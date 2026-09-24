@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seed } from "../prisma/seed-lib";
 import { PERMISSIONS } from "@/lib/permissions/catalog";
+import { BCRYPT_COST } from "@/server/auth/password";
 import { prisma, resetDb } from "./helpers/db";
 
 beforeEach(resetDb);
@@ -63,6 +64,7 @@ describe("seed", () => {
     expect(admin.mustChangePassword).toBe(true);
     expect(admin.passwordHash).not.toBe("Mat-khau-tam-123");
     expect(await bcrypt.compare("Mat-khau-tam-123", admin.passwordHash)).toBe(true);
+    expect(bcrypt.getRounds(admin.passwordHash)).toBe(BCRYPT_COST); // không còn số 10 rời trong seed
     expect(admin.roles.map((r) => r.role.name)).toEqual(["Giám đốc"]);
     await seed(prisma, { bootstrapAdminPassword: "khac" });
     expect(await prisma.user.count()).toBe(1);

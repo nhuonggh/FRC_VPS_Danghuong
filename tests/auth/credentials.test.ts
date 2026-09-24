@@ -1,6 +1,7 @@
+import bcrypt from "bcryptjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyCredentials } from "@/server/auth/credentials";
-import { hashPassword, verifyPassword } from "@/server/auth/password";
+import { BCRYPT_COST, hashPassword, verifyPassword } from "@/server/auth/password";
 import { prisma, resetDb } from "../helpers/db";
 import { makeUser } from "../helpers/factories";
 
@@ -30,6 +31,35 @@ describe("verifyCredentials", () => {
     expect(await verifyCredentials(prisma, "nam", "sai")).toEqual({ ok: false, reason: "INVALID" });
   });
 
+  it("mật khẩu tiếng Việt: hash dạng NFC, gõ dạng NFD (hoặc ngược lại) đều đăng nhập được", async () => {
+    const nfc = "Mật khẩu2026".normalize("NFC");
+    await makeUser({ username: "nam", passwordHash: await hashPassword(nfc) });
+    expect((await verifyCredentials(prisma, "nam", nfc.normalize("NFD"))).ok).toBe(true);
+    await prisma.user.update({ where: { username: "nam" }, data: { passwordHash: await hashPassword(nfc.normalize("NFD")) } });
+    expect((await verifyCredentials(prisma, "nam", nfc)).ok).toBe(true);
+  });
+
+  it("tên đăng nhập gõ dạng NFD vẫn khớp tên NFC trong DB", async () => {
+    const name = "nguyễn.nam".normalize("NFC");
+    await makeUser({ username: name, passwordHash: await hashPassword("Xuong2026") });
+    expect((await verifyCredentials(prisma, ` ${name.normalize("NFD").toUpperCase()} `, "Xuong2026")).ok).toBe(true);
+  });
+
+  it("hash giả tính LƯỜI: không băm lúc import, chỉ băm 1 lần rồi nhớ lại", async () => {
+    const hashSync = vi.spyOn(bcrypt, "hashSync");
+    const hash = vi.spyOn(bcrypt, "hash");
+    vi.resetModules();
+    const { verifyCredentials: fresh } = await import("@/server/auth/credentials");
+    expect(hashSync).not.toHaveBeenCalled();
+    expect(hash).not.toHaveBeenCalled();
+    await fresh(prisma, "khong-co-1", "Sai-mat-khau-1");
+    await fresh(prisma, "khong-co-2", "Sai-mat-khau-1");
+    expect(hashSync).not.toHaveBeenCalled();
+    expect(hash).toHaveBeenCalledTimes(1);
+    hashSync.mockRestore();
+    hash.mockRestore();
+  });
+
   // Không đo đồng hồ (chập chờn): ghim rằng nhánh "không có user" VẪN chạy một phép so bcrypt
   // thật với hash giả, nên độ trễ cùng bậc với nhánh "có user".
   describe("không lộ tên đăng nhập tồn tại qua độ trễ", () => {
@@ -42,7 +72,8 @@ describe("verifyCredentials", () => {
       expect(spy).toHaveBeenCalledTimes(1);
       const [plain, usedHash] = spy.mock.calls[0];
       expect(plain).toBe("Sai-mat-khau-1");
-      expect(usedHash).toMatch(/^\$2[aby]\$10\$/); // hash bcrypt hợp lệ, cùng cost với hash thật
+      expect(usedHash).toMatch(/^\$2[aby]\$/); // hash bcrypt hợp lệ
+      expect(bcrypt.getRounds(usedHash)).toBe(BCRYPT_COST); // cùng cost với hash thật (đổi cost → hash giả đổi theo)
       expect(usedHash).not.toBe(real);
     });
 

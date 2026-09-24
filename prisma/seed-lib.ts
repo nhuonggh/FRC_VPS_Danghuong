@@ -1,6 +1,6 @@
-import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { PERMISSIONS, ROLE_DEFAULTS, resolveRolePermissions } from "../src/lib/permissions/catalog";
+import { hashPassword } from "../src/server/auth/password";
 
 export interface SeedOptions {
   bootstrapAdminPassword?: string;
@@ -54,7 +54,7 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
 
   // 5. Admin khởi tạo (chỉ khi bảng users trống và có mật khẩu). KHÔNG log mật khẩu.
   if (opts.bootstrapAdminPassword) {
-    const passwordHash = await bcrypt.hash(opts.bootstrapAdminPassword, 10);
+    const passwordHash = await hashPassword(opts.bootstrapAdminPassword); // cùng BCRYPT_COST + chuẩn hoá NFC như đường đăng nhập
     await prisma.$transaction(async (tx) => {
       if ((await tx.user.count()) > 0) return;
       const role = await tx.role.findUniqueOrThrow({ where: { name: ADMIN_ROLE } });
