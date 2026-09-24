@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_${SLUG:-dh}_local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_only_change_me
+      POSTGRES_DB: dh_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # DB dành riêng cho test (xoá sạch mỗi lần chạy, nằm trên RAM)
+  pgtest:
+    image: postgres:15
+    container_name: dh_pgtest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dh_test
+    ports:
+      - "5434:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      target: runner # LUÔN ghi rõ target (pitfalls mục 1)
+    container_name: ${SLUG:-dh}_app_local
+    profiles: ["full"]
+    depends_on:
+      - postgres
+    env_file:
+      - .env.local
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

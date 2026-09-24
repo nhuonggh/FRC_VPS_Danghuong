@@ -4,7 +4,7 @@
 
 **Goal:** Dựng repo Next.js chạy được trong Docker theo khuôn `setup-project`, CSDL PostgreSQL với đủ "trụ nền" (kỳ, lớp lô FIFO, sổ cái, phân quyền, audit append-only, idempotency), và lớp phân quyền/audit/idempotency phía server — tất cả có test tự động.
 
-**Architecture:** 1 project Next.js 15 → image `runner` (standalone) + image `migrator` (chạy `prisma migrate deploy` + seed trước khi swap container). Prisma multi-file schema ở `prisma/schema/`, các ràng buộc Prisma không mô hình được (CHECK, trigger audit append-only, GRANT theo role) nằm trong migration SQL thô đầu tiên. Test tích hợp chạy trên Postgres thật (container `pgtest`, cổng 5433) vì engine FIFO cần advisory lock/transaction thật.
+**Architecture:** 1 project Next.js 15 → image `runner` (standalone) + image `migrator` (chạy `prisma migrate deploy` + seed trước khi swap container). Prisma multi-file schema ở `prisma/schema/`, các ràng buộc Prisma không mô hình được (CHECK, trigger audit append-only, GRANT theo role) nằm trong migration SQL thô đầu tiên. Test tích hợp chạy trên Postgres thật (container `pgtest`, cổng 5434) vì engine FIFO cần advisory lock/transaction thật.
 
 **Tech Stack:** Next.js 15, TypeScript, Prisma 6, PostgreSQL 15, Vitest, Docker, GitHub Actions, Caddy.
 
@@ -319,7 +319,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: dh_test
     ports:
-      - "5433:5432"
+      - "5434:5432"
     tmpfs:
       - /var/lib/postgresql/data
 
@@ -370,8 +370,8 @@ sed -i "s/__SLUG__/$SLUG/g" .env.example
 ```
 `.env.test` (commit được, giá trị bỏ đi):
 ```bash
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/dh_test
-MIGRATE_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/dh_test
+DATABASE_URL=postgresql://postgres:postgres@localhost:5434/dh_test
+MIGRATE_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/dh_test
 AUTH_SECRET=test-only-secret
 NEXTAUTH_URL=http://localhost:3000
 ```
@@ -403,7 +403,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: dh_test
         ports:
-          - 5433:5432
+          - 5434:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
@@ -1374,7 +1374,7 @@ describe("idempotency_keys", () => {
 
 Run: `npm test -- tests/db/foundation.test.ts`
 Expected: migration áp thành công (global-setup), test FAIL ở: `isOpen không được lệch status`, 5 test `audit_log …`, 3 test `ràng buộc engine kho` (chưa có CHECK/trigger/GRANT). `chỉ cho đúng 1 kỳ OPEN`, `nhiều kỳ CLOSED`, `idempotency_keys` PASS (do `@unique`/`@@id`).
-Nếu global-setup báo "Can't reach database server at localhost:5433": `docker compose up -d pgtest` rồi thử lại.
+Nếu global-setup báo "Can't reach database server at localhost:5434": `docker compose up -d pgtest` rồi thử lại.
 
 - [ ] **Step 13: Bổ sung SQL thô vào cuối `prisma/migrations/<ts>_foundation/migration.sql`**
 
