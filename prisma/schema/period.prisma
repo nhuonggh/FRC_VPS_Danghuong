@@ -1,0 +1,88 @@
+enum PeriodStatus {
+  OPEN
+  CLOSED
+
+  @@map("period_status")
+}
+
+// isOpen = true khi OPEN, NULL khi CLOSED → @unique cho phép nhiều NULL nhưng chỉ MỘT true
+// (tương đương partial unique index mà Prisma không mô hình được). CHECK ở migration SQL thô
+// giữ isOpen luôn khớp status.
+model Period {
+  id        Int          @id @default(autoincrement())
+  name      String
+  status    PeriodStatus @default(OPEN)
+  isOpen    Boolean?     @unique
+  openedAt  DateTime     @default(now())
+  closedAt  DateTime?
+  closedBy  Int?
+
+  openingStock    OpeningStock[]
+  openingDebt     OpeningDebt[]
+  openingCash     OpeningCash[]
+  openingDiscount OpeningDiscount[]
+  layers          CostLayer[]
+  ledger          StockLedger[]
+  partnerLedger   PartnerLedger[]
+  cashLedger      CashLedger[]
+  discountLedger  DiscountLedger[]
+
+  @@map("periods")
+}
+
+// K1, K4 — mỗi dòng = 1 lô đầu kỳ (NVL cũng là product)
+model OpeningStock {
+  id        Int     @id @default(autoincrement())
+  periodId  Int
+  productId Int
+  qty       Decimal @db.Decimal(18, 3)
+  unitCost  Decimal @db.Decimal(18, 4)
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, productId])
+  @@map("opening_stock")
+}
+
+// K2: (+) khách nợ mình, (−) mình nợ NCC/khách
+model OpeningDebt {
+  id        Int     @id @default(autoincrement())
+  periodId  Int
+  partnerId Int
+  amount    Decimal @db.Decimal(18, 2)
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@unique([periodId, partnerId])
+  @@map("opening_debt")
+}
+
+// K3
+model OpeningCash {
+  id            Int     @id @default(autoincrement())
+  periodId      Int
+  cashAccountId Int
+  amount        Decimal @db.Decimal(18, 2)
+
+  period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([periodId, cashAccountId])
+  @@map("opening_cash")
+}
+
+// số dư chiết khấu tích lũy chưa tất toán
+model OpeningDiscount {
+  id        Int     @id @default(autoincrement())
+  periodId  Int
+  partnerId Int
+  amount    Decimal @db.Decimal(18, 2)
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@unique([periodId, partnerId])
+  @@map("opening_discount")
+}

@@ -1,0 +1,114 @@
+enum ProductKind {
+  HANG
+  NVL
+  THANH_PHAM
+  PHU_KIEN
+
+  @@map("product_kind")
+}
+
+enum CashType {
+  CASH
+  BANK
+
+  @@map("cash_type")
+}
+
+model PartnerGroup {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  partners Partner[]
+
+  @@map("partner_groups")
+}
+
+model Partner {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  searchText   String   @default("") // D-9: chuẩn hoá không dấu để tìm kiếm
+  groupId      Int
+  isCustomer   Boolean  @default(true)
+  isSupplier   Boolean  @default(false)
+  ownerUserId  Int? // người bán phụ trách → quyền "chỉ khách của mình"
+  debtLimit    Decimal  @default(0) @db.Decimal(18, 2)
+  allowCredit  Boolean  @default(false)
+  phone        String?
+  address      String?
+  note         String?
+  isActive     Boolean  @default(true)
+  mergedIntoId Int? // sau khi gộp mã (mục 65)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  group         PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner         User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  mergedInto    Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom    Partner[]         @relation("PartnerMerge")
+  openingDebts  OpeningDebt[]
+  openingDisc   OpeningDiscount[]
+  partnerLedger PartnerLedger[]
+  discountLedger DiscountLedger[]
+
+  @@index([groupId])
+  @@index([ownerUserId])
+  @@index([searchText])
+  @@map("partners")
+}
+
+model Product {
+  id          Int         @id @default(autoincrement())
+  code        String      @unique
+  name        String
+  searchText  String      @default("")
+  kind        ProductKind @default(HANG)
+  baseUnit    String // đơn vị gốc (thường md); sổ kho & FIFO luôn tính theo đơn vị này
+  minStock    Decimal     @default(0) @db.Decimal(18, 3)
+  isActive    Boolean     @default(true)
+  recomputing Boolean     @default(false) // engine đang tính lại chuỗi nền → chặn xuất mã này
+  note        String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  units        ProductUnit[]
+  openingStock OpeningStock[]
+  layers       CostLayer[]
+  ledger       StockLedger[]
+
+  @@index([searchText])
+  @@index([kind])
+  @@map("products")
+}
+
+model ProductUnit {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  unit      String
+  factor    Decimal @db.Decimal(18, 6) // 1 unit = factor × baseUnit (mặc định; sửa được theo từng lần nhập)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, unit])
+  @@map("product_units")
+}
+
+model Warehouse {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  @@map("warehouses")
+}
+
+model CashAccount {
+  id       Int      @id @default(autoincrement())
+  type     CashType
+  name     String   @unique
+  bankNo   String?
+  isActive Boolean  @default(true)
+
+  openingCash OpeningCash[]
+  ledger      CashLedger[]
+
+  @@map("cash_accounts")
+}

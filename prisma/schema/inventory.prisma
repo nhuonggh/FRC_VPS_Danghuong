@@ -1,0 +1,95 @@
+enum StockDocType {
+  // nhập (tạo lớp)
+  OPENING
+  PURCHASE
+  ADJ_IN
+  RETURN_IN
+  PRODUCTION_OUT
+  STOCKTAKE_IN
+  // xuất (ăn lớp)
+  SALE
+  ADJ_LOSS
+  WRITE_OFF
+  RETURN_SUPPLIER
+  PRODUCTION_USE
+  PROCESSING_USE
+  STOCKTAKE_OUT
+
+  @@map("stock_doc_type")
+}
+
+// Sổ kho: mỗi dòng = 1 phát sinh nhập HOẶC xuất của 1 mã hàng, trỏ về chứng từ gốc.
+// KHÔNG có cột số dư chạy (spec 1.3).
+model StockLedger {
+  id             Int          @id @default(autoincrement())
+  periodId       Int
+  productId      Int
+  docType        StockDocType
+  docId          Int
+  docLineId      Int
+  qtyIn          Decimal      @default(0) @db.Decimal(18, 3)
+  qtyOut         Decimal      @default(0) @db.Decimal(18, 3)
+  unitCostOut    Decimal      @default(0) @db.Decimal(18, 4)
+  qtyProvisional Decimal      @default(0) @db.Decimal(18, 3) // phần xuất chưa có lớp (bán âm kho — 3.3)
+  at             DateTime
+  createdBy      Int
+  createdAt      DateTime     @default(now())
+
+  period       Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  layer        CostLayer?
+  consumptions CostConsumption[]
+
+  @@index([periodId, productId, at])
+  @@index([docType, docId])
+  @@index([docType, docLineId])
+  @@map("stock_ledger")
+}
+
+// Lớp lô FIFO. Thứ tự tiêu thụ = (at, id) — D-7 (không có cột seq).
+model CostLayer {
+  id            Int          @id @default(autoincrement())
+  periodId      Int
+  productId     Int
+  sourceDocType StockDocType
+  sourceDocId   Int
+  sourceLineId  Int
+  ledgerId      Int          @unique // dòng nhập tương ứng trong stock_ledger
+  qtyIn         Decimal      @db.Decimal(18, 3)
+  qtyRemaining  Decimal      @db.Decimal(18, 3)
+  unitCost      Decimal      @db.Decimal(18, 4)
+  at            DateTime
+  // Lớp có giá vốn PHỤ THUỘC dòng khác (trả hàng = giá vốn dòng bán gốc; thành phẩm SX = tổng vốn NVL)
+  costRefType   StockDocType?
+  costRefId     Int?
+  costRefQty    Decimal?     @db.Decimal(18, 3)
+  createdAt     DateTime     @default(now())
+
+  period       Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  ledger       StockLedger       @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  consumptions CostConsumption[]
+
+  @@index([periodId, productId, at])
+  @@index([costRefType, costRefId])
+  @@map("cost_layers")
+}
+
+// Mỗi lần xuất ghi rõ ăn lớp nào bao nhiêu → hoàn lớp chính xác khi sửa/hủy.
+model CostConsumption {
+  id        Int          @id @default(autoincrement())
+  layerId   Int
+  ledgerId  Int // dòng xuất trong stock_ledger
+  docType   StockDocType
+  docLineId Int
+  qty       Decimal      @db.Decimal(18, 3)
+  unitCost  Decimal      @db.Decimal(18, 4)
+
+  layer  CostLayer   @relation(fields: [layerId], references: [id], onDelete: Restrict)
+  ledger StockLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+
+  @@index([layerId])
+  @@index([ledgerId])
+  @@index([docType, docLineId])
+  @@map("cost_consumptions")
+}

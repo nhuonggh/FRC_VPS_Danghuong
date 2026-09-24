@@ -1,0 +1,104 @@
+model User {
+  id                 Int      @id @default(autoincrement())
+  username           String   @unique
+  passwordHash       String
+  fullName           String
+  isLocked           Boolean  @default(false)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  roles         UserRole[]
+  ownedPartners Partner[]  @relation("PartnerOwner")
+
+  @@map("users")
+}
+
+model Role {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  isSystem    Boolean @default(false)
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique // vd: order.create, cost.view, period.close
+  label       String
+  groupName   String
+  isSensitive Boolean @default(false)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// APPEND-ONLY: chặn ở DB bằng REVOKE cho app_rw + trigger (migration SQL thô).
+// userId KHÔNG có FK để dòng audit tồn tại độc lập với vòng đời user.
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  action     String
+  entity     String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  ip         String?
+  at         DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, at])
+  @@index([at])
+  @@map("audit_log")
+}
+
+// Bảng 1 dòng (id = 1) — mục 6
+model CompanySetting {
+  id       Int     @id @default(1)
+  name     String
+  address  String?
+  phone    String?
+  taxCode  String?
+  logo     String?
+  bankInfo Json?
+
+  @@map("company_settings")
+}
+
+// D-10: 1 khoá = 1 lần thực thi. Dòng chỉ tồn tại sau khi transaction của lần đầu commit.
+model IdempotencyKey {
+  userId       Int
+  scope        String
+  key          String
+  responseJson Json?
+  createdAt    DateTime @default(now())
+
+  @@id([userId, scope, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}

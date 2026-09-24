@@ -1,0 +1,10 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrate luôn dùng owner (tạo bảng/trigger); app chạy bằng role app_rw (D-2)
+  directUrl = env("MIGRATE_DATABASE_URL")
+}

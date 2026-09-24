@@ -1,0 +1,75 @@
+enum DiscountSettleMethod {
+  CASH
+  OFFSET
+
+  @@map("discount_settle_method")
+}
+
+// SỔ CÔNG NỢ DUY NHẤT (khách & NCC). Quy ước: số dư = Σ(debit − credit); dương = đối tác nợ mình.
+// Đơn giao/nhập hàng/thu/chi/trả hàng/điều chỉnh/gộp nợ đều sinh dòng ở đây; không có bảng debts riêng.
+model PartnerLedger {
+  id        Int      @id @default(autoincrement())
+  periodId  Int
+  partnerId Int
+  debit     Decimal  @default(0) @db.Decimal(18, 2)
+  credit    Decimal  @default(0) @db.Decimal(18, 2)
+  docType   String
+  docId     Int
+  at        DateTime
+  createdBy Int
+  createdAt DateTime @default(now())
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, partnerId, at])
+  @@index([docType, docId])
+  @@map("partner_ledger")
+}
+
+model CashLedger {
+  id            Int      @id @default(autoincrement())
+  periodId      Int
+  cashAccountId Int
+  amountIn      Decimal  @default(0) @db.Decimal(18, 2)
+  amountOut     Decimal  @default(0) @db.Decimal(18, 2)
+  docType       String
+  docId         Int
+  at            DateTime
+  createdBy     Int
+  createdAt     DateTime @default(now())
+
+  period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, cashAccountId, at])
+  @@index([docType, docId])
+  @@map("cash_ledger")
+}
+
+// Sổ chiết khấu tích lũy: mỗi dòng đơn cộng amountIn; tất toán/đảo trừ amountOut.
+// orderLineId chưa có FK — bảng sale_order_lines do GĐ1c thêm và bổ sung FK ở migration đó.
+model DiscountLedger {
+  id           Int                   @id @default(autoincrement())
+  periodId     Int
+  partnerId    Int
+  orderLineId  Int?
+  amountIn     Decimal               @default(0) @db.Decimal(18, 2)
+  amountOut    Decimal               @default(0) @db.Decimal(18, 2)
+  settleMethod DiscountSettleMethod?
+  docType      String
+  docId        Int
+  isReconciled Boolean               @default(false)
+  reconciledBy Int?
+  reconciledAt DateTime?
+  at           DateTime
+  createdBy    Int
+  createdAt    DateTime              @default(now())
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, partnerId, at])
+  @@index([docType, docId])
+  @@map("discount_ledger")
+}
