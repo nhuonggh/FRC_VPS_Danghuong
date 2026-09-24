@@ -1,0 +1,116 @@
+/* ============================================================================
+ * tokens.css — Nền token sẵn dùng cho CRM/ERP Design System
+ * Nguồn sự thật: references/theming.md. Drop file này vào global CSS, mọi
+ * component chỉ dùng var(--...) — KHÔNG hardcode hex. App muốn khác → tạo file
+ * app-override.css (xem references/app-override.md), KHÔNG sửa file này.
+ * ========================================================================== */
+
+:root {
+  /* Base neutral (Slate) — KHÔNG dùng trực tiếp trong component */
+  --gray-0:#ffffff; --gray-50:#f8fafc; --gray-100:#f1f5f9; --gray-200:#e2e8f0;
+  --gray-300:#cbd5e1; --gray-400:#94a3b8; --gray-500:#64748b; --gray-600:#475569;
+  --gray-700:#334155; --gray-800:#1e293b; --gray-900:#0f172a; --gray-950:#020617;
+
+  /* Accent (override theo brand từng app) */
+  --accent-500:#2563eb; --accent-600:#1d4ed8;
+
+  /* Semantic trạng thái — giữ nguyên giữa 2 theme */
+  --success:#16a34a; --warning:#d97706; --danger:#dc2626; --info:#0284c7;
+  --tertiary:#7c3aed;
+
+  /* Avatar color — 10 màu cố định cho initials (hash tên % 10), giữ nguyên giữa 2 theme */
+  --avatar-1:#2563eb; --avatar-2:#16a34a; --avatar-3:#d97706; --avatar-4:#dc2626;
+  --avatar-5:#7c3aed; --avatar-6:#0891b2; --avatar-7:#db2777; --avatar-8:#65a30d;
+  --avatar-9:#ea580c; --avatar-10:#4f46e5;
+
+  /* Spacing (base 4px) */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
+  --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px; --space-16:64px;
+
+  /* Typography */
+  --text-xs:12px; --text-sm:13px; --text-base:14px; --text-lg:16px;
+  --text-xl:20px; --text-2xl:24px;
+  --font-weight-normal:400; --font-weight-medium:500;
+  --font-weight-semibold:600; --font-weight-bold:700;
+  --font-sans:'Inter','Be Vietnam Pro',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,monospace;
+
+  /* Radius */
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-full:9999px;
+
+  /* Z-index */
+  --z-sticky-header:20; --z-sidebar:30; --z-dropdown:40; --z-overlay-scrim:50;
+  --z-slide-panel:51; --z-dialog:52; --z-toast:60;
+
+  /* Motion */
+  --ease-standard:cubic-bezier(0.2,0,0,1);
+  --duration-fast:120ms; --duration-base:200ms; --duration-slow:280ms;
+}
+
+/* ---------- LIGHT (mặc định) ---------- */
+:root, [data-theme="light"] {
+  --bg-canvas:var(--gray-50); --bg-surface:var(--gray-0);
+  --bg-surface-raised:var(--gray-0); --bg-hover:var(--gray-100);
+  --bg-active:var(--gray-200);
+  --border-default:var(--gray-200); --border-strong:var(--gray-300);
+  --text-primary:var(--gray-900); --text-secondary:var(--gray-600);
+  --text-muted:var(--gray-400); --text-on-accent:#ffffff;
+  --overlay-scrim:rgb(15 23 42 / 0.4); --shadow-color:220 3% 15%;
+
+  --accent-soft:color-mix(in srgb,var(--accent-500) 10%,transparent);
+  --success-soft:color-mix(in srgb,var(--success) 12%,transparent);
+  --warning-soft:color-mix(in srgb,var(--warning) 12%,transparent);
+  --danger-soft:color-mix(in srgb,var(--danger) 12%,transparent);
+  --info-soft:color-mix(in srgb,var(--info) 12%,transparent);
+  --tertiary-soft:color-mix(in srgb,var(--tertiary) 12%,transparent);
+
+  --shadow-sm:0 1px 2px hsl(var(--shadow-color)/0.06);
+  --shadow-md:0 4px 12px hsl(var(--shadow-color)/0.10);
+  --shadow-lg:0 12px 32px hsl(var(--shadow-color)/0.16);
+}
+
+/* ---------- DARK ---------- */
+[data-theme="dark"] {
+  --bg-canvas:var(--gray-950); --bg-surface:var(--gray-900);
+  --bg-surface-raised:var(--gray-800); --bg-hover:var(--gray-800);
+  --bg-active:var(--gray-700);
+  --border-default:var(--gray-700); --border-strong:var(--gray-600);
+  --text-primary:var(--gray-50); --text-secondary:var(--gray-300);
+  --text-muted:var(--gray-500); --text-on-accent:#ffffff;
+  --overlay-scrim:rgb(2 6 23 / 0.6); --shadow-color:220 40% 2%;
+
+  --accent-soft:color-mix(in srgb,var(--accent-500) 20%,transparent);
+  --success-soft:color-mix(in srgb,var(--success) 22%,transparent);
+  --warning-soft:color-mix(in srgb,var(--warning) 22%,transparent);
+  --danger-soft:color-mix(in srgb,var(--danger) 22%,transparent);
+  --info-soft:color-mix(in srgb,var(--info) 22%,transparent);
+  --tertiary-soft:color-mix(in srgb,var(--tertiary) 22%,transparent);
+}
+
+/* Chế độ "Hệ thống": nếu không set data-theme, theo prefers-color-scheme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-canvas:var(--gray-950); --bg-surface:var(--gray-900);
+    --bg-surface-raised:var(--gray-800); --bg-hover:var(--gray-800);
+    --bg-active:var(--gray-700);
+    --border-default:var(--gray-700); --border-strong:var(--gray-600);
+    --text-primary:var(--gray-50); --text-secondary:var(--gray-300);
+    --text-muted:var(--gray-500);
+    --overlay-scrim:rgb(2 6 23 / 0.6); --shadow-color:220 40% 2%;
+    --accent-soft:color-mix(in srgb,var(--accent-500) 20%,transparent);
+    --success-soft:color-mix(in srgb,var(--success) 22%,transparent);
+    --warning-soft:color-mix(in srgb,var(--warning) 22%,transparent);
+    --danger-soft:color-mix(in srgb,var(--danger) 22%,transparent);
+    --info-soft:color-mix(in srgb,var(--info) 22%,transparent);
+    --tertiary-soft:color-mix(in srgb,var(--tertiary) 22%,transparent);
+  }
+}
+
+/* Nền tảng chung */
+html { font-family:var(--font-sans); }
+body { background:var(--bg-canvas); color:var(--text-primary); }
+.tabular { font-variant-numeric:tabular-nums; } /* dùng cho số/tiền, căn phải */
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation:none !important; transition-duration:0.01ms !important; }
+}
