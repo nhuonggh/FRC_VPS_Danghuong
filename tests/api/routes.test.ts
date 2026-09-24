@@ -285,3 +285,105 @@ describe("/api/roles", () => {
     expect(await prisma.rolePermission.count({ where: { roleId: roleId["Giám đốc"]! } })).toBe(ALL_PERMISSION_CODES.length);
   });
 });
+
+describe("bắt đổi mật khẩu: API bị chặn cho tới khi đổi (trừ chính API đổi mật khẩu)", () => {
+  async function mustChangeUser() {
+    return (await prisma.user.create({
+      data: { username: "mc", fullName: "MC", passwordHash: await hashPassword("Admin12345"), mustChangePassword: true, roles: { create: { roleId: roleId["Giám đốc"]! } } },
+    })).id;
+  }
+
+  it("API nghiệp vụ → 403 JSON 'Cần đổi mật khẩu…', không ghi gì", async () => {
+    loginAs(await mustChangeUser());
+    const before = await snapshot();
+    for (const call of [
+      () => post(newUser()),
+      () => lockRoute(req("/x", "POST", { locked: true }), ctx(staffId)),
+      () => resetRoute(req("/x", "POST"), ctx(staffId)),
+      () => createRolePOST(req("/x", "POST", { name: "Nhóm mới" }), undefined),
+    ]) {
+      const r = await call();
+      expect(r.status).toBe(403);
+      expect((await r.json()).error).toBe("Cần đổi mật khẩu trước khi tiếp tục.");
+    }
+    expect(await snapshot()).toBe(before);
+  });
+
+  it("API đổi mật khẩu vẫn dùng được; sau khi đổi các API khác mở lại", async () => {
+    const id = await mustChangeUser();
+    loginAs(id);
+    const r = await changePassword(req("/x", "POST", { current: "Admin12345", next: "Xuong2026", confirm: "Xuong2026" }), undefined);
+    expect(r.status).toBe(200);
+    expect((await post(newUser())).status).toBe(200);
+  });
+});
+
+describe("Cache-Control: no-store cho phản hồi mang mật khẩu tạm", () => {
+  it("tạo user (lần đầu và lặp lại) + cấp lại mật khẩu", async () => {
+    loginAs(adminId);
+    expect((await post(newUser())).headers.get("cache-control")).toBe("no-store");
+    expect((await post(newUser())).headers.get("cache-control")).toBe("no-store");
+    expect((await resetRoute(req("/x", "POST"), ctx(staffId))).headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("cả phản hồi lỗi của các route này cũng no-store", async () => {
+    loginAs(adminId);
+    expect((await post(newUser(), null)).headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("Idempotency-Key được kiểm tra trước khi dùng", () => {
+  const BAD = ["a".repeat(101), "a b", "a/b", "a;b", "a,b", "a.b", "<script>", "../x"];
+  it.each(BAD)("khoá không hợp lệ %j → 400 tiếng Việt, không tạo user, không ghi khoá", async (key) => {
+    loginAs(adminId);
+    const r = await post(newUser(), key);
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/Idempotency-Key không hợp lệ/);
+    expect(await prisma.user.count({ where: { username: "nam" } })).toBe(0);
+    expect(await prisma.idempotencyKey.count()).toBe(0);
+  });
+
+  it.each(["11111111-2222-3333-4444-555555555555", "a".repeat(100), "abc_DEF-123", "1"])("khoá hợp lệ %s → tạo được", async (key) => {
+    loginAs(adminId);
+    expect((await post(newUser(), key)).status).toBe(200);
+  });
+
+  it("khoá rỗng → 'Thiếu Idempotency-Key.'", async () => {
+    loginAs(adminId);
+    const r = await post(newUser(), "");
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("Thiếu Idempotency-Key.");
+  });
+});
+
+describe("route: không leo thang đặc quyền → 403 JSON, dữ liệu nguyên vẹn", () => {
+  async function limitedUser(username: string, codes: string[]) {
+    const role = await prisma.role.create({ data: { name: `R-${username}` } });
+    const perms = await prisma.permission.findMany({ where: { code: { in: codes } } });
+    await prisma.rolePermission.createMany({ data: perms.map((p) => ({ roleId: role.id, permissionId: p.id })) });
+    return (await prisma.user.create({ data: { username, fullName: username, passwordHash: "x", roles: { create: { roleId: role.id } } } })).id;
+  }
+
+  it("user.manage-only cấp lại mật khẩu/khoá Giám đốc, gán Giám đốc cho mình → 403", async () => {
+    const ql = await limitedUser("ql", ["user.manage"]);
+    loginAs(ql);
+    const before = await snapshot();
+    expect((await resetRoute(req("/x", "POST"), ctx(adminId))).status).toBe(403);
+    expect((await lockRoute(req("/x", "POST", { locked: true }), ctx(adminId))).status).toBe(403);
+    const r = await userSection(req("/x", "PATCH", { section: "roles", roleIds: [roleId["Giám đốc"]!] }), ctx(ql));
+    expect(r.status).toBe(403);
+    expect((await r.json()).error).toMatch(/không thể cấp quyền/);
+    expect(await snapshot()).toBe(before);
+  });
+
+  it("role.manage-only thêm user.manage vào nhóm của mình → 403", async () => {
+    const qn = await limitedUser("qn", ["role.manage"]);
+    loginAs(qn);
+    const own = (await prisma.userRole.findFirstOrThrow({ where: { userId: qn } })).roleId;
+    const before = await snapshot();
+    const r = await roleSection(req("/x", "PATCH", { section: "permissions", codes: ["role.manage", "user.manage"] }), ctx(own));
+    expect(r.status).toBe(403);
+    expect(await snapshot()).toBe(before);
+    expect(await prisma.rolePermission.count({ where: { roleId: own } })).toBe(1);
+  });
+});

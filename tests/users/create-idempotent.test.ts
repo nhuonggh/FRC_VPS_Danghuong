@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { ALL_PERMISSION_CODES } from "@/lib/permissions/catalog";
 import { ForbiddenError } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { verifyCredentials } from "@/server/auth/credentials";
@@ -18,7 +19,7 @@ beforeEach(async () => {
   const u = await prisma.user.create({
     data: { username: "admin", fullName: "Admin", passwordHash: await hashPassword("Admin12345"), roles: { create: { roleId: role.id } } },
   });
-  actor = { userId: u.id, perms: new Set(["user.manage"]) };
+  actor = { userId: u.id, perms: new Set(ALL_PERMISSION_CODES) };
 });
 
 const input = (over = {}) => ({ username: "nam", fullName: "Nguyễn Nam", roleIds: [roleId], ...over });

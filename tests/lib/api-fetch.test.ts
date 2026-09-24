@@ -71,3 +71,32 @@ describe("apiFetch", () => {
     await expect(apiFetch("/api/users")).rejects.toMatchObject({ message: expect.stringMatching(/kết nối/) });
   });
 });
+
+describe("apiFetch — chống lặp toast 'phiên hết hạn'", () => {
+  it("nhiều request cùng dính 401 → chỉ MỘT toast (không chồng chất)", async () => {
+    fetchMock.mockResolvedValue(res(401, {}));
+    await Promise.allSettled([apiFetch("/api/a"), apiFetch("/api/b"), apiFetch("/api/c")]);
+    await expect(apiFetch("/api/d")).rejects.toBeInstanceOf(SessionExpiredError);
+    const items = useToastStore.getState().items;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.kind).toBe("error");
+  });
+
+  it("cả 4 lần đều ném SessionExpiredError (form biết để giữ dữ liệu); sau khi đóng toast, lần 401 kế tiếp hiện lại", async () => {
+    fetchMock.mockResolvedValue(res(401, {}));
+    const rs = await Promise.allSettled([apiFetch("/api/a"), apiFetch("/api/b")]);
+    expect(rs.every((r) => r.status === "rejected" && r.reason instanceof SessionExpiredError)).toBe(true);
+    useToastStore.getState().dismiss(useToastStore.getState().items[0]!.id);
+    expect(useToastStore.getState().items).toHaveLength(0);
+    await expect(apiFetch("/api/c")).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(useToastStore.getState().items).toHaveLength(1);
+  });
+
+  it("lỗi khác (409...) không bị dedupe làm mất và không ảnh hưởng toast phiên hết hạn", async () => {
+    fetchMock.mockResolvedValueOnce(res(401, {}));
+    await expect(apiFetch("/api/a")).rejects.toBeInstanceOf(SessionExpiredError);
+    fetchMock.mockResolvedValueOnce(res(409, { error: "Trùng." }));
+    await expect(apiFetch("/api/b")).rejects.toMatchObject({ status: 409 });
+    expect(useToastStore.getState().items).toHaveLength(1);
+  });
+});

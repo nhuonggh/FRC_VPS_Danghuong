@@ -4,6 +4,7 @@ import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
+import { assertCanGrant } from "@/server/users/privilege";
 import { assertAdminRemains, lockAdminInvariant } from "@/server/users/service";
 import type { RoleInfoInput } from "./schemas";
 
@@ -62,6 +63,10 @@ export async function updateRolePermissions(db: Db, actor: Actor, roleId: number
   const known = new Set<string>(ALL_PERMISSION_CODES);
   const bad = wanted.filter((c) => !known.has(c));
   if (bad.length) throw new DomainError(`Mã quyền không hợp lệ: ${bad.join(", ")}.`, 400);
+
+  // Chỉ được THÊM quyền mà chính mình có (quyền đã có sẵn trong nhóm giữ nguyên thì không tính là thêm)
+  const current = new Set(sortedCodes(role));
+  assertCanGrant(actor.perms, wanted.filter((c) => !current.has(c)));
 
   const perms = await db.permission.findMany({ where: { code: { in: wanted } } });
   if (perms.length !== wanted.length) throw new DomainError("Mã quyền không hợp lệ.", 400); // chưa có trong DB (chưa seed)

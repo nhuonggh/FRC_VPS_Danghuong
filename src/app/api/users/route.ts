@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireActorApi } from "@/server/auth/session";
-import { ValidationError } from "@/server/http/errors";
 import { apiHandler } from "@/server/http/handler";
-import { readJson } from "@/server/http/read-json";
+import { readIdempotencyKey, readJson } from "@/server/http/read-json";
 import { createUserSchema } from "@/server/users/schemas";
 import { createUserIdempotent } from "@/server/users/service";
 
@@ -12,8 +11,7 @@ import { createUserIdempotent } from "@/server/users/service";
  */
 export const POST = apiHandler(async (req) => {
   const actor = await requireActorApi("user.manage");
-  const key = req.headers.get("idempotency-key");
-  if (!key) throw new ValidationError("Thiếu Idempotency-Key.");
+  const key = readIdempotencyKey(req);
   const input = createUserSchema.parse(await readJson(req));
   return createUserIdempotent(prisma, actor, key, input);
-});
+}, { noStore: true }); // phản hồi mang mật khẩu tạm

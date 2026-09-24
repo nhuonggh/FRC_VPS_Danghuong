@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { beforeEach, describe, expect, it } from "vitest";
+import { ALL_PERMISSION_CODES } from "@/lib/permissions/catalog";
 import { ForbiddenError } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { verifyCredentials } from "@/server/auth/credentials";
@@ -89,7 +90,7 @@ describe("khoá / mở khoá (mã 4)", () => {
 
   it("khoá quản trị viên CUỐI CÙNG bị chặn và ROLLBACK", async () => {
     const other = await tx((db) => createUser(db, admin.actor, input({ username: "ketoan", roleIds: [roleId["Kế toán"]!] })));
-    const actorB: Actor = { userId: other.id, perms: new Set(["user.manage"]) }; // người thực hiện khác, không phải admin
+    const actorB: Actor = { userId: other.id, perms: new Set(ALL_PERMISSION_CODES) }; // người thực hiện khác (đủ quyền để không vướng kiểm tra leo thang), không phải admin
     await expect(tx((db) => setLocked(db, actorB, admin.id, true))).rejects.toThrow(/ít nhất một tài khoản/);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).isLocked).toBe(false); // đã rollback
   });
@@ -154,5 +155,20 @@ describe("cấp lại / đổi mật khẩu (mã 1)", () => {
     expect((await verifyCredentials(prisma, "nam", "Xuong2026")).ok).toBe(true);
     const log = await prisma.auditLog.findFirstOrThrow({ where: { action: "user.change_password" } });
     expect(JSON.stringify(log)).not.toContain("Xuong2026");
+  });
+});
+
+describe("đổi mật khẩu — so sánh sau chuẩn hoá NFC", () => {
+  it("mật khẩu mới chỉ khác mật khẩu hiện tại ở dạng NFC/NFD → bị từ chối 'phải khác'; DB không đổi", async () => {
+    const nfc = "Mật khẩu2026".normalize("NFC");
+    const u = await prisma.user.create({ data: { username: "vn", fullName: "VN", passwordHash: await hashPassword(nfc), mustChangePassword: true } });
+    const self: Actor = { userId: u.id, perms: new Set() };
+    expect(nfc.normalize("NFD")).not.toBe(nfc);
+    const before = await prisma.auditLog.count();
+    await expect(tx((db) => changeOwnPassword(db, self, { current: nfc, next: nfc.normalize("NFD") }))).rejects.toThrow(/khác mật khẩu hiện tại/);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: u.id } });
+    expect(after.passwordHash).toBe(u.passwordHash);
+    expect(after.mustChangePassword).toBe(true);
+    expect(await prisma.auditLog.count()).toBe(before);
   });
 });

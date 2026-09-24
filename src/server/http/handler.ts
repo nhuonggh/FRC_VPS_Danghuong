@@ -21,13 +21,20 @@ export function toErrorResponse(e: unknown): NextResponse {
   return NextResponse.json({ error: "Có lỗi hệ thống, vui lòng thử lại.", code: "INTERNAL" }, { status: 500 });
 }
 
-/** Bọc route handler: trả JSON, lỗi được chuyển thành phản hồi tiếng Việt. */
-export function apiHandler<C = unknown>(fn: (req: NextRequest, ctx: C) => Promise<unknown>) {
+/**
+ * Bọc route handler: trả JSON, lỗi được chuyển thành phản hồi tiếng Việt.
+ * `noStore`: thêm Cache-Control: no-store (route trả mật khẩu tạm — không để proxy/trình duyệt lưu bản sao).
+ */
+export function apiHandler<C = unknown>(fn: (req: NextRequest, ctx: C) => Promise<unknown>, opts: { noStore?: boolean } = {}) {
+  const finish = (res: NextResponse) => {
+    if (opts.noStore) res.headers.set("Cache-Control", "no-store");
+    return res;
+  };
   return async (req: NextRequest, ctx: C) => {
     try {
-      return NextResponse.json((await fn(req, ctx)) ?? { ok: true });
+      return finish(NextResponse.json((await fn(req, ctx)) ?? { ok: true }));
     } catch (e) {
-      return toErrorResponse(e);
+      return finish(toErrorResponse(e));
     }
   };
 }

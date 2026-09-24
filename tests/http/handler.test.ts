@@ -35,3 +35,12 @@ describe("apiHandler", () => {
     spy.mockRestore();
   });
 });
+
+describe("apiHandler { noStore }", () => {
+  it("đặt Cache-Control: no-store cho phản hồi thành công và lỗi; mặc định thì không", async () => {
+    expect((await apiHandler(async () => ({ a: 1 }), { noStore: true })(req(), undefined)).headers.get("cache-control")).toBe("no-store");
+    const err = await apiHandler(async () => { throw new DomainError("x"); }, { noStore: true })(req(), undefined);
+    expect(err.headers.get("cache-control")).toBe("no-store");
+    expect((await apiHandler(async () => ({ a: 1 }))(req(), undefined)).headers.get("cache-control")).toBeNull();
+  });
+});

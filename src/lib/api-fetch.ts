@@ -1,4 +1,4 @@
-import { toast } from "./toast";
+import { toast, useToastStore } from "./toast";
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string) {
@@ -12,6 +12,9 @@ export class SessionExpiredError extends ApiError {
     this.name = "SessionExpiredError";
   }
 }
+
+const SESSION_EXPIRED_TOAST =
+  "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại ở tab mới — dữ liệu đang nhập vẫn được giữ trên màn hình này.";
 
 type Init = Omit<RequestInit, "body"> & { json?: unknown; idempotencyKey?: string; body?: BodyInit | null };
 
@@ -34,7 +37,8 @@ export async function apiFetch<T = unknown>(url: string, init: Init = {}): Promi
   }
 
   if (res.status === 401) {
-    toast.error("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại ở tab mới — dữ liệu đang nhập vẫn được giữ trên màn hình này.");
+    // Toast lỗi không tự tắt → nhiều request cùng dính 401 không được chồng nhiều toast giống nhau
+    if (!useToastStore.getState().items.some((i) => i.message === SESSION_EXPIRED_TOAST)) toast.error(SESSION_EXPIRED_TOAST);
     throw new SessionExpiredError();
   }
   if (!res.ok) {

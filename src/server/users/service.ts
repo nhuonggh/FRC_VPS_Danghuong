@@ -2,12 +2,13 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
-import { normalizeUsername } from "@/server/auth/normalize";
+import { normalizePassword, normalizeUsername } from "@/server/auth/normalize";
 import {
   generateTempPassword, hashPassword, validatePasswordStrength, verifyPassword,
 } from "@/server/auth/password";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
+import { assertCanAffectUser, assertCanAssignRoles } from "./privilege";
 import type { CreateUserInput } from "./schemas";
 
 /** MỌI hàm nhận `db` là transaction client và PHẢI chạy trong prisma.$transaction (rollback khi vi phạm bất biến). */
@@ -61,6 +62,7 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
   const username = normalizeUsername(input.username);
   if (await db.user.findUnique({ where: { username } })) throw new DomainError("Tên đăng nhập đã tồn tại.");
   const roles = await loadRoles(db, input.roleIds);
+  await assertCanAssignRoles(db, actor, roles.map((r) => r.id)); // không tạo user mạnh hơn mình
   const tempPassword = generateTempPassword();
   let user;
   try {
@@ -111,6 +113,7 @@ export async function createUserIdempotent(
 export async function updateProfile(db: Db, actor: Actor, userId: number, input: { fullName: string }) {
   assertCan(actor.perms, "user.manage");
   const u = await getUserOrThrow(db, userId);
+  await assertCanAffectUser(db, actor, userId);
   const fullName = input.fullName.normalize("NFC").trim();
   if (fullName === u.fullName) return;
   await db.user.update({ where: { id: userId }, data: { fullName } });
@@ -125,6 +128,8 @@ export async function setUserRoles(db: Db, actor: Actor, userId: number, roleIds
   await lockAdminInvariant(db);
   const u = await getUserOrThrow(db, userId);
   const roles = await loadRoles(db, roleIds);
+  await assertCanAffectUser(db, actor, userId); // đối tượng (và các nhóm sắp gỡ) không được vượt quyền mình
+  await assertCanAssignRoles(db, actor, roles.map((r) => r.id)); // nhóm mới không được vượt quyền mình
   await db.userRole.deleteMany({ where: { userId } });
   await db.userRole.createMany({ data: roles.map((r) => ({ userId, roleId: r.id })) });
   await assertAdminRemains(db);
@@ -139,6 +144,7 @@ export async function setLocked(db: Db, actor: Actor, userId: number, locked: bo
   if (locked && userId === actor.userId) throw new DomainError("Bạn không thể tự khóa tài khoản của mình.");
   if (locked) await lockAdminInvariant(db);
   const u = await getUserOrThrow(db, userId);
+  await assertCanAffectUser(db, actor, userId);
   if (u.isLocked === locked) return;
   await db.user.update({ where: { id: userId }, data: { isLocked: locked } });
   if (locked) await assertAdminRemains(db);
@@ -151,6 +157,7 @@ export async function setLocked(db: Db, actor: Actor, userId: number, locked: bo
 export async function resetPassword(db: Db, actor: Actor, userId: number) {
   assertCan(actor.perms, "user.manage");
   await getUserOrThrow(db, userId);
+  await assertCanAffectUser(db, actor, userId); // không chiếm tài khoản mạnh hơn mình
   const tempPassword = generateTempPassword();
   await db.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(tempPassword), mustChangePassword: true } });
   await writeAudit(db, { userId: actor.userId, action: "user.reset_password", entity: "User", entityId: userId });
@@ -161,7 +168,7 @@ export async function resetPassword(db: Db, actor: Actor, userId: number) {
 export async function changeOwnPassword(db: Db, actor: Actor, input: { current: string; next: string }) {
   const u = await getUserOrThrow(db, actor.userId);
   if (!(await verifyPassword(input.current, u.passwordHash))) throw new DomainError("Mật khẩu hiện tại không đúng.");
-  if (input.next === input.current) throw new DomainError("Mật khẩu mới phải khác mật khẩu hiện tại.", 400);
+  if (normalizePassword(input.next) === normalizePassword(input.current)) throw new DomainError("Mật khẩu mới phải khác mật khẩu hiện tại.", 400);
   const weak = validatePasswordStrength(input.next, u.username);
   if (weak) throw new DomainError(weak, 400);
   await db.user.update({ where: { id: u.id }, data: { passwordHash: await hashPassword(input.next), mustChangePassword: false } });
