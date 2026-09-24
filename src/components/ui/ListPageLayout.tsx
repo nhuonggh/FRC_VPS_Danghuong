@@ -1,0 +1,27 @@
+export function ListPageLayout({
+  title, actions, stats, filters, footer, children,
+}: {
+  title: string;
+  /** Thêm mới / Import / Export — luôn hiển thị cả khi danh sách rỗng. */
+  actions?: React.ReactNode;
+  stats?: React.ReactNode;
+  filters?: React.ReactNode;
+  footer: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">{title}</h1>
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      </div>
+      {stats && <div className="flex flex-wrap gap-3">{stats}</div>}
+      {filters}
+      {/* .page-container: khung cố định; chỉ vùng bảng cuộn, footer phân trang không nhảy */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-surface">
+        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+        {footer}
+      </div>
+    </div>
+  );
+}
