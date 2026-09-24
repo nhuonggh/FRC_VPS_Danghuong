@@ -1,15 +1,12 @@
 import { execSync } from "node:child_process";
 import "./setup-env"; // nạp .env.test TRƯỚC khi @prisma/client được import
 import { PrismaClient } from "@prisma/client";
+import { assertTestDatabaseUrls } from "./helpers/assert-test-db";
 
 export default async function setup() {
-  const url = process.env.MIGRATE_DATABASE_URL;
-  if (!url) throw new Error("Thiếu MIGRATE_DATABASE_URL cho test");
-  const dbName = new URL(url).pathname.slice(1);
-  // Chốt an toàn: không bao giờ DROP SCHEMA trên DB không phải DB test
-  if (!dbName.endsWith("_test")) {
-    throw new Error(`Từ chối reset DB "${dbName}" (tên phải kết thúc bằng _test)`);
-  }
+  // Chốt an toàn: không bao giờ DROP SCHEMA trên DB không phải DB test (kiểm cả 2 URL)
+  assertTestDatabaseUrls();
+  const url = process.env.MIGRATE_DATABASE_URL!;
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
