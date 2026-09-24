@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NULL_TEXT } from "@/lib/format";
 import { nextSort } from "@/lib/pagination";
+import { shouldNavigateOnRowClick } from "./row-click";
 
 export interface Column<T> {
   key: string;
@@ -32,6 +33,8 @@ export interface RowAction {
 
 const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock };
 const MAX_INLINE_ACTIONS = 3;
+// Chạm ≥44px dưới md (mobile), 32px từ md (PC)
+const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover md:h-8 md:w-8";
 
 interface Props<T> {
   /** Khoá lưu cột ẩn/độ rộng vào localStorage. */
@@ -65,8 +68,11 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
   const [widths, setWidths] = useStored<Record<string, number>>(`table:${id}:widths`, {});
-  const visible = columns.filter((c) => !hidden[c.key]);
   const primary = columns.find((c) => c.primaryOnMobile) ?? columns[0]!;
+  // Cột chính (chứa <Link> vào dòng) KHÔNG ẩn được → dòng luôn có lối vào bằng bàn phím và luôn còn ≥1 cột.
+  // Đồng thời làm sạch trạng thái lưu sẵn (localStorage) vi phạm quy tắc này.
+  const isHidden = (c: Column<T>) => c !== primary && !!hidden[c.key];
+  const visible = columns.filter((c) => !isHidden(c));
 
   const cell = (c: Column<T>, row: T) => {
     const node = c.render(row);
@@ -88,7 +94,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
     if (actions.length === 0) return null;
     const inline = actions.length > MAX_INLINE_ACTIONS ? actions.slice(0, MAX_INLINE_ACTIONS) : actions;
     const rest = actions.length > MAX_INLINE_ACTIONS ? actions.slice(MAX_INLINE_ACTIONS) : [];
-    const iconBtn = "flex h-8 w-8 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover";
+    const iconBtn = ICON_BTN;
     return (
       <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
         {inline.map((a) => {
@@ -124,16 +130,17 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
       {/* Điều khiển cột */}
       <div className="flex justify-end border-b border-border px-2 py-1">
         <Dropdown.Root>
-          <Dropdown.Trigger aria-label="Cột hiển thị" title="Cột hiển thị" className="flex h-8 w-8 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover">
+          <Dropdown.Trigger aria-label="Cột hiển thị" title="Cột hiển thị" className={ICON_BTN}>
             <Columns3 size={16} aria-hidden />
           </Dropdown.Trigger>
           <Dropdown.Portal>
             <Dropdown.Content align="end" className="z-dropdown min-w-44 rounded-md border border-border bg-raised p-1 shadow-md">
               {columns.map((c) => (
-                <Dropdown.CheckboxItem key={c.key} checked={!hidden[c.key]} onCheckedChange={(v) => setHidden({ ...hidden, [c.key]: !v })}
+                <Dropdown.CheckboxItem key={c.key} checked={!isHidden(c)} onCheckedChange={(v) => setHidden({ ...hidden, [c.key]: !v })}
+                  disabled={c === primary || (visible.length <= 1 && !isHidden(c))}
                   onSelect={(e) => e.preventDefault()}
-                  className="flex h-9 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm outline-none data-[highlighted]:bg-hover">
-                  <span aria-hidden className="flex h-4 w-4 items-center justify-center rounded-sm border border-border-strong">{!hidden[c.key] && <Check size={12} />}</span>
+                  className="flex h-11 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-hover md:h-9">
+                  <span aria-hidden className="flex h-4 w-4 items-center justify-center rounded-sm border border-border-strong">{!isHidden(c) && <Check size={12} />}</span>
                   {c.label}
                 </Dropdown.CheckboxItem>
               ))}
@@ -164,12 +171,14 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
                 </th>
               );
             })}
-            {rowActions && <th scope="col" className="w-28 px-3 py-2 text-right">Thao tác</th>}
+            {rowActions && <th scope="col" className="w-32 px-3 py-2 text-right">Thao tác</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} onClick={rowHref ? () => router.push(rowHref(row)) : undefined}
+            <tr key={rowKey(row)} onClick={rowHref ? (e) => {
+                if (shouldNavigateOnRowClick(e, window.getSelection()?.toString() ?? "")) router.push(rowHref(row));
+              } : undefined}
               className={clsx("border-b border-border last:border-b-0 hover:bg-hover", rowHref && "cursor-pointer")}>
               {visible.map((c) => (
                 <td key={c.key} className={clsx("px-3 py-2", c.align === "right" && "tabular text-right")}>

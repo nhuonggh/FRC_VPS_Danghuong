@@ -121,6 +121,15 @@ describe("StatCard", () => {
     expect(link).toHaveAttribute("href", "/customers?status=active");
     expect(link).toHaveAttribute("aria-current", "true");
   });
+  it("nền: active có bg-accent-soft và KHÔNG bg-surface; không active ngược lại", () => {
+    render(<><StatCard label="A" value={1} active /><StatCard label="B" value={2} /></>);
+    const a = screen.getByText("A").parentElement!;
+    const b = screen.getByText("B").parentElement!;
+    expect(a.className).toMatch(/\bbg-accent-soft\b/);
+    expect(a.className).not.toMatch(/\bbg-surface\b/);
+    expect(b.className).toMatch(/\bbg-surface\b/);
+    expect(b.className).not.toMatch(/\bbg-accent-soft\b/);
+  });
   it("không href → không phải link", () => {
     render(<StatCard label="Tổng" value={1} />);
     expect(screen.queryByRole("link")).toBeNull();
