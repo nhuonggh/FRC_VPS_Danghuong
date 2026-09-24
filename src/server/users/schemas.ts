@@ -25,4 +25,8 @@ export const changePasswordSchema = z
     next: z.string().min(1, "Nhập mật khẩu mới."),
     confirm: z.string().min(1, "Nhập lại mật khẩu mới."),
   })
-  .refine((v) => v.next === v.confirm, { path: ["confirm"], message: "Mật khẩu nhập lại không khớp." });
+  .superRefine((v, ctx) => {
+    if (v.next !== v.confirm) ctx.addIssue({ code: "custom", path: ["confirm"], message: "Mật khẩu nhập lại không khớp." });
+    // Báo sớm cho form; service vẫn kiểm lại sau khi chuẩn hoá NFC (chỗ duy nhất tin được)
+    if (v.next && v.next === v.current) ctx.addIssue({ code: "custom", path: ["next"], message: "Mật khẩu mới phải khác mật khẩu hiện tại." });
+  });
