@@ -65,6 +65,7 @@ describe("GET /api/audit-log/export", () => {
     expect(r.headers.get("content-disposition")).toContain("nhat-ky-thao-tac.xlsx");
     expect(r.headers.get("x-export-truncated")).toBe("0");
     expect(r.headers.get("x-export-rows")).toBe("1");
+    expect(r.headers.get("x-export-max-rows")).toBe("10000"); // trần thực tế được báo cho client
   });
 
   it("redaction theo NGƯỜI XEM: có audit.view mà thiếu cost.view → không thấy unitCost; Giám đốc thấy", async () => {

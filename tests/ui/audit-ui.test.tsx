@@ -51,6 +51,34 @@ describe("AuditTable", () => {
   });
 });
 
+describe("AuditTable — chỉ báo sắp xếp mặc định", () => {
+  const th = () => screen.getAllByRole("columnheader").find((h) => /Thời gian/.test(h.textContent ?? ""))!;
+  const href = () => screen.getByRole("link", { name: /Thời gian/ }).getAttribute("href");
+  const setup = (sp: Record<string, string> = {}) => render(<AuditTable rows={rows} params={parseListParams(sp, ["user", "entity"])} />);
+
+  it("chưa chọn sort: cột Thời gian báo giảm dần (mặc định thật), bấm lần đầu → tăng dần (không phải vòng vô hiệu)", () => {
+    setup();
+    expect(th()).toHaveAttribute("aria-sort", "descending");
+    expect(href()).toBe("/system/audit-log?sort=at");
+  });
+
+  it("sort=-at tường minh cũng bấm được sang tăng dần; sort=at → quay về -at", () => {
+    setup({ sort: "-at" });
+    expect(th()).toHaveAttribute("aria-sort", "descending");
+    expect(href()).toBe("/system/audit-log?sort=at");
+    cleanup();
+    setup({ sort: "at" });
+    expect(th()).toHaveAttribute("aria-sort", "ascending");
+    expect(href()).toBe("/system/audit-log?sort=-at");
+  });
+
+  it("sort cột khác: Thời gian không còn cờ; bấm cột đang sort giảm dần → về mặc định (bỏ sort)", () => {
+    setup({ sort: "-action" });
+    expect(th()).toHaveAttribute("aria-sort", "none");
+    expect(screen.getByRole("link", { name: /Hành động/ }).getAttribute("href")).toBe("/system/audit-log");
+  });
+});
+
 const entry = {
   id: 5, at: "2026-09-30T16:50:00.000Z", by: "Nguyễn Văn Nam", action: "product.update", entity: "Product", entityId: "9", ip: "10.0.0.1",
   changes: [

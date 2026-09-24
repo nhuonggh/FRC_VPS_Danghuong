@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import ExcelJS from "exceljs";
 import { formatDate } from "@/lib/format";
 
@@ -37,6 +38,13 @@ function safeSheetName(name: string): string {
   return cleaned || "Sheet1";
 }
 
+/** Cấu hình cột dùng chung cho bản in-memory và bản ghi theo lô (cùng kiểu ô, cùng định dạng). */
+const columnDefs = (columns: XlsxColumn[]) =>
+  columns.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 16, style: c.text ? { numFmt: "@" } : c.numFmt ? { numFmt: c.numFmt } : {} }));
+
+const rowValues = (columns: XlsxColumn[], r: Record<string, unknown>) =>
+  Object.fromEntries(columns.map((c) => [c.key, toCell(r[c.key], !!c.text)]));
+
 export async function buildXlsx(
   sheetName: string,
   columns: XlsxColumn[],
@@ -44,16 +52,51 @@ export async function buildXlsx(
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(safeSheetName(sheetName));
-  ws.columns = columns.map((c) => ({
-    header: c.header,
-    key: c.key,
-    width: c.width ?? 16,
-    style: c.text ? { numFmt: "@" } : c.numFmt ? { numFmt: c.numFmt } : {},
-  }));
+  ws.columns = columnDefs(columns);
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];
-  for (const r of rows) ws.addRow(Object.fromEntries(columns.map((c) => [c.key, toCell(r[c.key], !!c.text)])));
+  for (const r of rows) ws.addRow(rowValues(columns, r));
   return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+/**
+ * Như buildXlsx nhưng nhận các LÔ dòng (AsyncIterable) và ghi bằng ExcelJS WorkbookWriter (stream): dòng đã ghi được
+ * đẩy xuống zip ngay, không giữ cả workbook trong bộ nhớ; giữa các lô nhường vòng lặp sự kiện (`setImmediate`) để
+ * request khác không bị bỏ đói. Mọi ô đi qua CÙNG `toCell` (Decimal → số, cột `text` là chữ "@", tiền tố dấu nháy chống công
+ * thức tiêm nhiễm). `note` (đọc SAU khi hết lô) → thêm 1 dòng ghi chú GỘP ô trên mọi cột ở cuối.
+ */
+export async function buildXlsxBatched(
+  sheetName: string,
+  columns: XlsxColumn[],
+  batches: AsyncIterable<Record<string, unknown>[]>,
+  opts: { note?: () => string | null } = {},
+): Promise<Buffer> {
+  const sink = new PassThrough();
+  const chunks: Buffer[] = [];
+  sink.on("data", (c: Buffer) => chunks.push(c));
+  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: sink, useStyles: true, useSharedStrings: false });
+  const ws = wb.addWorksheet(safeSheetName(sheetName), { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = columnDefs(columns);
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).commit();
+  try {
+    for await (const batch of batches) {
+      for (const r of batch) ws.addRow(rowValues(columns, r)).commit();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const note = opts.note?.() ?? null;
+    if (note !== null) {
+      const row = ws.addRow({ [columns[0]!.key]: toCell(note, false) });
+      ws.mergeCells(Number(row.number), 1, Number(row.number), columns.length);
+      row.commit();
+    }
+    ws.commit();
+    await wb.commit();
+  } catch (e) {
+    sink.destroy();
+    throw e;
+  }
+  return Buffer.concat(chunks);
 }
 
 export function xlsxResponse(filename: string, buffer: Buffer): Response {

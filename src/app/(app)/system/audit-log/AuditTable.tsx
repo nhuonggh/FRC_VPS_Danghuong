@@ -16,11 +16,16 @@ const columns: Column<AuditRow>[] = [
 
 /** Bảng nhật ký: dòng bất biến — thao tác duy nhất là Xem (không Sửa/Xóa/Khóa, không chọn nhiều). */
 export function AuditTable({ rows, params }: { rows: AuditRow[]; params: ListParams }) {
+  // Mặc định thật của truy vấn là thời gian giảm dần → báo đúng ở header (aria-sort/mũi tên) thay vì "none".
+  const sort = params.sort ?? "-at";
   return (
     <DataTable
       id="audit" columns={columns} rows={rows} rowKey={(r) => r.id} rowHref={(r) => `/system/audit-log/${r.id}`}
       rowActions={(r) => [{ key: "view", label: "Xem", icon: "eye", href: `/system/audit-log/${r.id}` }]}
-      sort={params.sort} buildSortHref={(s) => buildListHref("/system/audit-log", params, { sort: s })}
+      sort={sort}
+      // Vòng sort: tăng → giảm → BỎ (= mặc định -at). Đang ở -at (mặc định/tường minh) mà bấm "Thời gian" thì "bỏ" sẽ không
+      // đổi gì → chuyển thẳng sang tăng dần để lần bấm đầu luôn có tác dụng.
+      buildSortHref={(s) => buildListHref("/system/audit-log", params, { sort: s === undefined && sort === "-at" ? "at" : s })}
     />
   );
 }

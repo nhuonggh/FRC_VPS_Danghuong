@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import { buildXlsx, xlsxResponse } from "@/server/export/xlsx";
+import { buildXlsx, buildXlsxBatched, xlsxResponse } from "@/server/export/xlsx";
 
 async function read(buf: Buffer) {
   const wb = new ExcelJS.Workbook();
@@ -151,5 +151,61 @@ describe("xlsxResponse", () => {
     expect(Buffer.from(await res.arrayBuffer()).equals(buf)).toBe(true);
     const evil = xlsxResponse('a"\r\nSet-Cookie: x=1.xlsx', buf);
     expect(evil.headers.get("content-disposition")).not.toMatch(/[\r\n"]/);
+  });
+});
+
+describe("buildXlsxBatched (ghi theo lô, không giữ cả workbook trong bộ nhớ)", () => {
+  const columns = [
+    { header: "Mã", key: "code", width: 12, text: true },
+    { header: "Số lượng", key: "qty", numFmt: "#,##0.###" },
+    { header: "Tiền", key: "amount", numFmt: '#,##0 "₫"' },
+    { header: "Ngày", key: "date" },
+  ];
+  async function* batches(...bs: Record<string, unknown>[][]) { for (const b of bs) yield b; }
+  const evil = ['=HYPERLINK("http://x")', "+cmd|' /C calc'!A0", "-1+1", "@SUM(A1)", "\t=1+1", "\r=1+1"];
+  const sample = [
+    [{ code: "00123", qty: 1250, amount: "1500000.50", date: new Date("2026-09-30T16:50:00Z") }, { code: "SP2", qty: 0, amount: "0" }],
+    [{ code: "SP3", qty: null, amount: undefined, date: null }, { code: "12345678901234567890", qty: NaN, amount: Infinity }, ...evil.map((e) => ({ code: e, qty: e, amount: e }))],
+  ];
+
+  it("cho CÙNG giá trị ô, kiểu ô, định dạng như buildXlsx (số, Decimal, text '@', null, NaN, chống công thức)", async () => {
+    const a = await read(await buildXlsx("S", columns, sample.flat()));
+    const b = await read(await buildXlsxBatched("S", columns, batches(...sample)));
+    expect(b.rowCount).toBe(a.rowCount);
+    for (let r = 1; r <= a.rowCount; r++) {
+      for (let c = 1; c <= columns.length; c++) {
+        const x = a.getCell(r, c), y = b.getCell(r, c);
+        expect([r, c, y.value, y.type, y.numFmt]).toEqual([r, c, x.value, x.type, x.numFmt]);
+      }
+    }
+    expect(b.getCell("A2").value).toBe("00123");
+    expect(b.getColumn(1).numFmt).toBe("@");
+  });
+
+  it("tiêu đề đậm, cố định dòng đầu, tên sheet an toàn", async () => {
+    const ws = await read(await buildXlsxBatched("A/B:C", columns, batches(sample[0]!)));
+    expect(ws.name).toBe("A B C");
+    expect(ws.getRow(1).font?.bold).toBe(true);
+    expect(ws.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
+  });
+
+  it("ghi chú cuối file: gộp ô trên mọi cột, dài tuỳ ý; chỉ khi có ghi chú", async () => {
+    let note: string | null = null;
+    const ws = await read(await buildXlsxBatched("S", columns, (async function* () { yield sample[0]!; note = "=Ghi chú dài"; })(), { note: () => note }));
+    expect(ws.rowCount).toBe(4);
+    expect(ws.getCell("A4").value).toBe("'=Ghi chú dài"); // vẫn qua chống công thức
+    expect(ws.model.merges).toEqual(["A4:D4"]);
+    const none = await read(await buildXlsxBatched("S", columns, batches(sample[0]!), { note: () => null }));
+    expect(none.rowCount).toBe(3);
+    expect(none.model.merges).toEqual([]);
+  });
+
+  it("không có dòng nào: vẫn ra file hợp lệ chỉ có tiêu đề", async () => {
+    const ws = await read(await buildXlsxBatched("S", columns, batches()));
+    expect(ws.rowCount).toBe(1);
+  });
+
+  it("lỗi từ nguồn dữ liệu được ném ra (không treo)", async () => {
+    await expect(buildXlsxBatched("S", columns, (async function* () { yield sample[0]!; throw new Error("db down"); })())).rejects.toThrow("db down");
   });
 });

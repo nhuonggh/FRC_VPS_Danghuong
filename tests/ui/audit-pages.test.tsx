@@ -129,7 +129,7 @@ describe("/system/audit-log (server)", () => {
   it(`báo rõ khi xuất Excel bị giới hạn (> ${MAX_EXPORT_ROWS} dòng); dưới ngưỡng thì không có cảnh báo`, async () => {
     requireActor.mockResolvedValue(actor("audit.view"));
     listAudit.mockResolvedValue({ rows: [row], total: MAX_EXPORT_ROWS + 1 });
-    expect(JSON.stringify(await page())).toMatch(/chỉ gồm 50\.000 dòng mới nhất/);
+    expect(JSON.stringify(await page())).toMatch(/chỉ gồm 10.000 dòng mới nhất/);
     listAudit.mockResolvedValue({ rows: [row], total: MAX_EXPORT_ROWS });
     expect(JSON.stringify(await page())).not.toMatch(/chỉ gồm/);
   });

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseListParams } from "@/lib/query-params";
-import { exportAuditXlsx } from "@/server/audit/export";
+import { MAX_EXPORT_ROWS, exportAuditXlsx } from "@/server/audit/export";
 import { AUDIT_FILTER_KEYS, listAudit, listAuditEntities } from "@/server/audit/queries";
 import { prisma, resetDb } from "../helpers/db";
 
@@ -10,6 +10,9 @@ import { prisma, resetDb } from "../helpers/db";
  * Đặt PERF_LOG=1 để in thời gian đo được.
  */
 const BUDGET_MS = 3000;
+// ~4× số đo thật (xuất 10.000 dòng ≈ 1,6 s; nhịp event loop trễ nhất ≈ 0,12 s với lô 500 dòng)
+const EXPORT_BUDGET_MS = 6500;
+const LAG_BUDGET_MS = 500;
 const params = (sp: Record<string, string> = {}) => parseListParams(sp, AUDIT_FILTER_KEYS);
 const NOW = new Date();
 const timings: string[] = [];
@@ -84,12 +87,18 @@ describe("nhật ký 50.000 dòng", () => {
     expect(list).toHaveLength(8);
   });
 
-  it("xuất Excel toàn bộ 50.000 dòng (đúng giới hạn) hoàn tất trong 30 giây", async () => {
+  it("xuất Excel ở trần MAX_EXPORT_ROWS (bảng có 50.000 dòng): chỉ 10.000 dòng mới nhất, có ghi chú, nhanh và không giữ event loop", async () => {
+    // Đo độ trễ vòng lặp sự kiện trong lúc xuất: mỗi 5 ms một nhịp; nhịp trễ nhất phải nhỏ (nhường giữa các lô)
+    let worstLag = 0;
+    let last = performance.now();
+    const timer = setInterval(() => { const n = performance.now(); worstLag = Math.max(worstLag, n - last - 5); last = n; }, 5);
     const t = performance.now();
     const r = await exportAuditXlsx(prisma, params(), new Set(["audit.view"]));
     const ms = performance.now() - t;
-    timings.push(`xuất Excel 50.000 dòng: ${ms.toFixed(0)} ms (${(r.buffer.length / 1024 / 1024).toFixed(1)} MB)`);
-    expect(r).toMatchObject({ rowCount: 50000, truncated: false });
-    expect(ms).toBeLessThan(30_000);
+    clearInterval(timer);
+    timings.push(`xuất Excel ${MAX_EXPORT_ROWS} dòng (trần): ${ms.toFixed(0)} ms (${(r.buffer.length / 1024 / 1024).toFixed(1)} MB), nhịp event loop trễ nhất ${worstLag.toFixed(0)} ms`);
+    expect(r).toMatchObject({ rowCount: MAX_EXPORT_ROWS, truncated: true });
+    expect(ms).toBeLessThan(EXPORT_BUDGET_MS);
+    expect(worstLag).toBeLessThan(LAG_BUDGET_MS);
   }, 120_000);
 });

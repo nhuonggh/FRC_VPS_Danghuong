@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseListParams } from "@/lib/query-params";
 import { AUDIT_FILTER_KEYS } from "@/server/audit/queries";
 import { EXPORT_CELL_MAX_CHARS, MAX_EXPORT_ROWS, exportAuditXlsx } from "@/server/audit/export";
@@ -89,15 +89,18 @@ describe("exportAuditXlsx", () => {
     expect(EXPORT_CELL_MAX_CHARS).toBeLessThan(32767);
   });
 
-  it("vượt giới hạn dòng: chỉ xuất dòng MỚI NHẤT, thêm dòng ghi chú rõ ràng, truncated = true", async () => {
+  it("vượt giới hạn dòng: chỉ xuất dòng MỚI NHẤT, ghi chú GỘP Ô trên mọi cột ở cuối, truncated = true", async () => {
     for (let i = 1; i <= 5; i++) await prisma.auditLog.create({ data: { action: "a", entity: "E", entityId: String(i), at: new Date(Date.UTC(2026, 8, i)) } });
     const r = await exportAuditXlsx(prisma, params(), perms("audit.view"), { maxRows: 3 });
-    const { rows } = await sheetRows(r.buffer);
+    const { rows, ws } = await sheetRows(r.buffer);
     expect(r).toMatchObject({ truncated: true, rowCount: 3 });
     expect(rows.slice(0, 3).map((x) => x["Mã"])).toEqual(["5", "4", "3"]);
     expect(rows).toHaveLength(4);
-    expect(String(rows[3]!["Hành động"])).toMatch(/chỉ xuất 3 dòng mới nhất/i);
-    expect(String(rows[3]!["Hành động"])).toMatch(/thu hẹp bộ lọc/i);
+    const note = String(ws.getCell("A5").value);
+    expect(note).toMatch(/chỉ xuất 3 dòng mới nhất/i);
+    expect(note).toMatch(/thu hẹp bộ lọc/i);
+    expect(ws.model.merges).toEqual(["A5:G5"]); // không bị nhốt trong cột hẹp "Hành động"
+    expect(ws.getCell("C5").value).toBe(note); // ô con của vùng gộp
   });
 
   it("đúng bằng giới hạn: không cắt, không dòng ghi chú", async () => {
@@ -107,7 +110,38 @@ describe("exportAuditXlsx", () => {
     expect((await sheetRows(r.buffer)).rows).toHaveLength(3);
   });
 
-  it("giới hạn mặc định là 50.000 dòng", () => {
-    expect(MAX_EXPORT_ROWS).toBe(50_000);
+  it("giới hạn mặc định là 10.000 dòng (xuất đồng bộ trong 1 tiến trình Node nên phải nhỏ)", () => {
+    expect(MAX_EXPORT_ROWS).toBe(10_000);
+  });
+
+  it("đọc theo lô bằng con trỏ: nhiều dòng CÙNG thời điểm vẫn không trùng/lọt dòng giữa các lô; thứ tự at giảm dần rồi id giảm dần", async () => {
+    const same = new Date("2026-09-01T00:00:00Z");
+    for (let i = 1; i <= 7; i++) await prisma.auditLog.create({ data: { action: "a", entity: "E", entityId: String(i), at: same } });
+    await prisma.auditLog.create({ data: { action: "a", entity: "E", entityId: "newer", at: new Date("2026-09-02T00:00:00Z") } });
+    const r = await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 3 });
+    expect((await sheetRows(r.buffer)).rows.map((x) => x["Mã"])).toEqual(["newer", "7", "6", "5", "4", "3", "2", "1"]);
+    const cut = await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 3, maxRows: 5 });
+    expect(cut).toMatchObject({ rowCount: 5, truncated: true });
+    expect((await sheetRows(cut.buffer)).rows.slice(0, 5).map((x) => x["Mã"])).toEqual(["newer", "7", "6", "5", "4"]);
+  });
+
+  it("nhường vòng lặp sự kiện giữa các lô (request khác không bị bỏ đói): thêm ≥ 1 lần setImmediate cho mỗi lô", async () => {
+    for (let i = 1; i <= 6; i++) await prisma.auditLog.create({ data: { action: "a", entity: "E", entityId: String(i) } });
+    const spy = vi.spyOn(globalThis, "setImmediate");
+    try {
+      await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 1000 }); // 1 lô
+      const base = spy.mock.calls.length;
+      spy.mockClear();
+      await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 2 }); // 3 lô
+      expect(spy.mock.calls.length - base).toBeGreaterThanOrEqual(2);
+    } finally { spy.mockRestore(); }
+  });
+
+  it("nội dung không đổi theo cỡ lô", async () => {
+    for (let i = 1; i <= 9; i++) await prisma.auditLog.create({ data: { action: "a", entity: "E", entityId: String(i), afterJson: { n: i, unitCost: 1 } } });
+    const one = await sheetRows((await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 1 })).buffer);
+    const big = await sheetRows((await exportAuditXlsx(prisma, params(), perms("audit.view"), { batchSize: 1000 })).buffer);
+    expect(one.rows).toEqual(big.rows);
+    expect(JSON.stringify(one.rows)).not.toMatch(/unitCost/);
   });
 });

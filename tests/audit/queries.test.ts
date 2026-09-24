@@ -114,19 +114,6 @@ describe("listAudit", () => {
     expect((await listAudit(prisma, params({ timePreset: "custom", timeStart: "2026-09-15" }), new Date())).total).toBe(1);
     expect((await listAudit(prisma, params({ timePreset: "custom", timeStart: "2026-09-15", timeEnd: "2026-09-01" }), new Date())).total).toBe(1);
   });
-
-  it("50.000 dòng: trang đầu và trang xa đều ≤ 3 giây (hợp đồng hiệu năng)", async () => {
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO audit_log ("userId", action, entity, "entityId", "at")
-      SELECT 1 + (g % 5), 'order.update', 'SaleOrder', g::text, now() - (g || ' seconds')::interval
-      FROM generate_series(1, 50000) g`);
-    for (const page of ["1", "2000"]) {
-      const t = performance.now();
-      const r = await listAudit(prisma, params({ page }), new Date());
-      expect(r.total).toBe(50000);
-      expect(performance.now() - t).toBeLessThan(3000);
-    }
-  }, 60_000);
 });
 
 describe("listAuditEntities", () => {
