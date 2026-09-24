@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { findActiveFunction } from "@/lib/nav";
 import { Icon } from "./icons";
+import { BOTTOM_NAV_HEIGHT } from "./layout-constants";
 
 const hrefOf = (m: NavModule) => (m.type === "flat" ? m.path! : `/m/${m.key}`);
 
@@ -19,7 +20,7 @@ export function BottomNav({ nav }: { nav: NavModule[] }) {
   const shown = nav.slice(0, 4); // Trang chủ đầu tiên + 3 module hay dùng nhất theo thứ tự nghiệp vụ
 
   return (
-    <nav aria-label="Điều hướng nhanh" className="fixed inset-x-0 bottom-0 z-sidebar flex h-14 border-t border-border bg-surface md:hidden">
+    <nav aria-label="Điều hướng nhanh" className={clsx("fixed inset-x-0 bottom-0 z-sidebar flex border-t border-border bg-surface md:hidden", BOTTOM_NAV_HEIGHT)}>
       {shown.map((m) => {
         const on = active?.module.key === m.key || (m.type === "flat" && pathname === m.path);
         return (

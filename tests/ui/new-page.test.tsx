@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BOTTOM_NAV_HEIGHT, BOTTOM_NAV_OFFSET } from "@/components/shell/layout-constants";
 import { NewPage } from "@/components/ui/NewPage";
 
 const push = vi.fn();
@@ -38,6 +39,11 @@ describe("NewPage (/new)", () => {
     const footer = cancel.parentElement!;
     expect(footer.className).toContain("sticky");
     expect(footer.className).toContain("bottom-0");
+    // mobile: BottomNav (fixed, h-14, z cao hơn) đè đáy vùng cuộn → footer phải dính CÁCH đáy đúng chiều cao BottomNav
+    expect(footer.className).toContain("max-md:bottom-14");
+    expect(footer.className).toContain(BOTTOM_NAV_OFFSET);
+    expect(BOTTOM_NAV_HEIGHT).toBe("h-14");
+    expect(BOTTOM_NAV_OFFSET).toBe("max-md:bottom-14");
     expect(footer.className).not.toMatch(/\b(fixed|absolute)\b/);
     expect(Array.from(footer.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Hủy", "Tạo người dùng"]);
     footer.querySelectorAll("button").forEach((b) => expect(b.className).toContain("h-11"));

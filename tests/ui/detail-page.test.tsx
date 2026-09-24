@@ -51,6 +51,7 @@ const tabs: DetailTab[] = [
         <button onClick={() => ctx.cancelEdit()}>hủy-sửa</button>
         <button onClick={() => ctx.setError("Tên đã tồn tại")}>lỗi</button>
         <button onClick={() => ctx.finishEdit()}>xong</button>
+        <button onClick={() => ctx.setSaving(true)}>bắt-đầu-lưu</button>
       </div>
     ),
   },
@@ -126,6 +127,17 @@ describe("DetailPage — khung & điều hướng", () => {
     confirmMock.mockResolvedValueOnce(true);
     await userEvent.click(screen.getByRole("link", { name: /Quay lại người dùng/ }));
     expect(nav.push).toHaveBeenCalledWith("/system/users");
+  });
+
+  it("đang lưu → back-link bị chặn (không điều hướng, không hỏi), như tab/Hủy", async () => {
+    setup();
+    await userEvent.click(screen.getByText("sửa-basic"));
+    await userEvent.click(screen.getByText("làm-bẩn"));
+    await userEvent.click(screen.getByText("bắt-đầu-lưu"));
+    const notPrevented = fireEvent.click(screen.getByRole("link", { name: /Quay lại người dùng/ }));
+    expect(notPrevented).toBe(false); // preventDefault đã gọi → <Link> không điều hướng
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
   it("chỉ 1 section sửa mỗi lần: mở section khác khi đang dirty phải xác nhận", async () => {
@@ -332,6 +344,20 @@ describe("useDetailNav", () => {
     const { result } = renderHook(() => useDetailNav(KEYS, { basic: "info" }));
     expect(result.current.initialEditing).toBeNull();
     expect(nav.replace).toHaveBeenCalledWith("/x/1");
+  });
+
+  it("?tab= khác tab chứa section ?edit= → không bật edit ma (giữ tab đang mở), vẫn gỡ ?edit=", () => {
+    nav.search = "tab=roles&edit=basic";
+    const { result } = renderHook(() => useDetailNav(KEYS, { basic: "info" }));
+    expect(result.current.activeTab).toBe("roles");
+    expect(result.current.initialEditing).toBeNull();
+    expect(nav.replace).toHaveBeenCalledWith("/x/1?tab=roles");
+  });
+
+  it("?tab= khớp tab chứa section → deep-link ?tab=&edit= vẫn vào edit", () => {
+    nav.search = "tab=roles&edit=contact";
+    const { result } = renderHook(() => useDetailNav(KEYS, { basic: "info", contact: "roles" }));
+    expect(result.current.initialEditing).toBe("contact");
   });
 
   it("không có ?edit= → không gọi replace", () => {

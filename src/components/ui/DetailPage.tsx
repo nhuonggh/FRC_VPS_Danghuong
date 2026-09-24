@@ -119,8 +119,9 @@ export function useDetailNav(tabKeys: readonly string[], sectionTab: Record<stri
   const activeTab = wanted && tabKeys.includes(wanted) ? wanted : tabKeys[0]!;
   const [initialEditing] = useState<string | null>(() => {
     if (!editParam) return null;
-    const declared = Object.keys(sectionTab).length > 0;
-    return !declared || Object.hasOwn(sectionTab, editParam) ? editParam : null;
+    if (Object.keys(sectionTab).length === 0) return editParam; // không khai báo → không kiểm được, tin URL
+    // Section phải tồn tại VÀ nằm đúng tab đang mở; nếu không (vd ?tab=roles&edit=basic) → bỏ qua, không bật edit "ma"
+    return Object.hasOwn(sectionTab, editParam) && sectionTab[editParam] === activeTab ? editParam : null;
   });
   const consumed = useRef(false);
 
@@ -236,6 +237,7 @@ export function DetailPage({
   }
 
   async function onBackClick(e: React.MouseEvent) {
+    if (saving) { e.preventDefault(); return; } // đang lưu: không rời trang (như tab/Hủy)
     if (!editing || !dirty.current) return; // không có gì để mất → để <Link> điều hướng bình thường
     e.preventDefault();
     if (await confirm(DISCARD_CONFIRM)) router.push(backHref);

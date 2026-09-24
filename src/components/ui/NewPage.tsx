@@ -1,9 +1,11 @@
 "use client";
 
+import clsx from "clsx";
 import { ArrowLeft, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { BOTTOM_NAV_OFFSET } from "@/components/shell/layout-constants";
 import { confirm } from "@/lib/confirm-store";
 
 interface Props {
@@ -79,8 +81,10 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
         </aside>
         <div className="min-w-0 rounded-sm border border-border bg-surface p-4 sm:p-6">{children}</div>
       </div>
-      {/* Footer sticky đáy vùng cuộn (không absolute/fixed che nội dung); mobile: vùng cuộn có pb-20 nên không đè Bottom Nav */}
-      <div className="sticky bottom-0 z-header mt-4 flex justify-end gap-2 border-t border-border bg-surface px-4 py-3">
+      {/* Footer sticky đáy vùng cuộn (không absolute/fixed che nội dung). Sticky bám mép vùng cuộn, còn BottomNav
+          (fixed, z cao hơn) phủ lên đáy vùng đó ở < md → dính CÁCH đáy đúng chiều cao BottomNav (BOTTOM_NAV_OFFSET).
+          `pb-20` của vùng cuộn chỉ chừa chỗ cho cuối trang, không giữ footer khỏi bị BottomNav che. */}
+      <div className={clsx("sticky bottom-0 z-header mt-4 flex justify-end gap-2 border-t border-border bg-surface px-4 py-3", BOTTOM_NAV_OFFSET)}>
         <button type="button" onClick={() => void leave()} disabled={pending} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10">Hủy</button>
         <button type="button" onClick={() => void submit()} disabled={pending} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">
           {pending ? "Đang lưu" : submitLabel}

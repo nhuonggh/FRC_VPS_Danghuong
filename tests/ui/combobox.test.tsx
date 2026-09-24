@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -74,6 +74,33 @@ describe("Combobox", () => {
     expect(input).toHaveAttribute("aria-activedescendant", opts[0]!.id); // không vượt đầu
   });
 
+  it("cuộn dòng active vào tầm nhìn khi ↑↓; Home/End nhảy tới dòng đầu/cuối", async () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    render(<Harness load={async () => ALL} />);
+    const input = screen.getByRole("combobox");
+    await userEvent.click(input);
+    const opts = await screen.findAllByRole("option");
+    spy.mockClear();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(spy).toHaveBeenLastCalledWith({ block: "nearest" });
+    expect(spy.mock.contexts.at(-1)).toBe(opts[1]);
+    await userEvent.keyboard("{End}");
+    expect(input).toHaveAttribute("aria-activedescendant", opts[2]!.id);
+    expect(spy.mock.contexts.at(-1)).toBe(opts[2]);
+    await userEvent.keyboard("{Home}");
+    expect(input).toHaveAttribute("aria-activedescendant", opts[0]!.id);
+    expect(spy.mock.contexts.at(-1)).toBe(opts[0]);
+    spy.mockRestore();
+  });
+
+  it("Home/End khi danh sách đóng vẫn là phím sửa văn bản bình thường (không bị chặn)", () => {
+    render(<Harness load={async () => ALL} initial={ALL[0]!} />);
+    const input = screen.getByRole("combobox");
+    const ev = new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true });
+    input.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
   it("kết quả chậm của lần gõ CŨ không ghi đè kết quả lần gõ MỚI", async () => {
     let releaseSlow!: () => void;
     const load = vi.fn((q: string) =>
@@ -86,8 +113,10 @@ describe("Combobox", () => {
     await userEvent.type(input, "a");
     await userEvent.type(input, "b"); // q = "ab" trả về ngay
     expect(await screen.findByRole("option", { name: "MỚI" })).toBeInTheDocument();
-    releaseSlow();
-    await waitFor(() => expect(screen.queryByRole("option", { name: "CŨ" })).toBeNull());
+    // giải phóng kết quả cũ TRONG act(async) để phần tiếp theo của promise (setOptions nếu thiếu guard) chạy xong
+    await act(async () => { releaseSlow(); });
+    expect(screen.queryByRole("option", { name: "CŨ" })).toBeNull();
+    expect(screen.getByRole("option", { name: "MỚI" })).toBeInTheDocument();
   });
 
   it("không có kết quả → thông báo", async () => {

@@ -77,11 +77,20 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
     return () => clearTimeout(t);
   }, [q, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Giữ dòng active trong tầm nhìn khi đi bằng bàn phím (danh sách max-h-60 cuộn được). Không có scrollIntoView (jsdom cũ) → bỏ qua.
+  useEffect(() => {
+    if (!open || !options[active]) return;
+    document.getElementById(`${uid}-o${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [active, open, options, uid]);
+
   const pick = (o: ComboOption) => { onChange(o); setQ(o.label); setOpen(false); };
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") { e.preventDefault(); if (!open) setOpen(true); else setActive((a) => Math.min(a + 1, options.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    // Home/End chỉ nhảy dòng khi danh sách đang mở; đóng thì vẫn là phím di chuyển con trỏ trong ô nhập
+    else if (e.key === "Home" && open && options.length > 0) { e.preventDefault(); setActive(0); }
+    else if (e.key === "End" && open && options.length > 0) { e.preventDefault(); setActive(options.length - 1); }
     else if (e.key === "Enter" && open && options[active]) { e.preventDefault(); pick(options[active]!); }
     else if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); setQ(value?.label ?? ""); }
   }

@@ -24,7 +24,8 @@ function ToastView({ item }: { item: ToastItem }) {
   }, [item.id, item.kind, dismiss]);
   const { Icon, bar, icon } = STYLE[item.kind];
   return (
-    <div role="status" className={clsx("flex items-start gap-3 rounded-md border-l-[3px] bg-raised p-3 shadow-md", bar)}>
+    // Lỗi = role=alert (assertive, đọc ngay); còn lại = role=status (polite). Xem ToastHost về vùng live.
+    <div role={item.kind === "error" ? "alert" : "status"} className={clsx("flex items-start gap-3 rounded-md border-l-[3px] bg-raised p-3 shadow-md", bar)}>
       <Icon size={18} aria-hidden className={clsx("mt-0.5 shrink-0", icon)} />
       <p className="min-w-0 flex-1 text-sm">{item.message}</p>
       {item.action && (
@@ -39,13 +40,20 @@ function ToastView({ item }: { item: ToastItem }) {
   );
 }
 
-/** Tối đa 3 toast MỚI NHẤT; phần cũ hơn gộp "+N thông báo khác" (hiện lại khi bớt toast). */
+/**
+ * Tối đa 3 toast MỚI NHẤT; phần cũ hơn gộp "+N thông báo khác" (hiện lại khi bớt toast).
+ *
+ * A11y: vùng bao luôn có mặt trong DOM (kể cả khi chưa có toast) và là `aria-live="polite"` +
+ * `aria-relevant="additions"` — trình đọc màn hình chỉ đăng ký vùng live TỪ TRƯỚC, nên thêm con vào vùng có sẵn
+ * mới được đọc tin cậy (khác với vùng vừa được tạo cùng lúc với nội dung). Từng toast tự mang role: `status`
+ * (polite) cho success/info/warning, `alert` (assertive, ngắt lời) riêng cho lỗi.
+ */
 export function ToastHost() {
   const items = useToastStore((s) => s.items);
   const shown = items.slice(-MAX_VISIBLE);
   const hidden = items.length - shown.length;
   return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-16 z-toast flex flex-col items-end gap-2 md:inset-x-auto md:bottom-auto md:right-4 md:top-16">
+    <div aria-live="polite" aria-relevant="additions" className="pointer-events-none fixed inset-x-3 bottom-16 z-toast flex flex-col items-end gap-2 md:inset-x-auto md:bottom-auto md:right-4 md:top-16">
       {shown.map((i) => (
         <div key={i.id} className="pointer-events-auto w-full max-w-sm"><ToastView item={i} /></div>
       ))}
