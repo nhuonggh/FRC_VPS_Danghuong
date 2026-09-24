@@ -74,6 +74,9 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 
 // Tên field trong DTO → quyền cần có để được thấy. Mỗi domain BỔ SUNG field của mình ở đây
 // (plan module nào thêm field nhạy cảm thì thêm dòng vào bảng này + test ở module đó).
+// QUY ƯỚC: redact chạy theo TÊN field, nên giá trị nhạy cảm KHÔNG BAO GIỜ được trả dưới tên chung chung
+// (price, unitPrice, amount, total...) — luôn dùng tên riêng (salePrice, unitCostFifo, lineProfit...) rồi
+// đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   unitCostFifo: "cost.view",
   unitCostOut: "cost.view",
@@ -81,8 +84,15 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   lineProfit: "profit.view",
   orderProfit: "profit.view",
   profit: "profit.view",
+  unitCost: "cost.view",
+  costPrice: "cost.view",
+  stockValue: "cost.view",
+  margin: "profit.view",
+  grossProfit: "profit.view",
   purchasePrice: "purchase_price.view",
   lastPurchasePrice: "purchase_price.view",
+  salePrice: "sale_price.view",
+  lastSalePrice: "sale_price.view",
 };
 
 type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly PermissionCode[] };

@@ -24,10 +24,14 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
   for (const name of Object.keys(ROLE_DEFAULTS)) {
     const existing = await prisma.role.findUnique({ where: { name } });
     if (existing) continue;
-    const role = await prisma.role.create({ data: { name, isSystem: true } });
+    // Nguyên tử: vai trò + quyền mặc định cùng commit/rollback. Nếu tách rời, sập giữa chừng sẽ để lại
+    // vai trò rỗng và lần seed sau (`if (existing) continue`) không bao giờ bù quyền → khoá hệ thống.
     const ids = [...resolveRolePermissions(name)].map((c) => permByCode.get(c)!);
-    await prisma.rolePermission.createMany({
-      data: ids.map((permissionId) => ({ roleId: role.id, permissionId })),
+    await prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({ data: { name, isSystem: true } });
+      await tx.rolePermission.createMany({
+        data: ids.map((permissionId) => ({ roleId: role.id, permissionId })),
+      });
     });
   }
 
@@ -49,16 +53,20 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
   }
 
   // 5. Admin khởi tạo (chỉ khi bảng users trống và có mật khẩu). KHÔNG log mật khẩu.
-  if (opts.bootstrapAdminPassword && (await prisma.user.count()) === 0) {
-    const role = await prisma.role.findUniqueOrThrow({ where: { name: ADMIN_ROLE } });
-    await prisma.user.create({
-      data: {
-        username: "admin",
-        fullName: "Quản trị hệ thống",
-        passwordHash: await bcrypt.hash(opts.bootstrapAdminPassword, 10),
-        mustChangePassword: true,
-        roles: { create: { roleId: role.id } },
-      },
+  if (opts.bootstrapAdminPassword) {
+    const passwordHash = await bcrypt.hash(opts.bootstrapAdminPassword, 10);
+    await prisma.$transaction(async (tx) => {
+      if ((await tx.user.count()) > 0) return;
+      const role = await tx.role.findUniqueOrThrow({ where: { name: ADMIN_ROLE } });
+      await tx.user.create({
+        data: {
+          username: "admin",
+          fullName: "Quản trị hệ thống",
+          passwordHash,
+          mustChangePassword: true,
+          roles: { create: { roleId: role.id } },
+        },
+      });
     });
   }
 }

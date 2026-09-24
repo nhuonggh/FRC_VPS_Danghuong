@@ -100,3 +100,20 @@ describe("redactDeep", () => {
     expect(out.lines[0]!.at).toBe(at);
   });
 });
+
+describe("redactDeep với các tên field bổ sung", () => {
+  const row = () => ({
+    id: 1,
+    lines: [{ salePrice: 1, lastSalePrice: 2, unitCost: 3, costPrice: 4, margin: 5, grossProfit: 6, stockValue: 7, qty: 8 }],
+  });
+  it("thiếu quyền → chỉ còn field thường", () => {
+    expect(redactDeep(row(), new Set<string>())).toEqual({ id: 1, lines: [{ qty: 8 }] });
+  });
+  it("sale_price.view chỉ mở salePrice/lastSalePrice", () => {
+    expect(redactDeep(row(), new Set(["sale_price.view"])).lines[0]).toEqual({ salePrice: 1, lastSalePrice: 2, qty: 8 });
+  });
+  it("cost.view mở unitCost/costPrice/stockValue; profit.view mở margin/grossProfit", () => {
+    expect(redactDeep(row(), new Set(["cost.view"])).lines[0]).toEqual({ unitCost: 3, costPrice: 4, stockValue: 7, qty: 8 });
+    expect(redactDeep(row(), new Set(["profit.view"])).lines[0]).toEqual({ margin: 5, grossProfit: 6, qty: 8 });
+  });
+});

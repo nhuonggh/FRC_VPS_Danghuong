@@ -95,4 +95,58 @@ describe("seed", () => {
     await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123" });
     for (const s of spies) expect(JSON.stringify(s.mock.calls)).not.toContain("Mat-khau-tam-123");
   });
+
+  it("tạo vai trò nguyên tử: lỗi giữa chừng khi gán quyền → không còn vai trò rỗng, lần seed sau tạo đủ", async () => {
+    const crashing = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop !== "$transaction") return Reflect.get(target, prop);
+        return (fn: (tx: unknown) => Promise<unknown>, opts?: object) =>
+          target.$transaction(
+            (tx) =>
+              fn(
+                new Proxy(tx, {
+                  get(t, p) {
+                    if (p === "rolePermission") return { createMany: () => Promise.reject(new Error("sập giữa chừng")) };
+                    return Reflect.get(t, p);
+                  },
+                }),
+              ),
+            opts,
+          );
+      },
+    }) as typeof prisma;
+    await expect(seed(crashing)).rejects.toThrow("sập giữa chừng");
+    expect(await prisma.role.count()).toBe(0);
+    expect(await prisma.rolePermission.count()).toBe(0);
+
+    await seed(prisma);
+    const gd = await prisma.role.findUniqueOrThrow({ where: { name: "Giám đốc" } });
+    expect(await prisma.rolePermission.count({ where: { roleId: gd.id } })).toBe(PERMISSIONS.length);
+  });
+
+  it("tạo admin nguyên tử: lỗi khi gán vai trò → không còn user mồ côi, lần seed sau tạo được", async () => {
+    await seed(prisma);
+    const crashing = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop !== "$transaction") return Reflect.get(target, prop);
+        return (fn: (tx: unknown) => Promise<unknown>, opts?: object) =>
+          target.$transaction(
+            (tx) =>
+              fn(
+                new Proxy(tx, {
+                  get(t, p) {
+                    if (p === "user") return { ...t.user, create: () => Promise.reject(new Error("sập tạo admin")) };
+                    return Reflect.get(t, p);
+                  },
+                }),
+              ),
+            opts,
+          );
+      },
+    }) as typeof prisma;
+    await expect(seed(crashing, { bootstrapAdminPassword: "Mat-khau-tam-123" })).rejects.toThrow("sập tạo admin");
+    expect(await prisma.user.count()).toBe(0);
+    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123" });
+    expect(await prisma.user.count()).toBe(1);
+  });
 });

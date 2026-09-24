@@ -71,3 +71,25 @@ describe("danh mục quyền", () => {
     expect(() => resolveRolePermissions("Không tồn tại")).toThrow(/ROLE_DEFAULTS/);
   });
 });
+
+describe("SENSITIVE_FIELDS phủ đủ các quyền xem dữ liệu nhạy cảm", () => {
+  it("mỗi quyền *.view đánh dấu sensitive có ít nhất 1 field trong SENSITIVE_FIELDS", () => {
+    const viewSensitive = PERMISSIONS.filter((p) => p.code.endsWith(".view") && "sensitive" in p && p.sensitive);
+    expect(viewSensitive.map((p) => p.code).sort()).toEqual(
+      ["cost.view", "profit.view", "purchase_price.view", "sale_price.view"],
+    );
+    const mapped = new Set(Object.values(SENSITIVE_FIELDS));
+    for (const p of viewSensitive) expect(mapped.has(p.code), p.code).toBe(true);
+  });
+
+  it("các tên field hiển nhiên được ánh xạ đúng quyền", () => {
+    expect(SENSITIVE_FIELDS.salePrice).toBe("sale_price.view");
+    expect(SENSITIVE_FIELDS.lastSalePrice).toBe("sale_price.view");
+    for (const f of ["unitCost", "costPrice", "stockValue"]) expect(SENSITIVE_FIELDS[f], f).toBe("cost.view");
+    for (const f of ["margin", "grossProfit"]) expect(SENSITIVE_FIELDS[f], f).toBe("profit.view");
+  });
+
+  it("KHÔNG ánh xạ tên chung chung (price, amount...) — không bảo vệ được theo tên", () => {
+    for (const f of ["price", "unitPrice", "amount", "total"]) expect(SENSITIVE_FIELDS[f], f).toBeUndefined();
+  });
+});
