@@ -47,20 +47,20 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="username" className="mb-1 block text-xs text-fg-muted">Tên đăng nhập</label>
-              <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username}
-                className={`h-9 w-full rounded-sm border bg-canvas px-3 text-sm ${errors.username ? "border-danger" : "border-border"}`} />
-              {errors.username && <p className="mt-1 text-xs text-danger">{errors.username.message}</p>}
+              <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
+                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.username ? "border-danger" : "border-border"}`} />
+              {errors.username && <p id="username-error" className="mt-1 text-xs text-danger">{errors.username.message}</p>}
             </div>
             <div>
               <label htmlFor="fullName" className="mb-1 block text-xs text-fg-muted">Họ tên</label>
-              <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName}
-                className={`h-9 w-full rounded-sm border bg-canvas px-3 text-sm ${errors.fullName ? "border-danger" : "border-border"}`} />
-              {errors.fullName && <p className="mt-1 text-xs text-danger">{errors.fullName.message}</p>}
+              <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} aria-describedby={errors.fullName ? "fullName-error" : undefined}
+                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.fullName ? "border-danger" : "border-border"}`} />
+              {errors.fullName && <p id="fullName-error" className="mt-1 text-xs text-danger">{errors.fullName.message}</p>}
             </div>
           </div>
           <h2 className="pt-2 text-base font-semibold">Nhóm quyền</h2>
           <Controller control={control} name="roleIds" render={({ field }) => (
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-2" aria-describedby={errors.roleIds ? "roleIds-error" : undefined}>
               <legend className="sr-only">Nhóm quyền</legend>
               {roles.map((r) => (
                 <label key={r.id} className="flex min-h-10 items-start gap-3 rounded-sm border border-border p-3 text-sm">
@@ -69,7 +69,7 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
                   <span><span className="font-medium">{r.name}</span>{r.description && <span className="block text-xs text-fg-muted">{r.description}</span>}</span>
                 </label>
               ))}
-              {errors.roleIds && <p className="text-xs text-danger">{errors.roleIds.message}</p>}
+              {errors.roleIds && <p id="roleIds-error" className="text-xs text-danger">{errors.roleIds.message}</p>}
             </fieldset>
           )} />
           <p className="text-xs text-fg-muted">Hệ thống tự sinh mật khẩu tạm; người dùng phải đổi ở lần đăng nhập đầu.</p>

@@ -66,7 +66,10 @@ export function UsersTable({
     ...(canManage ? [
       { key: "edit", label: "Sửa", icon: "pencil" as const, href: `/system/users/${u.id}?edit=profile` },
       ...(u.id === selfId ? [] : [{ key: "lock", label: u.isLocked ? "Mở khóa" : "Khóa", icon: "lock" as const, danger: !u.isLocked, onClick: () => void toggleLock(u) }]),
-      { key: "reset", label: "Cấp lại mật khẩu", icon: "pencil" as const, onClick: () => void reset(u) },
+      // Chính mình: không tự cấp lại mật khẩu → trỏ sang trang đổi mật khẩu
+      u.id === selfId
+        ? { key: "change-password", label: "Đổi mật khẩu của tôi", icon: "lock" as const, href: "/change-password" }
+        : { key: "reset", label: "Cấp lại mật khẩu", icon: "pencil" as const, onClick: () => void reset(u) },
     ] : []),
   ];
 
@@ -74,7 +77,7 @@ export function UsersTable({
     <>
       <DataTable id="users" columns={columns} rows={rows} rowKey={(u) => u.id} rowHref={(u) => `/system/users/${u.id}`}
         rowActions={actions} sort={params.sort} buildSortHref={(s) => buildListHref("/system/users", params, { sort: s })} />
-      <TempPasswordDialog open={!!temp} username={temp?.username ?? ""} password={temp?.password ?? null} onClose={() => setTemp(null)} />
+      <TempPasswordDialog open={!!temp} username={temp?.username ?? ""} password={temp?.password ?? null} onClose={() => { setTemp(null); router.refresh(); }} />
     </>
   );
 }

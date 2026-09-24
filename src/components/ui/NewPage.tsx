@@ -59,7 +59,8 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    // <form>: Enter trong ô nhập gửi form (nút Tạo là nút submit duy nhất); mọi đường gửi đều qua submit() (chặn bấm đúp).
+    <form className="flex min-h-full flex-col" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <div className="mb-4">
         <Link
           href={backHref}
@@ -86,10 +87,10 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           `pb-20` của vùng cuộn chỉ chừa chỗ cho cuối trang, không giữ footer khỏi bị BottomNav che. */}
       <div className={clsx("sticky bottom-0 z-header mt-4 flex justify-end gap-2 border-t border-border bg-surface px-4 py-3", BOTTOM_NAV_OFFSET)}>
         <button type="button" onClick={() => void leave()} disabled={pending} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10">Hủy</button>
-        <button type="button" onClick={() => void submit()} disabled={pending} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">
+        <button type="submit" disabled={pending} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">
           {pending ? "Đang lưu" : submitLabel}
         </button>
       </div>
-    </div>
+    </form>
   );
 }

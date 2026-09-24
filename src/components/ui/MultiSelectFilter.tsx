@@ -3,6 +3,7 @@
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 
 /** Lọc đa chọn theo query-param `paramKey` (giá trị nối bằng dấu phẩy). Mọi thay đổi về trang 1 (do buildListHref). */
@@ -16,9 +17,23 @@ export function MultiSelectFilter({
   params: ListParams;
 }) {
   const router = useRouter();
-  const selected = params.filters[paramKey] ?? [];
+  const fromUrl = params.filters[paramKey] ?? [];
+  const urlKey = fromUrl.join(",");
+  // Lựa chọn hiển thị = trạng thái cục bộ (lạc quan): bấm nhanh 2 lần khi router.push chưa xong thì lần 2 vẫn dựng
+  // URL từ lựa chọn MỚI NHẤT chứ không từ `params` cũ (nếu không, lần bấm 1 bị mất). URL đổi thật (bộ lọc khác /
+  // "Xóa bộ lọc" / điều hướng) → đồng bộ lại từ URL.
+  const [selected, setSelected] = useState(fromUrl);
+  const latest = useRef(selected);
+  useEffect(() => {
+    const next = urlKey ? urlKey.split(",") : [];
+    latest.current = next;
+    setSelected(next);
+  }, [urlKey]);
   const toggle = (value: string) => {
-    const next = selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value];
+    const cur = latest.current;
+    const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+    latest.current = next;
+    setSelected(next);
     router.push(buildListHref(basePath, params, { filters: { [paramKey]: next } }));
   };
   return (

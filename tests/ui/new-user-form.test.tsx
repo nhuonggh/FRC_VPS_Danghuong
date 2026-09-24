@@ -36,6 +36,35 @@ describe("NewUserForm (/system/users/new)", () => {
     expect(screen.getByText("Nhập họ tên.")).toBeInTheDocument();
     expect(screen.getByText("Chọn ít nhất 1 nhóm quyền.")).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
+    for (const [label, msg] of [["Tên đăng nhập", "Tên đăng nhập tối thiểu 3 ký tự."], ["Họ tên", "Nhập họ tên."]] as const) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(msg);
+      expect(input).toHaveClass("h-11", "md:h-9");
+    }
+    expect(screen.getByRole("group", { name: "Nhóm quyền" })).toHaveAccessibleDescription("Chọn ít nhất 1 nhóm quyền.");
+  });
+
+  it("nhấn Enter trong ô nhập gửi form (như bấm nút Tạo), chỉ 1 lần dù Enter liên tiếp; giữ Idempotency-Key", async () => {
+    let done!: (v: unknown) => void;
+    apiFetch.mockReturnValueOnce(new Promise((r) => { done = r; }));
+    render(<NewUserForm roles={roles} />);
+    await userEvent.type(screen.getByLabelText("Tên đăng nhập"), "lan.tran");
+    await userEvent.type(screen.getByLabelText("Họ tên"), "Trần Thị Lan");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Kế toán/ }));
+    await userEvent.type(screen.getByLabelText("Họ tên"), "{Enter}{Enter}");
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+    expect(apiFetch.mock.calls[0]![1].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    done({ id: 8, tempPassword: "Aa1bB2cC3dD4" });
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("Enter khi dữ liệu thiếu → lỗi từng ô, không gọi API", async () => {
+    render(<NewUserForm roles={roles} />);
+    await userEvent.type(screen.getByLabelText("Tên đăng nhập"), "{Enter}");
+    expect(await screen.findByText("Nhập họ tên.")).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it("gửi POST /api/users kèm Idempotency-Key; thành công → hộp thoại mật khẩu tạm (1 lần), đóng → sang trang chi tiết", async () => {

@@ -22,7 +22,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     <ListPageLayout
       title="Người dùng"
       actions={canManage && (
-        <Link href={`${BASE}/new`} className="flex h-10 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent">
+        <Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 md:h-10 text-sm font-medium text-fg-on-accent">
           <Plus size={16} aria-hidden /> Thêm mới
         </Link>
       )}

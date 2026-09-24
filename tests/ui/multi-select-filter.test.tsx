@@ -50,4 +50,26 @@ describe("MultiSelectFilter", () => {
     await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "Giám đốc" }));
     expect(screen.getByRole("menuitemcheckbox", { name: "Kế toán" })).toBeInTheDocument();
   });
+
+  it("chọn 2 mục nhanh khi URL chưa kịp cập nhật → lần 2 vẫn giữ lựa chọn của lần 1 (không dựng URL từ params cũ)", async () => {
+    const stale = parseListParams({}, ["role"]); // props không đổi giữa 2 lần bấm (router.push chưa hoàn tất)
+    render(<MultiSelectFilter label="Nhóm quyền" paramKey="role" options={options} basePath="/system/users" params={stale} />);
+    await userEvent.click(screen.getByRole("button", { name: /Nhóm quyền/ }));
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "Giám đốc" }));
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "Kế toán" }));
+    expect(push).toHaveBeenNthCalledWith(1, "/system/users?role=1");
+    expect(push).toHaveBeenNthCalledWith(2, "/system/users?role=1%2C2");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Giám đốc" })).toBeChecked();
+    expect(screen.getByRole("button", { name: /Nhóm quyền/, hidden: true })).toHaveTextContent("2"); // menu mở → phần còn lại aria-hidden
+  });
+
+  it("URL đổi từ bên ngoài (vd 'Xóa bộ lọc') → đồng bộ lại lựa chọn hiển thị", () => {
+    const mk = (sp: Record<string, string>) => (
+      <MultiSelectFilter label="Nhóm quyền" paramKey="role" options={options} basePath="/system/users" params={parseListParams(sp, ["role"])} />
+    );
+    const { rerender } = render(mk({ role: "1,2" }));
+    expect(screen.getByRole("button", { name: /Nhóm quyền/ })).toHaveTextContent("2");
+    rerender(mk({}));
+    expect(screen.getByRole("button", { name: /Nhóm quyền/ })).not.toHaveTextContent(/\d/);
+  });
 });

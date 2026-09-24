@@ -91,6 +91,10 @@ describe("UserDetail — sửa từng phần", () => {
     await userEvent.click(screen.getByRole("button", { name: "Lưu" }));
     expect(await screen.findByText("Nhập họ tên.")).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
+    const input = screen.getByLabelText("Họ tên");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Nhập họ tên."); // aria-describedby trỏ tới thông báo lỗi
+    expect(input).toHaveClass("h-11", "md:h-9");
   });
 
   it("đổi nhóm quyền: gửi roleIds; lỗi 'còn quản trị viên' hiện ở khung cảnh báo, vẫn ở chế độ sửa", async () => {
@@ -172,8 +176,21 @@ describe("UserDetail — khóa / cấp lại mật khẩu", () => {
     expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "Cấp lại mật khẩu cho lan.tran?", danger: true }));
     expect(await screen.findByText("Zx9Kp2Lm4Qrs")).toBeInTheDocument();
     expect(apiFetch).toHaveBeenCalledWith("/api/users/5/reset-password", { method: "POST" });
+    expect(nav.refresh).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Đã ghi lại" }));
     await waitFor(() => expect(document.body.textContent).not.toContain("Zx9Kp2Lm4Qrs"));
+    expect(nav.refresh).toHaveBeenCalledTimes(1); // huy hiệu "Chờ đổi mật khẩu" + tab Nhật ký cập nhật
+  });
+
+  it("xem chính mình: KHÔNG có 'Cấp lại mật khẩu' (thay bằng liên kết tới /change-password)", () => {
+    render(<UserDetail {...base} isSelf />);
+    expect(screen.queryByRole("button", { name: "Cấp lại mật khẩu" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Đổi mật khẩu của tôi" })).toHaveAttribute("href", "/change-password");
+  });
+
+  it("nút hành động ở đầu trang chạm ≥44px trên mobile", () => {
+    render(<UserDetail {...base} />);
+    for (const name of ["Khóa", "Cấp lại mật khẩu"]) expect(screen.getByRole("button", { name })).toHaveClass("h-11", "md:h-10");
   });
 
   it("Cấp lại mật khẩu bị 403 (vượt quyền) → toast lỗi, không hộp thoại mật khẩu", async () => {

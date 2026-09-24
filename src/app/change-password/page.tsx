@@ -1,5 +1,6 @@
 import { requireActor } from "@/server/auth/session";
 import { ChangePasswordForm } from "./ChangePasswordForm";
+import { SignOutButton } from "./SignOutButton";
 
 // NGOÀI nhóm (app): layout (app) chuyển tài khoản mustChangePassword sang đây — đặt trong (app) sẽ redirect vòng lặp.
 export default async function ChangePasswordPage() {
@@ -12,6 +13,7 @@ export default async function ChangePasswordPage() {
           <p className="mb-4 text-sm text-warning">Bạn cần đổi mật khẩu trước khi sử dụng hệ thống.</p>
         )}
         <ChangePasswordForm forced={actor.mustChangePassword} />
+        <SignOutButton />
       </div>
     </main>
   );

@@ -120,8 +120,22 @@ describe("UsersTable", () => {
     expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "Cấp lại mật khẩu cho u3?", danger: true }));
     expect(await screen.findByText("Zx9Kp2Lm4Qrs")).toBeInTheDocument();
     expect(apiFetch).toHaveBeenCalledWith("/api/users/3/reset-password", { method: "POST" });
+    expect(refresh).not.toHaveBeenCalled(); // chưa làm mới khi còn hiện mật khẩu
     await userEvent.click(screen.getByRole("button", { name: "Đã ghi lại" }));
     await waitFor(() => expect(screen.queryByText("Zx9Kp2Lm4Qrs")).toBeNull());
     expect(document.body.textContent).not.toContain("Zx9Kp2Lm4Qrs");
+    expect(refresh).toHaveBeenCalledTimes(1); // đóng hộp thoại → làm mới (huy hiệu "Chờ đổi mật khẩu", nhật ký)
+  });
+
+  it("tài khoản của chính mình: KHÔNG có 'Cấp lại mật khẩu', có lối tới /change-password; người khác vẫn có", async () => {
+    setup({ selfId: 1 });
+    const mine = rowOf("Nguyễn Văn Nam");
+    expect(within(mine).getByRole("link", { name: "Đổi mật khẩu của tôi" })).toHaveAttribute("href", "/change-password");
+    expect(within(mine).queryByRole("button", { name: "Cấp lại mật khẩu" })).toBeNull();
+    expect(within(mine).queryByRole("button", { name: "Thêm thao tác" })).toBeNull(); // 3 thao tác đều hiện sẵn, không có menu ⋯
+    const other = rowOf("Người 3");
+    await userEvent.click(within(other).getByRole("button", { name: "Thêm thao tác" }));
+    expect(await screen.findByRole("menuitem", { name: "Cấp lại mật khẩu" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Đổi mật khẩu của tôi" })).toBeNull();
   });
 });

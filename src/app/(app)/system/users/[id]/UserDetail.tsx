@@ -1,6 +1,7 @@
 "use client";
 
 import { KeyRound, Lock, Unlock } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import {
@@ -43,8 +44,9 @@ function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
         <div>
           <label htmlFor="fullName" className="mb-1 block text-xs text-fg-muted">Họ tên</label>
           <input id="fullName" {...s.form.register("fullName")} aria-invalid={!!s.form.formState.errors.fullName}
-            className="h-9 w-full rounded-sm border border-border bg-canvas px-3 text-sm" />
-          {s.form.formState.errors.fullName && <p className="mt-1 text-xs text-danger">{s.form.formState.errors.fullName.message}</p>}
+            aria-describedby={s.form.formState.errors.fullName ? "fullName-error" : undefined}
+            className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${s.form.formState.errors.fullName ? "border-danger" : "border-border"}`} />
+          {s.form.formState.errors.fullName && <p id="fullName-error" className="mt-1 text-xs text-danger">{s.form.formState.errors.fullName.message}</p>}
         </div>
       ) : (
         <dl className="space-y-2">
@@ -123,22 +125,26 @@ export function UserDetail(p: Props) {
     } catch (e) { toastApiError(e); }
   });
 
-  const actionBtn = "flex h-10 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover";
+  const actionBtn = "flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover md:h-10";
   return (
     <>
       <DetailPage
         backHref="/system/users" backLabel="Quay lại người dùng"
-        headerActions={p.canManage && (
+        headerActions={
           <>
-            {!p.isSelf && (
-              <button type="button" onClick={() => void toggleLock()} className={actionBtn}>
-                {p.user.isLocked ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
-                {p.user.isLocked ? "Mở khóa" : "Khóa"}
-              </button>
+            {p.canManage && !p.isSelf && (
+              <>
+                <button type="button" onClick={() => void toggleLock()} className={actionBtn}>
+                  {p.user.isLocked ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
+                  {p.user.isLocked ? "Mở khóa" : "Khóa"}
+                </button>
+                <button type="button" onClick={() => void reset()} className={actionBtn}><KeyRound size={16} aria-hidden /> Cấp lại mật khẩu</button>
+              </>
             )}
-            <button type="button" onClick={() => void reset()} className={actionBtn}><KeyRound size={16} aria-hidden /> Cấp lại mật khẩu</button>
+            {/* Tài khoản của chính mình: không tự cấp lại mật khẩu (sinh mật khẩu tạm cho chính mình vô nghĩa) → đổi qua trang riêng */}
+            {p.isSelf && <Link href="/change-password" className={actionBtn}><KeyRound size={16} aria-hidden /> Đổi mật khẩu của tôi</Link>}
           </>
-        )}
+        }
         summary={{
           title: p.user.fullName, code: p.user.username,
           badges: [p.user.isLocked ? { label: "Đã khóa", tone: "danger" } : { label: "Hoạt động", tone: "success" },
@@ -165,7 +171,7 @@ export function UserDetail(p: Props) {
         {...nav}
         initialEditing={p.canManage ? nav.initialEditing : null}
       />
-      <TempPasswordDialog open={temp !== null} username={p.user.username} password={temp} onClose={() => setTemp(null)} />
+      <TempPasswordDialog open={temp !== null} username={p.user.username} password={temp} onClose={() => { setTemp(null); router.refresh(); }} />
     </>
   );
 }

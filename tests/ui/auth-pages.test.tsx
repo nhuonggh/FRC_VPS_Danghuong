@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChangePasswordPage from "@/app/change-password/page";
 import { ChangePasswordForm } from "@/app/change-password/ChangePasswordForm";
+import { SignOutButton } from "@/app/change-password/SignOutButton";
 import LoginPage from "@/app/(auth)/login/page";
 import { LoginForm } from "@/app/(auth)/login/LoginForm";
 
@@ -13,6 +14,7 @@ vi.mock("@/server/auth/session", () => ({ getActor: () => getActor(), requireAct
 // Trang chỉ dựng cây phần tử; không render → không cần next-auth/react
 vi.mock("@/app/(auth)/login/LoginForm", () => ({ LoginForm: () => null }));
 vi.mock("@/app/change-password/ChangePasswordForm", () => ({ ChangePasswordForm: () => null }));
+vi.mock("@/app/change-password/SignOutButton", () => ({ SignOutButton: () => null }));
 
 beforeEach(() => { getActor.mockReset(); requireActor.mockReset(); redirect.mockClear(); });
 
@@ -58,6 +60,11 @@ describe("/change-password (server)", () => {
     const tree = await ChangePasswordPage();
     expect(text(tree)).toContain("Bạn cần đổi mật khẩu trước khi sử dụng hệ thống.");
     expect(find(tree, ChangePasswordForm)?.props).toMatchObject({ forced: true });
+  });
+
+  it("trang nằm ngoài khung ứng dụng nên có nút Đăng xuất riêng", async () => {
+    requireActor.mockResolvedValue({ mustChangePassword: true });
+    expect(find(await ChangePasswordPage(), SignOutButton)).not.toBeNull();
   });
 
   it("tự nguyện đổi → không có lời nhắc, forced=false", async () => {
