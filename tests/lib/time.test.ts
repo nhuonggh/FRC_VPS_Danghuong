@@ -27,4 +27,26 @@ describe("time (Asia/Ho_Chi_Minh, UTC+7)", () => {
     expect(ictStartOfDay(2026, 12, 1).toISOString()).toBe("2026-12-31T17:00:00.000Z");
     expect(ictStartOfDay(2026, 8, 0).toISOString()).toBe("2026-08-30T17:00:00.000Z");
   });
+  it("ranh giới tuần: Chủ nhật 23:59 ICT (16:59Z) dow=6, 00:00 ICT thứ Hai (17:00Z) dow=0", () => {
+    const sun = toIct(new Date("2026-10-04T16:59:00Z"));
+    expect([sun.d, sun.dow, sun.hh, sun.mm]).toEqual([4, 6, 23, 59]);
+    const mon = toIct(new Date("2026-10-04T17:00:00Z"));
+    expect([mon.m, mon.d, mon.dow, mon.hh, mon.mm]).toEqual([9, 5, 0, 0, 0]);
+  });
+
+  it("ranh giới cuối tháng/năm: ngày ICT sang ngày mới đúng (năm nhuận, cuối năm)", () => {
+    const feb29 = toIct(new Date("2028-02-28T17:00:00Z"));
+    expect([feb29.y, feb29.m, feb29.d]).toEqual([2028, 1, 29]);
+    const mar1 = toIct(new Date("2028-02-29T17:00:00Z"));
+    expect([mar1.y, mar1.m, mar1.d]).toEqual([2028, 2, 1]);
+    const ny = toIct(new Date("2026-12-31T17:00:00Z"));
+    expect([ny.y, ny.m, ny.d, ny.dow]).toEqual([2027, 0, 1, 4]); // 01/01/2027 là Thứ Sáu
+    const eve = toIct(new Date("2026-12-31T16:59:59.999Z"));
+    expect([eve.y, eve.m, eve.d]).toEqual([2026, 11, 31]);
+  });
+
+  it("ictStartOfDay khớp toIct: 0h ICT thứ Hai", () => {
+    expect(ictStartOfDay(2026, 9, 5).toISOString()).toBe("2026-10-04T17:00:00.000Z");
+    expect(toIct(ictStartOfDay(2026, 9, 5)).dow).toBe(0);
+  });
 });

@@ -42,6 +42,51 @@ describe("format", () => {
     expect(formatQty(new Prisma.Decimal("1250.000"))).toBe("1.250");
   });
 
+  it("chuỗi chỉ có khoảng trắng / NaN / vô cực → '—', không bao giờ '0'", () => {
+    for (const v of [" ", "  ", "\t", "\n ", NaN, Infinity, -Infinity, "abc", "1,5"]) {
+      expect(formatNumber(v)).toBe("—");
+    }
+    expect(formatCurrency(" ")).toBe("—");
+    expect(formatCurrency("\t")).toBe("—");
+    expect(formatPercent("  ")).toBe("—");
+    expect(formatQty(" ")).toBe("—");
+    expect(formatNumber(" 12 ")).toBe("12");
+  });
+
+  it("làm tròn half-up trên chuỗi thập phân (khớp NUMERIC của Postgres), không qua float", () => {
+    expect(formatNumber("1.005", 2)).toBe("1,01");
+    expect(formatNumber(new Prisma.Decimal("1.005"), 2)).toBe("1,01");
+    expect(formatNumber("8.345", 2)).toBe("8,35");
+    expect(formatNumber(8.345, 2)).toBe("8,35");
+    expect(formatNumber(1.45, 1)).toBe("1,5");
+    expect(formatNumber("1.45", 1)).toBe("1,5");
+    expect(formatNumber(0.5, 0)).toBe("1");
+    expect(formatNumber(-0.5, 0)).toBe("-1"); // half-up = ra xa số 0
+    expect(formatNumber(-0.4, 0)).toBe("0"); // không có "-0"
+    expect(formatNumber("-0.001", 2)).toBe("0");
+    expect(formatNumber("-0.00", 2, 2)).toBe("0,00");
+    expect(formatNumber("999.999", 2)).toBe("1.000");
+    expect(formatNumber("0.999", 2)).toBe("1");
+    expect(formatNumber(-1.005, 2)).toBe("-1,01");
+    expect(formatNumber(0)).toBe("0");
+    expect(formatNumber(0, 2, 2)).toBe("0,00");
+    expect(formatNumber(-1234567.891, 2)).toBe("-1.234.567,89");
+  });
+
+  it("số rất lớn giữ đủ chữ số, không dạng mũ", () => {
+    expect(formatNumber("12345678901234567890.55", 1)).toBe("12.345.678.901.234.567.890,6");
+    expect(formatNumber("12345678901234567890.55", 2)).toBe("12.345.678.901.234.567.890,55");
+    expect(formatNumber("-9007199254740993")).toBe("-9.007.199.254.740.993");
+    expect(formatNumber(1e21)).toBe("1.000.000.000.000.000.000.000");
+    expect(formatNumber(1.5e-7, 8)).toBe("0,00000015");
+    expect(formatCurrency(new Prisma.Decimal("12345678901234567890.55"))).toBe("12.345.678.901.234.567.891 ₫");
+  });
+
+  it("minFrac > maxFrac được nâng maxFrac (không cắt cụt bất ngờ)", () => {
+    expect(formatNumber(5, 0, 2)).toBe("5,00");
+    expect(formatNumber(1.234, 1, 3)).toBe("1,234");
+  });
+
   it("ngày theo giờ Việt Nam", () => {
     expect(formatDate("2026-09-30T16:50:00Z")).toBe("30/09/2026");
     expect(formatDate("2026-09-30T17:00:00Z")).toBe("01/10/2026");

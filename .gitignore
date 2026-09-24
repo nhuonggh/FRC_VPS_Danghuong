@@ -47,3 +47,6 @@ next-env.d.ts
 coverage/
 node_modules/
 .next/
+
+# vitest json report (RTK hook)
+/.vitest/
