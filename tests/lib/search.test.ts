@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { normalizeSearch, searchTextWhere } from "@/lib/search";
 import { prisma, resetDb } from "../helpers/db";
@@ -14,6 +16,17 @@ describe("normalizeSearch", () => {
     ["", ""],
   ])("%j → %j", (input, out) => {
     expect(normalizeSearch(input)).toBe(out);
+  });
+
+  it("chuỗi phân rã (dấu kết hợp U+0300–U+036F tách rời) được bỏ dấu", () => {
+    expect(normalizeSearch("Tôn lạnh màu")).toBe("ton lanh mau");
+    expect(normalizeSearch("̣̀́̂̃̉a")).toBe("a");
+  });
+
+  it("mã nguồn dùng escape \\u0300-\\u036f, KHÔNG chứa ký tự kết hợp thô (dễ mất khi soạn/copy)", () => {
+    const src = readFileSync(join(process.cwd(), "src/lib/search.ts"), "utf8");
+    expect(src).toContain("[\\u0300-\\u036f]");
+    expect(/[̀-ͯ]/.test(src)).toBe(false);
   });
 
   it("chuỗi đã ở dạng NFD/NFC khác nhau cho cùng kết quả", () => {

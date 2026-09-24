@@ -2,7 +2,7 @@
 export function normalizeSearch(input: string): string {
   return input
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "") // dấu kết hợp (giữ dạng escape — ký tự thô rất dễ mất khi soạn/copy; có test canh)
     .replace(/[đĐ]/g, "d")
     .toLowerCase()
     .replace(/\s+/g, " ")

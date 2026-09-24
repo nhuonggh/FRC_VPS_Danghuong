@@ -63,6 +63,7 @@ export function xlsxResponse(filename: string, buffer: Buffer): Response {
     headers: {
       "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "content-disposition": `attachment; filename*=UTF-8''${encoded}`,
+      "cache-control": "no-store", // dữ liệu theo quyền + bộ lọc: proxy/trình duyệt không được lưu
     },
   });
 }

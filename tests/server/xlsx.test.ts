@@ -147,6 +147,7 @@ describe("xlsxResponse", () => {
     const res = xlsxResponse("Sản phẩm 30-09.xlsx", buf);
     expect(res.headers.get("content-type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     expect(res.headers.get("content-disposition")).toBe("attachment; filename*=UTF-8''S%E1%BA%A3n%20ph%E1%BA%A9m%2030-09.xlsx");
+    expect(res.headers.get("cache-control")).toBe("no-store"); // dữ liệu theo quyền/bộ lọc: không được cache
     expect(Buffer.from(await res.arrayBuffer()).equals(buf)).toBe(true);
     const evil = xlsxResponse('a"\r\nSet-Cookie: x=1.xlsx', buf);
     expect(evil.headers.get("content-disposition")).not.toMatch(/[\r\n"]/);

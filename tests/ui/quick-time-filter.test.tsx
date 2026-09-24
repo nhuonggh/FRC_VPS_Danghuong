@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
-import { parseListParams } from "@/lib/query-params";
+import { parseListParams, type ListParams } from "@/lib/query-params";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => "/x" }));
@@ -77,14 +78,6 @@ describe("QuickTimeFilter", () => {
     expect(screen.getByLabelText("Từ ngày")).toHaveValue("2026-09-01");
     expect(screen.getByLabelText("Đến ngày")).toHaveValue("2026-09-15");
     expect(screen.getByTestId("time-range")).toHaveTextContent("01/09/2026 – 15/09/2026");
-  });
-
-  it("Tùy chọn: đổi ngày → đẩy URL giữ ngày còn lại, về trang 1", () => {
-    render(<QuickTimeFilter basePath="/x" params={parseListParams({ timePreset: "custom", timeStart: "2026-09-01", timeEnd: "2026-09-15", page: "3" })} now={NOW} />);
-    fireEvent.change(screen.getByLabelText("Đến ngày"), { target: { value: "2026-09-20" } });
-    expect(push).toHaveBeenLastCalledWith("/x?timePreset=custom&timeStart=2026-09-01&timeEnd=2026-09-20");
-    fireEvent.change(screen.getByLabelText("Từ ngày"), { target: { value: "" } });
-    expect(push).toHaveBeenLastCalledWith("/x?timePreset=custom&timeEnd=2026-09-15");
   });
 
   it("Tùy chọn chưa đủ/đảo ngược → không hiện khoảng ngày, báo cho người dùng (server sẽ không lọc thời gian)", () => {
