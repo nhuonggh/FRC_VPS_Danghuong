@@ -2,7 +2,9 @@ import bcrypt from "bcryptjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seed } from "../prisma/seed-lib";
 import { PERMISSIONS } from "@/lib/permissions/catalog";
+import { loadActor } from "@/server/auth/actor";
 import { BCRYPT_COST } from "@/server/auth/password";
+import { updateRolePermissions } from "@/server/roles/service";
 import { prisma, resetDb } from "./helpers/db";
 
 beforeEach(resetDb);
@@ -150,5 +152,103 @@ describe("seed", () => {
     expect(await prisma.user.count()).toBe(0);
     await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123" });
     expect(await prisma.user.count()).toBe(1);
+  });
+});
+
+describe("quyền MỚI thêm vào danh mục ở bản sau (seed chạy lại)", () => {
+  const holders = async (code: string) =>
+    (await prisma.rolePermission.findMany({ where: { permission: { code } }, include: { role: true } })).map((r) => r.role.name).sort();
+
+  /** Mô phỏng "bản trước chưa có quyền này": xoá dòng Permission (kéo theo role_permissions do onDelete Cascade). */
+  async function forgetPermission(code: string) {
+    await prisma.permission.delete({ where: { code } });
+  }
+
+  it("quyền mới tạo → tự cấp cho vai trò wildcard (Giám đốc) đã tồn tại; vai trò khác KHÔNG được cấp", async () => {
+    await seed(prisma);
+    expect(await holders("cost.view")).toContain("Kế toán"); // mặc định ban đầu
+    await forgetPermission("cost.view");
+    await seed(prisma);
+    expect(await prisma.permission.count({ where: { code: "cost.view" } })).toBe(1);
+    expect(await holders("cost.view")).toEqual(["Giám đốc"]); // Kế toán (đã tồn tại) không bị áp lại mặc định
+  });
+
+  it("catalog mở rộng (tham số catalog): quyền mới chỉ vào Giám đốc", async () => {
+    await seed(prisma);
+    const extended = [...PERMISSIONS, { code: "zz.moi", label: "Quyền mới", group: "Thử nghiệm" }];
+    await seed(prisma, { catalog: extended });
+    expect(await holders("zz.moi")).toEqual(["Giám đốc"]);
+    expect(await prisma.permission.count()).toBe(PERMISSIONS.length + 1);
+  });
+
+  it("vai trò MỚI tạo vẫn nhận mặc định của nó (Giám đốc: toàn bộ catalog kể cả quyền mới; Thủ kho: theo danh sách)", async () => {
+    const extended = [...PERMISSIONS, { code: "zz.moi", label: "Quyền mới", group: "Thử nghiệm" }];
+    await seed(prisma, { catalog: extended });
+    expect(await holders("zz.moi")).toEqual(["Giám đốc"]);
+    const gd = await prisma.role.findUniqueOrThrow({ where: { name: "Giám đốc" } });
+    expect(await prisma.rolePermission.count({ where: { roleId: gd.id } })).toBe(PERMISSIONS.length + 1);
+    expect(await holders("stock.view")).toContain("Thủ kho");
+  });
+
+  it("khách CHỦ ĐỘNG gỡ quyền đã tồn tại khỏi Giám đốc → seed lại KHÔNG cấp lại", async () => {
+    await seed(prisma);
+    const gd = await prisma.role.findUniqueOrThrow({ where: { name: "Giám đốc" } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: gd.id, permission: { code: "order.cancel" } } });
+    await seed(prisma);
+    await seed(prisma, { catalog: [...PERMISSIONS, { code: "zz.moi", label: "Quyền mới", group: "Thử nghiệm" }] });
+    expect(await holders("order.cancel")).not.toContain("Giám đốc");
+    expect(await holders("zz.moi")).toEqual(["Giám đốc"]); // quyền mới thì vẫn vào
+  });
+
+  it("idempotent: chạy lại lần nữa không thêm/bớt gì", async () => {
+    await seed(prisma);
+    await forgetPermission("cost.view");
+    await seed(prisma);
+    const before = JSON.stringify(await prisma.rolePermission.findMany({ orderBy: [{ roleId: "asc" }, { permissionId: "asc" }] }));
+    await seed(prisma);
+    await seed(prisma);
+    expect(JSON.stringify(await prisma.rolePermission.findMany({ orderBy: [{ roleId: "asc" }, { permissionId: "asc" }] }))).toBe(before);
+    expect(await prisma.permission.count()).toBe(PERMISSIONS.length);
+  });
+
+  it("nguyên tử: lỗi khi cấp quyền mới → quyền KHÔNG còn nửa vời (rollback), lần seed sau sửa đủ", async () => {
+    await seed(prisma);
+    await forgetPermission("cost.view");
+    const crashing = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop !== "$transaction") return Reflect.get(target, prop);
+        return (fn: (tx: unknown) => Promise<unknown>, opts?: object) =>
+          target.$transaction(
+            (tx) =>
+              fn(
+                new Proxy(tx, {
+                  get(t, p) {
+                    if (p === "rolePermission") return { ...t.rolePermission, createMany: () => Promise.reject(new Error("sập khi cấp")) };
+                    return Reflect.get(t, p);
+                  },
+                }),
+              ),
+            opts,
+          );
+      },
+    }) as typeof prisma;
+    await expect(seed(crashing)).rejects.toThrow("sập khi cấp");
+    expect(await prisma.permission.count({ where: { code: "cost.view" } })).toBe(0); // rollback cả dòng Permission
+    await seed(prisma);
+    expect(await holders("cost.view")).toEqual(["Giám đốc"]);
+  });
+
+  it("tích hợp: Giám đốc (loadActor từ DB) cấp được quyền mới cho nhóm khác qua updateRolePermissions — không 403", async () => {
+    await seed(prisma);
+    await forgetPermission("cost.view");
+    await seed(prisma);
+    const gd = await prisma.role.findUniqueOrThrow({ where: { name: "Giám đốc" } });
+    const boss = await prisma.user.create({ data: { username: "boss", fullName: "Boss", passwordHash: "x", roles: { create: { roleId: gd.id } } } });
+    const actor = (await loadActor(prisma, boss.id))!;
+    expect(actor.perms.has("cost.view")).toBe(true);
+    const kho = await prisma.role.findUniqueOrThrow({ where: { name: "Thủ kho" }, include: { permissions: { include: { permission: true } } } });
+    const codes = [...kho.permissions.map((p) => p.permission.code), "cost.view"];
+    await prisma.$transaction((tx) => updateRolePermissions(tx, actor, kho.id, codes));
+    expect(await holders("cost.view")).toEqual(["Giám đốc", "Thủ kho"]);
   });
 });

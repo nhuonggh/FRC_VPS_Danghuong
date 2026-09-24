@@ -5,7 +5,7 @@ import { loadActor, type SessionActor } from "@/server/auth/actor";
 import { hashPassword } from "@/server/auth/password";
 import { createRole, updateRolePermissions } from "@/server/roles/service";
 import {
-  createUser, resetPassword, setLocked, setUserRoles, updateProfile,
+  createUser, lockAdminInvariant, resetPassword, setLocked, setUserRoles, updateProfile,
 } from "@/server/users/service";
 import { seed } from "../../prisma/seed-lib";
 import { prisma, resetDb } from "../helpers/db";
@@ -197,5 +197,52 @@ describe("(c) thao tác trên tài khoản khác: quyền của đối tượng 
     await tx((db) => setLocked(db, director, boss2, true));
     await tx((db) => updateProfile(db, director, nam, { fullName: "X Y" }));
     expect((await userRow(boss2)).isLocked).toBe(true);
+  });
+});
+
+describe("TOCTOU: đọc quyền của đối tượng chạy SAU khoá advisory (không đua với việc nâng quyền đồng thời)", () => {
+  /** Giữ khoá advisory trong 1 transaction; trả hàm nhả khoá. */
+  async function holdLock() {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let acquired!: () => void;
+    const got = new Promise<void>((r) => (acquired = r));
+    const done = prisma.$transaction(async (db) => {
+      await lockAdminInvariant(db);
+      acquired();
+      await gate;
+    });
+    await got;
+    return { release, done };
+  }
+  const pendingFor = async (p: Promise<unknown>) => {
+    let settled = false;
+    void p.then(() => (settled = true), () => (settled = true));
+    await new Promise((r) => setTimeout(r, 400));
+    return !settled;
+  };
+
+  it("resetPassword chờ khoá (không đọc quyền đối tượng khi người khác đang đổi quyền)", async () => {
+    const low = await roleWith("Chỉ xem", ["user.view"]);
+    const nv = await userWith("nv", [low]);
+    const lock = await holdLock();
+    const op = tx((db) => resetPassword(db, umActor, nv));
+    expect(await pendingFor(op)).toBe(true);
+    lock.release();
+    await lock.done;
+    expect((await op).tempPassword).toEqual(expect.any(String));
+  });
+
+  it("mở khoá (setLocked false) cũng chờ khoá", async () => {
+    const low = await roleWith("Chỉ xem", ["user.view"]);
+    const nv = await userWith("nv", [low]);
+    await prisma.user.update({ where: { id: nv }, data: { isLocked: true } });
+    const lock = await holdLock();
+    const op = tx((db) => setLocked(db, umActor, nv, false));
+    expect(await pendingFor(op)).toBe(true);
+    lock.release();
+    await lock.done;
+    await op;
+    expect((await userRow(nv)).isLocked).toBe(false);
   });
 });

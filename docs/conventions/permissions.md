@@ -12,6 +12,8 @@ Quyền hiệu lực của một người = **HỢP** quyền của mọi nhóm 
 4. Lỗi trả **403** (`DomainError` mã `FORBIDDEN`), tiếng Việt, không ghi gì và không ghi audit (kiểm tra chạy trong cùng transaction, **trước** khi ghi và trước bất biến "còn quản trị viên").
 5. **Giám đốc** giữ mọi quyền nên không bao giờ bị chặn bởi các quy tắc trên.
 
+**Quyền mới thêm vào danh mục ở bản sau:** seed chỉ tự cấp quyền MỚI TẠO (chưa có trong bảng `permissions`) cho vai trò wildcard "*" (Giám đốc) đã tồn tại — nếu không, Giám đốc (quyền đọc từ DB) thiếu quyền đó và quy tắc 1 khiến không ai cấp được. Cấp quyền đã có sẵn **không bao giờ** được thêm lại (khách có thể đã chủ động gỡ); vai trò khác không tự nhận quyền mới.
+
 Bất biến độc lập, vẫn áp dụng: luôn còn ≥ 1 tài khoản đang hoạt động có `user.manage` (`assertAdminRemains`, tuần tự hoá bằng advisory lock).
 
 ## GIẢ ĐỊNH CẦN KHÁCH XÁC NHẬN

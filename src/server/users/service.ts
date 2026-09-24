@@ -142,7 +142,7 @@ export async function setUserRoles(db: Db, actor: Actor, userId: number, roleIds
 export async function setLocked(db: Db, actor: Actor, userId: number, locked: boolean) {
   assertCan(actor.perms, "user.manage");
   if (locked && userId === actor.userId) throw new DomainError("Bạn không thể tự khóa tài khoản của mình.");
-  if (locked) await lockAdminInvariant(db);
+  await lockAdminInvariant(db); // cả mở khoá: đọc quyền đối tượng (assertCanAffectUser) không được đua với việc nâng quyền đồng thời
   const u = await getUserOrThrow(db, userId);
   await assertCanAffectUser(db, actor, userId);
   if (u.isLocked === locked) return;
@@ -156,6 +156,7 @@ export async function setLocked(db: Db, actor: Actor, userId: number, locked: bo
 
 export async function resetPassword(db: Db, actor: Actor, userId: number) {
   assertCan(actor.perms, "user.manage");
+  await lockAdminInvariant(db); // tuần tự hoá với setUserRoles/updateRolePermissions (chống TOCTOU khi đọc quyền đối tượng)
   await getUserOrThrow(db, userId);
   await assertCanAffectUser(db, actor, userId); // không chiếm tài khoản mạnh hơn mình
   const tempPassword = generateTempPassword();

@@ -1,39 +1,66 @@
 import type { PrismaClient } from "@prisma/client";
-import { PERMISSIONS, ROLE_DEFAULTS, resolveRolePermissions } from "../src/lib/permissions/catalog";
+import { PERMISSIONS, ROLE_DEFAULTS, resolveRolePermissions, type PermissionDef } from "../src/lib/permissions/catalog";
 import { hashPassword } from "../src/server/auth/password";
 
 export interface SeedOptions {
   bootstrapAdminPassword?: string;
+  /** Danh mục quyền để đồng bộ (mặc định PERMISSIONS). Chỉ tiêm để test mô phỏng "bản sau thêm quyền mới". */
+  catalog?: readonly PermissionDef[];
 }
 
 const ADMIN_ROLE = "Giám đốc";
+/** Vai trò mẫu có mặc định wildcard "*" (giữ MỌI quyền của danh mục). */
+const WILDCARD_ROLES = Object.entries(ROLE_DEFAULTS).filter(([, spec]) => spec === "*").map(([name]) => name);
 
 export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promise<void> {
-  // 1. Danh mục quyền: luôn đồng bộ theo code (thêm quyền mới ở bản sau tự vào DB)
-  for (const p of PERMISSIONS) {
-    const isSensitive = "sensitive" in p ? Boolean(p.sensitive) : false;
-    await prisma.permission.upsert({
-      where: { code: p.code },
-      update: { label: p.label, groupName: p.group, isSensitive },
-      create: { code: p.code, label: p.label, groupName: p.group, isSensitive },
-    });
-  }
-  const permByCode = new Map((await prisma.permission.findMany()).map((p) => [p.code, p.id]));
+  const catalog = opts.catalog ?? PERMISSIONS;
 
-  // 2. Vai trò mẫu: chỉ gán quyền mặc định khi vai trò MỚI tạo (không ghi đè phần khách đã chỉnh)
-  for (const name of Object.keys(ROLE_DEFAULTS)) {
-    const existing = await prisma.role.findUnique({ where: { name } });
-    if (existing) continue;
-    // Nguyên tử: vai trò + quyền mặc định cùng commit/rollback. Nếu tách rời, sập giữa chừng sẽ để lại
-    // vai trò rỗng và lần seed sau (`if (existing) continue`) không bao giờ bù quyền → khoá hệ thống.
-    const ids = [...resolveRolePermissions(name)].map((c) => permByCode.get(c)!);
-    await prisma.$transaction(async (tx) => {
-      const role = await tx.role.create({ data: { name, isSystem: true } });
-      await tx.rolePermission.createMany({
-        data: ids.map((permissionId) => ({ roleId: role.id, permissionId })),
-      });
-    });
-  }
+  // 1+2. Quyền + vai trò mẫu trong MỘT transaction (nguyên tử: sập giữa chừng thì không còn quyền/vai trò nửa vời).
+  await prisma.$transaction(
+    async (tx) => {
+      // 1. Danh mục quyền: luôn đồng bộ theo code. Quyền MỚI tạo trong lần chạy này (bản sau thêm vào catalog) được
+      //    cấp cho vai trò wildcard (Giám đốc) ĐÃ tồn tại — nếu không, actor.perms của Giám đốc (đọc từ DB) thiếu quyền đó
+      //    và assertCanGrant khiến không ai cấp được nó nữa. Quyền/cấp quyền ĐÃ có không bao giờ bị đụng tới
+      //    (khách có thể đã chủ động gỡ quyền khỏi Giám đốc).
+      const known = new Set((await tx.permission.findMany({ select: { code: true } })).map((p) => p.code));
+      const created: string[] = [];
+      for (const p of catalog) {
+        const isSensitive = "sensitive" in p ? Boolean(p.sensitive) : false;
+        await tx.permission.upsert({
+          where: { code: p.code },
+          update: { label: p.label, groupName: p.group, isSensitive },
+          create: { code: p.code, label: p.label, groupName: p.group, isSensitive },
+        });
+        if (!known.has(p.code)) created.push(p.code);
+      }
+      const permByCode = new Map((await tx.permission.findMany()).map((p) => [p.code, p.id]));
+
+      const wildcardRoleIds: number[] = [];
+      for (const name of WILDCARD_ROLES) {
+        const role = await tx.role.findUnique({ where: { name } });
+        if (role) wildcardRoleIds.push(role.id);
+      }
+      if (created.length > 0 && wildcardRoleIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: wildcardRoleIds.flatMap((roleId) => created.map((c) => ({ roleId, permissionId: permByCode.get(c)! }))),
+          skipDuplicates: true,
+        });
+      }
+
+      // 2. Vai trò mẫu: chỉ gán quyền mặc định khi vai trò MỚI tạo (không ghi đè phần khách đã chỉnh)
+      for (const name of Object.keys(ROLE_DEFAULTS)) {
+        if (await tx.role.findUnique({ where: { name } })) continue;
+        const codes = WILDCARD_ROLES.includes(name)
+          ? catalog.map((p) => p.code)
+          : [...resolveRolePermissions(name)].filter((c) => permByCode.has(c));
+        const role = await tx.role.create({ data: { name, isSystem: true } });
+        await tx.rolePermission.createMany({
+          data: codes.map((c) => ({ roleId: role.id, permissionId: permByCode.get(c)! })),
+        });
+      }
+    },
+    { timeout: 60_000 },
+  );
 
   // 3. Công ty (bảng 1 dòng)
   await prisma.companySetting.upsert({
