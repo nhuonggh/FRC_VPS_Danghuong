@@ -13,7 +13,7 @@ export function normalizeSearch(input: string): string {
  * Prisma `contains` KHÔNG tự escape ký tự đại diện của LIKE (đã kiểm chứng trên Postgres thật): người dùng gõ "%"
  * sẽ khớp mọi dòng, "_" khớp 1 ký tự bất kỳ. Escape bằng "\" (ký tự escape mặc định của LIKE trong Postgres).
  */
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+export const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
 
 /** Điều kiện Prisma cho cột `searchText`: mỗi từ khoá phải có mặt (AND), không phụ thuộc thứ tự. Rỗng → `{}` (không lọc). */
 export function searchTextWhere(q: string | undefined): { AND: { searchText: { contains: string } }[] } | Record<string, never> {
