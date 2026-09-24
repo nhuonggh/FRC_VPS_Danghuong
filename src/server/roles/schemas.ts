@@ -1,0 +1,9 @@
+import { z } from "zod";
+
+export const roleInfoSchema = z.object({
+  name: z.string({ required_error: "Nhập tên nhóm quyền." }).trim().min(2, "Tên nhóm quyền tối thiểu 2 ký tự.").max(40, "Tên nhóm quyền tối đa 40 ký tự."),
+  description: z.string().trim().max(200, "Mô tả tối đa 200 ký tự.").optional(),
+});
+export type RoleInfoInput = z.infer<typeof roleInfoSchema>;
+
+export const rolePermissionsSchema = z.object({ codes: z.array(z.string()) });
