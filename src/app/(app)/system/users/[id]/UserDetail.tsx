@@ -1,0 +1,171 @@
+"use client";
+
+import { KeyRound, Lock, Unlock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import {
+  DetailField, DetailPage, DetailSection, EditActions, EditButton, useDetailNav, useSectionForm, type TabRenderCtx,
+} from "@/components/ui/DetailPage";
+import { TempPasswordDialog } from "@/components/ui/TempPasswordDialog";
+import { apiFetch } from "@/lib/api-fetch";
+import { toastApiError } from "@/lib/api-error-toast";
+import { confirm } from "@/lib/confirm-store";
+import { formatDateTime } from "@/lib/format";
+import { toast } from "@/lib/toast";
+import { profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
+
+interface Props {
+  user: { id: number; username: string; fullName: string; isLocked: boolean; mustChangePassword: boolean; createdAt: string; roles: { id: number; name: string }[] };
+  roles: { id: number; name: string }[];
+  history: { id: number; action: string; at: string; by: string }[];
+  /** user.manage — không có thì mọi phần là chữ tĩnh, không bút chì, không nút Khóa/Cấp lại mật khẩu. */
+  canManage: boolean;
+  isSelf: boolean;
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  "user.create": "Tạo tài khoản", "user.update_profile": "Sửa họ tên", "user.set_roles": "Đổi nhóm quyền",
+  "user.lock": "Khóa tài khoản", "user.unlock": "Mở khóa tài khoản", "user.reset_password": "Cấp lại mật khẩu", "user.change_password": "Đổi mật khẩu",
+};
+
+function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
+  const s = useSectionForm(ctx, "profile", {
+    schema: profileSectionSchema, defaults: { fullName: p.user.fullName },
+    save: (v) => apiFetch(`/api/users/${p.user.id}/section-update`, { method: "PATCH", json: { section: "profile", ...v } }).then(() => {}),
+  });
+  const editing = p.canManage && s.editing; // ?edit=profile trên URL không mở form sửa cho người chỉ được xem
+  return (
+    <DetailSection title="Thông tin cơ bản" editing={editing}
+      action={!p.canManage ? null : editing
+        ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} />
+        : <EditButton label="Chỉnh sửa thông tin cơ bản" onClick={() => ctx.beginEdit("profile")} />}>
+      {editing ? (
+        <div>
+          <label htmlFor="fullName" className="mb-1 block text-xs text-fg-muted">Họ tên</label>
+          <input id="fullName" {...s.form.register("fullName")} aria-invalid={!!s.form.formState.errors.fullName}
+            className="h-9 w-full rounded-sm border border-border bg-canvas px-3 text-sm" />
+          {s.form.formState.errors.fullName && <p className="mt-1 text-xs text-danger">{s.form.formState.errors.fullName.message}</p>}
+        </div>
+      ) : (
+        <dl className="space-y-2">
+          <DetailField label="Họ tên">{p.user.fullName}</DetailField>
+          <DetailField label="Tên đăng nhập">{p.user.username}</DetailField>
+          <DetailField label="Tạo lúc">{formatDateTime(p.user.createdAt)}</DetailField>
+        </dl>
+      )}
+    </DetailSection>
+  );
+}
+
+function RolesSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
+  const current = p.user.roles.map((r) => r.id);
+  const s = useSectionForm(ctx, "roles", {
+    schema: rolesSectionSchema, defaults: { roleIds: current },
+    save: (v) => apiFetch(`/api/users/${p.user.id}/section-update`, { method: "PATCH", json: { section: "roles", ...v } }).then(() => {}),
+  });
+  const selected = s.form.watch("roleIds");
+  const editing = p.canManage && s.editing;
+  return (
+    <DetailSection title="Nhóm quyền" editing={editing}
+      action={!p.canManage ? null : editing
+        ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} />
+        : <EditButton label="Chỉnh sửa nhóm quyền" onClick={() => ctx.beginEdit("roles")} />}>
+      {editing ? (
+        <fieldset className="space-y-2">
+          <legend className="sr-only">Nhóm quyền</legend>
+          {p.roles.map((r) => (
+            <label key={r.id} className="flex min-h-10 items-center gap-3 rounded-sm border border-border p-3 text-sm">
+              <input type="checkbox" checked={selected.includes(r.id)}
+                onChange={(e) => s.form.setValue("roleIds", e.target.checked ? [...selected, r.id] : selected.filter((x) => x !== r.id), { shouldDirty: true, shouldValidate: true })} />
+              {r.name}
+            </label>
+          ))}
+          {s.form.formState.errors.roleIds && <p className="text-xs text-danger">{s.form.formState.errors.roleIds.message}</p>}
+        </fieldset>
+      ) : (
+        <dl><DetailField label="Đang thuộc">{p.user.roles.map((r) => r.name).join(", ")}</DetailField></dl>
+      )}
+    </DetailSection>
+  );
+}
+
+export function UserDetail(p: Props) {
+  const router = useRouter();
+  const nav = useDetailNav(["info", "roles", "history"], { profile: "info", roles: "roles" });
+  const [temp, setTemp] = useState<string | null>(null);
+  const busy = useRef(false); // 1 thao tác ghi (khóa / cấp lại mật khẩu) tại một thời điểm
+
+  async function guarded(fn: () => Promise<void>) {
+    if (busy.current) return;
+    busy.current = true;
+    try { await fn(); } finally { busy.current = false; }
+  }
+
+  const toggleLock = () => guarded(async () => {
+    const lock = !p.user.isLocked;
+    if (!(await confirm({
+      title: lock ? `Khóa tài khoản ${p.user.username}?` : `Mở khóa tài khoản ${p.user.username}?`,
+      description: lock ? "Người này sẽ bị đăng xuất ở thao tác kế tiếp và không đăng nhập được." : "Người này có thể đăng nhập lại.",
+      confirmLabel: lock ? "Khóa" : "Mở khóa", danger: lock,
+    }))) return;
+    try {
+      await apiFetch(`/api/users/${p.user.id}/lock`, { method: "POST", json: { locked: lock } });
+      toast.success(lock ? "Đã khóa tài khoản." : "Đã mở khóa tài khoản.");
+      router.refresh();
+    } catch (e) { toastApiError(e); }
+  });
+
+  const reset = () => guarded(async () => {
+    if (!(await confirm({ title: `Cấp lại mật khẩu cho ${p.user.username}?`, description: "Mật khẩu cũ mất hiệu lực ngay.", confirmLabel: "Cấp lại", danger: true }))) return;
+    try {
+      const r = await apiFetch<{ tempPassword: string }>(`/api/users/${p.user.id}/reset-password`, { method: "POST" });
+      setTemp(r.tempPassword);
+    } catch (e) { toastApiError(e); }
+  });
+
+  const actionBtn = "flex h-10 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover";
+  return (
+    <>
+      <DetailPage
+        backHref="/system/users" backLabel="Quay lại người dùng"
+        headerActions={p.canManage && (
+          <>
+            {!p.isSelf && (
+              <button type="button" onClick={() => void toggleLock()} className={actionBtn}>
+                {p.user.isLocked ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
+                {p.user.isLocked ? "Mở khóa" : "Khóa"}
+              </button>
+            )}
+            <button type="button" onClick={() => void reset()} className={actionBtn}><KeyRound size={16} aria-hidden /> Cấp lại mật khẩu</button>
+          </>
+        )}
+        summary={{
+          title: p.user.fullName, code: p.user.username,
+          badges: [p.user.isLocked ? { label: "Đã khóa", tone: "danger" } : { label: "Hoạt động", tone: "success" },
+                   ...(p.user.mustChangePassword ? [{ label: "Chờ đổi mật khẩu", tone: "warning" as const }] : [])],
+          facts: [{ label: "Nhóm quyền", value: p.user.roles.length }, { label: "Tạo lúc", value: formatDateTime(p.user.createdAt) }],
+        }}
+        tabs={[
+          { key: "info", label: "Thông tin", render: (ctx) => <ProfileSection ctx={ctx} p={p} /> },
+          { key: "roles", label: "Nhóm quyền", count: p.user.roles.length, render: (ctx) => <RolesSection ctx={ctx} p={p} /> },
+          {
+            key: "history", label: "Nhật ký", count: p.history.length,
+            render: () => p.history.length === 0
+              ? <p className="rounded-sm border border-dashed border-border p-6 text-center text-sm text-fg-muted">Chưa có thao tác nào ghi nhận.</p>
+              : <ul className="divide-y divide-[var(--border-default)]">
+                  {p.history.map((h) => (
+                    <li key={h.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span>{ACTION_LABEL[h.action] ?? h.action} <span className="text-fg-muted">— {h.by}</span></span>
+                      <span className="tabular text-xs text-fg-muted">{formatDateTime(h.at)}</span>
+                    </li>
+                  ))}
+                </ul>,
+          },
+        ]}
+        {...nav}
+        initialEditing={p.canManage ? nav.initialEditing : null}
+      />
+      <TempPasswordDialog open={temp !== null} username={p.user.username} password={temp} onClose={() => setTemp(null)} />
+    </>
+  );
+}
