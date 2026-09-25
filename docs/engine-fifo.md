@@ -39,7 +39,11 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
    sửa/hủy/khôi phục** — miễn là người gọi giữ `at` và `seq` như mục 3.
 4. ⚠ Tại cùng `at`, **thứ tự ghi (seq)** quyết định lệnh xuất nào dùng được thành phẩm/hàng trả (kể cả hai lệnh SX dùng
    thành phẩm của nhau cùng ngày: lệnh ghi trước không dùng được thành phẩm của lệnh ghi sau).
-5. Giá tạm phần treo = giá lớp **thường** gần nhất có `at ≤` thời điểm xuất → lớp thường đầu tiên → 0.
+5. Giá tạm phần treo = giá lớp **thường** gần nhất có `at ≤` thời điểm xuất → lớp thường đầu tiên → 0. "Gần nhất" /
+   "đầu tiên" xét theo **thứ tự sự kiện `(at, seq)`** của dòng sổ nhập — KHÔNG theo id lớp (sửa/khôi phục phiếu nhập cấp
+   id lớp mới nhưng giữ `at` + `seq`), nên giá tạm của đơn treo cũng không phụ thuộc lịch sử sửa. Ví dụ: A 1@100 rồi
+   B 1@200 cùng `at`, bán 5 → 3 treo @200 → giá 180; sửa A vẫn 180. Giá tạm chỉ tồn tại tới khi có nhập thường bù
+   (khi đó giá vốn được tính lại theo lớp thật).
 6. Mọi giá vốn đơn vị làm tròn HALF_UP 4 chữ số **một lần**, từ số học 80 chữ số (không float).
 7. Lưới an toàn flush: mỗi mã tối đa `min(50 + 2 × số lớp phụ thuộc của mã, 500)` lần tính lại/giao dịch, và ngân
    sách thời gian `flushBudgetMs` (mặc định 25 giây < timeout transaction 30 giây).

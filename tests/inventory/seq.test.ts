@@ -200,6 +200,42 @@ describe("không phụ thuộc lịch sử sửa (docs §2.3)", () => {
   });
 });
 
+describe("giá tạm (ước tính) chọn theo thứ tự sự kiện (at, seq), không theo id lớp (Task 4 I1)", () => {
+  const buyAt = (ctx: EngineCtx, productId: number, qty: number, unitCost: number, n: number, seq?: bigint) =>
+    postReceipt(ctx, { productId, qty, unitCost, docType: "PURCHASE", docId: n, docLineId: n, at: D, ...(seq === undefined ? {} : { seq }) });
+  const cost = async () => [(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()];
+
+  /** A 1@100 rồi B 1@200 cùng `at`; bán 5 cùng `at` → ăn A, B; 3 treo @ giá tạm = B (lớp thường cuối theo seq) → 180. */
+  async function setup() {
+    const w = await newWorld();
+    const run = engine(w);
+    const a = await run([w.p.id], (ctx) => buyAt(ctx, w.p.id, 1, 100, 1));
+    await run([w.p.id], (ctx) => buyAt(ctx, w.p.id, 1, 200, 2));
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 5, D, 1));
+    expect(await cost()).toEqual(["180", "3"]); // (100 + 200 + 3×200) / 5
+    return { w, run, aSeq: a.seq };
+  }
+
+  it("sửa phiếu nhập A (xoá + ghi lại cùng giao dịch, seq tự dùng lại) → giá tạm vẫn theo B, bán vẫn 180", async () => {
+    const { w, run } = await setup();
+    await run([w.p.id], async (ctx) => {
+      await removeDocument(ctx, "PURCHASE", 1);
+      await buyAt(ctx, w.p.id, 1, 100, 1);
+    });
+    expect(await cost()).toEqual(["180", "3"]);
+    await assertChainExact(w);
+  });
+
+  it("hủy phiếu nhập A rồi khôi phục QUA HAI giao dịch với seq đã lưu → bán vẫn 180", async () => {
+    const { w, run, aSeq } = await setup();
+    await run([w.p.id], (ctx) => removeDocument(ctx, "PURCHASE", 1));
+    expect(await cost()).toEqual(["200", "4"]); // chỉ còn B; 4 treo @200
+    await run([w.p.id], (ctx) => buyAt(ctx, w.p.id, 1, 100, 1, aSeq));
+    expect(await cost()).toEqual(["180", "3"]);
+    await assertChainExact(w);
+  });
+});
+
 describe("seq truyền vào", () => {
   it("seq đã có dòng dùng → EngineInvariantError tiếng Việt, không ghi gì", async () => {
     const w = await newWorld();

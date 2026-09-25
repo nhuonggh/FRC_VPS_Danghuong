@@ -17,7 +17,7 @@ import { assertLedgerBalanced, engine, layersOf, type World } from "./helpers";
  *    tính trước đó trong lượt (dòng gốc luôn ở TRƯỚC lớp theo thời gian). Dòng gốc thuộc mã hàng khác (thành
  *    phẩm SX) hoặc chưa có dòng sổ → lấy giá DB (ngoài phạm vi mô hình 1 mã hàng);
  *  - lệnh xuất: round4((Σ qty × giá lớp + phần thiếu × giá tạm) / qty); giá tạm = giá lớp THƯỜNG gần nhất ≤ at
- *    → lớp thường đầu tiên → 0.                                                                             */
+ *    → lớp thường đầu tiên → 0 (gần nhất/đầu tiên theo (at, seq)).                                                                          */
 const HP = Prisma.Decimal.clone({ precision: 80, rounding: Prisma.Decimal.ROUND_HALF_UP });
 type HPDec = InstanceType<typeof HP>;
 const s4 = (v: HPDec) => new Prisma.Decimal(v.toDecimalPlaces(4, HP.ROUND_HALF_UP).toFixed(4)).toString();
@@ -87,7 +87,10 @@ export async function referenceState(productId: number): Promise<State> {
   }
 
   // ── Pha 2: giá, một lượt theo thời gian ──
-  const plain = layers.filter((l) => l.costRefType === null).sort((a, b) => a.at.getTime() - b.at.getTime() || a.id - b.id);
+  // Giá tạm theo THỨ TỰ SỰ KIỆN (at, seq dòng sổ) — không theo id lớp (id đổi khi sửa phiếu nhập; Task 5 / I1).
+  const plain = layers
+    .filter((l) => l.costRefType === null)
+    .sort((a, b) => a.at.getTime() - b.at.getTime() || (a.ledger.seq < b.ledger.seq ? -1 : a.ledger.seq > b.ledger.seq ? 1 : 0));
   const estimate = (at: Date) => {
     const before = plain.filter((l) => l.at.getTime() <= at.getTime());
     return (before.length ? before[before.length - 1]! : plain[0])?.unitCost.toString() ?? "0";
