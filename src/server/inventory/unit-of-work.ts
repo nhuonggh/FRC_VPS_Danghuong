@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
+import { lockPeriodForEngine } from "@/server/period/guard";
 import { EngineBusyError, EngineInvariantError, ReplayTooLargeError } from "./errors";
 import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
@@ -29,7 +29,8 @@ export interface EngineOptions {
 
 /** Mở ngữ cảnh kho trong 1 transaction: kiểm kỳ còn mở → khoá mã hàng (tăng dần). */
 export async function beginEngine(tx: Tx, opts: EngineOptions): Promise<EngineCtx> {
-  const period = opts.periodId ? await assertPeriodOpen(tx, opts.periodId) : await getOpenPeriod(tx);
+  // Khoá kỳ (FOR SHARE) TRƯỚC mọi khoá advisory: tuần tự với kết sổ (FOR UPDATE) — review I2, docs/engine-fifo.md §6 K5
+  const period = await lockPeriodForEngine(tx, opts.periodId);
   const ctx: EngineCtx = {
     tx, period, userId: opts.userId,
     locked: new Set(), dirty: new Map(), afterCommit: [],

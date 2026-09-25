@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { DocDateBeforePeriodError, PeriodClosedError } from "@/server/inventory/errors";
-import { assertDocDateInPeriod, assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
+import { assertDocDateInPeriod, assertPeriodOpen, getOpenPeriod, lockPeriodForEngine } from "@/server/period/guard";
 import { prisma, resetDb } from "../helpers/db";
 import { makePeriod } from "../helpers/factories";
 
@@ -36,5 +36,18 @@ describe("assertDocDateInPeriod — không ghi ngày trước ngày mở kỳ", 
   it("chặn chứng từ thuộc ngày trước ngày mở kỳ", () => {
     expect(() => assertDocDateInPeriod(period, new Date("2026-09-23T16:59:59.999Z"))).toThrow(DocDateBeforePeriodError);
     expect(() => assertDocDateInPeriod(period, new Date("2026-09-23T16:59:59.999Z"))).toThrow("Ngày chứng từ trước ngày mở kỳ hiện tại");
+  });
+});
+
+describe("lockPeriodForEngine — FOR SHARE dòng kỳ (review I2; tuần tự hoá: tests/inventory/period-lock.test.ts)", () => {
+  it("kỳ mở → trả kỳ; kỳ đóng / không tồn tại → PeriodClosedError; không truyền id → kỳ đang mở", async () => {
+    const closed = await makePeriod({ status: "CLOSED", isOpen: null, closedAt: new Date() });
+    const open = await makePeriod();
+    await prisma.$transaction(async (tx) => {
+      expect((await lockPeriodForEngine(tx, open.id)).id).toBe(open.id);
+      expect((await lockPeriodForEngine(tx)).id).toBe(open.id);
+    });
+    await expect(prisma.$transaction((tx) => lockPeriodForEngine(tx, closed.id))).rejects.toThrow(PeriodClosedError);
+    await expect(prisma.$transaction((tx) => lockPeriodForEngine(tx, 99999))).rejects.toThrow(PeriodClosedError);
   });
 });

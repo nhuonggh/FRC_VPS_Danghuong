@@ -229,6 +229,13 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
 - **Hợp đồng kết sổ (K5 checklist, spec 3.5 / 4.2): kết sổ kỳ PHẢI BỊ CHẶN khi còn bất kỳ mã nào `products.recomputing
   = true` hoặc còn job `PENDING` / `RUNNING` / `FAILED` trong `recompute_jobs`** (job thuộc kỳ đã kết sổ sẽ `FAILED` vĩnh
   viễn với `PeriodClosedError`). Engine chưa tự chặn — module kết sổ (plan 07-F1) phải kiểm.
+- **K5 — kết sổ PHẢI khoá `SELECT … FROM periods WHERE id = … FOR UPDATE` trên dòng kỳ, là KHOÁ ĐẦU TIÊN của transaction
+  kết sổ** (trước mọi khoá advisory mã hàng / kiểm `recomputing`), và kiểm các điều kiện chặn ở trên SAU khi đã giữ khoá
+  đó. Engine (`beginEngine` → `lockPeriodForEngine`, `src/server/period/guard.ts`) giữ `FOR SHARE` trên dòng kỳ tới hết
+  transaction, lấy TRƯỚC khoá advisory (thứ tự khoá cố định kỳ → mã hàng ở cả hai phía ⇒ không chu trình chờ; nếu vẫn
+  deadlock thì `retryOnDeadlock` chạy lại). Hệ quả: kết sổ chờ mọi giao dịch kho đang chạy; giao dịch kho đến sau chờ kết
+  sổ rồi nhận `PeriodClosedError` (không truyền `periodId` ⇒ tra lại và chạy trên kỳ mới nếu kết sổ đã mở kỳ mới). Test:
+  `tests/inventory/period-lock.test.ts`.
 - Test: `.env.test` đặt `RECOMPUTE_WORKER=off` (worker không tự chạy); test gọi `runRecomputeJobs` để kiểm soát thời
   điểm.
 
