@@ -36,7 +36,11 @@ export interface ReceiptInput {
    * (không ổn định qua các ngày — xem JSDoc của nó), nếu không thứ tự FIFO bị xê dịch.
    */
   at: Date;
-  /** Lớp có giá vốn PHỤ THUỘC dòng khác: trả hàng (dòng bán gốc), thành phẩm SX (lệnh SX). */
+  /**
+   * Lớp có giá vốn PHỤ THUỘC dòng khác: trả hàng (dòng bán gốc), thành phẩm SX (lệnh SX). Mọi mã hàng của dòng gốc
+   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). Lớp này KHÔNG cấp hàng cho chính
+   * dòng gốc (kể cả phần treo) — xem replay.ts `take`.
+   */
   costRef?: { docType: StockDocType; docLineId: number; qty: DecInput };
 }
 
@@ -55,8 +59,13 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     // sửa khi dòng gốc tình cờ bị chạm) → tính lại từ đầu ≠ tính lại từng phần. Dòng gốc chưa có dòng sổ (sẽ
     // đăng sau trong cùng giao dịch) → tạm dùng `unitCost`; flush lan truyền lại khi dòng gốc được tính.
     // Dòng gốc thuộc kỳ đã kết sổ (trả hàng đơn kỳ cũ — spec 4.4) cũng đi đường này.
-    const refRows = await ctx.tx.stockLedger.count({ where: { docType: i.costRef.docType, docLineId: i.costRef.docLineId, qtyOut: { gt: 0 } } });
-    if (refRows > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
+    // Đọc giá dòng gốc ⇒ mọi mã hàng của dòng gốc phải đang được khoá (không đọc giá đang bị giao dịch khác tính lại)
+    const refRows = await ctx.tx.stockLedger.findMany({
+      where: { docType: i.costRef.docType, docLineId: i.costRef.docLineId, qtyOut: { gt: 0 } },
+      distinct: ["productId"], select: { productId: true },
+    });
+    for (const r of refRows) assertLocked(ctx, r.productId);
+    if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
   }
 
   const ledger = await ctx.tx.stockLedger.create({

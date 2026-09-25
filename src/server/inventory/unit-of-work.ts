@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { PrismaClient } from "@prisma/client";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { EngineInvariantError, ReplayTooLargeError } from "./errors";
@@ -63,11 +64,18 @@ async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Dat
   throw new EngineInvariantError(`Mã hàng ${productId} (từ ${fromAt.toISOString()}) đang tính lại nền (Task 8).`);
 }
 
-const MAX_FLUSH_ITERATIONS = 10_000; // đồ thị phụ thuộc là DAG → luôn hội tụ; chặn phòng vòng lặp do dữ liệu hỏng
+/**
+ * Đồ thị phụ thuộc giá (dòng xuất → lớp phụ thuộc → dòng xuất ăn lớp đó) là DAG NHỜ quy tắc trong replay.ts `take`:
+ * lớp phụ thuộc không bao giờ cấp hàng cho chính dòng gốc của nó. Với DAG, mỗi mã hàng chỉ phải tính lại vài lần
+ * trong 1 flush. Ngưỡng tính THEO MÃ HÀNG (không theo tổng số vòng) để giao dịch nhiều mã (kiểm kho 1.300 mã) không
+ * bị chặn oan; vượt ngưỡng ⇒ dữ liệu tạo chu trình (vd hai đơn treo trả hàng chéo cho nhau) → dừng, rollback.
+ */
+const MAX_REPLAYS_PER_PRODUCT = 50;
 
 /** Đồng bộ giá vốn dòng về chủ sở hữu + cập nhật lớp PHỤ THUỘC; lớp đổi giá thì đánh dấu tính lại tiếp. */
 async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> {
   const seen = new Set<string>();
+  // PERF(Task 9): ~2 truy vấn/dòng (lineSnapshot + tìm lớp phụ thuộc) kể cả dòng không đổi — gộp theo lô nếu đo thấy chậm
   for (const t of touched) {
     const key = `${t.docType}:${t.docLineId}`;
     if (seen.has(key)) continue;
@@ -97,11 +105,18 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
  * (NVL → thành phẩm → dòng bán) được khoá bổ sung tại đây.
  */
 export async function flush(ctx: EngineCtx): Promise<void> {
-  for (let i = 0; ctx.dirty.size > 0; i++) {
-    if (i > MAX_FLUSH_ITERATIONS) throw new EngineInvariantError("Tính lại giá vốn không hội tụ (nghi ngờ dữ liệu phụ thuộc vòng).");
+  const replays = new Map<number, number>();
+  while (ctx.dirty.size > 0) {
     const productId = Math.min(...ctx.dirty.keys());
     const fromAt = ctx.dirty.get(productId)!;
     ctx.dirty.delete(productId);
+    const n = (replays.get(productId) ?? 0) + 1;
+    replays.set(productId, n);
+    if (n > MAX_REPLAYS_PER_PRODUCT) {
+      throw new EngineInvariantError(
+        `Tính lại giá vốn không hội tụ: mã hàng ${productId} bị tính lại quá ${MAX_REPLAYS_PER_PRODUCT} lần trong một giao dịch (nghi ngờ giá vốn phụ thuộc vòng).`,
+      );
+    }
     await lockProducts(ctx, [productId]);
 
     if (ctx.mode === "inline") {
@@ -119,6 +134,9 @@ export async function flush(ctx: EngineCtx): Promise<void> {
   }
 }
 
+/** Đánh dấu "đang ở trong withInventoryTx" theo chuỗi async (hook afterCommit chạy NGOÀI, được gọi lại). */
+const insideInventoryTx = new AsyncLocalStorage<true>();
+
 export interface WithInventoryOptions extends EngineOptions {
   /** Chạy SAU flush, TRONG cùng transaction (vd worker nền dọn cờ `recomputing`). */
   finalize?: (ctx: EngineCtx) => Promise<void>;
@@ -134,18 +152,25 @@ export async function withInventoryTx<R>(
   opts: WithInventoryOptions,
   work: (ctx: EngineCtx) => Promise<R>,
 ): Promise<R> {
+  // Lồng withInventoryTx trong `work` mở transaction THỨ HAI: nó chờ khoá advisory mà transaction ngoài đang giữ
+  // → treo tới hết timeout, và nếu chạy được thì hai phần commit tách rời (phá nguyên tắc 4). Chặn ngay.
+  if (insideInventoryTx.getStore()) {
+    throw new EngineInvariantError("Không lồng withInventoryTx: trong `work` hãy dùng chính `ctx` đang có.");
+  }
   let hooks: (() => void)[] = [];
-  const result = await retryOnDeadlock(() =>
-    prisma.$transaction(
-      async (tx) => {
-        const ctx = await beginEngine(tx, opts);
-        const r = await work(ctx);
-        await flush(ctx);
-        if (opts.finalize) await opts.finalize(ctx);
-        hooks = ctx.afterCommit;
-        return r;
-      },
-      { maxWait: 10_000, timeout: 30_000 },
+  const result = await insideInventoryTx.run(true, () =>
+    retryOnDeadlock(() =>
+      prisma.$transaction(
+        async (tx) => {
+          const ctx = await beginEngine(tx, opts);
+          const r = await work(ctx);
+          await flush(ctx);
+          if (opts.finalize) await opts.finalize(ctx);
+          hooks = ctx.afterCommit;
+          return r;
+        },
+        { maxWait: 10_000, timeout: 30_000 },
+      ),
     ),
   );
   // Dữ liệu ĐÃ commit: hook hỏng chỉ ghi log, không biến thao tác thành công thành lỗi cho người gọi

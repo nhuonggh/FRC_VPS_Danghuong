@@ -1,11 +1,18 @@
 import { Prisma, type StockDocType } from "@prisma/client";
 import type { Dec, Tx } from "./types";
 
+/** Cho chủ dòng: giá đơn vị = tổng / SL, độ chính xác cao, HALF_UP 4 số — cùng hàm engine dùng. */
+export { unitCostOf } from "./replay";
+
 /** Giá vốn TỔNG của 1 dòng chứng từ (cộng mọi dòng sổ kho của nó — gồm cả NVL khi bán tôn xốp). */
 export interface LineCostSnapshot {
   docType: StockDocType;
   docLineId: number;
-  /** Σ qty_out × unit_cost_out (unit_cost_out đã làm tròn 4 số) — tính bằng numeric của PostgreSQL, không dùng float. */
+  /**
+   * Σ qty_out × unit_cost_out (unit_cost_out đã làm tròn 4 số) — tính CHÍNH XÁC bằng numeric của PostgreSQL. Là
+   * Prisma.Decimal: phép toán trên nó (div/times…) chỉ giữ 20 chữ số có nghĩa → chủ dòng tính giá đơn vị bằng
+   * `unitCostOf(totalCost, qty)` (độ chính xác cao, HALF_UP 4 số), KHÔNG tự `.div()`.
+   */
   totalCost: Dec;
   /** > 0 ⇔ dòng đang "đơn treo" (chưa đủ tồn). */
   qtyProvisional: Dec;
