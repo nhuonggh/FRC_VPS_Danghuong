@@ -123,10 +123,33 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   mã đang cờ — job của chính nó HOẶC mã khác bị lan truyền chạm tới — nó đọc lại mốc job **dưới khoá mã**, tính từ
   `min(mốc, mốc job)`, xoá job + tắt cờ **trong cùng giao dịch**. (Mốc lúc nhận job có thể đã cũ: giao dịch đồng bộ
   gộp mốc sớm hơn trong lúc worker chờ khoá.)
-- Job lỗi thật ⇒ `FAILED` + ghi `error`, **giữ cờ** (chặn xuất) chờ người vận hành; thay đổi mới chỉ gộp mốc, giữ
-  `FAILED`. Job gặp `EngineBusyError` ⇒ về `PENDING`, bỏ qua trong lượt, thử lại sau ~2 giây.
-- Khởi động app (`src/instrumentation.ts`): `resetStuckJobs` (RUNNING → PENDING — giả định **một** tiến trình app; nhiều
-  instance thì một instance khởi động lại sẽ trả job instance khác đang chạy về PENDING — vô hại vì tính lại dưới khoá
-  mã và idempotent, chỉ tốn công) rồi `kickRecomputeWorker`.
+- **Lỗi của worker** (fix round 1):
+  - Lỗi **tạm thời** (`isTransientError`: `EngineBusyError`/deadlock, Prisma `P2028` hết giờ transaction, `P2024` hết
+    kết nối pool, `P1001`/`P1002`/`P1008`/`P1017` mất/không tới được DB, "connection reset/terminated"…) ⇒ job về
+    `PENDING` (ghi `error` lần gần nhất), hẹn chạy lại sau `2 s × 2^(attempts−1)` (trần 60 s). `attempts` tăng mỗi lần
+    nhận; tới `MAX_JOB_ATTEMPTS` (= 5) lần vẫn lỗi tạm thời ⇒ `FAILED`.
+  - Lỗi **thật** (dữ liệu / lập trình, vd `PeriodClosedError`) ⇒ `FAILED` ngay.
+  - `FAILED` **giữ cờ** (chặn xuất mã đó) tới khi người vận hành gọi **`retryFailedJob(productId)`** (FAILED → PENDING,
+    attempts = 0, xoá lỗi, đánh thức worker) — công cụ khôi phục cho màn vận hành (plan 03). Thay đổi mới trên mã có
+    job FAILED chỉ gộp mốc, vẫn `FAILED`.
+  - Lỗi ở chính bước nhận job / ghi trạng thái (DB chập chờn) ⇒ ghi log + hẹn chạy lại; lượt worker không bao giờ
+    reject. Job kẹt `RUNNING` được quét định kỳ trả về `PENDING`.
+- **FAILED lan sang mã khác (qua gộp job):** khi worker tính mã A và lan truyền giá chạm mã B đang có job (kể cả job
+  `FAILED`), flush **gộp** job của B vào giao dịch của A (`absorbRecomputeJob`). Nếu lỗi của B là lỗi thật (dữ liệu của B
+  hỏng), giao dịch của A cũng lỗi ⇒ job A cũng `FAILED` (A bị chặn xuất theo). Người vận hành xử lý B trước rồi
+  `retryFailedJob` cả hai. (Ngược lại, B gộp thành công thì job FAILED của B được xoá + mở cờ — lỗi tạm thời cũ tự khỏi.)
+- **Cột `recompute_jobs.error` lưu thông điệp lỗi THÔ** (có thể chứa chi tiết Prisma/SQL/tên bảng): chỉ cho log / người
+  vận hành; **không hiển thị nguyên văn** cho người dùng cuối.
+- **Vòng đời trong tiến trình** (`src/instrumentation.ts` → `bootRecomputeWorker`): dọn job `RUNNING` kẹt (`resetStuckJobs`),
+  rồi đánh thức worker và bật quét định kỳ `SWEEP_INTERVAL_MS` = 60 s (`startRecomputeSweep`: job `RUNNING` quá
+  `STALE_RUNNING_MS` ≈ 31,5 phút = 3 × (timeout worker 600 s + maxWait 10 s) + 60 s → `PENDING`, rồi đánh thức nhặt job
+  `PENDING` bị lỡ). Mọi timer `unref`. DB chưa sẵn sàng lúc khởi động ⇒ log + thử lại sau 30 s, **không làm hỏng khởi
+  động Next**.
+- ⚠ **Giả định MỘT tiến trình app** (một container). Nhiều instance: một instance khởi động lại trả job instance khác
+  đang chạy về `PENDING` (`resetStuckJobs`) — vô hại về kết quả (tính lại dưới khoá mã, idempotent; xoá job/tắt cờ
+  idempotent) nhưng tốn công; khi scale ngang phải đổi sang chỉ dọn job quá hạn (như quét định kỳ) hoặc có owner/lease.
+- **Hợp đồng kết sổ (K5 checklist, spec 3.5 / 4.2): kết sổ kỳ PHẢI BỊ CHẶN khi còn bất kỳ mã nào `products.recomputing
+  = true` hoặc còn job `PENDING` / `RUNNING` / `FAILED` trong `recompute_jobs`** (job thuộc kỳ đã kết sổ sẽ `FAILED` vĩnh
+  viễn với `PeriodClosedError`). Engine chưa tự chặn — module kết sổ (plan sau) phải kiểm.
 - Test: `.env.test` đặt `RECOMPUTE_WORKER=off` (worker không tự chạy); test gọi `runRecomputeJobs` để kiểm soát thời
   điểm.

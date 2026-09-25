@@ -1,8 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { register } from "@/instrumentation";
 import { EngineBusyError, EngineInvariantError, PeriodClosedError, ProductRecomputingError } from "@/server/inventory/errors";
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
-import { resetStuckJobs, runRecomputeJobs } from "@/server/inventory/recompute";
+import {
+  bootRecomputeWorker, isTransientError, kickRecomputeWorker, MAX_JOB_ATTEMPTS, recomputeWorkerIdle, resetStaleRunningJobs, resetStuckJobs,
+  retryFailedJob, RETRY_BASE_MS, runRecomputeJobs, runRecomputePass, STALE_RUNNING_MS, startRecomputeSweep, stopRecomputeTimers, sweepRecomputeJobs,
+} from "@/server/inventory/recompute";
 import {
   DEFAULT_FLUSH_BUDGET_MS, FLUSH_BUDGET_MARGIN_MS, INLINE_TX_TIMEOUT_MS, WORKER_FLUSH_BUDGET_MS, WORKER_TX_TIMEOUT_MS,
 } from "@/server/inventory/types";
@@ -27,16 +31,17 @@ async function bigChain() {
 const jobOf = (productId: number) => prisma.recomputeJob.findUniqueOrThrow({ where: { productId } });
 const flagOf = async (productId: number) => (await prisma.product.findUniqueOrThrow({ where: { id: productId } })).recomputing;
 
-/** Client "bọc" chuyển tiếp mọi thứ sang `prisma`, riêng `$transaction` do test quyết định. */
-function wrapTransaction(tx: (fn: unknown, opts: unknown) => Promise<unknown>): PrismaClient {
+/** Client "bọc" chuyển tiếp mọi thứ sang `prisma`, riêng các khoá trong `over` do test quyết định (khe tiêm lỗi). */
+function wrapClient(over: Record<string, unknown>): PrismaClient {
   return new Proxy(prisma, {
     get(target, key) {
-      if (key === "$transaction") return tx;
+      if (typeof key === "string" && key in over) return over[key];
       const v: unknown = Reflect.get(target, key);
       return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
     },
   });
 }
+const wrapTransaction = (tx: (fn: unknown, opts: unknown) => Promise<unknown>): PrismaClient => wrapClient({ $transaction: tx });
 
 const deadlock = () => Object.assign(new Error("deadlock detected"), { code: "40P01" });
 
@@ -272,7 +277,13 @@ describe("kho bận: deadlock hết lượt chạy lại → EngineBusyError (Ta
     await run([w.p.id], (ctx) => removeDocument(ctx, "SALE", 1), { inlineLimit: 3 });
     let calls = 0;
     const busyDb = wrapTransaction(async () => { calls++; throw deadlock(); });
-    expect(await runRecomputeJobs(busyDb)).toBe(0);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await runRecomputeJobs(busyDb)).toBe(0);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
     expect(calls).toBe(3); // đúng 1 job × 3 lần thử, không nhận lại ngay trong cùng lượt
     const job = await jobOf(w.p.id);
     expect(job.status).toBe("PENDING");
@@ -304,6 +315,208 @@ describe("timeout transaction & ngân sách flush theo chế độ", () => {
     await expect(engine(w)([w.p.id], (ctx) => buy(ctx, w.p.id, 1, 1, T(0), 1), { flushBudgetMs: 60_000 })).rejects.toThrow(EngineInvariantError);
     expect(await prisma.stockLedger.count()).toBe(0);
     await assertLedgerBalanced(w.p.id, w.periodId);
+  });
+});
+
+describe("worker: lỗi tạm thời / hạ tầng không chặn xuất mãi mãi (fix round 1)", () => {
+  const prismaErr = (code: string, message = `lỗi ${code}`) => Object.assign(new Error(message), { code });
+  const failTx = (make: () => Error) => wrapTransaction(async () => { throw make(); });
+  let quiet: { warn: ReturnType<typeof vi.spyOn>; error: ReturnType<typeof vi.spyOn> } | null = null;
+  const silence = () => {
+    quiet = { warn: vi.spyOn(console, "warn").mockImplementation(() => {}), error: vi.spyOn(console, "error").mockImplementation(() => {}) };
+    return quiet;
+  };
+  const prevWorker = process.env.RECOMPUTE_WORKER;
+
+  afterEach(async () => {
+    stopRecomputeTimers();
+    await recomputeWorkerIdle();
+    vi.useRealTimers();
+    process.env.RECOMPUTE_WORKER = prevWorker;
+    quiet?.warn.mockRestore();
+    quiet?.error.mockRestore();
+    quiet = null;
+  });
+
+  /** Nhường vòng lặp sự kiện thật (setImmediate không bị giả) tới khi `cond` đúng. */
+  async function until(cond: () => Promise<boolean>, max = 200) {
+    for (let i = 0; i < max; i++) {
+      if (await cond()) return;
+      await new Promise((r) => setImmediate(r));
+    }
+    throw new Error("điều kiện không thành");
+  }
+
+  async function deferred() {
+    const { w, run } = await bigChain();
+    await run([w.p.id], (ctx) => removeDocument(ctx, "SALE", 1), { inlineLimit: 3 });
+    return { w, run };
+  }
+
+  it("isTransientError: bận/deadlock, P2028, P2024, P1001, P1017, mất kết nối = tạm thời; lỗi dữ liệu/lập trình thì không", () => {
+    for (const e of [new EngineBusyError(), deadlock(), prismaErr("P2028"), prismaErr("P2024"), prismaErr("P1001"), prismaErr("P1017"),
+      new Error("Connection terminated unexpectedly"), new Error("read ECONNRESET"), Object.assign(new Error("x"), { errorCode: "P1001" })]) {
+      expect(isTransientError(e), String(e)).toBe(true);
+    }
+    for (const e of [new PeriodClosedError(), new EngineInvariantError("hỏng"), new Error("boom"), prismaErr("P2002"), null, "x"]) {
+      expect(isTransientError(e), String(e)).toBe(false);
+    }
+  });
+
+  it("lỗi tạm thời (P2028 hết giờ transaction) → job về PENDING + hẹn thử lại; lượt sau thành công, mở chặn xuất", async () => {
+    const { w, run } = await deferred();
+    silence();
+    const r = await runRecomputePass(failTx(() => prismaErr("P2028", "Transaction already closed: expired")));
+    expect(r).toEqual({ done: 0, retryInMs: RETRY_BASE_MS });
+    const job = await jobOf(w.p.id);
+    expect([job.status, job.attempts]).toEqual(["PENDING", 1]);
+    expect(job.error).toContain("Transaction already closed");
+    expect(await flagOf(w.p.id)).toBe(true);
+
+    expect(await runRecomputeJobs(prisma)).toBe(1);
+    expect(await prisma.recomputeJob.count()).toBe(0);
+    expect(await flagOf(w.p.id)).toBe(false);
+    await assertChainExact(w);
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 1, T(100), 99)); // hết chặn xuất
+  });
+
+  it(`giãn cách tăng dần; lỗi tạm thời lần thứ ${MAX_JOB_ATTEMPTS} → FAILED, giữ cờ chặn xuất`, async () => {
+    const { w } = await deferred();
+    silence();
+    const db = failTx(() => prismaErr("P1001", "Can't reach database server"));
+    const delays: (number | null)[] = [];
+    for (let i = 1; i <= MAX_JOB_ATTEMPTS; i++) delays.push((await runRecomputePass(db)).retryInMs);
+    expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, null]);
+    const job = await jobOf(w.p.id);
+    expect([job.status, job.attempts]).toEqual(["FAILED", MAX_JOB_ATTEMPTS]);
+    expect(await flagOf(w.p.id)).toBe(true);
+    expect(await runRecomputeJobs(prisma)).toBe(0); // FAILED không được nhận lại
+  });
+
+  it("lỗi thật (không tạm thời) → FAILED ngay ở lần 1, không hẹn thử lại", async () => {
+    const { w } = await deferred();
+    const q = silence();
+    expect(await runRecomputePass(failTx(() => new Error("boom")))).toEqual({ done: 0, retryInMs: null });
+    const job = await jobOf(w.p.id);
+    expect([job.status, job.attempts, job.error]).toEqual(["FAILED", 1, "boom"]);
+    expect(q.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("bước NHẬN job lỗi (DB chập chờn) → không reject, hẹn thử lại; worker nền tự chạy lại theo hẹn giờ và tính xong", async () => {
+    const { w } = await deferred();
+    const q = silence();
+    process.env.RECOMPUTE_WORKER = "on";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let fails = 1;
+    const db = wrapClient({
+      $queryRaw: (...a: unknown[]) => {
+        if (fails-- > 0) throw prismaErr("P1001", "Can't reach database server");
+        return (prisma.$queryRaw as (...x: unknown[]) => Promise<unknown>)(...a);
+      },
+    });
+    expect(await runRecomputePass(db)).toEqual({ done: 0, retryInMs: RETRY_BASE_MS }); // không reject
+    fails = 1;
+    kickRecomputeWorker(db);
+    await recomputeWorkerIdle();
+    expect(vi.getTimerCount()).toBe(1); // đã hẹn thử lại
+    expect((await jobOf(w.p.id)).status).toBe("PENDING");
+    expect(q.error).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(RETRY_BASE_MS);
+    await recomputeWorkerIdle();
+    expect(await prisma.recomputeJob.count()).toBe(0);
+    expect(await flagOf(w.p.id)).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    await assertChainExact(w);
+  });
+
+  it("GHI trạng thái job lỗi → không reject, job kẹt RUNNING + hẹn thử lại; quét trả job RUNNING QUÁ HẠN về PENDING (job mới thì không)", async () => {
+    const { w } = await deferred();
+    silence();
+    const db = wrapClient({
+      $transaction: async () => { throw new Error("boom"); },
+      recomputeJob: { updateMany: () => Promise.reject(prismaErr("P1017", "Server has closed the connection")) },
+    });
+    expect(await runRecomputePass(db)).toEqual({ done: 0, retryInMs: RETRY_BASE_MS });
+    expect((await jobOf(w.p.id)).status).toBe("RUNNING");
+
+    expect(await resetStaleRunningJobs(prisma)).toBe(0); // vừa nhận: có thể còn đang chạy
+    expect(await resetStaleRunningJobs(prisma, new Date(Date.now() + STALE_RUNNING_MS + 1_000))).toBe(1);
+    expect((await jobOf(w.p.id)).status).toBe("PENDING");
+  });
+
+  it("sweepRecomputeJobs: job kẹt RUNNING (quá hạn) → PENDING rồi đánh thức worker tính xong; startRecomputeSweep chỉ 1 timer, chỉ khi worker bật", async () => {
+    const { w } = await deferred();
+    await prisma.$executeRaw`UPDATE recompute_jobs SET status = 'RUNNING', "updatedAt" = now() - interval '2 hours'`;
+    const q = silence();
+    process.env.RECOMPUTE_WORKER = "on";
+    await sweepRecomputeJobs(prisma);
+    await recomputeWorkerIdle();
+    expect(q.warn).toHaveBeenCalledTimes(1);
+    expect(await prisma.recomputeJob.count()).toBe(0);
+    expect(await flagOf(w.p.id)).toBe(false);
+
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    process.env.RECOMPUTE_WORKER = "off";
+    startRecomputeSweep(prisma);
+    expect(vi.getTimerCount()).toBe(0);
+    process.env.RECOMPUTE_WORKER = "on";
+    startRecomputeSweep(prisma);
+    startRecomputeSweep(prisma);
+    expect(vi.getTimerCount()).toBe(1);
+    stopRecomputeTimers();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retryFailedJob (công cụ người vận hành): FAILED → PENDING, attempts 0, xoá lỗi → worker tính xong; không có job FAILED → false", async () => {
+    const { w } = await deferred();
+    silence();
+    await runRecomputePass(failTx(() => new Error("boom")));
+    expect((await jobOf(w.p.id)).status).toBe("FAILED");
+
+    expect(await retryFailedJob(w.p.id, prisma)).toBe(true);
+    const job = await jobOf(w.p.id);
+    expect([job.status, job.attempts, job.error]).toEqual(["PENDING", 0, null]);
+    expect(await retryFailedJob(w.p.id, prisma)).toBe(false); // PENDING, không phải FAILED
+    expect(await runRecomputeJobs(prisma)).toBe(1);
+    expect(await flagOf(w.p.id)).toBe(false);
+    await assertChainExact(w);
+    expect(await retryFailedJob(w.p.id, prisma)).toBe(false);
+  });
+
+  it("bootRecomputeWorker: DB chưa sẵn sàng → KHÔNG reject (Next vẫn khởi động), log, hẹn thử lại; lần sau dọn job kẹt", async () => {
+    const { w } = await deferred();
+    await prisma.recomputeJob.update({ where: { productId: w.p.id }, data: { status: "RUNNING" } });
+    const q = silence();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let calls = 0;
+    const db = wrapClient({
+      recomputeJob: {
+        updateMany: (a: Parameters<typeof prisma.recomputeJob.updateMany>[0]) => {
+          if (++calls === 1) return Promise.reject(prismaErr("P1001", "Can't reach database server"));
+          return prisma.recomputeJob.updateMany(a);
+        },
+      },
+    });
+    await expect(bootRecomputeWorker(db, 1_000)).resolves.toBeUndefined();
+    expect(q.error).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+    expect((await jobOf(w.p.id)).status).toBe("RUNNING");
+
+    vi.advanceTimersByTime(1_000);
+    await until(async () => (await jobOf(w.p.id)).status === "PENDING");
+    expect(calls).toBe(2);
+  });
+
+  it("instrumentation register(): chạy được trong nodejs, không ném lỗi (worker tắt trong test)", async () => {
+    const prev = process.env.NEXT_RUNTIME;
+    process.env.NEXT_RUNTIME = "nodejs";
+    try {
+      await expect(register()).resolves.toBeUndefined();
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_RUNTIME;
+      else process.env.NEXT_RUNTIME = prev;
+    }
   });
 });
 

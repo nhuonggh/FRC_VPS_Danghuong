@@ -14,6 +14,8 @@ export async function deferRecompute(ctx: EngineCtx, productId: number, fromAt: 
   await ctx.tx.product.update({ where: { id: productId }, data: { recomputing: true } });
   await mergeRecomputeJob(ctx, productId, fromAt);
   ctx.afterCommit.push(() => {
+    // Kiểm cờ tắt worker NGAY lúc commit (không đợi import động xong mới kiểm — tránh đánh thức trễ, khó đoán)
+    if (process.env.RECOMPUTE_WORKER === "off") return;
     // import động: recompute.ts import unit-of-work.ts (vòng import) — chỉ cần lúc chạy
     void import("./recompute")
       .then((m) => m.kickRecomputeWorker())
