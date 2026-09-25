@@ -8,6 +8,13 @@ import { InvalidDocDateError } from "./errors";
  *  - ngày quá khứ        → 23:59:59.999 ICT của ngày đó (sau mọi thao tác thật của ngày, tie-break bằng id)
  *  - ngày tương lai      → lỗi
  * Chỉ dùng số học UTC + độ lệch ICT cố định (`@/lib/time`) → không phụ thuộc múi giờ máy chủ.
+ *
+ * LƯU Ý CHO NGƯỜI GỌI: kết quả KHÔNG ổn định qua các ngày. Chứng từ ngày 15/09 lập ngày 15/09 nhận `now`
+ * (vd 10:30 ICT); nếu sửa ngày 20/09 rồi gọi lại `docTimestamp("2026-09-15", now=20/09)` sẽ được
+ * 23:59:59.999 ICT 15/09 → thứ tự (at, id) của chứng từ bị xê dịch so với các chứng từ khác cùng ngày
+ * và làm đổi kết quả FIFO. Vì vậy: khi sửa chứng từ mà NGÀY KHÔNG ĐỔI, phải dùng lại `at` đã lưu
+ * (đọc từ stock_ledger trước `removeDocument`, truyền vào `postReceipt`/`postIssue`); chỉ gọi `docTimestamp`
+ * cho chứng từ MỚI hoặc khi NGÀY ĐỔI.
  */
 export function docTimestamp(date: string | Date, now: Date): Date {
   let day: { y: number; m: number; d: number } | null;
