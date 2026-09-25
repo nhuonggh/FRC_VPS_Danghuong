@@ -5,7 +5,7 @@ import { EngineBusyError, EngineInvariantError, PeriodClosedError, ProductRecomp
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import {
   bootRecomputeWorker, isTransientError, kickRecomputeWorker, MAX_JOB_ATTEMPTS, recomputeWorkerIdle, resetStaleRunningJobs, resetStuckJobs,
-  retryFailedJob, RETRY_BASE_MS, runRecomputeJobs, runRecomputePass, STALE_RUNNING_MS, startRecomputeSweep, stopRecomputeTimers, sweepRecomputeJobs,
+  retryFailedJob, RETRY_BASE_MS, RETRY_MAX_MS, runRecomputeJobs, runRecomputePass, STALE_RUNNING_MS, startRecomputeSweep, stopRecomputeTimers, sweepRecomputeJobs,
 } from "@/server/inventory/recompute";
 import {
   DEFAULT_FLUSH_BUDGET_MS, FLUSH_BUDGET_MARGIN_MS, INLINE_TX_TIMEOUT_MS, WORKER_FLUSH_BUDGET_MS, WORKER_TX_TIMEOUT_MS,
@@ -44,6 +44,12 @@ function wrapClient(over: Record<string, unknown>): PrismaClient {
 const wrapTransaction = (tx: (fn: unknown, opts: unknown) => Promise<unknown>): PrismaClient => wrapClient({ $transaction: tx });
 
 const deadlock = () => Object.assign(new Error("deadlock detected"), { code: "40P01" });
+
+/** Trả biến môi trường về giá trị cũ — cũ là undefined thì XOÁ (gán undefined sẽ thành chuỗi "undefined"). */
+function restoreEnv(name: string, prev: string | undefined): void {
+  if (prev === undefined) delete process.env[name];
+  else process.env[name] = prev;
+}
 
 describe("tính lại quá ngưỡng → chạy nền (spec 3.5)", () => {
   it("vượt ngưỡng: mã hàng bị đánh dấu 'đang tính lại', có job; chặn XUẤT mã đó; worker tính xong thì mở lại", async () => {
@@ -124,7 +130,7 @@ describe("tính lại quá ngưỡng → chạy nền (spec 3.5)", () => {
         expect(await flagOf(w.p.id)).toBe(false);
       }, { timeout: 15_000, interval: 50 });
     } finally {
-      process.env.RECOMPUTE_WORKER = prev;
+      restoreEnv("RECOMPUTE_WORKER", prev);
     }
     await assertChainExact(w);
   });
@@ -332,7 +338,7 @@ describe("worker: lỗi tạm thời / hạ tầng không chặn xuất mãi mã
     stopRecomputeTimers();
     await recomputeWorkerIdle();
     vi.useRealTimers();
-    process.env.RECOMPUTE_WORKER = prevWorker;
+    restoreEnv("RECOMPUTE_WORKER", prevWorker);
     quiet?.warn.mockRestore();
     quiet?.error.mockRestore();
     quiet = null;
@@ -354,11 +360,14 @@ describe("worker: lỗi tạm thời / hạ tầng không chặn xuất mãi mã
   }
 
   it("isTransientError: bận/deadlock, P2028, P2024, P1001, P1017, mất kết nối = tạm thời; lỗi dữ liệu/lập trình thì không", () => {
+    const rawErr = (pg: string) => Object.assign(new Error("Raw query failed"), { code: "P2010", meta: { code: pg } });
     for (const e of [new EngineBusyError(), deadlock(), prismaErr("P2028"), prismaErr("P2024"), prismaErr("P1001"), prismaErr("P1017"),
+      prismaErr("P2037"), prismaErr("57P03"), prismaErr("53300"), rawErr("57P03"), rawErr("53300"), rawErr("40P01"),
       new Error("Connection terminated unexpectedly"), new Error("read ECONNRESET"), Object.assign(new Error("x"), { errorCode: "P1001" })]) {
       expect(isTransientError(e), String(e)).toBe(true);
     }
-    for (const e of [new PeriodClosedError(), new EngineInvariantError("hỏng"), new Error("boom"), prismaErr("P2002"), null, "x"]) {
+    for (const e of [new PeriodClosedError(), new EngineInvariantError("hỏng"), new Error("boom"), prismaErr("P2002"), rawErr("23505"),
+      prismaErr("P2010"), null, "x"]) {
       expect(isTransientError(e), String(e)).toBe(false);
     }
   });
@@ -422,6 +431,9 @@ describe("worker: lỗi tạm thời / hạ tầng không chặn xuất mãi mã
     expect((await jobOf(w.p.id)).status).toBe("PENDING");
     expect(q.error).toHaveBeenCalledTimes(2);
 
+    vi.advanceTimersByTime(RETRY_BASE_MS); // lỗi nhận job thứ 2 liên tiếp → giãn cách 2 × RETRY_BASE_MS: chưa tới hẹn
+    await recomputeWorkerIdle();
+    expect((await jobOf(w.p.id)).status).toBe("PENDING");
     vi.advanceTimersByTime(RETRY_BASE_MS);
     await recomputeWorkerIdle();
     expect(await prisma.recomputeJob.count()).toBe(0);
@@ -508,6 +520,43 @@ describe("worker: lỗi tạm thời / hạ tầng không chặn xuất mãi mã
     expect(calls).toBe(2);
   });
 
+  it("NHẬN job lỗi liên tiếp (DB sập): giãn cách TĂNG DẦN tới trần, log chỉ khi giãn cách tăng bậc; nhận được thì đếm lại từ đầu", async () => {
+    const { w } = await deferred();
+    const q = silence();
+    let down = true;
+    const db = wrapClient({
+      $queryRaw: (...a: unknown[]) => {
+        if (down) throw prismaErr("P1001", "Can't reach database server");
+        return (prisma.$queryRaw as (...x: unknown[]) => Promise<unknown>)(...a);
+      },
+    });
+    const delays: (number | null)[] = [];
+    for (let i = 0; i < 8; i++) delays.push((await runRecomputePass(db)).retryInMs);
+    expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, RETRY_MAX_MS, RETRY_MAX_MS, RETRY_MAX_MS]);
+    expect(q.error).toHaveBeenCalledTimes(6); // lần 7, 8 ở trần: không log lại
+    for (let i = 0; i < 2; i++) await runRecomputePass(db); // lần 9 im lặng, lần 10 ghi 1 dòng nhắc
+    expect(q.error).toHaveBeenCalledTimes(7);
+
+    down = false;
+    expect(await runRecomputePass(db)).toEqual({ done: 1, retryInMs: null });
+    expect(await flagOf(w.p.id)).toBe(false);
+    down = true;
+    expect((await runRecomputePass(db)).retryInMs).toBe(RETRY_BASE_MS); // đếm lại từ đầu sau khi nhận được
+  });
+
+  it("trạng thái worker là singleton trên globalThis: nạp lại module (HMR) không nhân đôi timer quét", async () => {
+    process.env.RECOMPUTE_WORKER = "on";
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    startRecomputeSweep(prisma);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.resetModules();
+    const fresh = await import("@/server/inventory/recompute");
+    expect(fresh.startRecomputeSweep).not.toBe(startRecomputeSweep); // đúng là bản nạp mới của module
+    fresh.startRecomputeSweep(prisma);
+    expect(vi.getTimerCount()).toBe(1);
+    fresh.stopRecomputeTimers(); // bản mới dừng được timer do bản cũ tạo
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("instrumentation register(): chạy được trong nodejs, không ném lỗi (worker tắt trong test)", async () => {
     const prev = process.env.NEXT_RUNTIME;
     process.env.NEXT_RUNTIME = "nodejs";

@@ -38,6 +38,24 @@ export const STALE_RUNNING_MS = 3 * (WORKER_TX_TIMEOUT_MS + 10_000) + 60_000;
 export const BOOT_RETRY_MS = 30_000;
 
 const workerEnabled = () => process.env.RECOMPUTE_WORKER !== "off";
+
+/**
+ * Trạng thái worker trong tiến trình — SINGLETON trên `globalThis` (như src/lib/prisma.ts): Next dev (HMR) / bundle có
+ * thể nạp module này nhiều lần trong CÙNG tiến trình; biến cấp module sẽ nhân đôi worker + timer quét (chạy chồng).
+ */
+interface WorkerState {
+  current: Promise<void> | null;
+  again: boolean;
+  retryTimer: ReturnType<typeof setTimeout> | null;
+  sweepTimer: ReturnType<typeof setInterval> | null;
+  bootTimers: Set<ReturnType<typeof setTimeout>>;
+  /** Số lần NHẬN job lỗi liên tiếp (DB chập chờn) → giãn cách thử lại tăng dần. */
+  claimFailures: number;
+}
+const globalForWorker = globalThis as unknown as { __dhRecomputeWorker?: WorkerState };
+const worker: WorkerState = (globalForWorker.__dhRecomputeWorker ??= {
+  current: null, again: false, retryTimer: null, sweepTimer: null, bootTimers: new Set(), claimFailures: 0,
+});
 const defaultDb = async (): Promise<PrismaClient> => (await import("@/lib/prisma")).prisma;
 const backoffMs = (attempts: number) => Math.min(RETRY_BASE_MS * 2 ** Math.max(0, attempts - 1), RETRY_MAX_MS);
 
@@ -51,20 +69,25 @@ const TRANSIENT_CODES = new Set([
   "P1002", // DB timeout khi kết nối
   "P1008", // operation timeout
   "P1017", // server đóng kết nối
+  "P2037", // quá nhiều kết nối tới DB (Prisma)
   "57P01", // admin_shutdown
+  "57P03", // cannot_connect_now (DB đang khởi động / phục hồi)
+  "53300", // too_many_connections
   "ECONNRESET",
   "ECONNREFUSED",
   "ETIMEDOUT",
 ]);
 const TRANSIENT_MESSAGE =
-  /deadlock detected|connection (?:reset|terminated|closed|refused)|terminating connection|server has closed the connection|can't reach database server|timed out fetching a new connection|transaction already closed|transaction not found|ECONNRESET|ECONNREFUSED/i;
+  /deadlock detected|connection (?:reset|terminated|closed|refused)|terminating connection|server has closed the connection|can't reach database server|timed out fetching a new connection|transaction already closed|transaction not found|too many (?:database )?connections|the database system is (?:starting up|in recovery mode)|ECONNRESET|ECONNREFUSED/i;
 
 /** Lỗi tạm thời (thử lại có thể thành công) — không phải lỗi dữ liệu/lập trình. */
 export function isTransientError(e: unknown): boolean {
   if (e instanceof EngineBusyError) return true;
-  const x = e as { code?: unknown; message?: unknown; errorCode?: unknown } | null;
+  const x = e as { code?: unknown; message?: unknown; errorCode?: unknown; meta?: { code?: unknown } } | null;
   const code = typeof x?.code === "string" ? x.code : typeof x?.errorCode === "string" ? x.errorCode : undefined;
   if (code && TRANSIENT_CODES.has(code)) return true;
+  // P2010 = truy vấn thô ($queryRaw/$executeRaw) lỗi: mã Postgres thật nằm ở meta.code (vd 40P01, 57P03, 53300)
+  if (code === "P2010" && typeof x?.meta?.code === "string" && TRANSIENT_CODES.has(x.meta.code)) return true;
   return typeof x?.message === "string" && TRANSIENT_MESSAGE.test(x.message);
 }
 
@@ -110,9 +133,16 @@ export async function runRecomputePass(db: PrismaClient): Promise<RecomputePassR
                       ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
         RETURNING id, "periodId", "productId", "fromAt", attempts`;
       job = claimed[0];
+      worker.claimFailures = 0;
     } catch (e) {
-      console.error("[recompute] không nhận được job (DB?) — sẽ thử lại:", e);
-      retryIn(RETRY_BASE_MS);
+      // DB chập chờn/sập: giãn cách TĂNG DẦN theo số lần nhận lỗi liên tiếp (không dội DB mỗi 2 s), ghi log chỉ khi
+      // giãn cách vừa tăng một bậc; đã tới trần thì 10 lần lỗi mới ghi 1 lần (≈ 10 phút) — không tràn log khi DB sập lâu
+      const n = ++worker.claimFailures;
+      const ms = backoffMs(n);
+      if (ms > backoffMs(n - 1) || n === 1 || n % 10 === 0) {
+        console.error(`[recompute] không nhận được job (DB?) — lần lỗi liên tiếp thứ ${n}, thử lại sau ${ms} ms:`, e);
+      }
+      retryIn(ms);
       return res;
     }
     if (!job) return res;
@@ -182,19 +212,13 @@ export async function retryFailedJob(productId: number, db?: PrismaClient): Prom
 
 /* ───────────────────────── vòng đời worker trong tiến trình ───────────────────────── */
 
-let current: Promise<void> | null = null;
-let again = false;
-let retryTimer: ReturnType<typeof setTimeout> | null = null;
-let sweepTimer: ReturnType<typeof setInterval> | null = null;
-const bootTimers = new Set<ReturnType<typeof setTimeout>>();
-
 function scheduleKick(db: PrismaClient | undefined, ms: number): void {
-  if (retryTimer) clearTimeout(retryTimer);
-  retryTimer = setTimeout(() => {
-    retryTimer = null;
+  if (worker.retryTimer) clearTimeout(worker.retryTimer);
+  worker.retryTimer = setTimeout(() => {
+    worker.retryTimer = null;
     kickRecomputeWorker(db);
   }, ms);
-  retryTimer.unref?.();
+  worker.retryTimer.unref?.();
 }
 
 /**
@@ -203,9 +227,9 @@ function scheduleKick(db: PrismaClient | undefined, ms: number): void {
  */
 export function kickRecomputeWorker(db?: PrismaClient): void {
   if (!workerEnabled()) return; // test: tự gọi runRecomputeJobs để kiểm soát thời điểm
-  if (current) { again = true; return; }
-  again = false;
-  current = new Promise<void>((r) => setImmediate(r)).then(async () => {
+  if (worker.current) { worker.again = true; return; }
+  worker.again = false;
+  worker.current = new Promise<void>((r) => setImmediate(r)).then(async () => {
     let retryInMs: number | null = null;
     try {
       retryInMs = (await runRecomputePass(db ?? (await defaultDb()))).retryInMs;
@@ -213,16 +237,16 @@ export function kickRecomputeWorker(db?: PrismaClient): void {
       console.error("[recompute]", e); // runRecomputePass không reject; phòng hờ (vd nạp @/lib/prisma lỗi)
       retryInMs = RETRY_BASE_MS;
     } finally {
-      current = null;
+      worker.current = null;
     }
-    if (again) kickRecomputeWorker(db);
+    if (worker.again) kickRecomputeWorker(db);
     else if (retryInMs !== null) scheduleKick(db, retryInMs);
   });
 }
 
 /** Chờ worker trong tiến trình rảnh (kể cả lượt chạy thêm) — cho test / tắt app êm. */
 export async function recomputeWorkerIdle(): Promise<void> {
-  while (current) await current;
+  while (worker.current) await worker.current;
 }
 
 /** Một nhịp quét: job RUNNING kẹt → PENDING, rồi đánh thức worker (nhặt cả job PENDING bị lỡ). Không reject. */
@@ -238,19 +262,23 @@ export async function sweepRecomputeJobs(db?: PrismaClient): Promise<void> {
 
 /** Bật quét định kỳ (unref — không giữ tiến trình sống). Chỉ khi worker bật; gọi lại nhiều lần không tạo thêm timer. */
 export function startRecomputeSweep(db?: PrismaClient, intervalMs = SWEEP_INTERVAL_MS): void {
-  if (!workerEnabled() || sweepTimer) return;
-  sweepTimer = setInterval(() => { void sweepRecomputeJobs(db); }, intervalMs);
-  sweepTimer.unref?.();
+  if (!workerEnabled() || worker.sweepTimer) return;
+  worker.sweepTimer = setInterval(() => { void sweepRecomputeJobs(db); }, intervalMs);
+  worker.sweepTimer.unref?.();
 }
 
-/** Huỷ mọi timer của worker (test / tắt app). Lượt đang chạy vẫn chạy nốt — chờ bằng recomputeWorkerIdle. */
+/**
+ * Huỷ mọi timer của worker (test / tắt app) và xoá bộ đếm lỗi nhận job. Lượt đang chạy vẫn chạy nốt — chờ bằng
+ * recomputeWorkerIdle.
+ */
 export function stopRecomputeTimers(): void {
-  if (retryTimer) clearTimeout(retryTimer);
-  if (sweepTimer) clearInterval(sweepTimer);
-  for (const t of bootTimers) clearTimeout(t);
-  bootTimers.clear();
-  retryTimer = null;
-  sweepTimer = null;
+  if (worker.retryTimer) clearTimeout(worker.retryTimer);
+  if (worker.sweepTimer) clearInterval(worker.sweepTimer);
+  for (const t of worker.bootTimers) clearTimeout(t);
+  worker.bootTimers.clear();
+  worker.retryTimer = null;
+  worker.sweepTimer = null;
+  worker.claimFailures = 0;
 }
 
 /**
@@ -263,11 +291,11 @@ export async function bootRecomputeWorker(db?: PrismaClient, retryMs = BOOT_RETR
   } catch (e) {
     console.error(`[recompute] khởi động: chưa dọn được job kẹt (DB chưa sẵn sàng?) — thử lại sau ${retryMs} ms:`, e);
     const t = setTimeout(() => {
-      bootTimers.delete(t);
+      worker.bootTimers.delete(t);
       void bootRecomputeWorker(db, retryMs);
     }, retryMs);
     t.unref?.();
-    bootTimers.add(t);
+    worker.bootTimers.add(t);
     return;
   }
   kickRecomputeWorker(db);

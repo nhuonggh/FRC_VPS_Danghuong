@@ -269,6 +269,55 @@ describe("seq truyền vào", () => {
     expect(await prisma.stockLedger.count({ where: { docType: "SALE" } })).toBe(0);
   });
 
+  it("seq CHƯA TỪNG được cấp (> seq lớn nhất đã cấp, hoặc ≤ 0) → EngineInvariantError tiếng Việt, không ghi gì; sequence không bị chiếm trước", async () => {
+    const w = await newWorld();
+    const run = engine(w);
+    const { seq } = await run([w.p.id], (ctx) => buy(ctx, w.p.id, 10, 100, T(0), 1));
+    for (const bad of [seq + BigInt(1), seq + BigInt(1000), BigInt(0), BigInt(-5)]) {
+      const err = await run([w.p.id], (ctx) =>
+        postIssue(ctx, { productId: w.p.id, qty: 1, docType: "SALE", docId: 1, docLineId: 1, at: T(1), seq: bad }),
+      ).catch((e: unknown) => e);
+      expect(err, String(bad)).toBeInstanceOf(EngineInvariantError);
+      expect((err as Error).message).toMatch(/\(seq\) -?\d+ chưa từng được cấp/);
+    }
+    expect(await prisma.stockLedger.count({ where: { docType: "SALE" } })).toBe(0);
+    // Ghi mới bình thường vẫn nhận đúng seq kế tiếp (không P2002 vì bị chiếm trước)
+    expect((await run([w.p.id], (ctx) => sell(ctx, w.p.id, 1, T(1), 1))).seq).toBe(seq + BigInt(1));
+  });
+
+  it("ghi lại bị TỪ CHỐI (DerivedLayerDateError, bắt lại trong work) KHÔNG làm mất seq dùng lại — lần ghi đúng sau đó vẫn giữ vị trí", async () => {
+    const w = await newWorld();
+    const run = engine(w);
+    await run([w.p.id], (ctx) => buy(ctx, w.p.id, 10, 100, T(0), 1));
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 2, T(5), 1));
+    const ret = (ctx: EngineCtx, at: Date) =>
+      postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 50, docLineId: 50, at, costRef: { docType: "SALE", docLineId: 1, qty: 2 } });
+    const { seq: retSeq } = await run([w.p.id], (ctx) => ret(ctx, T(10)));
+    const again = await run([w.p.id], async (ctx) => {
+      await removeDocument(ctx, "RETURN_IN", 50);
+      const err = await ret(ctx, T(1)).catch((e: unknown) => e); // trước dòng bán gốc → bị từ chối
+      expect((err as Error).name).toBe("DerivedLayerDateError");
+      return ret(ctx, T(10));
+    });
+    expect(again.seq).toBe(retSeq);
+    await assertChainExact(w);
+  });
+
+  it("seq dùng lại đã bị lời gọi khác trong cùng giao dịch chiếm (truyền tường minh) → EngineInvariantError, không phải P2002 thô", async () => {
+    const w = await newWorld();
+    const run = engine(w);
+    await run([w.p.id], (ctx) => buy(ctx, w.p.id, 10, 100, T(0), 1));
+    const { seq } = await run([w.p.id], (ctx) => sell(ctx, w.p.id, 1, T(5), 1));
+    const err = await run([w.p.id], async (ctx) => {
+      await removeDocument(ctx, "SALE", 1);
+      await postIssue(ctx, { productId: w.p.id, qty: 1, docType: "SALE", docId: 2, docLineId: 2, at: T(5), seq }); // khoá khác chiếm seq
+      await sell(ctx, w.p.id, 1, T(5), 1); // khoá cũ muốn dùng lại cùng seq
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EngineInvariantError);
+    expect((err as Error).message).toMatch(/\(seq\) \d+ đã được dùng/);
+    expect((await saleRow(1)).seq).toBe(seq); // rollback: dữ liệu cũ còn nguyên
+  });
+
   it("DerivedLayerOrderError so theo seq: dòng gốc ghi SAU (id lớn hơn) nhưng khôi phục với seq NHỎ hơn lớp → hợp lệ", async () => {
     const w = await newWorld();
     const run = engine(w);

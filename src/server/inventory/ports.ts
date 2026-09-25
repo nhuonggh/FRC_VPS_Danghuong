@@ -30,22 +30,50 @@ const seqKeyOf = (docType: StockDocType, docId: number, docLineId: number, produ
 /**
  * Chọn `seq` (khoá thứ tự ghi ổn định — xem replay.ts `order`) cho dòng sổ sắp ghi:
  *  - `explicit` (module truyền seq đã lưu cùng dòng chứng từ — khôi phục qua giao dịch khác) → dùng nó; seq đang có
- *    dòng dùng ⇒ EngineInvariantError;
+ *    dòng dùng, hoặc CHƯA TỪNG được sequence cấp (> giá trị lớn nhất đã cấp, hay < 1) ⇒ EngineInvariantError;
  *  - không truyền nhưng CÙNG giao dịch vừa removeDocument dòng cùng khoá (docType, docId, docLineId, productId)
- *    ⇒ tự dùng lại seq cũ (sửa = xoá + ghi lại giữ nguyên vị trí FIFO, người gọi không phải làm gì);
+ *    ⇒ tự dùng lại seq cũ (sửa = xoá + ghi lại giữ nguyên vị trí FIFO, người gọi không phải làm gì); seq đó đã bị lời
+ *    gọi khác trong giao dịch chiếm (truyền tường minh) ⇒ EngineInvariantError;
  *  - còn lại ⇒ undefined: DB tự cấp seq mới (xếp SAU mọi dòng đã có).
  */
-async function resolveSeq(ctx: EngineCtx, key: string, explicit: bigint | undefined): Promise<bigint | undefined> {
+async function resolveSeq(ctx: EngineCtx, key: string, explicit: bigint | undefined): Promise<SeqChoice> {
   const pool = ctx.removedSeqs.get(key);
   if (explicit !== undefined) {
-    if (await ctx.tx.stockLedger.findUnique({ where: { seq: explicit }, select: { id: true } })) {
-      throw new EngineInvariantError(`Số thứ tự ghi sổ (seq) ${explicit} đã được dùng bởi dòng sổ khác — không ghi/khôi phục chứng từ với seq này.`);
+    // seq chưa từng được cấp: ghi vào sẽ "chiếm trước" giá trị mà sequence cấp sau này → lỗi UNIQUE (P2002) ở một
+    // giao dịch KHÁC, vô can. Chỉ nhận seq đã lưu từ dòng sổ trước đó (≤ giá trị lớn nhất sequence đã cấp).
+    const [s] = await ctx.tx.$queryRaw<{ last_value: bigint; is_called: boolean }[]>`SELECT last_value, is_called FROM "stock_ledger_seq_seq"`;
+    const lastIssued = s!.is_called ? BigInt(s!.last_value) : BigInt(s!.last_value) - BigInt(1);
+    if (explicit < BigInt(1) || explicit > lastIssued) {
+      throw new EngineInvariantError(
+        `Số thứ tự ghi sổ (seq) ${explicit} chưa từng được cấp (seq lớn nhất đã cấp: ${lastIssued}) — chỉ truyền lại seq đã lưu từ dòng sổ trước đó.`,
+      );
     }
-    const i = pool ? pool.indexOf(explicit) : -1;
-    if (pool && i >= 0) pool.splice(i, 1);
-    return explicit;
+    await assertSeqFree(ctx, explicit);
+    return {
+      seq: explicit,
+      commit: () => {
+        const i = pool ? pool.indexOf(explicit) : -1;
+        if (pool && i >= 0) pool.splice(i, 1);
+      },
+    };
   }
-  return pool?.shift();
+  const reuse = pool?.[0];
+  if (reuse === undefined) return { seq: undefined, commit: () => {} };
+  // seq vừa gỡ có thể đã bị lời gọi khác trong CÙNG giao dịch dùng (truyền `seq` tường minh) → lỗi rõ ràng, không P2002
+  await assertSeqFree(ctx, reuse);
+  return { seq: reuse, commit: () => void pool!.shift() };
+}
+
+/**
+ * seq đã chọn + `commit` rút nó khỏi `ctx.removedSeqs`. Người gọi chỉ `commit` SAU khi mọi kiểm tra đầu vào đã qua
+ * (ngay trước khi ghi): lời gọi bị từ chối (vd DerivedLayerDateError bị bắt lại trong `work`) không làm mất seq cũ.
+ */
+interface SeqChoice { seq: bigint | undefined; commit: () => void }
+
+async function assertSeqFree(ctx: EngineCtx, seq: bigint): Promise<void> {
+  if (await ctx.tx.stockLedger.findUnique({ where: { seq }, select: { id: true } })) {
+    throw new EngineInvariantError(`Số thứ tự ghi sổ (seq) ${seq} đã được dùng bởi dòng sổ khác — không ghi/khôi phục chứng từ với seq này.`);
+  }
 }
 
 export interface ReceiptInput {
@@ -91,7 +119,8 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
   // lẳng lặng giữ giá người gọi truyền
   if (i.costRef && !(OUT_DOC_TYPES as readonly StockDocType[]).includes(i.costRef.docType)) throw new InvalidCostRefTypeError();
   assertDocDateInPeriod(ctx.period, i.at);
-  const seq = await resolveSeq(ctx, seqKeyOf(i.docType, i.docId, i.docLineId, i.productId), i.seq);
+  const choice = await resolveSeq(ctx, seqKeyOf(i.docType, i.docId, i.docLineId, i.productId), i.seq);
+  const seq = choice.seq;
   if (i.costRef && costRefQty) {
     // Giá lớp phụ thuộc là HÀM của dòng gốc — đúng công thức propagate dùng. Nếu dòng gốc đã có dòng sổ, lấy
     // giá từ đó thay cho `unitCost` người gọi truyền: nếu không, giá lớp sẽ phụ thuộc LỊCH SỬ tính lại (chỉ được
@@ -108,6 +137,7 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     assertDerivedAfterSource({ at: i.at, ...(seq === undefined ? {} : { seq }) }, refRows);
     if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
   }
+  choice.commit(); // mọi kiểm tra đã qua → mới rút seq dùng lại khỏi ctx
 
   const ledger = await ctx.tx.stockLedger.create({
     data: {
@@ -148,7 +178,8 @@ export async function postIssue(ctx: EngineCtx, i: IssueInput): Promise<{ ledger
     const p = await ctx.tx.product.findUniqueOrThrow({ where: { id: i.productId }, select: { recomputing: true } });
     if (p.recomputing) throw new ProductRecomputingError();
   }
-  const seq = await resolveSeq(ctx, seqKeyOf(i.docType, i.docId, i.docLineId, i.productId), i.seq);
+  const { seq, commit } = await resolveSeq(ctx, seqKeyOf(i.docType, i.docId, i.docLineId, i.productId), i.seq);
+  commit();
   const ledger = await ctx.tx.stockLedger.create({
     data: {
       periodId: ctx.period.id, productId: i.productId, docType: i.docType, docId: i.docId, docLineId: i.docLineId,
