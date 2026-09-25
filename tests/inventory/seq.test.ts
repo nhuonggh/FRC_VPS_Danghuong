@@ -234,6 +234,26 @@ describe("giá tạm (ước tính) chọn theo thứ tự sự kiện (at, seq)
     expect(await cost()).toEqual(["180", "3"]);
     await assertChainExact(w);
   });
+
+  it("nhánh DỰ PHÒNG (bán trước mọi lớp thường): A rồi B cùng `at`; sửa A (id lớp mới > B) → giá tạm vẫn theo A", async () => {
+    // Bán 5 tại T10, TRƯỚC mọi lớp → treo cả 5; A 1@100 và B 1@200 (cùng `at` D, sau T10) lần lượt nuốt 1 + 1.
+    // Không có lớp thường ≤ T10 → giá tạm = lớp thường ĐẦU TIÊN theo (at, seq) = A → (100 + 200 + 3×100)/5 = 120.
+    // Sửa A cấp id lớp mới LỚN hơn B: nếu nhánh dự phòng sắp theo id lớp sẽ chọn B → 180.
+    const w = await newWorld();
+    const run = engine(w);
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 5, T(10), 1));
+    await run([w.p.id], (ctx) => buyAt(ctx, w.p.id, 1, 100, 1));
+    await run([w.p.id], (ctx) => buyAt(ctx, w.p.id, 1, 200, 2));
+    expect(await cost()).toEqual(["120", "3"]);
+    await run([w.p.id], async (ctx) => {
+      await removeDocument(ctx, "PURCHASE", 1);
+      await buyAt(ctx, w.p.id, 1, 100, 1);
+    });
+    const [a, b] = await prisma.costLayer.findMany({ where: { productId: w.p.id }, orderBy: { sourceDocId: "asc" } });
+    expect(a!.id > b!.id).toBe(true); // tiền đề: A nay có id lớp lớn hơn B
+    expect(await cost()).toEqual(["120", "3"]);
+    await assertChainExact(w);
+  });
 });
 
 describe("seq truyền vào", () => {
