@@ -71,8 +71,8 @@ async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Dat
 /**
  * Đồ thị phụ thuộc giá (dòng xuất → lớp phụ thuộc → dòng xuất ăn lớp đó) là DAG THEO THỜI GIAN nhờ hai quy tắc
  * (replay.ts): (1) lớp phụ thuộc KHÔNG nuốt đơn treo — đơn treo chỉ được nhập bù bằng lớp thường giá cố định;
- * (2) vị trí sự kiện của lớp phụ thuộc ở SAU dòng gốc: `at` không trước dòng gốc (`assertDerivedAfterSource`), và
- * tại cùng `at` thứ tự là lớp thường → lệnh xuất → lớp phụ thuộc. Lớp phụ thuộc cùng mã được định giá ngay trong
+ * (2) vị trí sự kiện của lớp phụ thuộc ở SAU dòng gốc: `at` không trước và GHI SAU dòng gốc (`assertDerivedAfterSource`);
+ * tại cùng `at`: lớp thường trước, rồi lệnh xuất + lớp phụ thuộc theo thứ tự ghi. Lớp phụ thuộc cùng mã được định giá ngay trong
  * replay; chỉ lan truyền KHÁC mã (thành phẩm SX) mới cần thêm vòng — số lần tính lại một mã ≈ số lần lớp phụ thuộc
  * CỦA MÃ ĐÓ đổi giá. Lưới an toàn, hai tầng:
  *  - đếm: mỗi mã tối đa min(BASE + PER_DERIVED × (số lớp phụ thuộc CỦA MÃ ĐÓ trong kỳ), CAP) lần tính lại/giao dịch
@@ -101,7 +101,7 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
       where: { costRefType: t.docType, costRefId: t.docLineId, periodId: ctx.period.id },
     });
     const srcRows = derived.length
-      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { productId: true, at: true } })
+      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { id: true, productId: true, at: true } })
       : [];
     for (const layer of derived) {
       // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc thời gian ở đây nữa (DAG theo thời gian)

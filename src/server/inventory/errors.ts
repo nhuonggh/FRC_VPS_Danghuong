@@ -49,6 +49,20 @@ export class DerivedLayerDateError extends DomainError {
   }
 }
 
+export class DerivedLayerOrderError extends DomainError {
+  constructor() {
+    super("Chứng từ gốc phải được ghi TRƯỚC chứng từ nhập theo giá của nó (trả hàng/thành phẩm).", 409, "DERIVED_LAYER_ORDER");
+    this.name = "DerivedLayerOrderError";
+  }
+}
+
+export class InvalidCostRefTypeError extends DomainError {
+  constructor() {
+    super("Chứng từ gốc để tính giá vốn phải là chứng từ XUẤT kho (bán, dùng NVL…).", 400, "INVALID_COST_REF_TYPE");
+    this.name = "InvalidCostRefTypeError";
+  }
+}
+
 export class InvalidDocDateError extends DomainError {
   constructor(message: string) {
     super(message, 400, "INVALID_DOC_DATE");

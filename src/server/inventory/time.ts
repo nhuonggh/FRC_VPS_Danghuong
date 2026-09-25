@@ -3,9 +3,11 @@ import { parseYmd } from "@/lib/time-presets";
 import { InvalidDocDateError } from "./errors";
 
 /**
- * Thời điểm ghi sổ của chứng từ (D-7: sắp lớp/lệnh theo (at, id)).
+ * Thời điểm ghi sổ của chứng từ (D-7). Engine sắp sự kiện theo (at, hạng, khoá): cùng `at` thì lớp nhập THƯỜNG trước,
+ * rồi lệnh xuất + lớp phụ thuộc (trả hàng/thành phẩm) theo THỨ TỰ GHI (id dòng sổ) — xem replay.ts `order`.
  *  - ngày hôm nay (ICT)  → `now` (giữ đúng thứ tự thao tác trong ngày)
- *  - ngày quá khứ        → 23:59:59.999 ICT của ngày đó (sau mọi thao tác thật của ngày, tie-break bằng id)
+ *  - ngày quá khứ        → 23:59:59.999 ICT của ngày đó (sau mọi thao tác thật của ngày; mọi chứng từ lùi về cùng ngày
+ *    trùng `at` → phân định bằng hạng + thứ tự ghi như trên)
  *  - ngày tương lai      → lỗi
  * Chỉ dùng số học UTC + độ lệch ICT cố định (`@/lib/time`) → không phụ thuộc múi giờ máy chủ.
  *

@@ -5,8 +5,8 @@ import { prisma } from "../helpers/db";
 import { assertLedgerBalanced, engine, layersOf, type World } from "./helpers";
 
 /* ───────────────────────── Mô hình tham chiếu NGÂY THƠ (độc lập với replay.ts) ─────────────────────────
- * Mô phỏng TỪ ĐẦU mọi sự kiện của mã hàng, sắp (at, hạng, id) — hạng tại cùng `at`: lớp THƯỜNG → lệnh XUẤT → lớp PHỤ
- * THUỘC (vòng sửa 3):
+ * Mô phỏng TỪ ĐẦU mọi sự kiện của mã hàng, sắp (at, hạng, khoá) — tại cùng `at`: lớp THƯỜNG trước (theo id lớp), rồi
+ * lệnh XUẤT và lớp PHỤ THUỘC trộn theo id DÒNG SỔ = thứ tự ghi (vòng sửa 4):
  *  - lệnh xuất → ăn lớp cũ nhất còn hàng (lớp thường HOẶC lớp phụ thuộc), phần thiếu vào hàng đợi đơn treo;
  *  - lớp THƯỜNG đến → nuốt hàng đợi đơn treo cũ→mới (chỉ bằng lớp thường);
  *  - lớp PHỤ THUỘC (costRef: trả hàng / thành phẩm) KHÔNG nuốt đơn treo (vòng sửa 2 — đổi QUY TẮC spec, không nới
@@ -43,12 +43,15 @@ export async function dbState(productId: number): Promise<State> {
 export async function referenceState(productId: number): Promise<State> {
   const layers = await prisma.costLayer.findMany({ where: { productId } });
   const outs = await prisma.stockLedger.findMany({ where: { productId, qtyOut: { gt: 0 } } });
-  // Cùng `at`: rank 0 lớp thường → 1 lệnh xuất → 2 lớp phụ thuộc (vòng sửa 3); kind: 0 = lớp, 1 = xuất
-  type E = { at: number; rank: 0 | 1 | 2; kind: 0 | 1; id: number };
+  // Cùng `at` (vòng sửa 4): rank 0 = lớp thường (khoá: id lớp); rank 1 = lệnh xuất và lớp phụ thuộc, khoá = id DÒNG SỔ
+  // (thứ tự ghi). kind: 0 = lớp, 1 = xuất; id = id lớp / id dòng sổ để tra cứu.
+  type E = { at: number; rank: 0 | 1; key: number; kind: 0 | 1; id: number };
   const evs: E[] = [
-    ...layers.map((l): E => ({ at: l.at.getTime(), rank: l.costRefType === null ? 0 : 2, kind: 0, id: l.id })),
-    ...outs.map((o): E => ({ at: o.at.getTime(), rank: 1, kind: 1, id: o.id })),
-  ].sort((a, b) => a.at - b.at || a.rank - b.rank || a.id - b.id);
+    ...layers.map((l): E => (l.costRefType === null
+      ? { at: l.at.getTime(), rank: 0, key: l.id, kind: 0, id: l.id }
+      : { at: l.at.getTime(), rank: 1, key: l.ledgerId, kind: 0, id: l.id })),
+    ...outs.map((o): E => ({ at: o.at.getTime(), rank: 1, key: o.id, kind: 1, id: o.id })),
+  ].sort((a, b) => a.at - b.at || a.rank - b.rank || a.key - b.key);
   const layerById = new Map(layers.map((l) => [l.id, l]));
   const outById = new Map(outs.map((o) => [o.id, o]));
   const derived = (lid: number) => layerById.get(lid)!.costRefType !== null;

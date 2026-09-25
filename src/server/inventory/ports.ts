@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type StockDocType } from "@prisma/client";
 import {
-  DependentDocumentsError, DerivedLayerCostError, InvalidCostError, InvalidCostRefError, InvalidQuantityError, PeriodClosedError, ProductRecomputingError,
+  DependentDocumentsError, DerivedLayerCostError, InvalidCostError, InvalidCostRefError, InvalidCostRefTypeError, InvalidQuantityError,
+  PeriodClosedError, ProductRecomputingError,
 } from "./errors";
 import { assertDocDateInPeriod } from "@/server/period/guard";
 import { assertDerivedAfterSource, restoreLayerRemaining } from "./layers";
@@ -8,7 +9,7 @@ import { assertLocked } from "./lock";
 import { lineSnapshot } from "./owners";
 import { unitCostOf } from "./replay";
 import { markDirty } from "./unit-of-work";
-import type { DecInput, EngineCtx, InDocType, OutDocType, Tx } from "./types";
+import { OUT_DOC_TYPES, type DecInput, type EngineCtx, type InDocType, type OutDocType, type Tx } from "./types";
 
 const D = (v: DecInput) => new Prisma.Decimal(v);
 
@@ -38,9 +39,10 @@ export interface ReceiptInput {
   at: Date;
   /**
    * Lớp có giá vốn PHỤ THUỘC dòng khác: trả hàng (dòng bán gốc), thành phẩm SX (lệnh SX). Mọi mã hàng của dòng gốc
-   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). `at` KHÔNG được TRƯỚC dòng
-   * gốc (cùng `at` được — lớp phụ thuộc xếp sau mọi lệnh xuất cùng `at`) — DerivedLayerDateError. Lớp này KHÔNG nuốt
-   * đơn treo; chỉ là tồn cho lệnh xuất xếp SAU nó — xem replay.ts.
+   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). `docType` phải là chứng từ XUẤT
+   * (InvalidCostRefTypeError). `at` KHÔNG được TRƯỚC dòng gốc (DerivedLayerDateError) và dòng gốc phải được GHI
+   * TRƯỚC lớp này (DerivedLayerOrderError); cùng `at` thì lớp xếp theo thứ tự ghi cùng các lệnh xuất. Lớp này KHÔNG
+   * nuốt đơn treo; chỉ là tồn cho lệnh xuất xếp SAU nó — xem replay.ts.
    */
   costRef?: { docType: StockDocType; docLineId: number; qty: DecInput };
 }
@@ -53,6 +55,9 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
   // costRef.qty là mẫu số khi lan truyền giá vốn (flush/propagate) → phải > 0, không được lẳng lặng bỏ qua
   const costRefQty = i.costRef ? D(i.costRef.qty) : null;
   if (costRefQty && !costRefQty.gt(0)) throw new InvalidCostRefError();
+  // Giá lớp phụ thuộc = giá XUẤT của dòng gốc (lineSnapshot chỉ cộng dòng xuất) → trỏ chứng từ nhập là sai, và sẽ
+  // lẳng lặng giữ giá người gọi truyền
+  if (i.costRef && !(OUT_DOC_TYPES as readonly StockDocType[]).includes(i.costRef.docType)) throw new InvalidCostRefTypeError();
   assertDocDateInPeriod(ctx.period, i.at);
   if (i.costRef && costRefQty) {
     // Giá lớp phụ thuộc là HÀM của dòng gốc — đúng công thức propagate dùng. Nếu dòng gốc đã có dòng sổ, lấy
