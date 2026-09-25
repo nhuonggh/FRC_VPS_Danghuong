@@ -4,7 +4,8 @@ import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { EngineBusyError, EngineInvariantError, ReplayTooLargeError } from "./errors";
 import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
-import { getCostOwner, lineSnapshots, type LineKey } from "./owners";
+import { lineSnapshots, resolveCostOwner, type LineKey } from "./owners";
+import { registerAllCostOwners } from "./owners-register";
 import { absorbRecomputeJob, deferRecompute, mergeRecomputeJob } from "./recompute-jobs";
 import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
 import {
@@ -136,7 +137,7 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
 
   const snaps = await lineSnapshots(ctx.tx, keys);
   for (const snap of snaps) {
-    const owner = getCostOwner(snap.docType);
+    const owner = resolveCostOwner(snap.docType); // loại "required" chưa đăng ký ⇒ EngineInvariantError (fail closed)
     if (owner) await owner(ctx.tx, snap);
   }
 
@@ -264,6 +265,7 @@ export async function withInventoryTx<R>(
     throw new EngineInvariantError("Không lồng withInventoryTx: trong `work` hãy dùng chính `ctx` đang có.");
   }
   const { txTimeoutMs } = engineTimeouts(opts); // kiểm bất biến ngân sách < timeout TRƯỚC khi mở transaction
+  registerAllCostOwners(); // điểm đăng ký chủ dòng trung tâm (owners-register.ts) — có mặt ở mọi bundle dùng engine
   let hooks: (() => void)[] = [];
   let result: R;
   try {

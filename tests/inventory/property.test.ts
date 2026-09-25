@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import type { EngineCtx } from "@/server/inventory/types";
 import { prisma, resetDb } from "../helpers/db";
-import { engine, newWorld, T } from "./helpers";
+import { engine, newWorld, T, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 /* Property test (plan 02 Task 6): 20 kịch bản ngẫu nhiên có hạt giống; sau MỖI thao tác:
@@ -117,6 +117,7 @@ const describeOp = (op: Op) =>
           : `đổi giá nhập #${op.n} → ${costStr(op.costM)}`;
 
 describe("engine == mô hình tham chiếu (property test): chèn lùi thời gian, sửa, hủy, khôi phục, đổi giá lô, trả hàng", () => {
+  useNoopCostOwners();
   beforeEach(resetDb); // chỉ khối chạy DB; khối bộ sinh bên dưới thuần, chạy riêng được (-t "phủ")
 
   it.each(SEEDS)("kịch bản ngẫu nhiên #%i", async (seed) => {

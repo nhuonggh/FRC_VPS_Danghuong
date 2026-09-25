@@ -1,10 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
+import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 

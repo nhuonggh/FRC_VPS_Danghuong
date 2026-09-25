@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DerivedLayerOrderError, EngineInvariantError, InvalidCostRefTypeError } from "@/server/inventory/errors";
-import { clearCostOwners, registerCostOwner } from "@/server/inventory/owners";
+import { registerCostOwner } from "@/server/inventory/owners";
 import { postIssue, postReceipt } from "@/server/inventory/ports";
 import { docTimestamp } from "@/server/inventory/time";
 import type { EngineCtx } from "@/server/inventory/types";
 import { markDirty } from "@/server/inventory/unit-of-work";
 import { prisma, resetDb } from "../helpers/db";
-import { buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { buy, engine, layersOf, newWorld, saleRow, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
-afterEach(clearCostOwners);
+useNoopCostOwners(); // chủ dòng rỗng mỗi test (test tự registerCostOwner thì ghi đè), dọn sau test
 
 /* Vòng sửa 4: thứ tự sự kiện = (at, hạng, khoá): hạng 0 = lớp THƯỜNG (khoá id lớp); hạng 1 = lệnh xuất VÀ lớp PHỤ
  * THUỘC (khoá id dòng sổ = thứ tự ghi). Lớp phụ thuộc: `at` KHÔNG TRƯỚC dòng gốc và được GHI SAU dòng gốc. */

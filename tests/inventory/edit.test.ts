@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getOnHand } from "@/server/inventory/queries";
 import { productsOfDocument, removeDocument } from "@/server/inventory/ports";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 // Chuỗi chuẩn: L1 100@20.000 (T0) → S1 30 (T10) → L2 100@22.000 (T20) → S2 90 (T30)
 async function chain(w: World) {

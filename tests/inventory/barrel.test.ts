@@ -33,7 +33,7 @@ describe("API công khai của engine (các plan sau CHỈ import từ đây)", 
   it("KHÔNG lộ phần nội bộ (replay, lan truyền, flush, khoá, bước worker cấp thấp)", () => {
     for (const internal of [
       "replayProduct", "updateLayers", "flush", "beginEngine", "markDirty", "retryOnDeadlock", "engineTimeouts", "lockProducts",
-      "lineSnapshot", "lineSnapshots", "clearCostOwners", "getCostOwner", "runRecomputePass", "resetStuckJobs", "resetStaleRunningJobs",
+      "lineSnapshot", "lineSnapshots", "clearCostOwners", "getCostOwner", "resolveCostOwner", "registerAllCostOwners", "runRecomputePass", "resetStuckJobs", "resetStaleRunningJobs",
       "sweepRecomputeJobs", "startRecomputeSweep", "isTransientError", "absorbRecomputeJob", "deferRecompute", "mergeRecomputeJob",
       "ReplayTooLargeError", "estimateFromPlainLayers", "plainLayerCosts",
     ]) {

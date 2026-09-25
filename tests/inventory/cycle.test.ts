@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DerivedLayerDateError, EngineInvariantError, ProductNotLockedError } from "@/server/inventory/errors";
-import { clearCostOwners, registerCostOwner, unitCostOf } from "@/server/inventory/owners";
+import { registerCostOwner, unitCostOf } from "@/server/inventory/owners";
 import { postReceipt, updateLayerCost } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
 import type { EngineCtx } from "@/server/inventory/types";
 import { markDirty } from "@/server/inventory/unit-of-work";
 import { prisma, resetDb } from "../helpers/db";
-import { buy, consOf, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
+import { buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
-afterEach(clearCostOwners);
+useNoopCostOwners(); // chủ dòng rỗng mỗi test (test tự registerCostOwner thì ghi đè), dọn sau test
 
 /* Vòng sửa 2: lớp phụ thuộc (costRef) KHÔNG nuốt hàng đợi đơn treo (của bất kỳ dòng nào) — chỉ là tồn cho lệnh xuất
  * đến SAU nó; lớp phụ thuộc phải ở SAU dòng gốc theo thời gian → đồ thị phụ thuộc giá là DAG theo thời gian. */

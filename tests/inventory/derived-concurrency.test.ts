@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
 import { postIssue, postReceipt, updateLayerCost } from "@/server/inventory/ports";
 import { prisma, resetDb } from "../helpers/db";
-import { buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { buy, engine, layersOf, newWorld, saleRow, sell, T, registerNoopCostOwners, type World } from "./helpers";
 import { assertChainExact } from "./reference";
 
 /* Task 7 fix round 1 — lan truyền giá vốn KHÁC MÃ dưới ghi đồng thời. Một dòng gốc (lệnh SX / dòng bán tôn xốp) có
@@ -14,6 +14,7 @@ import { assertChainExact } from "./reference";
 beforeEach(async () => {
   await resetDb();
   clearCostOwners();
+  registerNoopCostOwners(); // test không đăng ký chủ dòng SALE thì khai báo rõ: chủ dòng rỗng
 });
 
 function gate() {

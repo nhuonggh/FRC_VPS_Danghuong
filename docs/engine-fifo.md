@@ -27,7 +27,8 @@ Nguồn: `src/server/inventory/`. **API công khai duy nhất: `src/server/inven
 deadlock, chặn lồng giao dịch, `finalize`/`afterCommit` của `withInventoryTx`; `resetStuckJobs` — `bootRecomputeWorker`
 đã gọi; cùng mọi phần nội bộ: `replayProduct`, lan truyền (`propagate`, `lineSnapshot(s)`), khoá advisory, bảng job
 (`recompute-jobs.ts`), bước worker cấp thấp (`runRecomputePass`, quét…), `isTransientError`, `engineTimeouts`,
-`ReplayTooLargeError`, `clearCostOwners` (chỉ cho test).
+`ReplayTooLargeError`, `clearCostOwners` (chỉ cho test), `resolveCostOwner` + `registerAllCostOwners` (chủ dòng đăng ký
+tập trung — xem dưới).
 
 **Tóm tắt điều bắt buộc với module nghiệp vụ:**
 1. Mọi ghi kho qua `withInventoryTx({ userId, products, … }, async (ctx) => …)` — transaction + khoá mã (tăng dần) +
@@ -36,9 +37,28 @@ deadlock, chặn lồng giao dịch, `finalize`/`afterCommit` của `withInvento
 2. `products` liệt kê ĐỦ mã sẽ chạm (dùng `productsOfDocument` cho sửa/hủy; thêm mã của dòng gốc khi ghi lớp có `costRef`).
 3. Mỗi dòng chứng từ lưu `at` + `seq` (mục 3). Sửa = `removeDocument` + ghi lại trong CÙNG giao dịch, truyền lại `at` đã
    lưu; khôi phục = ghi lại với `at` + `seq` đã lưu.
-4. Đăng ký `registerCostOwner("SALE", …)` (và các loại xuất khác cần) để nhận `unit_cost_fifo` / cờ treo của dòng.
+4. Đăng ký chủ dòng (`CostOwner`) để nhận `unit_cost_fifo` / cờ treo của dòng — **CHỈ ở điểm đăng ký trung tâm
+   `src/server/inventory/owners-register.ts`** (xem "Chủ dòng — fail closed" ngay dưới), không gọi `registerCostOwner`
+   rải rác trong route/module.
 5. Bắt lỗi nghiệp vụ như mọi `DomainError` (vd `ProductRecomputingError` → "mã hàng đang tính lại giá vốn",
    `EngineBusyError` → "kho đang bận, thử lại").
+
+**Chủ dòng — fail closed (review I1).** `owners.ts` `COST_OWNER_POLICY` (kiểu `Record<OutDocType, …>` — thêm loại xuất
+mà quên quyết định ⇒ lỗi biên dịch) chia loại xuất thành **"required"** (hiện: `SALE` — dòng có cột giá vốn riêng) và
+**"optional"** (`ADJ_LOSS`, `WRITE_OFF`, `RETURN_SUPPLIER`, `PRODUCTION_USE` — giá thành phẩm do lớp phụ thuộc engine
+quản —, `PROCESSING_USE`, `STOCKTAKE_OUT`). Lan truyền chạm dòng loại "required" mà chưa có chủ dòng ⇒
+**`EngineInvariantError`** (giao dịch rollback; ở worker nền job `FAILED` + giữ cờ chặn xuất) thay vì lẳng lặng bỏ qua
+để `unit_cost_fifo` / `is_provisional` cũ. Registry là theo module instance (bundle instrumentation ≠ bundle route), nên
+đăng ký không dựa vào tác dụng phụ của import: `withInventoryTx` (mọi đường, gồm worker) và `bootRecomputeWorker` gọi
+`registerAllCostOwners()` (idempotent) của `owners-register.ts` — module này được `unit-of-work.ts` import TĨNH.
+Test không quan tâm cột giá vốn phải khai báo rõ bằng `useNoopCostOwners()` / `registerNoopCostOwners()`
+(`tests/inventory/helpers.ts`); test của quy tắc: `tests/inventory/owners.test.ts`.
+
+> **Hand-off plan 03 (bắt buộc trước khi ghi `SALE` thật):** tạo hàm chủ dòng trong file riêng của module bán hàng (vd
+> `src/server/sales/cost-owner.ts`: 1 câu `UPDATE sale_order_lines SET unit_cost_fifo = unitCostOf(snap.totalCost, qty),
+> is_provisional = snap.qtyProvisional > 0`), rồi thêm `["SALE", saleLineCostOwner]` vào `COST_OWNER_REGISTRATIONS` trong
+> `owners-register.ts`. Hiện danh sách RỖNG ⇒ mọi `SALE` qua engine ném `EngineInvariantError` cho tới khi làm bước này
+> (cố ý). Loại xuất khác có thêm cột giá vốn (vd `PROCESSING_USE`) ⇒ đổi sang "required" trong `COST_OWNER_POLICY` + đăng ký.
 
 ## 1. Thứ tự sự kiện
 
@@ -139,6 +159,8 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
 
 - `withInventoryTx({ products })` khoá các mã khai báo theo thứ tự **tăng dần** (không deadlock giữa các giao dịch chỉ
   dùng mã khai báo).
+- Chủ dòng được gọi SAU khi đã khoá đủ mã (dưới đây) và đọc `lineSnapshots`. Dòng loại "required" (§0, `SALE`) thiếu chủ
+  dòng ⇒ `EngineInvariantError` NGAY tại bước này (không phải lỗi deadlock ⇒ không chạy lại; worker ⇒ job `FAILED`).
 - Lan truyền (`propagate`, unit-of-work.ts): với các dòng xuất vừa tính lại, **trước khi** đọc tổng vốn dòng
   (`lineSnapshots`), gọi chủ dòng, hay ghi giá lớp phụ thuộc, engine khoá **mọi** mã có dòng sổ xuất của các dòng đó (vd
   mọi NVL của lệnh SX / dòng bán tôn xốp) **và** mọi mã có lớp phụ thuộc trỏ tới các dòng đó (thành phẩm, hàng trả) —

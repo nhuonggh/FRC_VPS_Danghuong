@@ -13,10 +13,11 @@ import {
 import { engineTimeouts, withInventoryTx } from "@/server/inventory/unit-of-work";
 import { prisma, resetDb } from "../helpers/db";
 import { makePeriod, makeProduct } from "../helpers/factories";
-import { assertLedgerBalanced, buy, engine, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { assertLedgerBalanced, buy, engine, newWorld, saleRow, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 /** 6 đơn bán liên tiếp trên tồn lớn. Với inlineLimit = 3, sửa đơn ĐẦU sẽ chạm > 3 sự kiện. */
 async function bigChain() {

@@ -6,7 +6,8 @@
  * CỐ Ý KHÔNG xuất (nội bộ engine): replay (replayProduct, updateLayers), lan truyền / flush / beginEngine / markDirty /
  * retryOnDeadlock / engineTimeouts (mọi thao tác kho đi qua withInventoryTx — transaction, khoá, tính lại, thử lại
  * deadlock, chặn lồng), khoá advisory (lock.ts), lineSnapshot(s), bảng job nội bộ (recompute-jobs.ts), các bước worker
- * cấp thấp (runRecomputePass, resetStuckJobs, sweep…), ReplayTooLargeError, clearCostOwners (chỉ cho test).
+ * cấp thấp (runRecomputePass, resetStuckJobs, sweep…), ReplayTooLargeError, clearCostOwners (chỉ cho test), resolveCostOwner +
+ * registerAllCostOwners (chủ dòng đăng ký TẬP TRUNG ở owners-register.ts — xem docs/engine-fifo.md §0).
  */
 
 // Thời điểm ghi sổ

@@ -1,5 +1,6 @@
 import { Prisma, type StockDocType } from "@prisma/client";
-import type { Dec, Tx } from "./types";
+import { EngineInvariantError } from "./errors";
+import { OUT_DOC_TYPES, type Dec, type OutDocType, type Tx } from "./types";
 
 /** Cho chủ dòng: giá đơn vị = tổng / SL, độ chính xác cao, HALF_UP 4 số — cùng hàm engine dùng. */
 export { unitCostOf } from "./replay";
@@ -24,6 +25,29 @@ export interface LineCostSnapshot {
  */
 export type CostOwner = (tx: Tx, snap: LineCostSnapshot) => Promise<void>;
 
+/**
+ * Chính sách chủ dòng cho TỪNG loại chứng từ xuất (FAIL CLOSED — review I1):
+ *  - "required": dòng loại này có cột giá vốn của riêng nó (vd `sale_order_lines.unit_cost_fifo` / `is_provisional`)
+ *    → lan truyền chạm dòng mà CHƯA đăng ký chủ dòng ⇒ EngineInvariantError (không lẳng lặng bỏ qua để cột giá vốn cũ).
+ *  - "optional": không có cột giá vốn cần ghi ngược (giá vốn chỉ nằm ở sổ kho / lớp phụ thuộc do engine quản); được
+ *    đăng ký nếu module muốn nghe, không đăng ký cũng không sao.
+ * `Record<OutDocType, …>` bắt buộc liệt kê ĐỦ loại xuất: thêm loại vào OUT_DOC_TYPES mà quên quyết định ở đây ⇒ lỗi
+ * biên dịch. Module plan 03+ thêm cột giá vốn cho loại khác (vd PROCESSING_USE) ⇒ đổi sang "required" + đăng ký chủ
+ * dòng trong `owners-register.ts`.
+ */
+export const COST_OWNER_POLICY = {
+  SALE: "required",
+  ADJ_LOSS: "optional",
+  WRITE_OFF: "optional",
+  RETURN_SUPPLIER: "optional",
+  PRODUCTION_USE: "optional", // giá thành phẩm = lớp phụ thuộc PRODUCTION_OUT, engine tự tính
+  PROCESSING_USE: "optional",
+  STOCKTAKE_OUT: "optional",
+} as const satisfies Record<OutDocType, "required" | "optional">;
+
+/** Loại xuất BẮT BUỘC có chủ dòng (suy ra từ COST_OWNER_POLICY — không liệt kê tay lần hai). */
+export const OWNER_REQUIRED_DOC_TYPES: readonly OutDocType[] = OUT_DOC_TYPES.filter((t) => COST_OWNER_POLICY[t] === "required");
+
 const owners = new Map<StockDocType, CostOwner>();
 
 export function registerCostOwner(docType: StockDocType, owner: CostOwner): void {
@@ -31,6 +55,22 @@ export function registerCostOwner(docType: StockDocType, owner: CostOwner): void
 }
 export function getCostOwner(docType: StockDocType): CostOwner | undefined {
   return owners.get(docType);
+}
+
+/**
+ * Chủ dòng cho dòng `docType` mà lan truyền vừa chạm. Loại "required" chưa đăng ký ⇒ EngineInvariantError (lỗi lập
+ * trình: quên đăng ký trong `owners-register.ts`); loại không phải chứng từ xuất ⇒ EngineInvariantError.
+ */
+export function resolveCostOwner(docType: StockDocType): CostOwner | undefined {
+  const policy = (COST_OWNER_POLICY as Partial<Record<StockDocType, "required" | "optional">>)[docType];
+  if (!policy) throw new EngineInvariantError(`Lan truyền giá vốn chạm dòng loại ${docType} — không phải chứng từ xuất.`);
+  const owner = owners.get(docType);
+  if (!owner && policy === "required") {
+    throw new EngineInvariantError(
+      `Chưa đăng ký chủ dòng (registerCostOwner) cho loại chứng từ ${docType}: giá vốn dòng (unit_cost_fifo / is_provisional) sẽ không được cập nhật. Đăng ký trong src/server/inventory/owners-register.ts.`,
+    );
+  }
+  return owner;
 }
 /** Chỉ dùng trong test. */
 export function clearCostOwners(): void {

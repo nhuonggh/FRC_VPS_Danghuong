@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
-import { expect } from "vitest";
+import { afterEach, beforeEach, expect } from "vitest";
+import { clearCostOwners, OWNER_REQUIRED_DOC_TYPES, registerCostOwner } from "@/server/inventory/owners";
 import { postIssue, postReceipt } from "@/server/inventory/ports";
 import type { EngineCtx } from "@/server/inventory/types";
 import { withInventoryTx, type WithInventoryOptions } from "@/server/inventory/unit-of-work";
@@ -72,3 +73,16 @@ export const sell = (ctx: EngineCtx, productId: number, qty: Prisma.Decimal.Valu
 export const saleRow = (docId: number) => prisma.stockLedger.findFirstOrThrow({ where: { docType: "SALE", docId } });
 export const layersOf = (productId: number) => prisma.costLayer.findMany({ where: { productId }, orderBy: [{ at: "asc" }, { id: "asc" }] });
 export const consOf = (ledgerId: number) => prisma.costConsumption.findMany({ where: { ledgerId }, orderBy: { id: "asc" } });
+
+/**
+ * Engine FAIL CLOSED khi lan truyền chạm dòng loại "required" (SALE…) chưa có chủ dòng (owners.ts COST_OWNER_POLICY).
+ * Test KHÔNG quan tâm cột giá vốn của dòng chứng từ phải KHAI BÁO điều đó: gọi `useNoopCostOwners()` ở cấp file/describe
+ * → mỗi test được đăng ký chủ dòng rỗng cho mọi loại bắt buộc (test tự `registerCostOwner` sau đó thì ghi đè), dọn sau test.
+ */
+export function useNoopCostOwners(): void {
+  beforeEach(registerNoopCostOwners);
+  afterEach(clearCostOwners);
+}
+export function registerNoopCostOwners(): void {
+  for (const t of OWNER_REQUIRED_DOC_TYPES) registerCostOwner(t, async () => {});
+}

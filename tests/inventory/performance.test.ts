@@ -4,7 +4,7 @@ import { postReceipt, removeDocument, updateLayerCost } from "@/server/inventory
 import { markDirty, withInventoryTx, type WithInventoryOptions } from "@/server/inventory/unit-of-work";
 import type { EngineCtx } from "@/server/inventory/types";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, engine, newWorld, sell, T, type World } from "./helpers";
+import { assertLedgerBalanced, buy, engine, newWorld, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact, dbState, referenceState } from "./reference";
 
 /*
@@ -14,6 +14,7 @@ import { assertChainExact, dbState, referenceState } from "./reference";
  */
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 /** Client riêng đếm mọi câu lệnh SQL (sự kiện `query` của Prisma). */
 const counted = new PrismaClient({ log: [{ emit: "event", level: "query" }] });

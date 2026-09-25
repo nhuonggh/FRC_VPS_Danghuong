@@ -4,7 +4,7 @@ import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/serve
 import { DependentDocumentsError } from "@/server/inventory/errors";
 import type { EngineCtx } from "@/server/inventory/types";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, registerNoopCostOwners, type World } from "./helpers";
 import { assertChainExact, dbState, referenceState } from "./reference";
 
 /* Plan 02 Task 7 — giá vốn phụ thuộc chéo (spec 3.4, 3.6). Quy ước gọi engine cho các plan sau:
@@ -17,6 +17,7 @@ import { assertChainExact, dbState, referenceState } from "./reference";
 beforeEach(async () => {
   await resetDb();
   clearCostOwners();
+  registerNoopCostOwners(); // test không đăng ký chủ dòng SALE thì khai báo rõ: chủ dòng rỗng
 });
 
 const checkAll = async (w: World) => { for (const p of w.products) await assertChainExact(w, p.id); };

@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { EngineBusyError } from "./errors";
+import { registerAllCostOwners } from "./owners-register";
 import { WORKER_TX_TIMEOUT_MS } from "./types";
 import { markDirty, withInventoryTx } from "./unit-of-work";
 
@@ -286,6 +287,7 @@ export function stopRecomputeTimers(): void {
  * để Next khởi động bình thường. Thành công: trả job RUNNING kẹt về PENDING, rồi (nếu worker bật) đánh thức + bật quét.
  */
 export async function bootRecomputeWorker(db?: PrismaClient, retryMs = BOOT_RETRY_MS): Promise<void> {
+  registerAllCostOwners(); // bundle instrumentation: chủ dòng có mặt trước khi worker chạy job đầu tiên
   try {
     await resetStuckJobs(db ?? (await defaultDb()));
   } catch (e) {

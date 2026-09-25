@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getOnHand } from "@/server/inventory/queries";
 import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
+import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, registerNoopCostOwners } from "./helpers";
 
 beforeEach(async () => {
   await resetDb();
   clearCostOwners();
+  registerNoopCostOwners(); // test không đăng ký chủ dòng SALE thì khai báo rõ: chủ dòng rỗng
 });
 
 describe("bán âm kho → đơn treo → nhập bù (spec 3.3)", () => {

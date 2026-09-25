@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, engine, layersOf, newWorld, sell, T } from "./helpers";
+import { assertLedgerBalanced, buy, engine, layersOf, newWorld, sell, T, useNoopCostOwners } from "./helpers";
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 describe("ghi đồng thời cùng mã hàng (spec 3.0)", () => {
   it("2 người bán cùng lúc 60 + 60 trên tồn 100 → không ăn trùng lớp; đúng 20 treo; người bán trước theo thời gian được đủ", async () => {

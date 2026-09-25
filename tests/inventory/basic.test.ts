@@ -3,9 +3,10 @@ import { postIssue } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
 import { markDirty } from "@/server/inventory/unit-of-work";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
+import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, useNoopCostOwners } from "./helpers";
 
 beforeEach(resetDb);
+useNoopCostOwners(); // các test này không kiểm cột giá vốn dòng chứng từ
 
 describe("engine FIFO — nhập/bán cơ bản (spec 3.7)", () => {
   it("nhập 100@20.000 rồi bán 30 → vốn 20.000, còn 70@20.000", async () => {

@@ -1,15 +1,15 @@
 import { Prisma } from "@prisma/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
 import { runRecomputeJobs } from "@/server/inventory/recompute";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
-afterEach(clearCostOwners);
+useNoopCostOwners(); // chủ dòng rỗng mỗi test (test tự registerCostOwner thì ghi đè), dọn sau test
 
 describe("bán âm kho / đơn treo / nhập bù (spec 3.3)", () => {
   it("bán khi chưa có lớp nào → treo toàn bộ, giá tạm 0; nhập bù → khớp đủ, gỡ treo", async () => {

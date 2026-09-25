@@ -1,15 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { EngineInvariantError } from "@/server/inventory/errors";
-import { clearCostOwners } from "@/server/inventory/owners";
 import { postIssue, postReceipt, removeDocument } from "@/server/inventory/ports";
 import { docTimestamp } from "@/server/inventory/time";
 import type { EngineCtx } from "@/server/inventory/types";
 import { prisma, resetDb } from "../helpers/db";
-import { buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
+import { buy, engine, layersOf, newWorld, saleRow, sell, T, type World, useNoopCostOwners } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
-afterEach(clearCostOwners);
+useNoopCostOwners(); // chủ dòng rỗng mỗi test (test tự registerCostOwner thì ghi đè), dọn sau test
 
 /* Vòng sửa 5: khoá thứ tự ổn định `seq` (stock_ledger.seq) — giữ nguyên qua sửa (xoá + ghi lại) như `at`. */
 
