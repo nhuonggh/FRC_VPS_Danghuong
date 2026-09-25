@@ -54,9 +54,27 @@ interface WorkerState {
   claimFailures: number;
 }
 const globalForWorker = globalThis as unknown as { __dhRecomputeWorker?: WorkerState };
-const worker: WorkerState = (globalForWorker.__dhRecomputeWorker ??= {
+const defaultWorkerState = (): WorkerState => ({
   current: null, again: false, retryTimer: null, sweepTimer: null, bootTimers: new Set(), claimFailures: 0,
 });
+/**
+ * Lấy/tạo singleton. Object cũ trên globalThis có thể mang HÌNH DẠNG CŨ (HMR nạp bản code mới vào tiến trình đang chạy
+ * bản cũ): trường mới thiếu ⇒ `undefined` (vd claimFailures ⇒ backoff NaN, bootTimers.add ném lỗi). Trộn mặc định VÀO
+ * object cũ (giữ nguyên danh tính + timer/lượt đang chạy): trường còn thiếu / sai kiểu được điền mặc định.
+ */
+export function adoptWorkerState(existing: Partial<WorkerState> | undefined): WorkerState {
+  const d = defaultWorkerState();
+  if (!existing) return d;
+  const s = existing as WorkerState;
+  if (typeof s.claimFailures !== "number" || !Number.isFinite(s.claimFailures)) s.claimFailures = d.claimFailures;
+  if (!(s.bootTimers instanceof Set)) s.bootTimers = d.bootTimers;
+  if (typeof s.again !== "boolean") s.again = d.again;
+  if (s.current === undefined) s.current = d.current;
+  if (s.retryTimer === undefined) s.retryTimer = d.retryTimer;
+  if (s.sweepTimer === undefined) s.sweepTimer = d.sweepTimer;
+  return s;
+}
+const worker: WorkerState = (globalForWorker.__dhRecomputeWorker = adoptWorkerState(globalForWorker.__dhRecomputeWorker));
 const defaultDb = async (): Promise<PrismaClient> => (await import("@/lib/prisma")).prisma;
 const backoffMs = (attempts: number) => Math.min(RETRY_BASE_MS * 2 ** Math.max(0, attempts - 1), RETRY_MAX_MS);
 

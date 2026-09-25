@@ -147,7 +147,8 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
       FROM cost_layers c
       JOIN stock_ledger s ON s.id = c."ledgerId"
       JOIN unnest(${types}::text[], ${lines}::int[]) AS k(t, l) ON c."costRefType" = k.t::stock_doc_type AND c."costRefId" = k.l
-     WHERE c."periodId" = ${ctx.period.id}`;
+     WHERE c."periodId" = ${ctx.period.id}
+     ORDER BY c.at, s.seq, c.id`; // thứ tự tất định: lỗi vị trí (assertDerivedAfterSource) luôn báo cùng một lớp
   if (derived.length === 0) return;
   const srcKeys = [...new Map(derived.map((d) => [`${d.t}:${d.l}`, { t: d.t, l: d.l }])).values()];
   const srcRows = await ctx.tx.$queryRaw<{ seq: bigint; at: Date; t: string; l: number }[]>`
@@ -155,7 +156,8 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
       FROM stock_ledger s
       JOIN unnest(${srcKeys.map((k) => k.t)}::text[], ${srcKeys.map((k) => k.l)}::int[]) AS k(t, l)
         ON s."docType" = k.t::stock_doc_type AND s."docLineId" = k.l
-     WHERE s."qtyOut" > 0`;
+     WHERE s."qtyOut" > 0
+     ORDER BY s.seq`;
   const srcOf = new Map<string, { seq: bigint; at: Date }[]>();
   for (const s of srcRows) {
     const k = `${s.t}:${s.l}`;

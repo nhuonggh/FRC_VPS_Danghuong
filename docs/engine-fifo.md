@@ -126,6 +126,10 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   gọi phải bảo đảm SL trả ≤ SL bán gốc** (kiểm ở tầng nghiệp vụ, plan 03+).
 - **Không bao giờ nạp lại hàng loạt dòng sổ (import / chuyển kỳ / sửa tay DB) mà không giữ `seq`.** Chuyển dữ liệu
   cũ vào: gán seq theo đúng thứ tự nghiệp vụ gốc.
+  **Sau khi nạp dữ liệu cũ có `seq` tường minh, PHẢI đẩy sequence lên**: `SELECT setval('stock_ledger_seq_seq', (SELECT
+  max(seq) FROM stock_ledger));` — nếu không, seq DB cấp tiếp có thể trùng seq đã nạp (lỗi UNIQUE) hoặc bị coi là "chưa
+  từng cấp" khi khôi phục. Cột `at` lưu tới **mili-giây** (`timestamp(3)`): nguồn có micro-giây phải làm tròn trước, và hai
+  chứng từ cùng ms được xếp theo `seq`.
 
 ## 4. Quy ước gọi engine cho giá vốn phụ thuộc chéo (Task 7 — `tests/inventory/derived.test.ts`)
 
@@ -315,4 +319,6 @@ Nguyên nhân cũ: 1 `UPDATE` cho mỗi dòng xuất/lớp đổi trong replay, 
 liên quan, `lineSnapshot`, tìm lớp phụ thuộc, dòng gốc), 2 câu lệnh giá tạm cho mỗi đơn treo. Nay: ghi gộp `UPDATE … FROM
 unnest(…)`, lan truyền theo lô (`lineSnapshots`, một truy vấn lớp phụ thuộc + dòng gốc cho cả lô), giá tạm nạp lớp thường
 một lần. Ngoại lệ còn lại theo số dòng: lời gọi **chủ dòng** (mục 4). Test ghim **số câu lệnh** (không phụ thuộc máy)
-và thời gian với ngưỡng rộng (≤ 3 s cho 2.000 dòng — hợp đồng spec; ≤ 500 ms bán ở đuôi).
+là hàng rào CỨNG; thời gian (≤ 3 s cho 2.000 dòng — hợp đồng spec; ≤ 500 ms bán ở đuôi) chỉ được kiểm khi chạy với
+`PERF_STRICT=1` (vd `PERF_STRICT=1 npx vitest run tests/inventory/performance.test.ts` trên máy đo), mặc định chỉ ghi log —
+tránh test đỏ oan do máy/CI chậm.
