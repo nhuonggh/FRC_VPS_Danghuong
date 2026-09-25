@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { PrismaClient } from "@prisma/client";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { EngineInvariantError, ReplayTooLargeError } from "./errors";
+import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
 import { getCostOwner, lineSnapshot } from "./owners";
 import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
@@ -65,12 +66,17 @@ async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Dat
 }
 
 /**
- * Đồ thị phụ thuộc giá (dòng xuất → lớp phụ thuộc → dòng xuất ăn lớp đó) là DAG NHỜ quy tắc trong replay.ts `take`:
- * lớp phụ thuộc không bao giờ cấp hàng cho chính dòng gốc của nó. Với DAG, mỗi mã hàng chỉ phải tính lại vài lần
- * trong 1 flush. Ngưỡng tính THEO MÃ HÀNG (không theo tổng số vòng) để giao dịch nhiều mã (kiểm kho 1.300 mã) không
- * bị chặn oan; vượt ngưỡng ⇒ dữ liệu tạo chu trình (vd hai đơn treo trả hàng chéo cho nhau) → dừng, rollback.
+ * Đồ thị phụ thuộc giá (dòng xuất → lớp phụ thuộc → dòng xuất ăn lớp đó) là DAG THEO THỜI GIAN nhờ hai quy tắc
+ * (replay.ts): (1) lớp phụ thuộc KHÔNG nuốt đơn treo — đơn treo chỉ được nhập bù bằng lớp thường giá cố định;
+ * (2) lớp phụ thuộc ở SAU dòng gốc (`assertDerivedAfterSource`). Lớp phụ thuộc cùng mã được định giá ngay trong
+ * replay; chỉ lan truyền KHÁC mã (thành phẩm SX) mới cần thêm vòng — số vòng của một mã ≤ độ sâu chuỗi phụ thuộc
+ * ≤ số lớp phụ thuộc. Lưới an toàn (co giãn theo số lớp phụ thuộc để không chặn oan chuỗi sâu hợp lệ): mỗi mã tối đa
+ * BASE + PER_DERIVED × (số lớp phụ thuộc trong kỳ) lần tính lại mỗi giao dịch — chỉ vượt khi có lỗi lập trình
+ * (vd chủ dòng tự đánh dấu dirty) hoặc dữ liệu hỏng. flush xử lý mã nhỏ nhất trước (không theo thứ tự tôpô): vài
+ * vòng thừa là chấp nhận được và vẫn nằm trong ngưỡng trên.
  */
-const MAX_REPLAYS_PER_PRODUCT = 50;
+const MAX_REPLAYS_BASE = 50;
+const MAX_REPLAYS_PER_DERIVED = 2;
 
 /** Đồng bộ giá vốn dòng về chủ sở hữu + cập nhật lớp PHỤ THUỘC; lớp đổi giá thì đánh dấu tính lại tiếp. */
 async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> {
@@ -86,7 +92,12 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
     const derived = await ctx.tx.costLayer.findMany({
       where: { costRefType: t.docType, costRefId: t.docLineId, periodId: ctx.period.id },
     });
+    const srcRows = derived.length
+      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { productId: true, at: true } })
+      : [];
     for (const layer of derived) {
+      // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc thời gian ở đây nữa (DAG theo thời gian)
+      assertDerivedAfterSource(layer, srcRows);
       // postReceipt bảo đảm costRefQty > 0; gặp dữ liệu hỏng thì dừng hẳn thay vì lẳng lặng bỏ qua
       if (!layer.costRefQty || !layer.costRefQty.gt(0)) {
         throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);
@@ -106,16 +117,21 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
  */
 export async function flush(ctx: EngineCtx): Promise<void> {
   const replays = new Map<number, number>();
+  let limit: number | undefined;
   while (ctx.dirty.size > 0) {
     const productId = Math.min(...ctx.dirty.keys());
     const fromAt = ctx.dirty.get(productId)!;
     ctx.dirty.delete(productId);
     const n = (replays.get(productId) ?? 0) + 1;
     replays.set(productId, n);
-    if (n > MAX_REPLAYS_PER_PRODUCT) {
-      throw new EngineInvariantError(
-        `Tính lại giá vốn không hội tụ: mã hàng ${productId} bị tính lại quá ${MAX_REPLAYS_PER_PRODUCT} lần trong một giao dịch (nghi ngờ giá vốn phụ thuộc vòng).`,
-      );
+    if (n > MAX_REPLAYS_BASE) {
+      limit ??= MAX_REPLAYS_BASE + MAX_REPLAYS_PER_DERIVED *
+        (await ctx.tx.costLayer.count({ where: { periodId: ctx.period.id, costRefType: { not: null } } }));
+      if (n > limit) {
+        throw new EngineInvariantError(
+          `Tính lại giá vốn không hội tụ: mã hàng ${productId} bị tính lại quá ${limit} lần trong một giao dịch (lỗi lập trình hoặc dữ liệu phụ thuộc hỏng).`,
+        );
+      }
     }
     await lockProducts(ctx, [productId]);
 

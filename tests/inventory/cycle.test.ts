@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EngineInvariantError, ProductNotLockedError } from "@/server/inventory/errors";
+import { DerivedLayerDateError, EngineInvariantError, ProductNotLockedError } from "@/server/inventory/errors";
 import { clearCostOwners, registerCostOwner, unitCostOf } from "@/server/inventory/owners";
 import { postReceipt, updateLayerCost } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
@@ -12,7 +12,8 @@ import { assertChainExact } from "./reference";
 beforeEach(resetDb);
 afterEach(clearCostOwners);
 
-/* Vòng sửa 1: lớp phụ thuộc (costRef) KHÔNG cấp hàng cho chính dòng gốc của nó → đồ thị phụ thuộc giá là DAG. */
+/* Vòng sửa 2: lớp phụ thuộc (costRef) KHÔNG nuốt hàng đợi đơn treo (của bất kỳ dòng nào) — chỉ là tồn cho lệnh xuất
+ * đến SAU nó; lớp phụ thuộc phải ở SAU dòng gốc theo thời gian → đồ thị phụ thuộc giá là DAG theo thời gian. */
 
 const ret998 = (ctx: EngineCtx, productId: number) =>
   postReceipt(ctx, { productId, qty: 998, unitCost: 0, docType: "RETURN_IN", docId: 50, docLineId: 50, at: T(30), costRef: { docType: "SALE", docLineId: 1, qty: 1000 } });
@@ -56,7 +57,7 @@ describe("lớp trả hàng ↔ dòng bán gốc đang treo: không chu trình",
     expect((await getOnHand(prisma, w.periodId, w.p.id)).toString()).toBe("0");
     await assertChainExact(w);
 
-    // Nhập bù 998@50 → dòng bán nuốt lớp MỚI (bỏ qua lớp trả của chính nó dù lớp trả cũ hơn):
+    // Nhập bù 998@50 → dòng bán nuốt lớp THƯỜNG mới (lớp trả cũ hơn không bao giờ cấp cho đơn treo):
     // (100 + 300 + 998×50)/1000 = 50.300/1000 = 50,3 → lớp trả lan truyền 50,3; lớp trả vẫn còn 998
     await run([w.p.id], (ctx) => buy(ctx, w.p.id, 998, 50, T(40), 3));
     expect([(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()]).toEqual(["50.3", "0"]);
@@ -121,7 +122,8 @@ describe("lớp trả hàng ↔ dòng bán gốc đang treo: không chu trình",
     await assertChainExact(w);
   });
 
-  it("lớp trả hàng VẪN nuốt đơn treo của dòng KHÁC", async () => {
+  // ĐỔI KỲ VỌNG ở vòng sửa 2 (quy tắc spec mới, không nới lỏng): trước đây lớp trả nuốt đơn treo dòng #2 → 160.
+  it("lớp trả hàng KHÔNG nuốt đơn treo của dòng KHÁC — chỉ là tồn cho đơn bán đến SAU nó", async () => {
     const w = await newWorld();
     const run = engine(w);
     await run([w.p.id], async (ctx) => {
@@ -134,17 +136,23 @@ describe("lớp trả hàng ↔ dòng bán gốc đang treo: không chu trình",
     await run([w.p.id], (ctx) =>
       postReceipt(ctx, { productId: w.p.id, qty: 4, unitCost: 0, docType: "RETURN_IN", docId: 60, docLineId: 60, at: T(20), costRef: { docType: "SALE", docLineId: 1, qty: 10 } }),
     );
-    // lớp trả 4@150 nuốt dòng bán #2: (4×150 + 1 tạm × 200)/5 = 800/5 = 160
+    // lớp trả 4@150 KHÔNG nuốt dòng #2 (vẫn treo 5 @200); lớp trả còn nguyên 4
     expect([(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()]).toEqual(["150", "0"]);
-    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["160", "1"]);
+    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["200", "5"]);
     const ret = (await layersOf(w.p.id)).find((l) => l.sourceDocType === "RETURN_IN")!;
-    expect([ret.unitCost.toString(), ret.qtyRemaining.toString()]).toEqual(["150", "0"]);
+    expect([ret.unitCost.toString(), ret.qtyRemaining.toString()]).toEqual(["150", "4"]);
+    expect((await getOnHand(prisma, w.periodId, w.p.id)).toString()).toBe("-1"); // 4 − 5
+    await assertChainExact(w);
+    // đơn bán SAU lớp trả ăn nó bình thường: 3@150
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 3, T(30), 3));
+    expect([(await saleRow(3)).unitCostOut.toString(), (await saleRow(3)).qtyProvisional.toString()]).toEqual(["150", "0"]);
     await assertChainExact(w);
   });
 });
 
 describe("lớp trả hàng đến khi dòng gốc ĐỨNG TRƯỚC trong hàng đợi treo", () => {
-  it("bỏ qua dòng gốc (vẫn treo) nhưng VẪN nuốt đơn treo đứng SAU nó", async () => {
+  // ĐỔI KỲ VỌNG ở vòng sửa 2: trước đây lớp trả nuốt dòng #2 (3@370) và còn 2.
+  it("không nuốt dòng gốc lẫn đơn treo đứng sau; nhập bù THƯỜNG thì nuốt cả hai theo thứ tự", async () => {
     const w = await newWorld();
     const run = engine(w);
     await run([w.p.id], async (ctx) => {
@@ -158,12 +166,123 @@ describe("lớp trả hàng đến khi dòng gốc ĐỨNG TRƯỚC trong hàng 
     await run([w.p.id], (ctx) =>
       postReceipt(ctx, { productId: w.p.id, qty: 5, unitCost: 0, docType: "RETURN_IN", docId: 70, docLineId: 70, at: T(10), costRef: { docType: "SALE", docLineId: 1, qty: 10 } }),
     );
-    // lớp trả 5@370: dòng #1 (gốc) bị bỏ qua, dòng #2 nuốt 3@370; lớp trả còn 2
+    // lớp trả 5@370 không nuốt ai: #1 vẫn 370/8, #2 vẫn 400/3, lớp trả còn 5
     expect([(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()]).toEqual(["370", "8"]);
-    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["370", "0"]);
-    const ret = (await layersOf(w.p.id)).find((l) => l.sourceDocType === "RETURN_IN")!;
-    expect([ret.unitCost.toString(), ret.qtyRemaining.toString()]).toEqual(["370", "2"]);
+    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["400", "3"]);
+    const ret = async () => (await layersOf(w.p.id)).find((l) => l.sourceDocType === "RETURN_IN")!;
+    expect([(await ret()).unitCost.toString(), (await ret()).qtyRemaining.toString()]).toEqual(["370", "5"]);
     await assertChainExact(w);
+    // nhập bù THƯỜNG 11@500 @T20: #1 nuốt 8 → (100 + 400 + 8×500)/10 = 4.500/10 = 450; #2 nuốt 3@500 = 500;
+    // lớp trả theo #1 → 450, vẫn còn 5
+    await run([w.p.id], (ctx) => buy(ctx, w.p.id, 11, 500, T(20), 3));
+    expect([(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()]).toEqual(["450", "0"]);
+    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["500", "0"]);
+    expect([(await ret()).unitCost.toString(), (await ret()).qtyRemaining.toString()]).toEqual(["450", "5"]);
+    await assertChainExact(w);
+  });
+});
+
+/** Kịch bản re-review vòng 2: hai đơn treo trả hàng chéo cho nhau (A → RA, B → RB). */
+async function crossScenario(order: "natural" | "backdated") {
+  const w = await newWorld();
+  const run = engine(w);
+  const ret = (ctx: EngineCtx, n: number, srcLine: number, at: Date) =>
+    postReceipt(ctx, { productId: w.p.id, qty: 9, unitCost: 0, docType: "RETURN_IN", docId: n, docLineId: n, at, costRef: { docType: "SALE", docLineId: srcLine, qty: 10 } });
+  await run([w.p.id], (ctx) => buy(ctx, w.p.id, 1, 100, T(0), 1));
+  await run([w.p.id], (ctx) => sell(ctx, w.p.id, 10, T(10), 1)); // A
+  if (order === "natural") await run([w.p.id], (ctx) => buy(ctx, w.p.id, 1, 1000, T(15), 2));
+  await run([w.p.id], (ctx) => sell(ctx, w.p.id, 10, T(20), 2)); // B
+  await run([w.p.id], (ctx) => ret(ctx, 61, 1, T(30))); // RA
+  await run([w.p.id], (ctx) => ret(ctx, 62, 2, T(40))); // RB
+  if (order === "backdated") await run([w.p.id], (ctx) => buy(ctx, w.p.id, 1, 1000, T(15), 2)); // nhập lùi ngày SAU CÙNG
+  return { w, run };
+}
+
+describe("re-review vòng 2: hai đơn treo trả hàng chéo — DAG theo thời gian", () => {
+  it("hội tụ trong vài vòng: A=190 (treo 8), B=1.000 (treo 10), RA=190, RB=1.000; đơn sau ăn RA", async () => {
+    let calls = 0;
+    registerCostOwner("SALE", async () => {
+      if (++calls > 40) throw new Error(`chủ dòng bị gọi ${calls} lần — flush không hội tụ nhanh`);
+    });
+    const { w, run } = await crossScenario("natural");
+    // A: 1@100 + 1@1000 (nhập bù thường) + 8 tạm @100 (giá nhập gần nhất ≤ T10) = 1.900/10 = 190
+    expect([(await saleRow(1)).unitCostOut.toString(), (await saleRow(1)).qtyProvisional.toString()]).toEqual(["190", "8"]);
+    // B: hết hàng → 10 tạm @1.000 (giá nhập gần nhất ≤ T20)
+    expect([(await saleRow(2)).unitCostOut.toString(), (await saleRow(2)).qtyProvisional.toString()]).toEqual(["1000", "10"]);
+    const layers = await layersOf(w.p.id);
+    expect(layers.filter((l) => l.sourceDocType === "RETURN_IN").map((l) => [l.sourceDocId, l.unitCost.toString(), l.qtyRemaining.toString()]))
+      .toEqual([[61, "190", "9"], [62, "1000", "9"]]);
+    expect((await getOnHand(prisma, w.periodId, w.p.id)).toString()).toBe("0"); // 18 − 18
+    await assertChainExact(w);
+    // đơn C 5 @T50 ăn RA (cũ nhất còn hàng) 5@190
+    await run([w.p.id], (ctx) => sell(ctx, w.p.id, 5, T(50), 3));
+    expect((await saleRow(3)).unitCostOut.toString()).toBe("190");
+    await assertChainExact(w);
+  });
+
+  it("không phụ thuộc lịch sử: nhập 1@1.000 lùi ngày SAU CÙNG == thứ tự tự nhiên (từng dòng giống hệt)", async () => {
+    const a = await crossScenario("natural");
+    await assertChainExact(a.w);
+    const sa = await docState(a.w.p.id);
+    await resetDb();
+    const b = await crossScenario("backdated");
+    await assertChainExact(b.w);
+    expect(await docState(b.w.p.id)).toEqual(sa);
+  });
+});
+
+describe("chuỗi lớp phụ thuộc lồng nhau sâu trong MỘT giao dịch", () => {
+  it("61 đơn bán + 60 lớp trả lồng nhau (R_i từ S_i, S_{i+1} ăn R_i) trong 1 giao dịch → hội tụ, không bị lưới an toàn chặn oan", async () => {
+    const w = await newWorld();
+    const run = engine(w);
+    await run([w.p.id], async (ctx) => {
+      await buy(ctx, w.p.id, 1, 100, T(0), 1);
+      for (let i = 1; i <= 61; i++) {
+        await sell(ctx, w.p.id, 1, T(10 * i), i); // S_i ăn R_{i-1} (S_1 ăn lô nhập)
+        if (i <= 60) {
+          await postReceipt(ctx, {
+            productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 100 + i, docLineId: 100 + i, at: T(10 * i + 5),
+            costRef: { docType: "SALE", docLineId: i, qty: 1 },
+          });
+        }
+      }
+    });
+    const sales = await prisma.stockLedger.findMany({ where: { docType: "SALE" } });
+    expect(new Set(sales.map((s) => `${s.unitCostOut.toString()}:${s.qtyProvisional.toString()}`))).toEqual(new Set(["100:0"]));
+    const rets = await prisma.costLayer.findMany({ where: { sourceDocType: "RETURN_IN" } });
+    expect(rets).toHaveLength(60);
+    expect(new Set(rets.map((l) => l.unitCost.toString()))).toEqual(new Set(["100"]));
+    await assertChainExact(w);
+  }, 120_000);
+});
+
+describe("quy tắc thời gian lớp phụ thuộc", () => {
+  it("trả hàng cùng mã có thời điểm ≤ dòng bán gốc → lỗi tiếng Việt, không ghi gì", async () => {
+    const w = await newWorld();
+    const run = engine(w);
+    await run([w.p.id], async (ctx) => {
+      await buy(ctx, w.p.id, 10, 100, T(0), 1);
+      await sell(ctx, w.p.id, 5, T(10), 1);
+    });
+    for (const at of [T(10), T(5)]) {
+      await expect(run([w.p.id], (ctx) =>
+        postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at, costRef: { docType: "SALE", docLineId: 1, qty: 5 } }),
+      )).rejects.toThrow(DerivedLayerDateError);
+    }
+    expect(await prisma.costLayer.count({ where: { sourceDocType: "RETURN_IN" } })).toBe(0);
+    await expect(run([w.p.id], (ctx) =>
+      postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at: T(5), costRef: { docType: "SALE", docLineId: 1, qty: 5 } }),
+    )).rejects.toThrow("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm SAU chứng từ gốc.");
+  });
+
+  it("dòng gốc đăng SAU lớp trong cùng giao dịch mà thời điểm muộn hơn lớp → bị chặn khi lan truyền", async () => {
+    const w = await newWorld();
+    await expect(engine(w)([w.p.id], async (ctx) => {
+      await buy(ctx, w.p.id, 10, 100, T(0), 1);
+      await postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at: T(5), costRef: { docType: "SALE", docLineId: 1, qty: 5 } });
+      await sell(ctx, w.p.id, 5, T(10), 1);
+    })).rejects.toThrow(DerivedLayerDateError);
+    expect(await prisma.stockLedger.count()).toBe(0);
   });
 });
 

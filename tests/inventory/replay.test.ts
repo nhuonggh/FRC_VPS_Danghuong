@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
 import { postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
@@ -177,40 +178,61 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
     };
   };
 
-  for (const seed of [11, 2026, 90210]) {
-    it(`hạt giống ${seed}: 30 thao tác nhập/bán/hủy/khôi phục/đổi giá, lùi ngày, trùng thời điểm, số lẻ`, async () => {
+  for (const seed of [11, 2026, 90210, 424242]) {
+    it(`hạt giống ${seed}: 40 thao tác nhập/bán/TRẢ HÀNG (costRef)/hủy/khôi phục/đổi giá, lùi ngày, trùng thời điểm, số lẻ`, async () => {
       const w = await newWorld();
       const run = engine(w);
       const r = rng(seed);
       const pick = <X,>(xs: X[]): X => xs[Math.floor(r() * xs.length)]!;
       const qty = () => (r() < 0.5 ? String(1 + Math.floor(r() * 40)) : (1 + Math.floor(r() * 40) + Math.floor(r() * 1000) / 1000).toFixed(3));
       const cost = () => (r() < 0.5 ? String(100 + Math.floor(r() * 30000)) : (100 + r() * 30000).toFixed(4));
-      type Doc = { kind: "PURCHASE" | "SALE"; n: number; qty: string; cost: string; at: Date };
+      type Doc = { kind: "PURCHASE" | "SALE" | "RETURN_IN"; n: number; qty: string; cost: string; at: Date; ref?: Doc };
       const live: Doc[] = [];
       const removed: Doc[] = [];
       let nBuy = 0;
       let nSell = 1000;
+      let nRet = 5000;
       const post = (ctx: Parameters<Parameters<ReturnType<typeof engine>>[1]>[0], d: Doc) =>
-        d.kind === "PURCHASE" ? buy(ctx, w.p.id, d.qty, d.cost, d.at, d.n) : sell(ctx, w.p.id, d.qty, d.at, d.n);
+        d.kind === "PURCHASE" ? buy(ctx, w.p.id, d.qty, d.cost, d.at, d.n)
+          : d.kind === "SALE" ? sell(ctx, w.p.id, d.qty, d.at, d.n)
+            : postReceipt(ctx, {
+                productId: w.p.id, qty: d.qty, unitCost: 0, docType: "RETURN_IN", docId: d.n, docLineId: d.n, at: d.at,
+                costRef: { docType: "SALE", docLineId: d.ref!.n, qty: d.ref!.qty },
+              });
+      // Không hủy dòng bán còn lớp trả hàng dựa vào nó (engine chặn — DependentDocumentsError)
+      const removable = () => live.filter((d) => !live.some((x) => x.ref === d));
 
-      for (let step = 0; step < 30; step++) {
+      for (let step = 0; step < 40; step++) {
         const x = r();
         const at = T(5 * Math.floor(r() * 21)); // 21 mốc → trùng thời điểm thường xuyên
-        if (x < 0.33 || live.length === 0) {
+        if (x < 0.28 || live.length === 0) {
           const d: Doc = { kind: "PURCHASE", n: ++nBuy, qty: qty(), cost: cost(), at };
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
-        } else if (x < 0.7) {
+        } else if (x < 0.58) {
           const d: Doc = { kind: "SALE", n: ++nSell, qty: qty(), cost: "0", at };
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
+        } else if (x < 0.72) {
+          // Trả hàng theo đơn: SL ≤ SL bán, thời điểm SAU dòng bán gốc (quy tắc thời gian của engine)
+          const sales = live.filter((d) => d.kind === "SALE" && d.at.getTime() < T(100).getTime());
+          if (!sales.length) continue;
+          const src = pick(sales);
+          const later = T(5 * (Math.floor((src.at.getTime() - T(0).getTime()) / 300_000) + 1 + Math.floor(r() * 4)));
+          const rq = new Prisma.Decimal(src.qty).times(r()).toDecimalPlaces(3, Prisma.Decimal.ROUND_DOWN);
+          const d: Doc = { kind: "RETURN_IN", n: ++nRet, qty: (rq.gt(0) ? rq : new Prisma.Decimal(src.qty)).toString(), cost: "0", at: later, ref: src };
+          await run([w.p.id], (ctx) => post(ctx, d));
+          live.push(d);
         } else if (x < 0.82) {
-          const d = pick(live);
+          const cands = removable();
+          if (!cands.length) continue;
+          const d = pick(cands);
           await run([w.p.id], (ctx) => removeDocument(ctx, d.kind, d.n));
           live.splice(live.indexOf(d), 1);
           removed.push(d);
         } else if (x < 0.9 && removed.length) {
           const d = removed.pop()!; // khôi phục tại `at` gốc
+          if (d.ref && !live.includes(d.ref)) continue; // dòng gốc đã hủy → không khôi phục trả hàng
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
         } else {
@@ -222,7 +244,9 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
         }
         await assertChainExact(w);
       }
-    }, 120_000);
+      // bộ sinh phải thật sự tạo ra lớp trả hàng để quy tắc lớp phụ thuộc được kiểm
+      expect(await prisma.costLayer.count({ where: { costRefType: { not: null } } })).toBeGreaterThan(0);
+    }, 180_000);
   }
 });
 

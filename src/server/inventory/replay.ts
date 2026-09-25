@@ -1,6 +1,6 @@
 import { Prisma, type StockDocType } from "@prisma/client";
 import { ReplayTooLargeError } from "./errors";
-import { restoreLayerRemaining } from "./layers";
+import { assertDerivedAfterSource, restoreLayerRemaining } from "./layers";
 import { assertLocked } from "./lock";
 import { estimateCost } from "./queries";
 import type { Dec, EngineCtx } from "./types";
@@ -23,7 +23,12 @@ export function unitCostOf(total: Prisma.Decimal.Value, qty: Prisma.Decimal.Valu
 
 const ZERO = new Prisma.Decimal(0);
 
-interface InEvent { kind: "in"; at: Date; id: number; qty: Dec; unitCost: Dec; costRefType: StockDocType | null; costRefId: number | null }
+/** Lớp trong mô phỏng. `derived` ⇔ costRefType ≠ null (trả hàng / thành phẩm). */
+interface Avail {
+  layerId: number; at: Date; remaining: Dec; orig: Dec; unitCost: Dec; origCost: Dec;
+  derived: boolean; costRefType: StockDocType | null; costRefId: number | null; costRefQty: Dec | null;
+}
+interface InEvent { kind: "in"; at: Date; id: number; layer: Avail }
 interface OutEvent { kind: "out"; at: Date; id: number; qty: Dec }
 type Ev = InEvent | OutEvent;
 
@@ -31,10 +36,8 @@ type Ev = InEvent | OutEvent;
 const order = (a: Ev, b: Ev) =>
   a.at.getTime() - b.at.getTime() || (a.kind === "in" ? 0 : 1) - (b.kind === "in" ? 0 : 1) || a.id - b.id;
 
-/** `costRefType/costRefId` ≠ null ⇔ lớp phụ thuộc (trả hàng / thành phẩm) — xem quy tắc chống chu trình ở `take`. */
-interface Avail { layerId: number; remaining: Dec; orig: Dec; unitCost: Dec; costRefType: StockDocType | null; costRefId: number | null }
 interface OutRef { id: number; at: Date; docType: StockDocType; docLineId: number; qtyOut: Dec; unitCostOut: Dec; qtyProvisional: Dec }
-interface Acc { qty: Dec; cost: MoneyDec }
+interface Pick { layer: Avail; outId: number; qty: Dec }
 
 export interface TouchedLine { docType: StockDocType; docLineId: number }
 export interface ReplayResult { touched: TouchedLine[]; eventCount: number }
@@ -44,12 +47,24 @@ export interface ReplayResult { touched: TouchedLine[]; eventCount: number }
  * bán ở đuôi, sửa/hủy giữa chuỗi, khôi phục, nhập bù đơn treo, đổi giá lô đều đi qua đây.
  * Yêu cầu: đã khoá advisory lock mã hàng trong transaction.
  *
+ * QUY TẮC LỚP PHỤ THUỘC (spec 3.3 × 3.4 — vòng sửa 2): lớp phụ thuộc (costRef: trả hàng, thành phẩm SX) KHÔNG BAO
+ * GIỜ nuốt hàng đợi đơn treo — của bất kỳ dòng nào. Đơn treo chỉ được "nhập bù" bằng lớp THƯỜNG (mua, nhập đầu kỳ,
+ * điều chỉnh…) có giá tự thân cố định. Lớp phụ thuộc vẫn là tồn bình thường cho lệnh xuất đến SAU nó theo (at, id).
+ * Cùng với quy tắc thời gian (lớp phụ thuộc ở SAU dòng gốc — `assertDerivedAfterSource`), giá của mọi dòng chỉ phụ
+ * thuộc (a) lớp ở TRƯỚC nó theo thời gian và (b) lớp thường giá cố định; giá lớp phụ thuộc chỉ phụ thuộc dòng gốc ở
+ * TRƯỚC nó ⇒ đồ thị phụ thuộc giá là DAG theo thời gian, không có dải điểm bất động do làm tròn.
+ * GIẢ ĐỊNH NGHIỆP VỤ (chờ khách xác nhận): hàng khách trả KHÔNG lấp lùi đơn bán âm kho trước đó; nó là tồn cho
+ * đơn bán sau. Tương tự thành phẩm SX không lấp đơn bán âm phụ kiện trước đó.
+ *
+ * Hai pha: (1) SỐ LƯỢNG — ai ăn lớp nào bao nhiêu không phụ thuộc giá; (2) GIÁ — một lượt theo thời gian; lớp phụ
+ * thuộc có dòng gốc cùng mã hàng được định giá NGAY trong lượt (dòng gốc đã được tính trước nó), nên chuỗi trả hàng
+ * lồng nhau của cùng mã hội tụ trong 1 lần tính lại. Dòng gốc khác mã (thành phẩm SX) do flush/propagate lan truyền.
+ *
  * Tính đúng của tính lại TỪNG PHẦN (== mô phỏng từ đầu): trạng thái tại `fromAt` gồm (a) lớp trước `fromAt`
  * còn hàng sau khi gỡ mọi consumption của lệnh xuất ≥ `fromAt`, (b) hàng đợi đơn treo = lệnh xuất trước
  * `fromAt` còn thiếu hàng sau khi gỡ mọi consumption vào lớp ≥ `fromAt`. Consumption (xuất < fromAt, lớp <
  * fromAt) chỉ phụ thuộc sự kiện < fromAt nên giữ nguyên. Người gọi phải chọn `fromAt` ≤ mọi sự kiện bị đổi —
  * kể cả lệnh xuất đã ăn lớp bị xoá (removeDocument làm việc đó).
- * Quy tắc chống chu trình (xem `take`): lớp phụ thuộc không cấp hàng cho chính dòng gốc của nó.
  */
 export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: Date): Promise<ReplayResult> {
   assertLocked(ctx, productId);
@@ -87,13 +102,16 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   await restoreLayerRemaining(tx, [...layerIds, ...hit.map((h) => h.layerId)]);
 
   // 4) Trạng thái đầu: lớp còn hàng trước fromAt (FIFO theo (at, id))
+  type LayerRow = (typeof scopeLayers)[number];
+  const toAvail = (l: LayerRow, remaining: Dec): Avail => ({
+    layerId: l.id, at: l.at, remaining, orig: remaining, unitCost: l.unitCost, origCost: l.unitCost,
+    derived: l.costRefType !== null, costRefType: l.costRefType, costRefId: l.costRefId, costRefQty: l.costRefQty,
+  });
   const open = await tx.costLayer.findMany({
     where: { periodId, productId, at: { lt: fromAt }, qtyRemaining: { gt: 0 } },
     orderBy: [{ at: "asc" }, { id: "asc" }],
   });
-  const avail: Avail[] = open.map((l) => ({
-    layerId: l.id, remaining: l.qtyRemaining, orig: l.qtyRemaining, unitCost: l.unitCost, costRefType: l.costRefType, costRefId: l.costRefId,
-  }));
+  const avail: Avail[] = open.map((l) => toAvail(l, l.qtyRemaining));
 
   // 5) Hàng đợi đơn treo CŨ: lệnh xuất trước fromAt còn thiếu hàng (đang treo, hoặc vừa mất consumption ở bước 2)
   const pendingRows = await tx.stockLedger.findMany({
@@ -109,92 +127,70 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
         select: { ledgerId: true, qty: true, unitCost: true },
       })
     : [];
+  // Consumption CŨ còn giữ của đơn treo cũ (vào lớp trước fromAt — giá lớp đó không đổi trong lần này)
+  const kept = new Map<number, { qty: Dec; cost: MoneyDec }>();
+  for (const c of pendingCons) {
+    const k = kept.get(c.ledgerId) ?? { qty: ZERO, cost: new Money(0) };
+    kept.set(c.ledgerId, { qty: k.qty.plus(c.qty), cost: k.cost.plus(mul(c.qty, c.unitCost)) });
+  }
 
   const refs = new Map<number, OutRef>();
-  const acc = new Map<number, Acc>();
-  const addAcc = (outId: number, qty: Dec, unitCost: Dec) => {
-    const a = acc.get(outId) ?? { qty: ZERO, cost: new Money(0) };
-    acc.set(outId, { qty: a.qty.plus(qty), cost: a.cost.plus(mul(qty, unitCost)) });
-  };
-  for (const c of pendingCons) addAcc(c.ledgerId, c.qty, c.unitCost);
-
   const shortfalls: { id: number; missing: Dec }[] = [];
   for (const p of pendingRows) {
     // Luôn đưa vào refs (để sửa cả cờ treo lỗi thời nếu có); chỉ vào hàng đợi khi thật sự còn thiếu
     refs.set(p.id, { id: p.id, at: p.at, docType: p.docType, docLineId: p.docLineId, qtyOut: p.qtyOut, unitCostOut: p.unitCostOut, qtyProvisional: p.qtyProvisional });
-    const missing = p.qtyOut.minus(acc.get(p.id)?.qty ?? ZERO);
+    const missing = p.qtyOut.minus(kept.get(p.id)?.qty ?? ZERO);
     if (missing.gt(0)) shortfalls.push({ id: p.id, missing });
   }
-
-  // 6) Mô phỏng theo thời gian
   for (const o of scopeOuts) {
     refs.set(o.id, { id: o.id, at: o.at, docType: o.docType, docLineId: o.docLineId, qtyOut: o.qtyOut, unitCostOut: o.unitCostOut, qtyProvisional: o.qtyProvisional });
   }
   const events: Ev[] = [
-    ...scopeLayers.map((l): Ev => ({ kind: "in", at: l.at, id: l.id, qty: l.qtyIn, unitCost: l.unitCost, costRefType: l.costRefType, costRefId: l.costRefId })),
+    ...scopeLayers.map((l): Ev => ({ kind: "in", at: l.at, id: l.id, layer: toAvail(l, l.qtyIn) })),
     ...scopeOuts.map((o): Ev => ({ kind: "out", at: o.at, id: o.id, qty: o.qtyOut })),
   ].sort(order);
 
-  const newCons: Prisma.CostConsumptionCreateManyInput[] = [];
+  // ── Pha 1: SỐ LƯỢNG ──
+  const picks = new Map<number, Pick[]>();
   let head = 0;
-
-  /**
-   * Lệnh `outId` ăn lớp cũ nhất còn hàng; trả phần CÒN THIẾU.
-   *
-   * QUY TẮC CHỐNG CHU TRÌNH (spec 3.3 × 3.4): lớp PHỤ THUỘC (costRef) KHÔNG BAO GIỜ cấp hàng cho chính dòng gốc
-   * của nó (dòng sổ có docType/docLineId = costRefType/costRefId) — kể cả khi dòng gốc đang treo.
-   * Lý do: trả lại hàng mà chính đơn đó chưa thực giao (phần treo) không tạo ra tồn thật cho đơn đó; giá lớp trả =
-   * giá dòng gốc đo KHÔNG gồm phần do chính lớp trả cấp → đồ thị phụ thuộc giá không có cạnh tự vòng, flush hội tụ.
-   * (Nếu cho phép: x = round4((A + r·x)/q) chỉ co r/q mỗi vòng → hàng nghìn vòng, dừng ở một điểm trong dải điểm
-   * bất động do làm tròn → giá phụ thuộc lịch sử.) Lớp đó vẫn cấp hàng bình thường cho MỌI dòng khác.
-   */
-  const take = (outId: number, need: Dec): Dec => {
-    const ref = refs.get(outId)!;
+  /** Lệnh `outId` ăn lớp cũ nhất còn hàng (`plainOnly`: bỏ qua lớp phụ thuộc); trả phần CÒN THIẾU. */
+  const take = (outId: number, need: Dec, plainOnly: boolean): Dec => {
     while (head < avail.length && avail[head]!.remaining.lte(0)) head++;
     for (let i = head; need.gt(0) && i < avail.length; i++) {
       const l = avail[i]!;
-      if (l.remaining.lte(0)) continue;
-      if (l.costRefType === ref.docType && l.costRefId === ref.docLineId) continue; // lớp của chính dòng gốc
+      if (l.remaining.lte(0) || (plainOnly && l.derived)) continue;
       const q = Prisma.Decimal.min(need, l.remaining);
       l.remaining = l.remaining.minus(q);
       need = need.minus(q);
-      newCons.push({ layerId: l.layerId, ledgerId: outId, docType: ref.docType, docLineId: ref.docLineId, qty: q, unitCost: l.unitCost });
-      addAcc(outId, q, l.unitCost);
+      const list = picks.get(outId) ?? [];
+      list.push({ layer: l, outId, qty: q });
+      picks.set(outId, list);
     }
     while (head < avail.length && avail[head]!.remaining.lte(0)) head++;
     return need;
   };
-  /**
-   * Đơn treo được nuốt theo thứ tự CŨ → MỚI mỗi khi có hàng (spec 3.3). Duyệt HẾT hàng đợi: một đơn có thể không
-   * dùng được phần hàng còn lại (vì đó là lớp của chính nó) nhưng đơn sau thì dùng được.
-   */
+  /** Nhập bù (spec 3.3): đơn treo được nuốt CŨ → MỚI, CHỈ bằng lớp thường. */
   const drain = () => {
-    for (let k = 0; k < shortfalls.length && head < avail.length; ) {
+    for (let k = 0; k < shortfalls.length; ) {
       const s = shortfalls[k]!;
-      s.missing = take(s.id, s.missing);
+      s.missing = take(s.id, s.missing, true);
       if (s.missing.lte(0)) shortfalls.splice(k, 1);
-      else k++;
+      else break; // lớp thường đã cạn (không lớp thường nào còn hàng khi hàng đợi khác rỗng)
     }
   };
 
-  // Phòng thủ: ở trạng thái nhất quán, đơn treo cũ chỉ cùng tồn tại với lớp cũ còn hàng của CHÍNH nó → no-op
-  drain();
+  drain(); // phòng thủ: ở trạng thái nhất quán không có lớp thường cũ còn hàng khi còn đơn treo → no-op
   for (const ev of events) {
     if (ev.kind === "in") {
-      avail.push({ layerId: ev.id, remaining: ev.qty, orig: ev.qty, unitCost: ev.unitCost, costRefType: ev.costRefType, costRefId: ev.costRefId });
-      drain();
+      avail.push(ev.layer);
+      if (!ev.layer.derived) drain(); // lớp phụ thuộc KHÔNG nuốt đơn treo
     } else {
-      const left = take(ev.id, ev.qty);
+      const left = take(ev.id, ev.qty, false);
       if (left.gt(0)) shortfalls.push({ id: ev.id, missing: left });
     }
   }
 
-  // 7) Ghi kết quả
-  if (newCons.length) await tx.costConsumption.createMany({ data: newCons });
-  // PERF(Task 9): 1 UPDATE mỗi lớp đổi — gộp thành 1 UPDATE … FROM (VALUES …) nếu đo thấy chậm
-  for (const l of avail) {
-    if (!l.remaining.equals(l.orig)) await tx.costLayer.update({ where: { id: l.layerId }, data: { qtyRemaining: l.remaining } });
-  }
+  // ── Pha 2: GIÁ, một lượt theo thời gian ──
   const estimates = new Map<number, Dec>();
   const estimateAt = async (at: Date) => {
     const k = at.getTime();
@@ -202,15 +198,61 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     if (!v) { v = await estimateCost(tx, periodId, productId, at); estimates.set(k, v); }
     return v;
   };
+  const result = new Map<number, { unitCostOut: Dec; missing: Dec }>();
+  const priceOut = async (ref: OutRef) => {
+    const k = kept.get(ref.id);
+    let qty = k?.qty ?? ZERO;
+    let total = k?.cost ?? new Money(0);
+    for (const p of picks.get(ref.id) ?? []) {
+      qty = qty.plus(p.qty);
+      total = total.plus(mul(p.qty, p.layer.unitCost));
+    }
+    const missing = ref.qtyOut.minus(qty);
+    if (missing.gt(0)) total = total.plus(mul(missing, await estimateAt(ref.at)));
+    result.set(ref.id, { unitCostOut: unitCostOf(total, ref.qtyOut), missing });
+  };
+  // Đơn treo cũ trước: phần mới nuốt được chỉ từ lớp thường (giá cố định)
+  for (const ref of refs.values()) if (!scopeOutSet.has(ref.id)) await priceOut(ref);
+
+  const derivedInScope = scopeLayers.filter((l) => l.costRefType !== null);
+  const sources = derivedInScope.length
+    ? await tx.stockLedger.findMany({
+        where: { qtyOut: { gt: 0 }, OR: derivedInScope.map((l) => ({ docType: l.costRefType!, docLineId: l.costRefId! })) },
+        select: { id: true, productId: true, docType: true, docLineId: true, qtyOut: true, unitCostOut: true, at: true },
+      })
+    : [];
+  for (const ev of events) {
+    if (ev.kind === "out") { await priceOut(refs.get(ev.id)!); continue; }
+    const l = ev.layer;
+    if (!l.derived) continue;
+    const src = sources.filter((s) => s.docType === l.costRefType && s.docLineId === l.costRefId);
+    assertDerivedAfterSource({ productId, at: l.at }, src);
+    // Dòng gốc chưa có dòng sổ, hoặc có dòng ở mã khác (thành phẩm SX): giá do postReceipt/propagate quản
+    if (src.length === 0 || src.some((s) => s.productId !== productId) || !l.costRefQty) continue;
+    let total = new Money(0);
+    for (const s of src) total = total.plus(mul(s.qtyOut, result.get(s.id)?.unitCostOut ?? s.unitCostOut));
+    l.unitCost = unitCostOf(total, l.costRefQty);
+  }
+
+  // ── Ghi kết quả ──
+  const newCons: Prisma.CostConsumptionCreateManyInput[] = [];
+  for (const [outId, list] of picks) {
+    const ref = refs.get(outId)!;
+    for (const p of list) newCons.push({ layerId: p.layer.layerId, ledgerId: outId, docType: ref.docType, docLineId: ref.docLineId, qty: p.qty, unitCost: p.layer.unitCost });
+  }
+  if (newCons.length) await tx.costConsumption.createMany({ data: newCons });
+  // PERF(Task 9): 1 UPDATE mỗi lớp đổi — gộp thành 1 UPDATE … FROM (VALUES …) nếu đo thấy chậm
+  for (const l of avail) {
+    const data: Prisma.CostLayerUpdateInput = {};
+    if (!l.remaining.equals(l.orig)) data.qtyRemaining = l.remaining;
+    if (!l.unitCost.equals(l.origCost)) data.unitCost = l.unitCost;
+    if (Object.keys(data).length) await tx.costLayer.update({ where: { id: l.layerId }, data });
+  }
   const touched: TouchedLine[] = [];
   for (const ref of refs.values()) {
-    const a = acc.get(ref.id) ?? { qty: ZERO, cost: new Money(0) };
-    const missing = ref.qtyOut.minus(a.qty);
-    let total = a.cost;
-    if (missing.gt(0)) total = total.plus(mul(missing, await estimateAt(ref.at)));
-    const unitCostOut = unitCostOf(total, ref.qtyOut);
-    if (!unitCostOut.equals(ref.unitCostOut) || !missing.equals(ref.qtyProvisional)) {
-      await tx.stockLedger.update({ where: { id: ref.id }, data: { unitCostOut, qtyProvisional: missing } });
+    const r = result.get(ref.id)!;
+    if (!r.unitCostOut.equals(ref.unitCostOut) || !r.missing.equals(ref.qtyProvisional)) {
+      await tx.stockLedger.update({ where: { id: ref.id }, data: { unitCostOut: r.unitCostOut, qtyProvisional: r.missing } });
     }
     touched.push({ docType: ref.docType, docLineId: ref.docLineId });
   }

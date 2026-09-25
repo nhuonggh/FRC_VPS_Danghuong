@@ -5,17 +5,25 @@ import { prisma } from "../helpers/db";
 import { assertLedgerBalanced, engine, layersOf, type World } from "./helpers";
 
 /* ───────────────────────── Mô hình tham chiếu NGÂY THƠ (độc lập với replay.ts) ─────────────────────────
- * Mô phỏng TỪ ĐẦU mọi sự kiện của mã hàng: sắp (at, nhập trước xuất, id); lớp đến → nuốt hàng đợi đơn treo
- * cũ→mới; lệnh xuất → ăn lớp cũ nhất, phần thiếu vào hàng đợi. Giá tạm phần thiếu = giá nhập gần nhất ≤ at
- * (không tính lớp phụ thuộc) → lớp đầu tiên → 0. unit_cost_out = tổng/qty, HALF_UP 4 số.
- * Quy tắc spec bổ sung (vòng sửa 1 — đổi QUY TẮC, không nới lỏng oracle): lớp phụ thuộc (costRef) KHÔNG cấp
- * hàng cho chính dòng gốc của nó — cả khi dòng gốc là đơn treo lẫn khi nó xuất bình thường. Hàng đợi được
- * duyệt HẾT cũ→mới mỗi khi có lớp đến (đơn không dùng được lớp đó thì đơn sau vẫn dùng được).             */
+ * Mô phỏng TỪ ĐẦU mọi sự kiện của mã hàng, sắp (at, nhập trước xuất, id):
+ *  - lệnh xuất → ăn lớp cũ nhất còn hàng (lớp thường HOẶC lớp phụ thuộc), phần thiếu vào hàng đợi đơn treo;
+ *  - lớp THƯỜNG đến → nuốt hàng đợi đơn treo cũ→mới (chỉ bằng lớp thường);
+ *  - lớp PHỤ THUỘC (costRef: trả hàng / thành phẩm) KHÔNG nuốt đơn treo (vòng sửa 2 — đổi QUY TẮC spec, không nới
+ *    oracle): nó chỉ là tồn cho lệnh xuất đến SAU nó.
+ * Giá: số lượng ăn lớp không phụ thuộc giá → pha 1 tính số lượng, pha 2 tính giá MỘT LƯỢT theo thời gian:
+ *  - lớp thường: giá lưu trong DB (đầu vào);
+ *  - lớp phụ thuộc: TỰ SUY RA = round4(Σ qtyOut × unit_cost_out của dòng gốc / costRefQty), dòng gốc đã được
+ *    tính trước đó trong lượt (dòng gốc luôn ở TRƯỚC lớp theo thời gian). Dòng gốc thuộc mã hàng khác (thành
+ *    phẩm SX) hoặc chưa có dòng sổ → lấy giá DB (ngoài phạm vi mô hình 1 mã hàng);
+ *  - lệnh xuất: round4((Σ qty × giá lớp + phần thiếu × giá tạm) / qty); giá tạm = giá lớp THƯỜNG gần nhất ≤ at
+ *    → lớp thường đầu tiên → 0.                                                                             */
 const HP = Prisma.Decimal.clone({ precision: 80, rounding: Prisma.Decimal.ROUND_HALF_UP });
 type HPDec = InstanceType<typeof HP>;
+const s4 = (v: HPDec) => new Prisma.Decimal(v.toDecimalPlaces(4, HP.ROUND_HALF_UP).toFixed(4)).toString();
+const s3 = (v: HPDec) => new Prisma.Decimal(v.toString()).toString();
 
 export interface State {
-  layers: string[]; // "id:remaining"
+  layers: string[]; // "id:remaining:unitCost"
   outs: string[]; // "id:unitCostOut:qtyProvisional"
   cons: string[]; // "ledgerId:layerId:qty:unitCost" (sắp xếp)
 }
@@ -25,7 +33,7 @@ export async function dbState(productId: number): Promise<State> {
   const outs = await prisma.stockLedger.findMany({ where: { productId, qtyOut: { gt: 0 } }, orderBy: { id: "asc" } });
   const cons = await prisma.costConsumption.findMany({ where: { ledger: { productId } } });
   return {
-    layers: layers.map((l) => `${l.id}:${l.qtyRemaining.toString()}`).sort(),
+    layers: layers.map((l) => `${l.id}:${l.qtyRemaining.toString()}:${l.unitCost.toString()}`).sort(),
     outs: outs.map((o) => `${o.id}:${o.unitCostOut.toString()}:${o.qtyProvisional.toString()}`).sort(),
     cons: cons.map((c) => `${c.ledgerId}:${c.layerId}:${c.qty.toString()}:${c.unitCost.toString()}`).sort(),
   };
@@ -41,25 +49,22 @@ export async function referenceState(productId: number): Promise<State> {
   ].sort((a, b) => a.at - b.at || a.kind - b.kind || a.id - b.id);
   const layerById = new Map(layers.map((l) => [l.id, l]));
   const outById = new Map(outs.map((o) => [o.id, o]));
+  const derived = (lid: number) => layerById.get(lid)!.costRefType !== null;
+
+  // ── Pha 1: số lượng ──
   const rem = new Map<number, HPDec>();
   const fifo: number[] = [];
   const queue: { id: number; need: HPDec }[] = [];
-  const got = new Map<number, { qty: HPDec; cost: HPDec }>();
-  const cons: string[] = [];
-  const eat = (outId: number, need: HPDec): HPDec => {
-    const out = outById.get(outId)!;
+  const took = new Map<number, { layerId: number; qty: HPDec }[]>();
+  const eat = (outId: number, need: HPDec, plainOnly: boolean): HPDec => {
     for (const lid of fifo) {
       if (need.lte(0)) break;
       const r = rem.get(lid)!;
-      if (r.lte(0)) continue;
-      const L = layerById.get(lid)!;
-      if (L.costRefType === out.docType && L.costRefId === out.docLineId) continue; // không tự cấp cho dòng gốc
+      if (r.lte(0) || (plainOnly && derived(lid))) continue;
       const q = HP.min(r, need);
       rem.set(lid, r.minus(q));
       need = need.minus(q);
-      cons.push(`${outId}:${lid}:${new Prisma.Decimal(q.toString()).toString()}:${L.unitCost.toString()}`);
-      const g = got.get(outId) ?? { qty: new HP(0), cost: new HP(0) };
-      got.set(outId, { qty: g.qty.plus(q), cost: g.cost.plus(q.times(L.unitCost.toString())) });
+      took.set(outId, [...(took.get(outId) ?? []), { layerId: lid, qty: q }]);
     }
     return need;
   };
@@ -67,38 +72,74 @@ export async function referenceState(productId: number): Promise<State> {
     if (e.kind === 0) {
       rem.set(e.id, new HP(layerById.get(e.id)!.qtyIn.toString()));
       fifo.push(e.id);
+      if (derived(e.id)) continue; // lớp phụ thuộc không nuốt đơn treo
       for (const entry of [...queue]) {
-        entry.need = eat(entry.id, entry.need);
+        entry.need = eat(entry.id, entry.need, true);
         if (entry.need.lte(0)) queue.splice(queue.indexOf(entry), 1);
       }
     } else {
-      const left = eat(e.id, new HP(outById.get(e.id)!.qtyOut.toString()));
+      const left = eat(e.id, new HP(outById.get(e.id)!.qtyOut.toString()), false);
       if (left.gt(0)) queue.push({ id: e.id, need: left });
     }
   }
+
+  // ── Pha 2: giá, một lượt theo thời gian ──
   const plain = layers.filter((l) => l.costRefType === null).sort((a, b) => a.at.getTime() - b.at.getTime() || a.id - b.id);
   const estimate = (at: Date) => {
     const before = plain.filter((l) => l.at.getTime() <= at.getTime());
     return (before.length ? before[before.length - 1]! : plain[0])?.unitCost.toString() ?? "0";
   };
+  const layerCost = new Map<number, string>();
+  const outCost = new Map<number, string>();
+  const outMissing = new Map<number, HPDec>();
+  const allSrc = await prisma.stockLedger.findMany({
+    where: { qtyOut: { gt: 0 }, OR: layers.filter((l) => l.costRefType !== null).map((l) => ({ docType: l.costRefType!, docLineId: l.costRefId! })) },
+  });
+  for (const l of plain) layerCost.set(l.id, l.unitCost.toString());
+  for (const e of evs) {
+    if (e.kind === 0) {
+      const l = layerById.get(e.id)!;
+      if (l.costRefType === null) continue;
+      const src = allSrc.filter((s) => s.docType === l.costRefType && s.docLineId === l.costRefId);
+      if (src.length === 0 || src.some((s) => s.productId !== productId)) { layerCost.set(l.id, l.unitCost.toString()); continue; }
+      let total = new HP(0);
+      for (const s of src) {
+        const c = outCost.get(s.id);
+        if (c === undefined) throw new Error(`mô hình: dòng gốc ${s.id} chưa được tính trước lớp ${l.id} (vi phạm thứ tự thời gian)`);
+        total = total.plus(new HP(s.qtyOut.toString()).times(c));
+      }
+      layerCost.set(l.id, s4(total.div(l.costRefQty!.toString())));
+    } else {
+      const o = outById.get(e.id)!;
+      let got = new HP(0);
+      let total = new HP(0);
+      for (const t of took.get(o.id) ?? []) {
+        const c = layerCost.get(t.layerId);
+        if (c === undefined) throw new Error(`mô hình: lớp ${t.layerId} chưa có giá khi dòng ${o.id} dùng`);
+        got = got.plus(t.qty);
+        total = total.plus(t.qty.times(c));
+      }
+      const missing = new HP(o.qtyOut.toString()).minus(got);
+      total = total.plus(missing.times(estimate(o.at)));
+      outCost.set(o.id, s4(total.div(o.qtyOut.toString())));
+      outMissing.set(o.id, missing);
+    }
+  }
+  // Lượt giá phải xong hết pha 2 trước khi viết consumption (giá lớp phụ thuộc có thể đổi sau khi lệnh xuất ăn nó? KHÔNG:
+  // lớp luôn được định giá tại sự kiện của nó, trước mọi lệnh xuất ăn nó).
+  const cons: string[] = [];
+  for (const [outId, ts] of took) for (const t of ts) cons.push(`${outId}:${t.layerId}:${s3(t.qty)}:${layerCost.get(t.layerId)}`);
   return {
-    layers: layers.map((l) => `${l.id}:${new Prisma.Decimal(rem.get(l.id)!.toString()).toString()}`).sort(),
-    outs: outs
-      .map((o) => {
-        const g = got.get(o.id) ?? { qty: new HP(0), cost: new HP(0) };
-        const missing = new HP(o.qtyOut.toString()).minus(g.qty);
-        const total = g.cost.plus(missing.times(estimate(o.at)));
-        const unit = total.div(o.qtyOut.toString()).toDecimalPlaces(4, HP.ROUND_HALF_UP);
-        return `${o.id}:${new Prisma.Decimal(unit.toString()).toString()}:${new Prisma.Decimal(missing.toString()).toString()}`;
-      })
-      .sort(),
+    layers: layers.map((l) => `${l.id}:${s3(rem.get(l.id)!)}:${layerCost.get(l.id)}`).sort(),
+    outs: outs.map((o) => `${o.id}:${outCost.get(o.id)}:${s3(outMissing.get(o.id)!)}`).sort(),
     cons: cons.sort(),
   };
 }
 
 /**
  * Bất biến MẠNH sau mỗi thao tác: (1) sổ cân; (2) kết quả tính lại TỪNG PHẦN (từ mốc dirty) == mô hình tham
- * chiếu mô phỏng từ đầu; (3) ép tính lại TỪ ĐẦU kỳ cho đúng cùng kết quả (partial == full, idempotent).
+ * chiếu mô phỏng từ đầu (kể cả GIÁ lớp phụ thuộc do mô hình tự suy ra); (3) ép tính lại TỪ ĐẦU kỳ cho đúng cùng
+ * kết quả (partial == full, idempotent).
  */
 export async function assertChainExact(w: World, productId = w.p.id) {
   await assertLedgerBalanced(productId, w.periodId);

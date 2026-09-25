@@ -42,6 +42,13 @@ export class DerivedLayerCostError extends DomainError {
   }
 }
 
+export class DerivedLayerDateError extends DomainError {
+  constructor() {
+    super("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm SAU chứng từ gốc.", 409, "DERIVED_LAYER_DATE");
+    this.name = "DerivedLayerDateError";
+  }
+}
+
 export class InvalidDocDateError extends DomainError {
   constructor(message: string) {
     super(message, 400, "INVALID_DOC_DATE");

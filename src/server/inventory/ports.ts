@@ -3,7 +3,7 @@ import {
   DependentDocumentsError, DerivedLayerCostError, InvalidCostError, InvalidCostRefError, InvalidQuantityError, PeriodClosedError, ProductRecomputingError,
 } from "./errors";
 import { assertDocDateInPeriod } from "@/server/period/guard";
-import { restoreLayerRemaining } from "./layers";
+import { assertDerivedAfterSource, restoreLayerRemaining } from "./layers";
 import { assertLocked } from "./lock";
 import { lineSnapshot } from "./owners";
 import { unitCostOf } from "./replay";
@@ -38,8 +38,9 @@ export interface ReceiptInput {
   at: Date;
   /**
    * Lớp có giá vốn PHỤ THUỘC dòng khác: trả hàng (dòng bán gốc), thành phẩm SX (lệnh SX). Mọi mã hàng của dòng gốc
-   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). Lớp này KHÔNG cấp hàng cho chính
-   * dòng gốc (kể cả phần treo) — xem replay.ts `take`.
+   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). `at` phải SAU dòng gốc (cùng mã)
+   * / không trước dòng gốc (khác mã) — DerivedLayerDateError. Lớp này KHÔNG nuốt đơn treo; chỉ là tồn cho lệnh xuất
+   * đến sau nó — xem replay.ts.
    */
   costRef?: { docType: StockDocType; docLineId: number; qty: DecInput };
 }
@@ -62,9 +63,10 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     // Đọc giá dòng gốc ⇒ mọi mã hàng của dòng gốc phải đang được khoá (không đọc giá đang bị giao dịch khác tính lại)
     const refRows = await ctx.tx.stockLedger.findMany({
       where: { docType: i.costRef.docType, docLineId: i.costRef.docLineId, qtyOut: { gt: 0 } },
-      distinct: ["productId"], select: { productId: true },
+      select: { productId: true, at: true },
     });
     for (const r of refRows) assertLocked(ctx, r.productId);
+    assertDerivedAfterSource({ productId: i.productId, at: i.at }, refRows);
     if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
   }
 
