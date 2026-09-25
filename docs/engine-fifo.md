@@ -46,7 +46,9 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
    (khi đó giá vốn được tính lại theo lớp thật).
 6. Mọi giá vốn đơn vị làm tròn HALF_UP 4 chữ số **một lần**, từ số học 80 chữ số (không float).
 7. Lưới an toàn flush: mỗi mã tối đa `min(50 + 2 × số lớp phụ thuộc của mã, 500)` lần tính lại/giao dịch, và ngân
-   sách thời gian `flushBudgetMs` (mặc định 25 giây < timeout transaction 30 giây).
+   sách thời gian `flushBudgetMs` theo chế độ (`engineTimeouts`): đồng bộ 25 giây < timeout transaction 30 giây; worker
+   nền 570 giây < timeout transaction worker 600 giây. Bất biến `flushBudgetMs + 5 s ≤ txTimeoutMs` (vi phạm ⇒
+   `EngineInvariantError` trước khi mở transaction).
 
 ## 3. Hợp đồng cho module nghiệp vụ (plan 03+): mỗi dòng chứng từ lưu `at` + `seq`
 
@@ -102,6 +104,29 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   (vd hai người cùng sửa định mức một dòng bán tôn xốp) có thể mỗi bên chỉ thấy tổng vốn dòng một phần. Khoá của engine
   chỉ tính các dòng sổ đã commit / của chính giao dịch.
 - **Hết lượt chạy lại:** `retryOnDeadlock` chỉ thử 3 lần; khi nhiều giao dịch cùng tranh NVL dùng chung trong BOM, lần
-  thứ 3 vẫn deadlock thì lỗi deadlock thô của Postgres/Prisma (`40P01` / `P2034` / "deadlock detected") tới người gọi.
-  Tầng API và worker nền (Task 8) phải đổi lỗi này thành phản hồi "đang bận, thử lại" (không phải 500), hoặc khai báo
-  sẵn các mã BOM liên quan trong `products` để khoá theo thứ tự tăng dần ngay từ đầu.
+  thứ 3 vẫn deadlock thì `withInventoryTx` ném **`EngineBusyError`** (DomainError 409, code `INVENTORY_BUSY`, thông điệp
+  "kho đang bận… thử lại"; lỗi Postgres/Prisma gốc `40P01` / `P2034` ở `cause`) — tầng API trả như mọi DomainError,
+  không phải 500. Worker nền để job về `PENDING` và thử lại sau (xem §6). Module vẫn nên khai báo sẵn các mã BOM liên
+  quan trong `products` để khoá theo thứ tự tăng dần ngay từ đầu.
+
+## 6. Tính lại chạy nền (Task 8 — `src/server/inventory/recompute.ts`, `recompute-jobs.ts`)
+
+- Giao dịch đồng bộ (`mode: "inline"`) gặp mã cần tính lại > `inlineLimit` sự kiện (mặc định 2.000, spec 3.5): KHÔNG
+  tính, KHÔNG lỗi — bật `products.recomputing`, tạo/gộp **job** (`recompute_jobs`, tối đa 1 job/mã, giữ mốc sớm nhất)
+  rồi **commit** bình thường; sau commit đánh thức worker. Dữ liệu sổ của mã đó (giá vốn các dòng sau mốc) là **cũ**
+  tới khi worker xong.
+- Trong lúc mã đang cờ: **xuất** mã đó ⇒ `ProductRecomputingError` (409, thử lại sau); **nhập / hủy / sửa / đổi giá lô**
+  vẫn ghi được — giao dịch đồng bộ chỉ gộp mốc vào job (không tính đồng bộ, kể cả khi dưới ngưỡng). Lan truyền giá từ mã
+  khác chạm mã đang cờ cũng chỉ gộp mốc.
+- Worker (`runRecomputeJobs`): nhận job `PENDING` bằng `FOR UPDATE SKIP LOCKED` (an toàn nhiều tiến trình), mỗi job 1
+  `withInventoryTx` chế độ `worker` (không ngưỡng, timeout 10 phút, ngân sách flush 570 giây). Khi flush (worker) gặp
+  mã đang cờ — job của chính nó HOẶC mã khác bị lan truyền chạm tới — nó đọc lại mốc job **dưới khoá mã**, tính từ
+  `min(mốc, mốc job)`, xoá job + tắt cờ **trong cùng giao dịch**. (Mốc lúc nhận job có thể đã cũ: giao dịch đồng bộ
+  gộp mốc sớm hơn trong lúc worker chờ khoá.)
+- Job lỗi thật ⇒ `FAILED` + ghi `error`, **giữ cờ** (chặn xuất) chờ người vận hành; thay đổi mới chỉ gộp mốc, giữ
+  `FAILED`. Job gặp `EngineBusyError` ⇒ về `PENDING`, bỏ qua trong lượt, thử lại sau ~2 giây.
+- Khởi động app (`src/instrumentation.ts`): `resetStuckJobs` (RUNNING → PENDING — giả định **một** tiến trình app; nhiều
+  instance thì một instance khởi động lại sẽ trả job instance khác đang chạy về PENDING — vô hại vì tính lại dưới khoá
+  mã và idempotent, chỉ tốn công) rồi `kickRecomputeWorker`.
+- Test: `.env.test` đặt `RECOMPUTE_WORKER=off` (worker không tự chạy); test gọi `runRecomputeJobs` để kiểm soát thời
+  điểm.

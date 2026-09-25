@@ -77,6 +77,18 @@ export class ProductRecomputingError extends DomainError {
   }
 }
 
+/**
+ * Giao dịch kho bị Postgres hủy vì deadlock và đã hết lượt tự chạy lại (retryOnDeadlock) — tranh chấp tạm thời giữa
+ * các giao dịch cùng đụng NVL dùng chung, KHÔNG phải lỗi dữ liệu. Người dùng / worker chỉ cần thử lại. Lỗi gốc ở `cause`.
+ */
+export class EngineBusyError extends DomainError {
+  constructor(cause?: unknown) {
+    super("Kho đang bận xử lý giao dịch khác trên cùng mã hàng, vui lòng thử lại sau giây lát.", 409, "INVENTORY_BUSY");
+    this.name = "EngineBusyError";
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
 export class DependentDocumentsError extends DomainError {
   constructor() {
     super(

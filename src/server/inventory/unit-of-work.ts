@@ -1,12 +1,16 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { PrismaClient } from "@prisma/client";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
-import { EngineInvariantError, ReplayTooLargeError } from "./errors";
+import { EngineBusyError, EngineInvariantError, ReplayTooLargeError } from "./errors";
 import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
 import { getCostOwner, lineSnapshot } from "./owners";
+import { absorbRecomputeJob, deferRecompute, mergeRecomputeJob } from "./recompute-jobs";
 import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
-import { DEFAULT_FLUSH_BUDGET_MS, DEFAULT_INLINE_LIMIT, type EngineCtx, type Tx } from "./types";
+import {
+  DEFAULT_FLUSH_BUDGET_MS, DEFAULT_INLINE_LIMIT, FLUSH_BUDGET_MARGIN_MS, INLINE_TX_TIMEOUT_MS, WORKER_FLUSH_BUDGET_MS, WORKER_TX_TIMEOUT_MS,
+  type EngineCtx, type Tx,
+} from "./types";
 
 export interface EngineOptions {
   /** Bỏ trống = kỳ đang mở. */
@@ -16,8 +20,10 @@ export interface EngineOptions {
   products: number[];
   inlineLimit?: number;
   mode?: "inline" | "worker";
-  /** Ngân sách thời gian flush (ms), mặc định DEFAULT_FLUSH_BUDGET_MS. */
+  /** Ngân sách thời gian flush (ms). Mặc định theo `mode` — xem engineTimeouts. */
   flushBudgetMs?: number;
+  /** Timeout transaction (ms) của withInventoryTx. Mặc định theo `mode` — xem engineTimeouts. */
+  txTimeoutMs?: number;
 }
 
 /** Mở ngữ cảnh kho trong 1 transaction: kiểm kỳ còn mở → khoá mã hàng (tăng dần). */
@@ -28,7 +34,7 @@ export async function beginEngine(tx: Tx, opts: EngineOptions): Promise<EngineCt
     locked: new Set(), dirty: new Map(), afterCommit: [],
     inlineLimit: opts.inlineLimit ?? DEFAULT_INLINE_LIMIT,
     mode: opts.mode ?? "inline",
-    flushBudgetMs: opts.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS,
+    flushBudgetMs: engineTimeouts(opts).flushBudgetMs,
     removedSeqs: new Map(),
   };
   await lockProducts(ctx, opts.products);
@@ -61,12 +67,22 @@ export async function retryOnDeadlock<T>(fn: () => Promise<T>, attempts = 3): Pr
   }
 }
 
-// Thay ở Task 8 bằng import từ ./recompute
-async function deferRecompute(_ctx: EngineCtx, productId: number, fromAt: Date): Promise<never> {
-  throw new EngineInvariantError(`Mã hàng ${productId} (từ ${fromAt.toISOString()}): tính lại nền chưa được bật (Task 8).`);
-}
-async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Date): Promise<never> {
-  throw new EngineInvariantError(`Mã hàng ${productId} (từ ${fromAt.toISOString()}) đang tính lại nền (Task 8).`);
+/**
+ * Timeout transaction + ngân sách flush theo chế độ. Worker nền chạy transaction DÀI (chuỗi quá ngưỡng đồng bộ) nên
+ * ngân sách flush được nâng CÙNG timeout — nếu không, worker báo "không hội tụ" oan ở 25 giây dù transaction còn 10
+ * phút; ngược lại ngân sách ≥ timeout thì lỗi rõ ràng của flush bị thay bằng timeout transaction mơ hồ. Bất biến:
+ * flushBudgetMs + FLUSH_BUDGET_MARGIN_MS ≤ txTimeoutMs (vi phạm = lỗi lập trình của người gọi).
+ */
+export function engineTimeouts(opts: Pick<EngineOptions, "mode" | "flushBudgetMs" | "txTimeoutMs">): { txTimeoutMs: number; flushBudgetMs: number } {
+  const worker = opts.mode === "worker";
+  const txTimeoutMs = opts.txTimeoutMs ?? (worker ? WORKER_TX_TIMEOUT_MS : INLINE_TX_TIMEOUT_MS);
+  const flushBudgetMs = opts.flushBudgetMs ?? (worker ? WORKER_FLUSH_BUDGET_MS : DEFAULT_FLUSH_BUDGET_MS);
+  if (!(flushBudgetMs > 0) || flushBudgetMs + FLUSH_BUDGET_MARGIN_MS > txTimeoutMs) {
+    throw new EngineInvariantError(
+      `Ngân sách flush ${flushBudgetMs} ms phải > 0 và nhỏ hơn timeout transaction ${txTimeoutMs} ms ít nhất ${FLUSH_BUDGET_MARGIN_MS} ms.`,
+    );
+  }
+  return { txTimeoutMs, flushBudgetMs };
 }
 
 /**
@@ -168,13 +184,17 @@ export async function flush(ctx: EngineCtx): Promise<void> {
     }
     await lockProducts(ctx, [productId]);
 
-    if (ctx.mode === "inline") {
-      const p = await ctx.tx.product.findUniqueOrThrow({ where: { id: productId }, select: { recomputing: true } });
-      if (p.recomputing) { await mergeRecomputeJob(ctx, productId, fromAt); continue; }
+    // Mã đang chờ tính lại nền (Task 8), đọc DƯỚI khoá mã: đồng bộ → chỉ gộp mốc vào job (worker sẽ tính); worker →
+    // gộp mốc job vào lần tính này rồi xoá job + mở cờ (tính lại từng phần từ mốc muộn hơn thay đổi chưa tính là sai).
+    let from = fromAt;
+    const p = await ctx.tx.product.findUniqueOrThrow({ where: { id: productId }, select: { recomputing: true } });
+    if (p.recomputing) {
+      if (ctx.mode === "inline") { await mergeRecomputeJob(ctx, productId, fromAt); continue; }
+      from = await absorbRecomputeJob(ctx, productId, fromAt);
     }
     let result;
     try {
-      result = await replayProduct(ctx, productId, fromAt);
+      result = await replayProduct(ctx, productId, from);
     } catch (e) {
       if (e instanceof ReplayTooLargeError && ctx.mode === "inline") { await deferRecompute(ctx, productId, fromAt); continue; }
       throw e;
@@ -194,7 +214,10 @@ export interface WithInventoryOptions extends EngineOptions {
 /**
  * Cách DUY NHẤT module nghiệp vụ được đụng vào kho: mở transaction → khoá mã hàng → `work` (ghi chứng từ + post/remove)
  * → flush (tính lại chuỗi, đồng bộ giá vốn về dòng chứng từ) → finalize → commit → hook afterCommit.
- * Deadlock được tự thử lại tối đa 3 lần (chạy lại TOÀN BỘ `work` — `work` không được có tác dụng phụ ngoài `ctx.tx`).
+ * Deadlock được tự thử lại tối đa 3 lần (chạy lại TOÀN BỘ `work` — `work` không được có tác dụng phụ ngoài `ctx.tx`);
+ * hết lượt ⇒ EngineBusyError (DomainError 409 INVENTORY_BUSY, lỗi gốc ở `cause`).
+ * Chuỗi quá ngưỡng đồng bộ (`inlineLimit`) KHÔNG làm giao dịch thất bại: mã đó được đánh dấu "đang tính lại" + job nền
+ * (recompute.ts), giao dịch vẫn commit; lệnh xuất mã đó bị chặn tới khi worker tính xong.
  */
 export async function withInventoryTx<R>(
   prisma: PrismaClient,
@@ -206,22 +229,31 @@ export async function withInventoryTx<R>(
   if (insideInventoryTx.getStore()) {
     throw new EngineInvariantError("Không lồng withInventoryTx: trong `work` hãy dùng chính `ctx` đang có.");
   }
+  const { txTimeoutMs } = engineTimeouts(opts); // kiểm bất biến ngân sách < timeout TRƯỚC khi mở transaction
   let hooks: (() => void)[] = [];
-  const result = await insideInventoryTx.run(true, () =>
-    retryOnDeadlock(() =>
-      prisma.$transaction(
-        async (tx) => {
-          const ctx = await beginEngine(tx, opts);
-          const r = await work(ctx);
-          await flush(ctx);
-          if (opts.finalize) await opts.finalize(ctx);
-          hooks = ctx.afterCommit;
-          return r;
-        },
-        { maxWait: 10_000, timeout: 30_000 },
+  let result: R;
+  try {
+    result = await insideInventoryTx.run(true, () =>
+      retryOnDeadlock(() =>
+        prisma.$transaction(
+          async (tx) => {
+            const ctx = await beginEngine(tx, opts);
+            const r = await work(ctx);
+            await flush(ctx);
+            if (opts.finalize) await opts.finalize(ctx);
+            hooks = ctx.afterCommit;
+            return r;
+          },
+          { maxWait: 10_000, timeout: txTimeoutMs },
+        ),
       ),
-    ),
-  );
+    );
+  } catch (e) {
+    // Hết lượt chạy lại vì deadlock = tranh chấp tạm thời, không phải lỗi dữ liệu → lỗi nghiệp vụ "đang bận, thử lại"
+    // (API trả 409 có thông điệp, worker nền để job PENDING) thay vì 500 với lỗi Postgres thô.
+    if (isDeadlock(e)) throw new EngineBusyError(e);
+    throw e;
+  }
   // Dữ liệu ĐÃ commit: hook hỏng chỉ ghi log, không biến thao tác thành công thành lỗi cho người gọi
   for (const h of hooks) {
     try {

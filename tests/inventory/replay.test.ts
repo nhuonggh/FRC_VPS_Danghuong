@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
+import { runRecomputeJobs } from "@/server/inventory/recompute";
 import { prisma, resetDb } from "../helpers/db";
-import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
+import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
 import { assertChainExact } from "./reference";
 
 beforeEach(resetDb);
@@ -388,20 +389,27 @@ describe("withInventoryTx", () => {
     expect(await prisma.costLayer.count()).toBe(1);
   });
 
-  it("mode worker bỏ qua ngưỡng inline; inline vượt ngưỡng → không tính đồng bộ, rollback (Task 8 thay bằng hàng đợi nền)", async () => {
-    const w = await newWorld();
+  it("inline vượt ngưỡng → KHÔNG tính đồng bộ nhưng vẫn commit: mã được đánh dấu 'đang tính lại' + job nền (Task 8); mode worker bỏ qua ngưỡng", async () => {
+    const w = await newWorld(2);
+    const [p1, p2] = w.products as [World["p"], World["p"]];
     const run = engine(w);
-    await expect(run([w.p.id], async (ctx) => {
-      await buy(ctx, w.p.id, 10, 5, T(0), 1);
-      await sell(ctx, w.p.id, 4, T(1), 1);
-    }, { inlineLimit: 1 })).rejects.toThrow();
-    expect(await prisma.stockLedger.count()).toBe(0);
-
-    await run([w.p.id], async (ctx) => {
-      await buy(ctx, w.p.id, 10, 5, T(0), 1);
-      await sell(ctx, w.p.id, 4, T(1), 1);
-    }, { inlineLimit: 1, mode: "worker" });
+    await run([p1.id], async (ctx) => {
+      await buy(ctx, p1.id, 10, 5, T(0), 1);
+      await sell(ctx, p1.id, 4, T(1), 1);
+    }, { inlineLimit: 1 });
+    expect(await prisma.stockLedger.count()).toBe(2);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p1.id } })).recomputing).toBe(true);
+    expect((await prisma.recomputeJob.findUniqueOrThrow({ where: { productId: p1.id } })).fromAt).toEqual(T(0));
+    expect(await runRecomputeJobs(prisma)).toBe(1);
     expect((await saleRow(1)).unitCostOut.toString()).toBe("5");
-    await assertChainExact(w);
+    await assertChainExact(w, p1.id);
+
+    await run([p2.id], async (ctx) => {
+      await buy(ctx, p2.id, 10, 5, T(0), 2);
+      await sell(ctx, p2.id, 4, T(1), 2);
+    }, { inlineLimit: 1, mode: "worker" });
+    expect((await saleRow(2)).unitCostOut.toString()).toBe("5");
+    expect(await prisma.recomputeJob.count()).toBe(0);
+    await assertChainExact(w, p2.id);
   });
 });
