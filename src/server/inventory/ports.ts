@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient, type StockDocType } from "@prisma/client";
-import { DependentDocumentsError, InvalidCostError, InvalidQuantityError, PeriodClosedError, ProductRecomputingError } from "./errors";
+import {
+  DependentDocumentsError, DerivedLayerCostError, InvalidCostError, InvalidCostRefError, InvalidQuantityError, PeriodClosedError, ProductRecomputingError,
+} from "./errors";
 import { assertDocDateInPeriod } from "@/server/period/guard";
 import { restoreLayerRemaining } from "./layers";
 import { assertLocked } from "./lock";
@@ -41,6 +43,9 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
   assertLocked(ctx, i.productId);
   const qty = requirePositive(i.qty);
   const unitCost = requireNonNegativeCost(i.unitCost);
+  // costRef.qty là mẫu số khi lan truyền giá vốn (flush/propagate) → phải > 0, không được lẳng lặng bỏ qua
+  const costRefQty = i.costRef ? D(i.costRef.qty) : null;
+  if (costRefQty && !costRefQty.gt(0)) throw new InvalidCostRefError();
   assertDocDateInPeriod(ctx.period, i.at);
 
   const ledger = await ctx.tx.stockLedger.create({
@@ -53,7 +58,7 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     data: {
       periodId: ctx.period.id, productId: i.productId, sourceDocType: i.docType, sourceDocId: i.docId, sourceLineId: i.docLineId,
       ledgerId: ledger.id, qtyIn: qty, qtyRemaining: qty, unitCost, at: i.at,
-      costRefType: i.costRef?.docType ?? null, costRefId: i.costRef?.docLineId ?? null, costRefQty: i.costRef ? D(i.costRef.qty) : null,
+      costRefType: i.costRef?.docType ?? null, costRefId: i.costRef?.docLineId ?? null, costRefQty,
     },
   });
   markDirty(ctx, i.productId, i.at);
@@ -152,6 +157,9 @@ export async function updateLayerCost(
   });
   // Chứng từ thuộc kỳ đã kết sổ: báo lỗi rõ ràng, không lẳng lặng bỏ qua (spec 4.4)
   if (layers.some((l) => l.periodId !== ctx.period.id)) throw new PeriodClosedError();
+  // Lớp phụ thuộc (trả hàng/thành phẩm): giá do flush lan truyền từ dòng gốc — sửa tay sẽ bị ghi đè/lệch chuỗi.
+  // Kiểm TRƯỚC khi đổi bất kỳ lớp nào (cả lời gọi bị từ chối, không đổi dở dang).
+  if (layers.some((l) => l.costRefType !== null)) throw new DerivedLayerCostError();
   for (const l of layers) {
     assertLocked(ctx, l.productId);
     await ctx.tx.costLayer.update({ where: { id: l.id }, data: { unitCost } });

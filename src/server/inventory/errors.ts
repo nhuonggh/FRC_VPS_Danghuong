@@ -28,6 +28,20 @@ export class InvalidCostError extends DomainError {
   }
 }
 
+export class InvalidCostRefError extends DomainError {
+  constructor() {
+    super("Số lượng của dòng chứng từ gốc (để tính giá vốn) phải lớn hơn 0.", 400, "INVALID_COST_REF");
+    this.name = "InvalidCostRefError";
+  }
+}
+
+export class DerivedLayerCostError extends DomainError {
+  constructor() {
+    super("Giá vốn lớp trả hàng/thành phẩm do hệ thống tính theo chứng từ gốc, không sửa tay được.", 409, "DERIVED_LAYER_COST");
+    this.name = "DerivedLayerCostError";
+  }
+}
+
 export class InvalidDocDateError extends DomainError {
   constructor(message: string) {
     super(message, 400, "INVALID_DOC_DATE");

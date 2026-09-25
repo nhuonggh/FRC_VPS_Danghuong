@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DependentDocumentsError, DocDateBeforePeriodError, InvalidCostError, InvalidQuantityError, PeriodClosedError, ProductNotLockedError, ProductRecomputingError } from "@/server/inventory/errors";
+import { DependentDocumentsError, DerivedLayerCostError, DocDateBeforePeriodError, InvalidCostError, InvalidCostRefError, InvalidQuantityError, PeriodClosedError, ProductNotLockedError, ProductRecomputingError } from "@/server/inventory/errors";
 import { postIssue, postReceipt, productsOfDocument, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import { beginEngine } from "@/server/inventory/unit-of-work";
 import { prisma, resetDb } from "../helpers/db";
@@ -9,8 +9,6 @@ import { newWorld, T, type World } from "./helpers";
 
 beforeEach(resetDb);
 
-const begin = (w: World, products: number[], over = {}) =>
-  prisma.$transaction((tx) => beginEngine(tx, { periodId: w.periodId, userId: w.userId, products, ...over }));
 const inTx = <R,>(w: World, products: number[], fn: (ctx: Awaited<ReturnType<typeof beginEngine>>) => Promise<R>) =>
   prisma.$transaction(async (tx) => fn(await beginEngine(tx, { periodId: w.periodId, userId: w.userId, products })));
 
@@ -77,6 +75,16 @@ describe("postReceipt", () => {
       const layer = await ctx.tx.costLayer.findUniqueOrThrow({ where: { id: r.layerId } });
       expect([layer.costRefType, layer.costRefId, layer.costRefQty?.toString()]).toEqual(["SALE", 2, "90"]);
     });
+  });
+
+  it("từ chối costRef.qty ≤ 0 (lan truyền giá vốn không chia được) — lỗi tiếng Việt, không ghi gì", async () => {
+    const w = await newWorld();
+    const post = (qty: number | string) =>
+      inTx(w, [w.p.id], (ctx) => postReceipt(ctx, { productId: w.p.id, qty: 10, unitCost: 1, docType: "RETURN_IN", docId: 5, docLineId: 5, at: T(40), costRef: { docType: "SALE", docLineId: 2, qty } }));
+    await expect(post(0)).rejects.toThrow(InvalidCostRefError);
+    await expect(post("-3")).rejects.toThrow("Số lượng của dòng chứng từ gốc (để tính giá vốn) phải lớn hơn 0.");
+    expect(await prisma.stockLedger.count()).toBe(0);
+    expect(await prisma.costLayer.count()).toBe(0);
   });
 });
 
@@ -214,5 +222,20 @@ describe("updateLayerCost — cước nhập sau phiếu hàng (spec 3.1)", () =
       expect((await updateLayerCost(ctx, { docType: "PURCHASE", docId: 99, unitCost: 5 })).updated).toBe(0);
     });
     await expect(inTx(w, [w.p.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: -1 }))).rejects.toThrow(InvalidCostError);
+  });
+
+  it("từ chối lớp PHỤ THUỘC (costRef — trả hàng/thành phẩm): giá do engine lan truyền, không sửa tay; không đổi lớp nào", async () => {
+    const w = await newWorld();
+    await inTx(w, [w.p.id], async (ctx) => {
+      await postReceipt(ctx, { productId: w.p.id, qty: 5, unitCost: 100, docType: "RETURN_IN", docId: 9, docLineId: 91, at: T(1) });
+      await postReceipt(ctx, { productId: w.p.id, qty: 5, unitCost: 100, docType: "RETURN_IN", docId: 9, docLineId: 92, at: T(1), costRef: { docType: "SALE", docLineId: 7, qty: 5 } });
+    });
+    await expect(inTx(w, [w.p.id], (ctx) => updateLayerCost(ctx, { docType: "RETURN_IN", docId: 9, unitCost: 1 }))).rejects.toThrow(DerivedLayerCostError);
+    await expect(inTx(w, [w.p.id], (ctx) => updateLayerCost(ctx, { docType: "RETURN_IN", docId: 9, docLineId: 92, unitCost: 1 }))).rejects.toThrow(
+      "Giá vốn lớp trả hàng/thành phẩm do hệ thống tính theo chứng từ gốc, không sửa tay được.",
+    );
+    expect((await prisma.costLayer.findMany({ orderBy: { id: "asc" } })).map((l) => l.unitCost.toString())).toEqual(["100", "100"]);
+    // lớp thường cùng chứng từ vẫn đổi được khi chỉ định đúng dòng
+    await inTx(w, [w.p.id], async (ctx) => expect((await updateLayerCost(ctx, { docType: "RETURN_IN", docId: 9, docLineId: 91, unitCost: 7 })).updated).toBe(1));
   });
 });
