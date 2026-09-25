@@ -29,6 +29,7 @@ export async function beginEngine(tx: Tx, opts: EngineOptions): Promise<EngineCt
     inlineLimit: opts.inlineLimit ?? DEFAULT_INLINE_LIMIT,
     mode: opts.mode ?? "inline",
     flushBudgetMs: opts.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS,
+    removedSeqs: new Map(),
   };
   await lockProducts(ctx, opts.products);
   return ctx;
@@ -99,13 +100,14 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
     if (owner) await owner(ctx.tx, snap);
     const derived = await ctx.tx.costLayer.findMany({
       where: { costRefType: t.docType, costRefId: t.docLineId, periodId: ctx.period.id },
+      include: { ledger: { select: { seq: true } } },
     });
     const srcRows = derived.length
-      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { id: true, productId: true, at: true } })
+      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { seq: true, at: true } })
       : [];
     for (const layer of derived) {
-      // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc thời gian ở đây nữa (DAG theo thời gian)
-      assertDerivedAfterSource(layer, srcRows);
+      // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc vị trí (at + seq) ở đây nữa (DAG)
+      assertDerivedAfterSource({ at: layer.at, seq: layer.ledger.seq }, srcRows);
       // postReceipt bảo đảm costRefQty > 0; gặp dữ liệu hỏng thì dừng hẳn thay vì lẳng lặng bỏ qua
       if (!layer.costRefQty || !layer.costRefQty.gt(0)) {
         throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);

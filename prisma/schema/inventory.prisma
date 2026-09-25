@@ -32,6 +32,8 @@ model StockLedger {
   unitCostOut    Decimal      @default(0) @db.Decimal(18, 4)
   qtyProvisional Decimal      @default(0) @db.Decimal(18, 3) // phần xuất chưa có lớp (bán âm kho — 3.3)
   at             DateTime
+  // Thứ tự ghi ỔN ĐỊNH (khoá phụ sau `at`; giữ nguyên qua sửa/khôi phục — module lưu cùng dòng chứng từ như `at`)
+  seq            BigInt       @unique @default(autoincrement()) // sequence stock_ledger_seq_seq (migration ledger_seq)
   createdBy      Int
   createdAt      DateTime     @default(now())
 

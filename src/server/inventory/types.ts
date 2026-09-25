@@ -21,6 +21,11 @@ export interface EngineCtx {
   mode: "inline" | "worker";
   /** Ngân sách thời gian (ms) cho flush — vượt ⇒ EngineInvariantError rõ ràng thay vì timeout transaction mơ hồ. */
   flushBudgetMs: number;
+  /**
+   * seq của các dòng sổ vừa bị removeDocument trong giao dịch này, theo khoá (docType, docId, docLineId, productId)
+   * → postReceipt/postIssue cùng khoá tự dùng lại (sửa = xoá + ghi lại giữ nguyên vị trí FIFO).
+   */
+  removedSeqs: Map<string, bigint[]>;
 }
 
 export const IN_DOC_TYPES = [

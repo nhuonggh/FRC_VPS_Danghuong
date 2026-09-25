@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearCostOwners, registerCostOwner, type LineCostSnapshot } from "@/server/inventory/owners";
-import { postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
+import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import { getOnHand } from "@/server/inventory/queries";
 import { prisma, resetDb } from "../helpers/db";
 import { assertLedgerBalanced, buy, consOf, engine, layersOf, newWorld, saleRow, sell, T } from "./helpers";
@@ -191,7 +191,8 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
       const pick = <X,>(xs: X[]): X => xs[Math.floor(r() * xs.length)]!;
       const qty = () => (r() < 0.5 ? String(1 + Math.floor(r() * 40)) : (1 + Math.floor(r() * 40) + Math.floor(r() * 1000) / 1000).toFixed(3));
       const cost = () => (r() < 0.5 ? String(100 + Math.floor(r() * 30000)) : (100 + r() * 30000).toFixed(4));
-      type Doc = { kind: "PURCHASE" | "SALE" | "RETURN_IN"; n: number; qty: string; cost: string; at: Date; ref?: Doc };
+      // seq: khoá thứ tự đã lưu cùng chứng từ (như `at`) — dùng khi khôi phục qua giao dịch khác
+      type Doc = { kind: "PURCHASE" | "SALE" | "RETURN_IN"; n: number; qty: string; cost: string; at: Date; ref?: Doc; seq?: bigint };
       const live: Doc[] = [];
       const removed: Doc[] = [];
       let nBuy = 0;
@@ -199,13 +200,30 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
       let nRet = 5000;
       let nReturns = 0;
       let nTies = 0;
-      const post = (ctx: Parameters<Parameters<ReturnType<typeof engine>>[1]>[0], d: Doc) =>
-        d.kind === "PURCHASE" ? buy(ctx, w.p.id, d.qty, d.cost, d.at, d.n)
-          : d.kind === "SALE" ? sell(ctx, w.p.id, d.qty, d.at, d.n)
-            : postReceipt(ctx, {
+      let nEdits = 0;
+      const post = async (ctx: Parameters<Parameters<ReturnType<typeof engine>>[1]>[0], d: Doc) => {
+        const s = d.seq === undefined ? {} : { seq: d.seq };
+        const r = d.kind === "PURCHASE" ? await postReceipt(ctx, { productId: w.p.id, qty: d.qty, unitCost: d.cost, docType: "PURCHASE", docId: d.n, docLineId: d.n, at: d.at, ...s })
+          : d.kind === "SALE" ? await postIssue(ctx, { productId: w.p.id, qty: d.qty, docType: "SALE", docId: d.n, docLineId: d.n, at: d.at, ...s })
+            : await postReceipt(ctx, {
                 productId: w.p.id, qty: d.qty, unitCost: 0, docType: "RETURN_IN", docId: d.n, docLineId: d.n, at: d.at,
-                costRef: { docType: "SALE", docLineId: d.ref!.n, qty: d.ref!.qty },
+                costRef: { docType: "SALE", docLineId: d.ref!.n, qty: d.ref!.qty }, ...s,
               });
+        d.seq = r.seq;
+      };
+      /** Trạng thái chuẩn hoá theo SỐ CHỨNG TỪ (id đổi khi sửa; seq giữ nguyên). */
+      const docSnap = async (productId: number) => {
+        const layers = await prisma.costLayer.findMany({ where: { productId }, include: { ledger: { select: { seq: true } } } });
+        const byLayer = new Map(layers.map((l) => [l.id, `${l.sourceDocType}#${l.sourceLineId}`]));
+        const outs = await prisma.stockLedger.findMany({ where: { productId, qtyOut: { gt: 0 } } });
+        const byOut = new Map(outs.map((o) => [o.id, `${o.docType}#${o.docLineId}`]));
+        const cons = await prisma.costConsumption.findMany({ where: { ledger: { productId } } });
+        return {
+          layers: layers.map((l) => `${byLayer.get(l.id)}@${l.ledger.seq}:${l.qtyRemaining.toString()}:${l.unitCost.toString()}`).sort(),
+          outs: outs.map((o) => `${byOut.get(o.id)}@${o.seq}:${o.unitCostOut.toString()}:${o.qtyProvisional.toString()}`).sort(),
+          cons: cons.map((c) => `${byOut.get(c.ledgerId)}<-${byLayer.get(c.layerId)}:${c.qty.toString()}:${c.unitCost.toString()}`).sort(),
+        };
+      };
       // Không hủy dòng bán còn lớp trả hàng dựa vào nó (engine chặn — DependentDocumentsError)
       const removable = () => live.filter((d) => !live.some((x) => x.ref === d));
 
@@ -242,10 +260,24 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
           live.splice(live.indexOf(d), 1);
           removed.push(d);
         } else if (x < 0.9 && removed.length) {
-          const d = removed.pop()!; // khôi phục tại `at` gốc
+          const d = removed.pop()!; // khôi phục tại `at` gốc VÀ seq đã lưu (vòng sửa 5)
           if (d.ref && !live.includes(d.ref)) continue; // dòng gốc đã hủy → không khôi phục trả hàng
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
+        } else if (x < 0.95) {
+          // SỬA (vòng sửa 5): xoá + ghi lại cùng `at`/SL trong 1 giao dịch → seq tự dùng lại → KHÔNG đổi gì
+          const cands = removable();
+          if (!cands.length) continue;
+          const d = pick(cands);
+          const before = await docSnap(w.p.id);
+          const again: Doc = { ...d, seq: undefined }; // KHÔNG truyền seq: engine phải tự dùng lại seq của dòng vừa xoá
+          await run([w.p.id], async (ctx) => {
+            await removeDocument(ctx, d.kind, d.n);
+            await post(ctx, again);
+          });
+          expect(again.seq, "seq tự dùng lại").toBe(d.seq);
+          expect(await docSnap(w.p.id), `sửa ${d.kind}#${d.n} không đổi gì`).toEqual(before);
+          nEdits++;
         } else {
           const buys = live.filter((d) => d.kind === "PURCHASE");
           if (!buys.length) continue;
@@ -258,6 +290,7 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
       // bộ sinh phải thật sự tạo đủ lớp trả hàng (kể cả trùng `at` với dòng gốc) để quy tắc được kiểm
       expect(nReturns, `số thao tác TRẢ HÀNG (hạt giống ${seed})`).toBeGreaterThanOrEqual(MIN_RETURNS);
       if (tieProb === 1) expect(nTies, `số trả hàng CÙNG \`at\` dòng gốc (hạt giống ${seed})`).toBeGreaterThanOrEqual(MIN_RETURNS);
+      if (tieProb === 1) expect(nEdits, `số thao tác SỬA (hạt giống ${seed})`).toBeGreaterThanOrEqual(1);
     }, 180_000);
   }
 });

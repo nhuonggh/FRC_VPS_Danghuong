@@ -12,19 +12,18 @@ export async function restoreLayerRemaining(tx: Tx, layerIds: readonly number[])
 }
 
 /**
- * Lớp phụ thuộc phải đứng SAU mọi dòng sổ của dòng gốc trong THỨ TỰ SỰ KIỆN (at, hạng, id) — xem replay.ts
- * (hạng 0 = lớp thường; hạng 1 = lệnh xuất VÀ lớp phụ thuộc, xếp theo id dòng sổ = thứ tự ghi). Tương đương:
+ * Lớp phụ thuộc phải đứng SAU mọi dòng sổ của dòng gốc trong THỨ TỰ SỰ KIỆN (at, hạng, seq) — xem replay.ts
+ * (hạng 0 = lớp thường; hạng 1 = lệnh xuất VÀ lớp phụ thuộc, xếp theo `seq` = thứ tự ghi ổn định). Tương đương:
  *  - `at` lớp KHÔNG TRƯỚC `at` dòng gốc (DerivedLayerDateError), và
- *  - dòng sổ của lớp được GHI SAU mọi dòng sổ của dòng gốc: id nhỏ hơn (DerivedLayerOrderError).
- * Áp cho cả cùng mã lẫn khác mã. `ledgerId` bỏ trống khi lớp chưa được ghi (postReceipt — mọi dòng gốc đã có sẵn
- * nên tất nhiên ghi trước).
+ *  - `seq` dòng sổ của lớp LỚN HƠN seq mọi dòng sổ của dòng gốc (DerivedLayerOrderError).
+ * Áp cho cả cùng mã lẫn khác mã. `seq` của lớp bỏ trống khi chỉ kiểm `at` (postReceipt kiểm seq riêng).
  */
-export function assertDerivedAfterSource(layer: { at: Date; ledgerId?: number }, sources: readonly { at: Date; id?: number }[]): void {
+export function assertDerivedAfterSource(layer: { at: Date; seq?: bigint }, sources: readonly { at: Date; seq?: bigint }[]): void {
   for (const s of sources) {
     if (layer.at.getTime() < s.at.getTime()) throw new DerivedLayerDateError();
   }
-  if (layer.ledgerId === undefined) return;
+  if (layer.seq === undefined) return;
   for (const s of sources) {
-    if (s.id !== undefined && s.id > layer.ledgerId) throw new DerivedLayerOrderError();
+    if (s.seq !== undefined && s.seq > layer.seq) throw new DerivedLayerOrderError();
   }
 }

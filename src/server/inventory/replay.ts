@@ -25,26 +25,29 @@ const ZERO = new Prisma.Decimal(0);
 
 /** Lớp trong mô phỏng. `derived` ⇔ costRefType ≠ null (trả hàng / thành phẩm). */
 interface Avail {
-  layerId: number; ledgerId: number; at: Date; remaining: Dec; orig: Dec; unitCost: Dec; origCost: Dec;
+  layerId: number; seq: bigint; at: Date; remaining: Dec; orig: Dec; unitCost: Dec; origCost: Dec;
   derived: boolean; costRefType: StockDocType | null; costRefId: number | null; costRefQty: Dec | null;
 }
-interface InEvent { kind: "in"; at: Date; id: number; layer: Avail }
-interface OutEvent { kind: "out"; at: Date; id: number; qty: Dec }
+/** `id` = id lớp / id dòng sổ (tra cứu); `seq` = khoá thứ tự ổn định của dòng sổ (lớp: dòng sổ nhập 1–1 của nó). */
+interface InEvent { kind: "in"; at: Date; id: number; seq: bigint; layer: Avail }
+interface OutEvent { kind: "out"; at: Date; id: number; seq: bigint; qty: Dec }
 type Ev = InEvent | OutEvent;
 
 /**
- * THỨ TỰ SỰ KIỆN (D-7 + vòng sửa 4): (at, hạng, khoá) với
- *  - hạng 0 = lớp THƯỜNG (costRefType null), khoá = id lớp;
- *  - hạng 1 = MỌI thứ khác — lệnh XUẤT và lớp PHỤ THUỘC — khoá = id DÒNG SỔ (= thứ tự ghi).
+ * THỨ TỰ SỰ KIỆN (D-7 + vòng sửa 4–5): (at, hạng, seq) với
+ *  - hạng 0 = lớp THƯỜNG (costRefType null);
+ *  - hạng 1 = MỌI thứ khác — lệnh XUẤT và lớp PHỤ THUỘC;
+ *  - trong hạng: `stock_ledger.seq` = thứ tự ghi ỔN ĐỊNH (giữ nguyên khi sửa/khôi phục — như `at`; lớp dùng seq của
+ *    dòng sổ nhập 1–1 của nó).
  * Tại cùng `at`: lớp thường trước; lệnh xuất và lớp phụ thuộc theo THỨ TỰ GHI. Lớp phụ thuộc luôn được ghi SAU mọi dòng
- * sổ của dòng gốc (`assertDerivedAfterSource`: `at` không trước + id dòng sổ lớn hơn) ⇒ đứng sau dòng gốc; lệnh xuất
+ * sổ của dòng gốc (`assertDerivedAfterSource`: `at` không trước + seq lớn hơn) ⇒ đứng sau dòng gốc; lệnh xuất
  * chỉ ăn lớp đứng TRƯỚC nó ⇒ mọi cạnh phụ thuộc giá đi từ trước ra sau ⇒ DAG (kể cả vòng BOM cùng `at`: lệnh ghi trước
  * không dùng được thành phẩm của lệnh ghi sau). Hệ quả nghiệp vụ: bán ghi SAU lệnh SX/trả hàng cùng ngày lùi ăn được
  * thành phẩm/hàng trả; bán ghi TRƯỚC thì treo và KHÔNG được lớp phụ thuộc nhập bù (xem quy tắc bên dưới).
  */
-const seqKey = (l: Avail) => (l.derived ? l.ledgerId : l.layerId);
+const cmpSeq = (a: bigint, b: bigint) => (a < b ? -1 : a > b ? 1 : 0);
 const eventClass = (e: Ev) => (e.kind === "in" && !e.layer.derived ? 0 : 1);
-const order = (a: Ev, b: Ev) => a.at.getTime() - b.at.getTime() || eventClass(a) - eventClass(b) || a.id - b.id;
+const order = (a: Ev, b: Ev) => a.at.getTime() - b.at.getTime() || eventClass(a) - eventClass(b) || cmpSeq(a.seq, b.seq);
 
 interface OutRef { id: number; at: Date; docType: StockDocType; docLineId: number; qtyOut: Dec; unitCostOut: Dec; qtyProvisional: Dec }
 interface Pick { layer: Avail; outId: number; qty: Dec }
@@ -84,11 +87,12 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   // 1) Phạm vi
   const scopeLayers = await tx.costLayer.findMany({
     where: { periodId, productId, at: { gte: fromAt } },
-    orderBy: [{ at: "asc" }, { id: "asc" }],
+    include: { ledger: { select: { seq: true } } },
+    orderBy: [{ at: "asc" }, { id: "asc" }], // thứ tự thật do `order` (seq) quyết định
   });
   const scopeOuts = await tx.stockLedger.findMany({
     where: { periodId, productId, qtyOut: { gt: 0 }, at: { gte: fromAt } },
-    orderBy: [{ at: "asc" }, { id: "asc" }],
+    orderBy: [{ at: "asc" }, { id: "asc" }], // thứ tự thật do `order` (seq) quyết định
   });
   const eventCount = scopeLayers.length + scopeOuts.length;
   if (ctx.mode === "inline" && eventCount > ctx.inlineLimit) throw new ReplayTooLargeError(productId, eventCount);
@@ -114,17 +118,18 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   // 4) Trạng thái đầu: lớp còn hàng trước fromAt, theo đúng thứ tự sự kiện (`order`)
   type LayerRow = (typeof scopeLayers)[number];
   const toAvail = (l: LayerRow, remaining: Dec): Avail => ({
-    layerId: l.id, ledgerId: l.ledgerId, at: l.at, remaining, orig: remaining, unitCost: l.unitCost, origCost: l.unitCost,
+    layerId: l.id, seq: l.ledger.seq, at: l.at, remaining, orig: remaining, unitCost: l.unitCost, origCost: l.unitCost,
     derived: l.costRefType !== null, costRefType: l.costRefType, costRefId: l.costRefId, costRefQty: l.costRefQty,
   });
   const open = await tx.costLayer.findMany({
     where: { periodId, productId, at: { lt: fromAt }, qtyRemaining: { gt: 0 } },
+    include: { ledger: { select: { seq: true } } },
     orderBy: [{ at: "asc" }, { id: "asc" }],
   });
-  // DB chỉ sắp được (at, id lớp) → sắp lại theo (at, hạng, khoá) như `order`
+  // DB chỉ sắp được (at, id lớp) → sắp lại theo (at, hạng, seq) như `order`
   const avail: Avail[] = open
     .map((l) => toAvail(l, l.qtyRemaining))
-    .sort((a, b) => a.at.getTime() - b.at.getTime() || Number(a.derived) - Number(b.derived) || seqKey(a) - seqKey(b));
+    .sort((a, b) => a.at.getTime() - b.at.getTime() || Number(a.derived) - Number(b.derived) || cmpSeq(a.seq, b.seq));
 
   // 5) Hàng đợi đơn treo CŨ: lệnh xuất trước fromAt còn thiếu hàng (đang treo, hoặc vừa mất consumption ở bước 2)
   const pendingRows = await tx.stockLedger.findMany({
@@ -132,7 +137,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
       periodId, productId, qtyOut: { gt: 0 }, at: { lt: fromAt },
       OR: [{ qtyProvisional: { gt: 0 } }, ...(earlierIds.length ? [{ id: { in: earlierIds } }] : [])],
     },
-    orderBy: [{ at: "asc" }, { id: "asc" }],
+    orderBy: [{ at: "asc" }, { seq: "asc" }], // hàng đợi đơn treo cũ→mới theo thứ tự sự kiện
   });
   const pendingCons = pendingRows.length
     ? await tx.costConsumption.findMany({
@@ -159,8 +164,8 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     refs.set(o.id, { id: o.id, at: o.at, docType: o.docType, docLineId: o.docLineId, qtyOut: o.qtyOut, unitCostOut: o.unitCostOut, qtyProvisional: o.qtyProvisional });
   }
   const events: Ev[] = [
-    ...scopeLayers.map((l): Ev => { const a = toAvail(l, l.qtyIn); return { kind: "in", at: l.at, id: seqKey(a), layer: a }; }),
-    ...scopeOuts.map((o): Ev => ({ kind: "out", at: o.at, id: o.id, qty: o.qtyOut })),
+    ...scopeLayers.map((l): Ev => ({ kind: "in", at: l.at, id: l.id, seq: l.ledger.seq, layer: toAvail(l, l.qtyIn) })),
+    ...scopeOuts.map((o): Ev => ({ kind: "out", at: o.at, id: o.id, seq: o.seq, qty: o.qtyOut })),
   ].sort(order);
 
   // ── Pha 1: SỐ LƯỢNG ──
@@ -231,7 +236,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   const sources = derivedInScope.length
     ? await tx.stockLedger.findMany({
         where: { qtyOut: { gt: 0 }, OR: derivedInScope.map((l) => ({ docType: l.costRefType!, docLineId: l.costRefId! })) },
-        select: { id: true, productId: true, docType: true, docLineId: true, qtyOut: true, unitCostOut: true, at: true },
+        select: { id: true, seq: true, productId: true, docType: true, docLineId: true, qtyOut: true, unitCostOut: true, at: true },
       })
     : [];
   for (const ev of events) {
@@ -239,7 +244,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     const l = ev.layer;
     if (!l.derived) continue;
     const src = sources.filter((s) => s.docType === l.costRefType && s.docLineId === l.costRefId);
-    assertDerivedAfterSource({ at: l.at, ledgerId: l.ledgerId }, src);
+    assertDerivedAfterSource({ at: l.at, seq: l.seq }, src);
     // Dòng gốc chưa có dòng sổ, hoặc có dòng ở mã khác (thành phẩm SX): giá do postReceipt/propagate quản
     if (src.length === 0 || src.some((s) => s.productId !== productId) || !l.costRefQty) continue;
     let total = new Money(0);
