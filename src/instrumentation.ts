@@ -5,7 +5,7 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   try {
-    const { bootRecomputeWorker } = await import("@/server/inventory/recompute");
+    const { bootRecomputeWorker } = await import("@/server/inventory");
     await bootRecomputeWorker();
   } catch (e) {
     console.error("[recompute] không khởi động được worker tính lại nền:", e);
