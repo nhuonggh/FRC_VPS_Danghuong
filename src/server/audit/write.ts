@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { currentRequestIp } from "@/server/http/request-context";
 
 export interface AuditInput {
   userId: number | null;
@@ -64,7 +65,7 @@ export async function writeAudit(
       entityId: input.entityId == null ? null : String(input.entityId),
       beforeJson: toJson(input.before),
       afterJson: toJson(input.after),
-      ip: input.ip ?? null,
+      ip: input.ip ?? currentRequestIp(), // mặc định: IP của request API đang xử lý (apiHandler) — null ngoài request
     },
   });
 }

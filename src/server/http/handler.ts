@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { ForbiddenError } from "@/lib/permissions/guard";
 import { DomainError, ValidationError } from "./errors";
+import { clientIpFromHeaders, runWithRequestContext } from "./request-context";
 import "./zod-vi";
 
 export function toErrorResponse(e: unknown): NextResponse {
@@ -23,6 +24,7 @@ export function toErrorResponse(e: unknown): NextResponse {
 
 /**
  * Bọc route handler: trả JSON, lỗi được chuyển thành phản hồi tiếng Việt.
+ * Chạy `fn` trong ngữ cảnh request (request-context.ts: IP máy khách cho nhật ký).
  * `noStore`: thêm Cache-Control: no-store (route trả mật khẩu tạm — không để proxy/trình duyệt lưu bản sao).
  */
 export function apiHandler<C = unknown>(fn: (req: NextRequest, ctx: C) => Promise<unknown>, opts: { noStore?: boolean } = {}) {
@@ -32,7 +34,9 @@ export function apiHandler<C = unknown>(fn: (req: NextRequest, ctx: C) => Promis
   };
   return async (req: NextRequest, ctx: C) => {
     try {
-      return finish(NextResponse.json((await fn(req, ctx)) ?? { ok: true }));
+      // Ngữ cảnh request (IP máy khách) cho tầng service — writeAudit tự lấy IP từ đây
+      const result = await runWithRequestContext({ ip: clientIpFromHeaders(req.headers) }, () => fn(req, ctx));
+      return finish(NextResponse.json(result ?? { ok: true }));
     } catch (e) {
       return finish(toErrorResponse(e));
     }
