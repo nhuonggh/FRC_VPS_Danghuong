@@ -1,10 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { EngineBusyError, EngineInvariantError, ReplayTooLargeError } from "./errors";
 import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
-import { getCostOwner, lineSnapshot } from "./owners";
+import { getCostOwner, lineSnapshots, type LineKey } from "./owners";
 import { absorbRecomputeJob, deferRecompute, mergeRecomputeJob } from "./recompute-jobs";
 import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
 import {
@@ -105,48 +105,82 @@ const MAX_REPLAYS_CAP = 500;
 
 /** Đồng bộ giá vốn dòng về chủ sở hữu + cập nhật lớp PHỤ THUỘC; lớp đổi giá thì đánh dấu tính lại tiếp. */
 async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> {
+  // Mọi câu lệnh ở đây chạy THEO LÔ cho cả danh sách dòng (Task 9 — đo: 4 câu lệnh/dòng làm tính lại 2.000 dòng mất
+  // ~16 s): số câu lệnh không phụ thuộc số dòng, trừ lời gọi chủ dòng (1 lần/dòng — hợp đồng CostOwner).
   const seen = new Set<string>();
-  // PERF(Task 9): ~2 truy vấn/dòng (lineSnapshot + tìm lớp phụ thuộc) kể cả dòng không đổi — gộp theo lô nếu đo thấy chậm
+  const keys: LineKey[] = [];
   for (const t of touched) {
     const key = `${t.docType}:${t.docLineId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // KHOÁ TRƯỚC KHI ĐỌC (Task 7 fix round 1): tổng vốn dòng gốc cộng dòng sổ ở MỌI mã của dòng (NVL của lệnh SX / dòng
-    // bán tôn xốp), và giá được ghi vào lớp phụ thuộc ở mã KHÁC (thành phẩm). Chỉ giữ khoá mã đang tính lại thì giao
-    // dịch đồng thời đổi giá NVL khác thấy nửa cũ của nhau → bên commit sau ghi đè giá cũ (lost update) lên lớp thành
-    // phẩm / chủ dòng. Khoá đủ các mã đó rồi mới đọc (READ COMMITTED: mỗi câu lệnh thấy dữ liệu đã commit mới nhất).
-    // Khoá có thể lấy NGOÀI thứ tự tăng dần → Postgres có thể phát hiện deadlock → withInventoryTx chạy lại cả giao
-    // dịch (retryOnDeadlock) trên dữ liệu đã commit: đúng, chỉ chậm hơn.
-    const involved = await ctx.tx.$queryRaw<{ productId: number }[]>`
-      SELECT "productId" FROM stock_ledger
-       WHERE "docType"::text = ${t.docType} AND "docLineId" = ${t.docLineId} AND "qtyOut" > 0
-      UNION
-      SELECT "productId" FROM cost_layers
-       WHERE "costRefType"::text = ${t.docType} AND "costRefId" = ${t.docLineId} AND "periodId" = ${ctx.period.id}`;
-    await lockProducts(ctx, involved.map((r) => r.productId));
-    const snap = await lineSnapshot(ctx.tx, t.docType, t.docLineId);
-    const owner = getCostOwner(t.docType);
+    keys.push({ docType: t.docType, docLineId: t.docLineId });
+  }
+  if (keys.length === 0) return;
+  const types = keys.map((k) => k.docType);
+  const lines = keys.map((k) => k.docLineId);
+  // KHOÁ TRƯỚC KHI ĐỌC (Task 7 fix round 1): tổng vốn dòng gốc cộng dòng sổ ở MỌI mã của dòng (NVL của lệnh SX / dòng
+  // bán tôn xốp), và giá được ghi vào lớp phụ thuộc ở mã KHÁC (thành phẩm). Chỉ giữ khoá mã đang tính lại thì giao
+  // dịch đồng thời đổi giá NVL khác thấy nửa cũ của nhau → bên commit sau ghi đè giá cũ (lost update) lên lớp thành
+  // phẩm / chủ dòng. Khoá đủ các mã đó (của MỌI dòng) rồi mới đọc (READ COMMITTED: mỗi câu lệnh thấy dữ liệu đã commit
+  // mới nhất). Khoá có thể lấy NGOÀI thứ tự tăng dần → Postgres có thể phát hiện deadlock → withInventoryTx chạy lại cả
+  // giao dịch (retryOnDeadlock) trên dữ liệu đã commit: đúng, chỉ chậm hơn.
+  const involved = await ctx.tx.$queryRaw<{ productId: number }[]>`
+    SELECT s."productId" FROM stock_ledger s
+      JOIN unnest(${types}::text[], ${lines}::int[]) AS k(t, l) ON s."docType" = k.t::stock_doc_type AND s."docLineId" = k.l
+     WHERE s."qtyOut" > 0
+    UNION
+    SELECT c."productId" FROM cost_layers c
+      JOIN unnest(${types}::text[], ${lines}::int[]) AS k(t, l) ON c."costRefType" = k.t::stock_doc_type AND c."costRefId" = k.l
+     WHERE c."periodId" = ${ctx.period.id}`;
+  await lockProducts(ctx, involved.map((r) => r.productId));
+
+  const snaps = await lineSnapshots(ctx.tx, keys);
+  for (const snap of snaps) {
+    const owner = getCostOwner(snap.docType);
     if (owner) await owner(ctx.tx, snap);
-    const derived = await ctx.tx.costLayer.findMany({
-      where: { costRefType: t.docType, costRefId: t.docLineId, periodId: ctx.period.id },
-      include: { ledger: { select: { seq: true } } },
-    });
-    const srcRows = derived.length
-      ? await ctx.tx.stockLedger.findMany({ where: { docType: t.docType, docLineId: t.docLineId, qtyOut: { gt: 0 } }, select: { seq: true, at: true } })
-      : [];
-    for (const layer of derived) {
-      // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc vị trí (at + seq) ở đây nữa (DAG)
-      assertDerivedAfterSource({ at: layer.at, seq: layer.ledger.seq }, srcRows);
-      // postReceipt bảo đảm costRefQty > 0; gặp dữ liệu hỏng thì dừng hẳn thay vì lẳng lặng bỏ qua
-      if (!layer.costRefQty || !layer.costRefQty.gt(0)) {
-        throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);
-      }
-      const next = unitCostOf(snap.totalCost, layer.costRefQty);
-      if (!next.equals(layer.unitCost)) {
-        await ctx.tx.costLayer.update({ where: { id: layer.id }, data: { unitCost: next } });
-        markDirty(ctx, layer.productId, layer.at);
-      }
+  }
+
+  const derived = await ctx.tx.$queryRaw<{ id: number; productId: number; at: Date; seq: bigint; unitCost: Prisma.Decimal; costRefQty: Prisma.Decimal | null; t: string; l: number }[]>`
+    SELECT c.id, c."productId", c.at, s.seq, c."unitCost", c."costRefQty", c."costRefType"::text AS t, c."costRefId" AS l
+      FROM cost_layers c
+      JOIN stock_ledger s ON s.id = c."ledgerId"
+      JOIN unnest(${types}::text[], ${lines}::int[]) AS k(t, l) ON c."costRefType" = k.t::stock_doc_type AND c."costRefId" = k.l
+     WHERE c."periodId" = ${ctx.period.id}`;
+  if (derived.length === 0) return;
+  const srcKeys = [...new Map(derived.map((d) => [`${d.t}:${d.l}`, { t: d.t, l: d.l }])).values()];
+  const srcRows = await ctx.tx.$queryRaw<{ seq: bigint; at: Date; t: string; l: number }[]>`
+    SELECT s.seq, s.at, s."docType"::text AS t, s."docLineId" AS l
+      FROM stock_ledger s
+      JOIN unnest(${srcKeys.map((k) => k.t)}::text[], ${srcKeys.map((k) => k.l)}::int[]) AS k(t, l)
+        ON s."docType" = k.t::stock_doc_type AND s."docLineId" = k.l
+     WHERE s."qtyOut" > 0`;
+  const srcOf = new Map<string, { seq: bigint; at: Date }[]>();
+  for (const s of srcRows) {
+    const k = `${s.t}:${s.l}`;
+    srcOf.set(k, [...(srcOf.get(k) ?? []), { seq: BigInt(s.seq), at: s.at }]);
+  }
+  const snapOf = new Map(snaps.map((s) => [`${s.docType}:${s.docLineId}`, s]));
+  const changed: { id: number; unitCost: Prisma.Decimal }[] = [];
+  for (const layer of derived) {
+    const k = `${layer.t}:${layer.l}`;
+    // Dòng gốc có thể được đăng SAU lớp (cùng giao dịch) → kiểm quy tắc vị trí (at + seq) ở đây nữa (DAG)
+    assertDerivedAfterSource({ at: layer.at, seq: BigInt(layer.seq) }, srcOf.get(k) ?? []);
+    // postReceipt bảo đảm costRefQty > 0; gặp dữ liệu hỏng thì dừng hẳn thay vì lẳng lặng bỏ qua
+    const refQty = layer.costRefQty === null ? null : new Prisma.Decimal(layer.costRefQty);
+    if (!refQty || !refQty.gt(0)) {
+      throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);
     }
+    const next = unitCostOf(snapOf.get(k)!.totalCost, refQty);
+    if (!next.equals(new Prisma.Decimal(layer.unitCost))) {
+      changed.push({ id: layer.id, unitCost: next });
+      markDirty(ctx, layer.productId, layer.at);
+    }
+  }
+  if (changed.length) {
+    await ctx.tx.$executeRaw`
+      UPDATE cost_layers cl SET "unitCost" = v.c
+        FROM unnest(${changed.map((c) => c.id)}::int[], ${changed.map((c) => c.unitCost.toFixed(4))}::numeric[]) AS v(id, c)
+       WHERE cl.id = v.id`;
   }
 }
 

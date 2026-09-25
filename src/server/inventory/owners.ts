@@ -44,3 +44,20 @@ export async function lineSnapshot(tx: Tx, docType: StockDocType, docLineId: num
      WHERE "docType"::text = ${docType} AND "docLineId" = ${docLineId} AND "qtyOut" > 0`;
   return { docType, docLineId, totalCost: new Prisma.Decimal(rows[0]!.total), qtyProvisional: new Prisma.Decimal(rows[0]!.prov) };
 }
+
+export interface LineKey { docType: StockDocType; docLineId: number }
+
+/** lineSnapshot cho NHIỀU dòng trong MỘT câu lệnh (propagate). Trả theo đúng thứ tự `keys`; dòng không có dòng sổ → 0. */
+export async function lineSnapshots(tx: Tx, keys: readonly LineKey[]): Promise<LineCostSnapshot[]> {
+  if (keys.length === 0) return [];
+  const rows = await tx.$queryRaw<{ i: number; total: Prisma.Decimal; prov: Prisma.Decimal }[]>`
+    SELECT k.i::int AS i, COALESCE(SUM(s."qtyOut" * s."unitCostOut"), 0) AS total, COALESCE(SUM(s."qtyProvisional"), 0) AS prov
+      FROM unnest(${keys.map((k) => k.docType)}::text[], ${keys.map((k) => k.docLineId)}::int[]) WITH ORDINALITY AS k(t, l, i)
+      LEFT JOIN stock_ledger s ON s."docType" = k.t::stock_doc_type AND s."docLineId" = k.l AND s."qtyOut" > 0
+     GROUP BY k.i`;
+  const byIndex = new Map(rows.map((r) => [r.i, r]));
+  return keys.map((k, idx) => {
+    const r = byIndex.get(idx + 1);
+    return { ...k, totalCost: new Prisma.Decimal(r?.total ?? 0), qtyProvisional: new Prisma.Decimal(r?.prov ?? 0) };
+  });
+}

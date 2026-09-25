@@ -29,3 +29,31 @@ export async function estimateCost(tx: Tx, periodId: number, productId: number, 
   });
   return first?.unitCost ?? new Prisma.Decimal(0);
 }
+
+/** Lớp thường của mã trong kỳ, sắp theo thứ tự sự kiện (at, seq) — đầu vào của estimateFromPlainLayers. */
+export interface PlainLayerCost { at: Date; unitCost: Dec }
+
+export async function plainLayerCosts(tx: Tx, periodId: number, productId: number): Promise<PlainLayerCost[]> {
+  return tx.costLayer.findMany({
+    where: { periodId, productId, costRefType: null },
+    orderBy: [{ at: "asc" }, { ledger: { seq: "asc" } }],
+    select: { at: true, unitCost: true },
+  });
+}
+
+/**
+ * Như estimateCost nhưng trên danh sách đã nạp (replay dùng cho MỌI đơn treo của mã — 1 câu lệnh thay vì 2/đơn):
+ * lớp CUỐI có `at ≤ at` → lớp đầu tiên → 0. `layers` phải sắp (at, seq) như plainLayerCosts.
+ */
+export function estimateFromPlainLayers(layers: readonly PlainLayerCost[], at: Date): Dec {
+  const t = at.getTime();
+  let lo = 0;
+  let hi = layers.length; // tìm vị trí đầu tiên có at > t
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (layers[mid]!.at.getTime() <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0) return layers[lo - 1]!.unitCost;
+  return layers[0]?.unitCost ?? new Prisma.Decimal(0);
+}

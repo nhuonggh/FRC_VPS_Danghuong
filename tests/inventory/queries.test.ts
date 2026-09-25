@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { estimateCost, getOnHand } from "@/server/inventory/queries";
+import { estimateCost, estimateFromPlainLayers, getOnHand, plainLayerCosts } from "@/server/inventory/queries";
 import { prisma, resetDb } from "../helpers/db";
 import { newWorld, T, type World } from "./helpers";
 
@@ -98,5 +98,24 @@ describe("estimateCost — giá vốn tạm cho phần xuất thiếu hàng (spe
     expect((await prisma.$transaction((tx) => estimateCost(tx, w.periodId, w.p.id, at))).toString()).toBe("110");
     expect((await prisma.$transaction((tx) => estimateCost(tx, w.periodId, w.products[1]!.id, at))).toString()).toBe("0");
     expect((await prisma.$transaction((tx) => estimateCost(tx, w.periodId + 99, w.p.id, at))).toString()).toBe("0");
+  });
+
+  it("estimateFromPlainLayers (replay dùng, nạp 1 lần) == estimateCost ở mọi thời điểm: trước lớp đầu, trùng `at`, giữa, sau cùng", async () => {
+    const w = await newWorld();
+    const cmp = async () => {
+      await prisma.$transaction(async (tx) => {
+        const list = await plainLayerCosts(tx, w.periodId, w.p.id);
+        for (const at of [0, 4, 5, 6, 10, 15, 20, 99]) {
+          expect(estimateFromPlainLayers(list, T(at)).toString(), `T(${at})`).toBe((await estimateCost(tx, w.periodId, w.p.id, T(at))).toString());
+        }
+      });
+    };
+    await cmp(); // chưa có lớp → 0
+    await rawLayer(w, 5, 10, 100);
+    await rawLayer(w, 5, 10, 110); // cùng `at`: seq lớn hơn là "gần nhất"
+    await rawLayer(w, 12, 5, 999, { ref: true }); // lớp phụ thuộc bị bỏ qua
+    await rawLayer(w, 20, 10, 130);
+    await cmp();
+    expect(estimateFromPlainLayers(await prisma.$transaction((tx) => plainLayerCosts(tx, w.periodId, w.p.id)), T(5)).toString()).toBe("110");
   });
 });

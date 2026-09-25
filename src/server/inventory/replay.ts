@@ -2,8 +2,8 @@ import { Prisma, type StockDocType } from "@prisma/client";
 import { ReplayTooLargeError } from "./errors";
 import { assertDerivedAfterSource, restoreLayerRemaining } from "./layers";
 import { assertLocked } from "./lock";
-import { estimateCost } from "./queries";
-import type { Dec, EngineCtx } from "./types";
+import { estimateFromPlainLayers, plainLayerCosts, type PlainLayerCost } from "./queries";
+import type { Dec, EngineCtx, Tx } from "./types";
 
 /**
  * Số học TIỀN độ chính xác cao: Prisma.Decimal mặc định chỉ giữ 20 chữ số có nghĩa, trong khi
@@ -209,13 +209,10 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   }
 
   // ── Pha 2: GIÁ, một lượt theo thời gian ──
-  const estimates = new Map<number, Dec>();
-  const estimateAt = async (at: Date) => {
-    const k = at.getTime();
-    let v = estimates.get(k);
-    if (!v) { v = await estimateCost(tx, periodId, productId, at); estimates.set(k, v); }
-    return v;
-  };
+  // Giá tạm (estimateCost) cho phần treo: nạp MỘT lần mọi lớp thường của mã (sắp theo (at, seq)) rồi chọn trong bộ
+  // nhớ — cùng quy tắc với estimateCost (queries.ts); gọi estimateCost cho từng `at` khác nhau là 2 câu lệnh/đơn treo.
+  let plain: PlainLayerCost[] | undefined;
+  const estimateAt = async (at: Date) => estimateFromPlainLayers((plain ??= await plainLayerCosts(tx, periodId, productId)), at);
   const result = new Map<number, { unitCostOut: Dec; missing: Dec }>();
   const priceOut = async (ref: OutRef) => {
     const k = kept.get(ref.id);
@@ -259,20 +256,34 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     for (const p of list) newCons.push({ layerId: p.layer.layerId, ledgerId: outId, docType: ref.docType, docLineId: ref.docLineId, qty: p.qty, unitCost: p.layer.unitCost });
   }
   if (newCons.length) await tx.costConsumption.createMany({ data: newCons });
-  // PERF(Task 9): 1 UPDATE mỗi lớp đổi — gộp thành 1 UPDATE … FROM (VALUES …) nếu đo thấy chậm
-  for (const l of avail) {
-    const data: Prisma.CostLayerUpdateInput = {};
-    if (!l.remaining.equals(l.orig)) data.qtyRemaining = l.remaining;
-    if (!l.unitCost.equals(l.origCost)) data.unitCost = l.unitCost;
-    if (Object.keys(data).length) await tx.costLayer.update({ where: { id: l.layerId }, data });
-  }
+  // Ghi GỘP (Task 9 — đo: 1 UPDATE/dòng làm tính lại 2.000 dòng mất ~16 s): mỗi bảng MỘT câu lệnh cho mọi dòng đổi
+  const changedLayers = avail.filter((l) => !l.remaining.equals(l.orig) || !l.unitCost.equals(l.origCost));
+  await updateLayers(tx, changedLayers.map((l) => ({ id: l.layerId, qtyRemaining: l.remaining, unitCost: l.unitCost })));
   const touched: TouchedLine[] = [];
+  const changedOuts: { id: number; unitCostOut: Dec; qtyProvisional: Dec }[] = [];
   for (const ref of refs.values()) {
     const r = result.get(ref.id)!;
     if (!r.unitCostOut.equals(ref.unitCostOut) || !r.missing.equals(ref.qtyProvisional)) {
-      await tx.stockLedger.update({ where: { id: ref.id }, data: { unitCostOut: r.unitCostOut, qtyProvisional: r.missing } });
+      changedOuts.push({ id: ref.id, unitCostOut: r.unitCostOut, qtyProvisional: r.missing });
     }
     touched.push({ docType: ref.docType, docLineId: ref.docLineId });
   }
+  if (changedOuts.length) {
+    await tx.$executeRaw`
+      UPDATE stock_ledger s SET "unitCostOut" = v.c, "qtyProvisional" = v.p
+        FROM unnest(${changedOuts.map((o) => o.id)}::int[], ${changedOuts.map((o) => o.unitCostOut.toFixed(4))}::numeric[],
+                    ${changedOuts.map((o) => o.qtyProvisional.toFixed(3))}::numeric[]) AS v(id, c, p)
+       WHERE s.id = v.id`;
+  }
   return { touched, eventCount };
+}
+
+/** Ghi GỘP qty_remaining + unit_cost cho nhiều lớp trong MỘT câu lệnh (giá trị đầy đủ của từng lớp, không phải phần đổi). */
+export async function updateLayers(tx: Tx, rows: readonly { id: number; qtyRemaining: Dec; unitCost: Dec }[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.$executeRaw`
+    UPDATE cost_layers cl SET "qtyRemaining" = v.r, "unitCost" = v.c
+      FROM unnest(${rows.map((r) => r.id)}::int[], ${rows.map((r) => r.qtyRemaining.toFixed(3))}::numeric[],
+                  ${rows.map((r) => r.unitCost.toFixed(4))}::numeric[]) AS v(id, r, c)
+     WHERE cl.id = v.id`;
 }
