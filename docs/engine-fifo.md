@@ -60,3 +60,25 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   gọi phải bảo đảm SL trả ≤ SL bán gốc** (kiểm ở tầng nghiệp vụ, plan 03+).
 - **Không bao giờ nạp lại hàng loạt dòng sổ (import / chuyển kỳ / sửa tay DB) mà không giữ `seq`.** Chuyển dữ liệu
   cũ vào: gán seq theo đúng thứ tự nghiệp vụ gốc.
+
+## 4. Quy ước gọi engine cho giá vốn phụ thuộc chéo (Task 7 — `tests/inventory/derived.test.ts`)
+
+- **Trả hàng theo đơn / hàng không giao được** (spec 3.4): `postReceipt({ docType: "RETURN_IN", …, unitCost: <vốn dòng bán
+  gốc>, costRef: { docType: "SALE", docLineId: <dòng bán gốc>, qty: <SL dòng bán gốc> } })`. Giá lớp = giá dòng bán gốc
+  (engine tự lấy từ dòng sổ gốc, `unitCost` truyền vào chỉ dùng khi dòng gốc chưa có dòng sổ) và **tự cập nhật** khi
+  giá dòng gốc đổi (vd cước nhập sau vào lô cũ), lan tới đơn bán đã ăn lớp trả hàng.
+- **Bán hàng gia công có BOM** (tôn xốp, spec 3.6): mỗi NVL 1 `postIssue({ docType: "SALE", docId: <đơn>, docLineId:
+  <dòng bán>, productId: <NVL>, qty: <định mức × SL> })` — nhiều dòng sổ cùng `docLineId`. Chủ dòng (`registerCostOwner
+  ("SALE")`) nhận `snap.totalCost` = tổng vốn mọi NVL, giá/md = `unitCostOf(snap.totalCost, SL thành phẩm)` (KHÔNG
+  `.div`); `snap.qtyProvisional > 0` ⇔ thiếu ít nhất một NVL (đơn treo). Mỗi mã NVL lưu `seq` riêng (khoá seq theo
+  `productId`).
+- **Lệnh SX phụ kiện** (spec 3.6): NVL `postIssue({ docType: "PRODUCTION_USE", docId: <lệnh>, docLineId: <lệnh> })`
+  ghi **TRƯỚC**, rồi thành phẩm `postReceipt({ docType: "PRODUCTION_OUT", docId: <lệnh>, docLineId: <lệnh>, costRef:
+  { docType: "PRODUCTION_USE", docLineId: <lệnh>, qty: <SL thành phẩm> } })` (ngược thứ tự ⇒ `DerivedLayerOrderError`).
+  Giá thành phẩm = Σ vốn NVL / SL, tự lan truyền sang mã thành phẩm và đơn bán thành phẩm khi giá NVL đổi.
+- **Hủy / sửa** chứng từ gốc còn lớp phụ thuộc ⇒ `DependentDocumentsError`. Hủy lệnh SX: `removeDocument
+  ("PRODUCTION_OUT")` rồi `removeDocument("PRODUCTION_USE")`. **Sửa** lệnh SX / đơn bán có trả hàng: trong CÙNG
+  `withInventoryTx` gỡ lớp phụ thuộc → gỡ dòng gốc → ghi lại dòng gốc → ghi lại lớp phụ thuộc (engine tự giữ `seq` của
+  từng dòng nên thành phẩm vẫn xếp sau NVL). `costRefId` là `docLineId` của dòng gốc — module phải dùng `docLineId`
+  DUY NHẤT trong mỗi `docType` xuất (id dòng chứng từ, không phải số thứ tự dòng trong phiếu).
+- Nhắc lại §2.2: hàng trả / thành phẩm **không lấp** đơn bán âm kho ghi trước đó.
