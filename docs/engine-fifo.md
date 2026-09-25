@@ -56,5 +56,7 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
 - **Khôi phục** chứng từ đã hủy (giao dịch khác): truyền lại `at` **và** `seq` đã lưu (`seq` input). Không truyền →
   nhận seq mới (xếp sau mọi dòng đã có) → có thể đổi kết quả FIFO của các chứng từ cùng `at`.
 - `seq` đang có dòng dùng ⇒ `EngineInvariantError` (duy nhất toàn bảng — UNIQUE).
+- Engine KHÔNG kiểm SL trả hàng ≤ SL dòng bán gốc (vd khôi phục phiếu trả sau khi đơn bán gốc đã bị sửa giảm): **người
+  gọi phải bảo đảm SL trả ≤ SL bán gốc** (kiểm ở tầng nghiệp vụ, plan 03+).
 - **Không bao giờ nạp lại hàng loạt dòng sổ (import / chuyển kỳ / sửa tay DB) mà không giữ `seq`.** Chuyển dữ liệu
   cũ vào: gán seq theo đúng thứ tự nghiệp vụ gốc.
