@@ -43,4 +43,18 @@ describe("schema bổ sung của engine (migration engine_support)", () => {
       prisma.costLayer.create({ data: { periodId: w.periodId, productId: w.p.id, sourceDocType: "PURCHASE", sourceDocId: 1, sourceLineId: 1, ledgerId: l.id, qtyIn: 5, qtyRemaining: 6, unitCost: 1, at: T(0) } }),
     ).rejects.toThrow();
   });
+
+  it("role app_rw INSERT/UPDATE/DELETE được recompute_jobs (bảng + sequence có quyền)", async () => {
+    const w = await newWorld();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL ROLE app_rw");
+      await tx.$executeRawUnsafe(
+        `INSERT INTO recompute_jobs ("periodId", "productId", "fromAt", "updatedAt") VALUES (${w.periodId}, ${w.p.id}, now(), now())`,
+      );
+      await tx.$executeRawUnsafe(`UPDATE recompute_jobs SET status = 'RUNNING', attempts = attempts + 1`);
+      const rows = await tx.$queryRawUnsafe<{ status: string; attempts: number }[]>("SELECT status::text AS status, attempts FROM recompute_jobs");
+      expect(rows).toEqual([{ status: "RUNNING", attempts: 1 }]);
+      await tx.$executeRawUnsafe("DELETE FROM recompute_jobs");
+    });
+  });
 });

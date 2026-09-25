@@ -108,12 +108,14 @@ describe("assertLedgerBalanced — PHÁT HIỆN sổ lệch (checker có răng)"
     await expect(assertLedgerBalanced(w.p.id, w.periodId)).rejects.toThrow(/dòng xuất \d+: Σconsumption \+ provisional = qtyOut/);
   });
 
-  it("(3) dòng xuất khai qtyProvisional nhưng consumption vẫn ăn đủ → lệch", async () => {
+  it("(3) dòng xuất khai qtyProvisional nhưng consumption vẫn ăn đủ (bù trừ với dòng khác) → lệch dòng", async () => {
     const w = await newWorld();
     const l = await ledgerIn(w, 10);
     const ly = await layer(w, l.id, 10, 5);
-    const o = await ledgerOut(w, 5, 2); // treo 2 nhưng consumption 5
-    await consume(w, ly.id, o.id, 5);
-    await expect(assertLedgerBalanced(w.p.id, w.periodId)).rejects.toThrow();
+    const o1 = await ledgerOut(w, 5, 2, 10, 100); // treo 2 nhưng consumption 5 (dư 2)
+    await ledgerOut(w, 2, 0, 11, 101); // không consumption, không treo (thiếu 2)
+    await consume(w, ly.id, o1.id, 5);
+    // (1): 10 − 7 = 3 = 5 − 2 ; (2): 10 − 5 = 5 ✓ ; chỉ (3) sai
+    await expect(assertLedgerBalanced(w.p.id, w.periodId)).rejects.toThrow(/dòng xuất \d+: Σconsumption \+ provisional = qtyOut/);
   });
 });
