@@ -13,12 +13,12 @@ export async function restoreLayerRemaining(tx: Tx, layerIds: readonly number[])
 
 /**
  * Quy tắc THỜI GIAN của lớp phụ thuộc (điều kiện để đồ thị phụ thuộc giá là DAG theo thời gian — xem replay.ts):
- * cùng mã hàng → lớp phải ở SAU HẲN dòng gốc (nếu cùng/lùi thời điểm, dòng gốc có thể ăn chính lớp của nó);
- * khác mã (thành phẩm SX từ NVL) → lớp không được TRƯỚC dòng gốc (cùng thời điểm được).
+ * VỊ TRÍ SỰ KIỆN của lớp phải SAU dòng gốc. Dòng gốc là lệnh xuất (lớp sự kiện 1), lớp phụ thuộc là lớp sự kiện 2 →
+ * tương đương `at` lớp KHÔNG TRƯỚC `at` dòng gốc (cùng `at` hợp lệ: bán + trả lùi ngày cùng ngày, gia công lại),
+ * cho cả cùng mã lẫn khác mã.
  */
-export function assertDerivedAfterSource(layer: { productId: number; at: Date }, sources: readonly { productId: number; at: Date }[]): void {
+export function assertDerivedAfterSource(layer: { at: Date }, sources: readonly { at: Date }[]): void {
   for (const s of sources) {
-    const ok = s.productId === layer.productId ? layer.at.getTime() > s.at.getTime() : layer.at.getTime() >= s.at.getTime();
-    if (!ok) throw new DerivedLayerDateError();
+    if (layer.at.getTime() < s.at.getTime()) throw new DerivedLayerDateError();
   }
 }

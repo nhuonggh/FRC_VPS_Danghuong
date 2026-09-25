@@ -6,7 +6,7 @@ import { assertDerivedAfterSource } from "./layers";
 import { lockProducts } from "./lock";
 import { getCostOwner, lineSnapshot } from "./owners";
 import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
-import { DEFAULT_INLINE_LIMIT, type EngineCtx, type Tx } from "./types";
+import { DEFAULT_FLUSH_BUDGET_MS, DEFAULT_INLINE_LIMIT, type EngineCtx, type Tx } from "./types";
 
 export interface EngineOptions {
   /** Bỏ trống = kỳ đang mở. */
@@ -16,6 +16,8 @@ export interface EngineOptions {
   products: number[];
   inlineLimit?: number;
   mode?: "inline" | "worker";
+  /** Ngân sách thời gian flush (ms), mặc định DEFAULT_FLUSH_BUDGET_MS. */
+  flushBudgetMs?: number;
 }
 
 /** Mở ngữ cảnh kho trong 1 transaction: kiểm kỳ còn mở → khoá mã hàng (tăng dần). */
@@ -26,6 +28,7 @@ export async function beginEngine(tx: Tx, opts: EngineOptions): Promise<EngineCt
     locked: new Set(), dirty: new Map(), afterCommit: [],
     inlineLimit: opts.inlineLimit ?? DEFAULT_INLINE_LIMIT,
     mode: opts.mode ?? "inline",
+    flushBudgetMs: opts.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS,
   };
   await lockProducts(ctx, opts.products);
   return ctx;
@@ -68,15 +71,20 @@ async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Dat
 /**
  * Đồ thị phụ thuộc giá (dòng xuất → lớp phụ thuộc → dòng xuất ăn lớp đó) là DAG THEO THỜI GIAN nhờ hai quy tắc
  * (replay.ts): (1) lớp phụ thuộc KHÔNG nuốt đơn treo — đơn treo chỉ được nhập bù bằng lớp thường giá cố định;
- * (2) lớp phụ thuộc ở SAU dòng gốc (`assertDerivedAfterSource`). Lớp phụ thuộc cùng mã được định giá ngay trong
- * replay; chỉ lan truyền KHÁC mã (thành phẩm SX) mới cần thêm vòng — số vòng của một mã ≤ độ sâu chuỗi phụ thuộc
- * ≤ số lớp phụ thuộc. Lưới an toàn (co giãn theo số lớp phụ thuộc để không chặn oan chuỗi sâu hợp lệ): mỗi mã tối đa
- * BASE + PER_DERIVED × (số lớp phụ thuộc trong kỳ) lần tính lại mỗi giao dịch — chỉ vượt khi có lỗi lập trình
- * (vd chủ dòng tự đánh dấu dirty) hoặc dữ liệu hỏng. flush xử lý mã nhỏ nhất trước (không theo thứ tự tôpô): vài
- * vòng thừa là chấp nhận được và vẫn nằm trong ngưỡng trên.
+ * (2) vị trí sự kiện của lớp phụ thuộc ở SAU dòng gốc: `at` không trước dòng gốc (`assertDerivedAfterSource`), và
+ * tại cùng `at` thứ tự là lớp thường → lệnh xuất → lớp phụ thuộc. Lớp phụ thuộc cùng mã được định giá ngay trong
+ * replay; chỉ lan truyền KHÁC mã (thành phẩm SX) mới cần thêm vòng — số lần tính lại một mã ≈ số lần lớp phụ thuộc
+ * CỦA MÃ ĐÓ đổi giá. Lưới an toàn, hai tầng:
+ *  - đếm: mỗi mã tối đa min(BASE + PER_DERIVED × (số lớp phụ thuộc CỦA MÃ ĐÓ trong kỳ), CAP) lần tính lại/giao dịch
+ *    — co giãn để không chặn oan chuỗi sâu hợp lệ, nhưng có trần tuyệt đối;
+ *  - thời gian: flush quá `ctx.flushBudgetMs` ⇒ lỗi rõ ràng (thay vì timeout transaction 30s mơ hồ khi mỗi lần tính
+ *    lại đắt).
+ * Chỉ vượt khi có lỗi lập trình (vd chủ dòng tự đánh dấu dirty) hoặc dữ liệu hỏng. flush xử lý mã nhỏ nhất trước
+ * (không theo thứ tự tôpô): vài vòng thừa là chấp nhận được và vẫn nằm trong ngưỡng.
  */
 const MAX_REPLAYS_BASE = 50;
 const MAX_REPLAYS_PER_DERIVED = 2;
+const MAX_REPLAYS_CAP = 500;
 
 /** Đồng bộ giá vốn dòng về chủ sở hữu + cập nhật lớp PHỤ THUỘC; lớp đổi giá thì đánh dấu tính lại tiếp. */
 async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> {
@@ -117,16 +125,26 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
  */
 export async function flush(ctx: EngineCtx): Promise<void> {
   const replays = new Map<number, number>();
-  let limit: number | undefined;
+  const limits = new Map<number, number>();
+  const deadline = Date.now() + ctx.flushBudgetMs;
   while (ctx.dirty.size > 0) {
     const productId = Math.min(...ctx.dirty.keys());
     const fromAt = ctx.dirty.get(productId)!;
     ctx.dirty.delete(productId);
+    if (Date.now() > deadline) {
+      throw new EngineInvariantError(
+        `Tính lại giá vốn không hội tụ: quá thời gian cho phép (${ctx.flushBudgetMs} ms) khi còn mã hàng ${productId} cần tính lại (lỗi lập trình hoặc dữ liệu phụ thuộc hỏng).`,
+      );
+    }
     const n = (replays.get(productId) ?? 0) + 1;
     replays.set(productId, n);
     if (n > MAX_REPLAYS_BASE) {
-      limit ??= MAX_REPLAYS_BASE + MAX_REPLAYS_PER_DERIVED *
-        (await ctx.tx.costLayer.count({ where: { periodId: ctx.period.id, costRefType: { not: null } } }));
+      let limit = limits.get(productId);
+      if (limit === undefined) {
+        const d = await ctx.tx.costLayer.count({ where: { periodId: ctx.period.id, productId, costRefType: { not: null } } });
+        limit = Math.min(MAX_REPLAYS_BASE + MAX_REPLAYS_PER_DERIVED * d, MAX_REPLAYS_CAP);
+        limits.set(productId, limit);
+      }
       if (n > limit) {
         throw new EngineInvariantError(
           `Tính lại giá vốn không hội tụ: mã hàng ${productId} bị tính lại quá ${limit} lần trong một giao dịch (lỗi lập trình hoặc dữ liệu phụ thuộc hỏng).`,

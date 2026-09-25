@@ -178,8 +178,13 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
     };
   };
 
-  for (const seed of [11, 2026, 90210, 424242]) {
-    it(`hạt giống ${seed}: 40 thao tác nhập/bán/TRẢ HÀNG (costRef)/hủy/khôi phục/đổi giá, lùi ngày, trùng thời điểm, số lẻ`, async () => {
+  const MIN_RETURNS = 3;
+  // tieProb = xác suất trả hàng CÙNG `at` dòng gốc (bán + trả lùi ngày cùng ngày); 1 = chế độ "cùng ngày" dồn trùng thời điểm
+  for (const { seed, tieProb } of [
+    { seed: 11, tieProb: 0.3 }, { seed: 2026, tieProb: 0.3 }, { seed: 90210, tieProb: 0.3 }, { seed: 424242, tieProb: 0.3 },
+    { seed: 99, tieProb: 1 }, { seed: 31337, tieProb: 1 },
+  ]) {
+    it(`hạt giống ${seed} (tỉ lệ trả hàng trùng thời điểm ${tieProb}): 40 thao tác nhập/bán/TRẢ HÀNG (costRef)/hủy/khôi phục/đổi giá, lùi ngày, trùng thời điểm, số lẻ`, async () => {
       const w = await newWorld();
       const run = engine(w);
       const r = rng(seed);
@@ -192,6 +197,8 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
       let nBuy = 0;
       let nSell = 1000;
       let nRet = 5000;
+      let nReturns = 0;
+      let nTies = 0;
       const post = (ctx: Parameters<Parameters<ReturnType<typeof engine>>[1]>[0], d: Doc) =>
         d.kind === "PURCHASE" ? buy(ctx, w.p.id, d.qty, d.cost, d.at, d.n)
           : d.kind === "SALE" ? sell(ctx, w.p.id, d.qty, d.at, d.n)
@@ -214,15 +221,19 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
         } else if (x < 0.72) {
-          // Trả hàng theo đơn: SL ≤ SL bán, thời điểm SAU dòng bán gốc (quy tắc thời gian của engine)
-          const sales = live.filter((d) => d.kind === "SALE" && d.at.getTime() < T(100).getTime());
+          // Trả hàng theo đơn: SL ≤ SL bán; thời điểm KHÔNG TRƯỚC dòng bán gốc — tỉ lệ tieProb CÙNG `at` (bán + trả lùi ngày
+          // cùng ngày → docTimestamp trùng), còn lại muộn hơn 1–4 mốc
+          const sales = live.filter((d) => d.kind === "SALE");
           if (!sales.length) continue;
           const src = pick(sales);
-          const later = T(5 * (Math.floor((src.at.getTime() - T(0).getTime()) / 300_000) + 1 + Math.floor(r() * 4)));
+          const tie = r() < tieProb;
+          const at2 = tie ? src.at : T(5 * (Math.floor((src.at.getTime() - T(0).getTime()) / 300_000) + 1 + Math.floor(r() * 4)));
           const rq = new Prisma.Decimal(src.qty).times(r()).toDecimalPlaces(3, Prisma.Decimal.ROUND_DOWN);
-          const d: Doc = { kind: "RETURN_IN", n: ++nRet, qty: (rq.gt(0) ? rq : new Prisma.Decimal(src.qty)).toString(), cost: "0", at: later, ref: src };
+          const d: Doc = { kind: "RETURN_IN", n: ++nRet, qty: (rq.gt(0) ? rq : new Prisma.Decimal(src.qty)).toString(), cost: "0", at: at2, ref: src };
           await run([w.p.id], (ctx) => post(ctx, d));
           live.push(d);
+          nReturns++;
+          if (tie) nTies++;
         } else if (x < 0.82) {
           const cands = removable();
           if (!cands.length) continue;
@@ -244,8 +255,9 @@ describe("tính lại từng phần == tính lại từ đầu == mô hình tham
         }
         await assertChainExact(w);
       }
-      // bộ sinh phải thật sự tạo ra lớp trả hàng để quy tắc lớp phụ thuộc được kiểm
-      expect(await prisma.costLayer.count({ where: { costRefType: { not: null } } })).toBeGreaterThan(0);
+      // bộ sinh phải thật sự tạo đủ lớp trả hàng (kể cả trùng `at` với dòng gốc) để quy tắc được kiểm
+      expect(nReturns, `số thao tác TRẢ HÀNG (hạt giống ${seed})`).toBeGreaterThanOrEqual(MIN_RETURNS);
+      if (tieProb === 1) expect(nTies, `số trả hàng CÙNG \`at\` dòng gốc (hạt giống ${seed})`).toBeGreaterThanOrEqual(MIN_RETURNS);
     }, 180_000);
   }
 });

@@ -19,6 +19,8 @@ export interface EngineCtx {
   inlineLimit: number;
   /** worker = đang chạy nền: không giới hạn ngưỡng, không bị chặn bởi cờ recomputing. */
   mode: "inline" | "worker";
+  /** Ngân sách thời gian (ms) cho flush — vượt ⇒ EngineInvariantError rõ ràng thay vì timeout transaction mơ hồ. */
+  flushBudgetMs: number;
 }
 
 export const IN_DOC_TYPES = [
@@ -44,3 +46,5 @@ export type InDocType = (typeof IN_DOC_TYPES)[number];
 export type OutDocType = (typeof OUT_DOC_TYPES)[number];
 
 export const DEFAULT_INLINE_LIMIT = 2000;
+/** < timeout transaction 30s của withInventoryTx (Task 8 nâng timeout cho worker thì nâng cả số này). */
+export const DEFAULT_FLUSH_BUDGET_MS = 25_000;

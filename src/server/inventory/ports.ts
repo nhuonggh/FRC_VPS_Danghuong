@@ -38,9 +38,9 @@ export interface ReceiptInput {
   at: Date;
   /**
    * Lớp có giá vốn PHỤ THUỘC dòng khác: trả hàng (dòng bán gốc), thành phẩm SX (lệnh SX). Mọi mã hàng của dòng gốc
-   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). `at` phải SAU dòng gốc (cùng mã)
-   * / không trước dòng gốc (khác mã) — DerivedLayerDateError. Lớp này KHÔNG nuốt đơn treo; chỉ là tồn cho lệnh xuất
-   * đến sau nó — xem replay.ts.
+   * phải có trong `products` của withInventoryTx (ProductNotLockedError nếu thiếu). `at` KHÔNG được TRƯỚC dòng
+   * gốc (cùng `at` được — lớp phụ thuộc xếp sau mọi lệnh xuất cùng `at`) — DerivedLayerDateError. Lớp này KHÔNG nuốt
+   * đơn treo; chỉ là tồn cho lệnh xuất xếp SAU nó — xem replay.ts.
    */
   costRef?: { docType: StockDocType; docLineId: number; qty: DecInput };
 }
@@ -66,7 +66,7 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
       select: { productId: true, at: true },
     });
     for (const r of refRows) assertLocked(ctx, r.productId);
-    assertDerivedAfterSource({ productId: i.productId, at: i.at }, refRows);
+    assertDerivedAfterSource({ at: i.at }, refRows);
     if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
   }
 

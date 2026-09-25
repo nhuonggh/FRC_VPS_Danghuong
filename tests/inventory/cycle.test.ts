@@ -257,22 +257,22 @@ describe("chuỗi lớp phụ thuộc lồng nhau sâu trong MỘT giao dịch",
 });
 
 describe("quy tắc thời gian lớp phụ thuộc", () => {
-  it("trả hàng cùng mã có thời điểm ≤ dòng bán gốc → lỗi tiếng Việt, không ghi gì", async () => {
+  // ĐỔI KỲ VỌNG vòng sửa 3: cùng thời điểm với dòng gốc nay HỢP LỆ (thứ tự sự kiện: lớp phụ thuộc sau lệnh xuất) —
+  // xem tests/inventory/ties.test.ts; chỉ thời điểm TRƯỚC dòng gốc bị chặn.
+  it("trả hàng có thời điểm TRƯỚC dòng bán gốc → lỗi tiếng Việt, không ghi gì", async () => {
     const w = await newWorld();
     const run = engine(w);
     await run([w.p.id], async (ctx) => {
       await buy(ctx, w.p.id, 10, 100, T(0), 1);
       await sell(ctx, w.p.id, 5, T(10), 1);
     });
-    for (const at of [T(10), T(5)]) {
-      await expect(run([w.p.id], (ctx) =>
-        postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at, costRef: { docType: "SALE", docLineId: 1, qty: 5 } }),
-      )).rejects.toThrow(DerivedLayerDateError);
-    }
-    expect(await prisma.costLayer.count({ where: { sourceDocType: "RETURN_IN" } })).toBe(0);
     await expect(run([w.p.id], (ctx) =>
       postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at: T(5), costRef: { docType: "SALE", docLineId: 1, qty: 5 } }),
-    )).rejects.toThrow("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm SAU chứng từ gốc.");
+    )).rejects.toThrow(DerivedLayerDateError);
+    expect(await prisma.costLayer.count({ where: { sourceDocType: "RETURN_IN" } })).toBe(0);
+    await expect(run([w.p.id], (ctx) =>
+      postReceipt(ctx, { productId: w.p.id, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 9, docLineId: 9, at: T(9), costRef: { docType: "SALE", docLineId: 1, qty: 5 } }),
+    )).rejects.toThrow("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm KHÔNG TRƯỚC chứng từ gốc.");
   });
 
   it("dòng gốc đăng SAU lớp trong cùng giao dịch mà thời điểm muộn hơn lớp → bị chặn khi lan truyền", async () => {

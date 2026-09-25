@@ -44,7 +44,7 @@ export class DerivedLayerCostError extends DomainError {
 
 export class DerivedLayerDateError extends DomainError {
   constructor() {
-    super("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm SAU chứng từ gốc.", 409, "DERIVED_LAYER_DATE");
+    super("Chứng từ nhập theo giá chứng từ gốc (trả hàng/thành phẩm) phải có thời điểm KHÔNG TRƯỚC chứng từ gốc.", 409, "DERIVED_LAYER_DATE");
     this.name = "DerivedLayerDateError";
   }
 }

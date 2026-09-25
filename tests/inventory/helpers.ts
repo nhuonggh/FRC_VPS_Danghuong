@@ -54,7 +54,7 @@ export async function assertLedgerBalanced(productId: number, periodId: number):
   for (const o of outs) expect(D(o.consumed).plus(o.prov).toString(), `dòng xuất ${o.id}: Σconsumption + provisional = qtyOut`).toBe(D(o.qty_out).toString());
 }
 
-type EngineExtra = Partial<Pick<WithInventoryOptions, "inlineLimit" | "mode" | "finalize">>;
+type EngineExtra = Partial<Pick<WithInventoryOptions, "inlineLimit" | "mode" | "finalize" | "flushBudgetMs">>;
 
 /** engine(w)(products, ctx => …, extra?) — chạy 1 công việc trong withInventoryTx của thế giới test. */
 export const engine = (w: World) =>

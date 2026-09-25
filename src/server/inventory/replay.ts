@@ -32,9 +32,14 @@ interface InEvent { kind: "in"; at: Date; id: number; layer: Avail }
 interface OutEvent { kind: "out"; at: Date; id: number; qty: Dec }
 type Ev = InEvent | OutEvent;
 
-// Cùng thời điểm: nhập TRƯỚC xuất; cùng loại: theo id (lớp: id lớp; xuất: id dòng sổ) — D-7
-const order = (a: Ev, b: Ev) =>
-  a.at.getTime() - b.at.getTime() || (a.kind === "in" ? 0 : 1) - (b.kind === "in" ? 0 : 1) || a.id - b.id;
+/**
+ * Thứ tự sự kiện (D-7 + vòng sửa 3): (at, lớp, id) với lớp tại CÙNG `at` = 0 lớp THƯỜNG → 1 lệnh XUẤT → 2 lớp PHỤ
+ * THUỘC; cùng lớp theo id (lớp: id lớp; xuất: id dòng sổ). Lớp phụ thuộc xếp SAU mọi lệnh xuất cùng `at` ⇒ dòng gốc
+ * cùng `at` (bán + trả lùi ngày cùng ngày — docTimestamp trùng; gia công lại; vòng BOM cùng `at`) không thể ăn lớp
+ * phụ thuộc của chính nó → đồ thị phụ thuộc giá vẫn là DAG.
+ */
+const eventClass = (e: Ev) => (e.kind === "out" ? 1 : e.layer.derived ? 2 : 0);
+const order = (a: Ev, b: Ev) => a.at.getTime() - b.at.getTime() || eventClass(a) - eventClass(b) || a.id - b.id;
 
 interface OutRef { id: number; at: Date; docType: StockDocType; docLineId: number; qtyOut: Dec; unitCostOut: Dec; qtyProvisional: Dec }
 interface Pick { layer: Avail; outId: number; qty: Dec }
@@ -50,7 +55,8 @@ export interface ReplayResult { touched: TouchedLine[]; eventCount: number }
  * QUY TẮC LỚP PHỤ THUỘC (spec 3.3 × 3.4 — vòng sửa 2): lớp phụ thuộc (costRef: trả hàng, thành phẩm SX) KHÔNG BAO
  * GIỜ nuốt hàng đợi đơn treo — của bất kỳ dòng nào. Đơn treo chỉ được "nhập bù" bằng lớp THƯỜNG (mua, nhập đầu kỳ,
  * điều chỉnh…) có giá tự thân cố định. Lớp phụ thuộc vẫn là tồn bình thường cho lệnh xuất đến SAU nó theo (at, id).
- * Cùng với quy tắc thời gian (lớp phụ thuộc ở SAU dòng gốc — `assertDerivedAfterSource`), giá của mọi dòng chỉ phụ
+ * Cùng với quy tắc thời gian (vị trí sự kiện của lớp phụ thuộc SAU dòng gốc — `at` không trước dòng gốc, cùng `at` thì
+ * xếp sau nhờ `eventClass` — `assertDerivedAfterSource`), giá của mọi dòng chỉ phụ
  * thuộc (a) lớp ở TRƯỚC nó theo thời gian và (b) lớp thường giá cố định; giá lớp phụ thuộc chỉ phụ thuộc dòng gốc ở
  * TRƯỚC nó ⇒ đồ thị phụ thuộc giá là DAG theo thời gian, không có dải điểm bất động do làm tròn.
  * GIẢ ĐỊNH NGHIỆP VỤ (chờ khách xác nhận): hàng khách trả KHÔNG lấp lùi đơn bán âm kho trước đó; nó là tồn cho
@@ -111,7 +117,10 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     where: { periodId, productId, at: { lt: fromAt }, qtyRemaining: { gt: 0 } },
     orderBy: [{ at: "asc" }, { id: "asc" }],
   });
-  const avail: Avail[] = open.map((l) => toAvail(l, l.qtyRemaining));
+  // Cùng thứ tự sự kiện như bên dưới: tại cùng `at`, lớp thường trước lớp phụ thuộc (DB chỉ sắp được (at, id))
+  const avail: Avail[] = open
+    .map((l) => toAvail(l, l.qtyRemaining))
+    .sort((a, b) => a.at.getTime() - b.at.getTime() || Number(a.derived) - Number(b.derived) || a.layerId - b.layerId);
 
   // 5) Hàng đợi đơn treo CŨ: lệnh xuất trước fromAt còn thiếu hàng (đang treo, hoặc vừa mất consumption ở bước 2)
   const pendingRows = await tx.stockLedger.findMany({
@@ -226,7 +235,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     const l = ev.layer;
     if (!l.derived) continue;
     const src = sources.filter((s) => s.docType === l.costRefType && s.docLineId === l.costRefId);
-    assertDerivedAfterSource({ productId, at: l.at }, src);
+    assertDerivedAfterSource({ at: l.at }, src);
     // Dòng gốc chưa có dòng sổ, hoặc có dòng ở mã khác (thành phẩm SX): giá do postReceipt/propagate quản
     if (src.length === 0 || src.some((s) => s.productId !== productId) || !l.costRefQty) continue;
     let total = new Money(0);
