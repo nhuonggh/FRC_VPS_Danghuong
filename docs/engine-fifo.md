@@ -82,3 +82,18 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   từng dòng nên thành phẩm vẫn xếp sau NVL). `costRefId` là `docLineId` của dòng gốc — module phải dùng `docLineId`
   DUY NHẤT trong mỗi `docType` xuất (id dòng chứng từ, không phải số thứ tự dòng trong phiếu).
 - Nhắc lại §2.2: hàng trả / thành phẩm **không lấp** đơn bán âm kho ghi trước đó.
+
+## 5. Khoá khi lan truyền giá khác mã (Task 7 fix round 1)
+
+- `withInventoryTx({ products })` khoá các mã khai báo theo thứ tự **tăng dần** (không deadlock giữa các giao dịch chỉ
+  dùng mã khai báo).
+- Lan truyền (`propagate`, unit-of-work.ts): với mỗi dòng xuất vừa tính lại, **trước khi** đọc tổng vốn dòng
+  (`lineSnapshot`), gọi chủ dòng, hay ghi giá lớp phụ thuộc, engine khoá **mọi** mã có dòng sổ xuất của dòng đó (vd mọi
+  NVL của lệnh SX / dòng bán tôn xốp) **và** mọi mã có lớp phụ thuộc trỏ tới dòng đó (thành phẩm, hàng trả). Không có
+  khoá này, hai giao dịch đổi giá hai NVL khác nhau của cùng một lệnh SX thấy nửa cũ của nhau và giao dịch commit sau ghi
+  đè giá thành phẩm / tổng vốn dòng bằng số cũ (mất cập nhật) — test `derived-concurrency.test.ts`.
+- Các khoá bổ sung này (và khoá mã phát sinh trong `flush`) có thể lấy **ngoài thứ tự tăng dần** ⇒ Postgres có thể phát
+  hiện deadlock (≈1 giây `deadlock_timeout`) và hủy một giao dịch; `withInventoryTx` tự chạy lại **toàn bộ** giao dịch
+  (tối đa 3 lần, `retryOnDeadlock`) trên dữ liệu đã commit ⇒ kết quả đúng, chỉ chậm hơn. Vì vậy `work` KHÔNG được có tác
+  dụng phụ ngoài `ctx.tx`. Module có thể giảm xác suất này bằng cách khai báo sẵn trong `products` các mã NVL/thành phẩm
+  liên quan (vd sửa giá phiếu nhập NVL: thêm mã thành phẩm của các lệnh SX dùng lô đó nếu biết).

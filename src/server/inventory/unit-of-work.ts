@@ -95,6 +95,19 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
     const key = `${t.docType}:${t.docLineId}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    // KHOÁ TRƯỚC KHI ĐỌC (Task 7 fix round 1): tổng vốn dòng gốc cộng dòng sổ ở MỌI mã của dòng (NVL của lệnh SX / dòng
+    // bán tôn xốp), và giá được ghi vào lớp phụ thuộc ở mã KHÁC (thành phẩm). Chỉ giữ khoá mã đang tính lại thì giao
+    // dịch đồng thời đổi giá NVL khác thấy nửa cũ của nhau → bên commit sau ghi đè giá cũ (lost update) lên lớp thành
+    // phẩm / chủ dòng. Khoá đủ các mã đó rồi mới đọc (READ COMMITTED: mỗi câu lệnh thấy dữ liệu đã commit mới nhất).
+    // Khoá có thể lấy NGOÀI thứ tự tăng dần → Postgres có thể phát hiện deadlock → withInventoryTx chạy lại cả giao
+    // dịch (retryOnDeadlock) trên dữ liệu đã commit: đúng, chỉ chậm hơn.
+    const involved = await ctx.tx.$queryRaw<{ productId: number }[]>`
+      SELECT "productId" FROM stock_ledger
+       WHERE "docType"::text = ${t.docType} AND "docLineId" = ${t.docLineId} AND "qtyOut" > 0
+      UNION
+      SELECT "productId" FROM cost_layers
+       WHERE "costRefType"::text = ${t.docType} AND "costRefId" = ${t.docLineId} AND "periodId" = ${ctx.period.id}`;
+    await lockProducts(ctx, involved.map((r) => r.productId));
     const snap = await lineSnapshot(ctx.tx, t.docType, t.docLineId);
     const owner = getCostOwner(t.docType);
     if (owner) await owner(ctx.tx, snap);

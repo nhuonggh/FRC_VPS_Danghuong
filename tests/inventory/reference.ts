@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { expect } from "vitest";
 import { markDirty } from "@/server/inventory/unit-of-work";
 import { prisma } from "../helpers/db";
-import { assertLedgerBalanced, engine, layersOf, type World } from "./helpers";
+import { assertLedgerBalanced, engine, type World } from "./helpers";
 
 /* ───────────────────────── Mô hình tham chiếu NGÂY THƠ (độc lập với replay.ts) ─────────────────────────
  * Mô phỏng TỪ ĐẦU mọi sự kiện của mã hàng, sắp (at, hạng, seq) — tại cùng `at`: lớp THƯỜNG trước, rồi lệnh XUẤT và
@@ -30,10 +30,10 @@ export interface State {
   cons: string[]; // "ledgerId:layerId:qty:unitCost" (sắp xếp)
 }
 
-export async function dbState(productId: number): Promise<State> {
-  const layers = await layersOf(productId);
-  const outs = await prisma.stockLedger.findMany({ where: { productId, qtyOut: { gt: 0 } }, orderBy: { id: "asc" } });
-  const cons = await prisma.costConsumption.findMany({ where: { ledger: { productId } } });
+export async function dbState(productId: number, periodId: number): Promise<State> {
+  const layers = await prisma.costLayer.findMany({ where: { productId, periodId } });
+  const outs = await prisma.stockLedger.findMany({ where: { productId, periodId, qtyOut: { gt: 0 } }, orderBy: { id: "asc" } });
+  const cons = await prisma.costConsumption.findMany({ where: { ledger: { productId, periodId } } });
   return {
     layers: layers.map((l) => `${l.id}:${l.qtyRemaining.toString()}:${l.unitCost.toString()}`).sort(),
     outs: outs.map((o) => `${o.id}:${o.unitCostOut.toString()}:${o.qtyProvisional.toString()}`).sort(),
@@ -45,15 +45,15 @@ export async function dbState(productId: number): Promise<State> {
  * Mã hàng mà giá của `productId` phụ thuộc (bao đóng): mã của dòng gốc các lớp phụ thuộc (thành phẩm SX ← NVL), lặp
  * tiếp trên chính các mã đó. Mô hình mô phỏng CHUNG cả bao đóng (Task 7) — không lấy giá lớp phụ thuộc khác mã từ DB.
  */
-async function dependencyClosure(productId: number): Promise<number[]> {
+async function dependencyClosure(productId: number, periodId: number): Promise<number[]> {
   const seen = new Set([productId]);
   const todo = [productId];
   while (todo.length) {
     const p = todo.pop()!;
-    const refs = await prisma.costLayer.findMany({ where: { productId: p, costRefType: { not: null } }, select: { costRefType: true, costRefId: true } });
+    const refs = await prisma.costLayer.findMany({ where: { periodId, productId: p, costRefType: { not: null } }, select: { costRefType: true, costRefId: true } });
     if (!refs.length) continue;
     const src = await prisma.stockLedger.findMany({
-      where: { qtyOut: { gt: 0 }, OR: refs.map((r) => ({ docType: r.costRefType!, docLineId: r.costRefId! })) },
+      where: { periodId, qtyOut: { gt: 0 }, OR: refs.map((r) => ({ docType: r.costRefType!, docLineId: r.costRefId! })) },
       select: { productId: true },
     });
     for (const s of src) if (!seen.has(s.productId)) { seen.add(s.productId); todo.push(s.productId); }
@@ -61,10 +61,11 @@ async function dependencyClosure(productId: number): Promise<number[]> {
   return [...seen];
 }
 
-export async function referenceState(productId: number): Promise<State> {
-  const products = await dependencyClosure(productId);
-  const layers = await prisma.costLayer.findMany({ where: { productId: { in: products } }, include: { ledger: { select: { seq: true } } } });
-  const outs = await prisma.stockLedger.findMany({ where: { productId: { in: products }, qtyOut: { gt: 0 } } });
+/** Mô phỏng TỪ ĐẦU kỳ `periodId` (chỉ dữ liệu kỳ đó; dòng gốc ở kỳ khác = đầu vào cố định). */
+export async function referenceState(productId: number, periodId: number): Promise<State> {
+  const products = await dependencyClosure(productId, periodId);
+  const layers = await prisma.costLayer.findMany({ where: { periodId, productId: { in: products } }, include: { ledger: { select: { seq: true } } } });
+  const outs = await prisma.stockLedger.findMany({ where: { periodId, productId: { in: products }, qtyOut: { gt: 0 } } });
   // Cùng `at` (vòng sửa 4–5): rank 0 = lớp thường; rank 1 = lệnh xuất và lớp phụ thuộc; trong hạng theo `seq` của dòng
   // sổ (thứ tự ghi ỔN ĐỊNH qua sửa/khôi phục; seq duy nhất TOÀN BẢNG nên sắp chung nhiều mã được). kind: 0 = lớp,
   // 1 = xuất; id = id lớp / id dòng sổ để tra cứu (duy nhất toàn bảng).
@@ -139,7 +140,8 @@ export async function referenceState(productId: number): Promise<State> {
       if (src.length === 0) { layerCost.set(l.id, l.unitCost.toString()); continue; }
       let total = new HP(0);
       for (const s of src) {
-        const c = outCost.get(s.id);
+        // Dòng gốc thuộc kỳ khác (đã kết sổ — trả hàng đơn kỳ cũ, spec 4.4): giá cố định = đầu vào
+        const c = s.periodId !== periodId ? s.unitCostOut.toString() : outCost.get(s.id);
         if (c === undefined) throw new Error(`mô hình: dòng gốc ${s.id} chưa được tính trước lớp ${l.id} (vi phạm thứ tự thời gian)`);
         total = total.plus(new HP(s.qtyOut.toString()).times(c));
       }
@@ -182,9 +184,9 @@ export async function referenceState(productId: number): Promise<State> {
  */
 export async function assertChainExact(w: World, productId = w.p.id) {
   await assertLedgerBalanced(productId, w.periodId);
-  const partial = await dbState(productId);
-  expect(partial, "tính lại từng phần == mô hình tham chiếu").toEqual(await referenceState(productId));
+  const partial = await dbState(productId, w.periodId);
+  expect(partial, "tính lại từng phần == mô hình tham chiếu").toEqual(await referenceState(productId, w.periodId));
   await engine(w)([productId], async (ctx) => markDirty(ctx, productId, w.period.openedAt));
-  expect(await dbState(productId), "tính lại từ đầu == tính lại từng phần").toEqual(partial);
+  expect(await dbState(productId, w.periodId), "tính lại từ đầu == tính lại từng phần").toEqual(partial);
   await assertLedgerBalanced(productId, w.periodId);
 }

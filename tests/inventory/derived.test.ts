@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clearCostOwners, registerCostOwner, unitCostOf, type LineCostSnapshot } from "@/server/inventory/owners";
 import { postIssue, postReceipt, removeDocument, updateLayerCost } from "@/server/inventory/ports";
 import { DependentDocumentsError } from "@/server/inventory/errors";
+import type { EngineCtx } from "@/server/inventory/types";
 import { prisma, resetDb } from "../helpers/db";
 import { assertLedgerBalanced, buy, engine, layersOf, newWorld, saleRow, sell, T, type World } from "./helpers";
 import { assertChainExact, dbState, referenceState } from "./reference";
@@ -235,13 +236,13 @@ describe("lệnh sản xuất phụ kiện: giá vốn thành phẩm = tổng v�
     const w = await newWorld(3);
     const { run, phuKien } = await produce(w);
     await run([phuKien.id], (ctx) => sell(ctx, phuKien.id, 2, T(20), 1));
-    expect(await dbState(phuKien.id)).toEqual(await referenceState(phuKien.id));
+    expect(await dbState(phuKien.id, w.periodId)).toEqual(await referenceState(phuKien.id, w.periodId));
     // Lệch "tự nhất quán": lớp, consumption và dòng bán cùng 69.000 — oracle cũ (lấy giá DB cho lớp khác mã) sẽ chấp nhận
     const layer = (await layersOf(phuKien.id))[0]!;
     await prisma.costLayer.update({ where: { id: layer.id }, data: { unitCost: 69000 } });
     await prisma.costConsumption.updateMany({ where: { layerId: layer.id }, data: { unitCost: 69000 } });
     await prisma.stockLedger.updateMany({ where: { docType: "SALE", docId: 1 }, data: { unitCostOut: 69000 } });
-    expect(await dbState(phuKien.id)).not.toEqual(await referenceState(phuKien.id));
+    expect(await dbState(phuKien.id, w.periodId)).not.toEqual(await referenceState(phuKien.id, w.periodId));
   });
 
   // Quyết định engine (docs/engine-fifo.md §2.2): lớp phụ thuộc KHÔNG nhập bù đơn treo
@@ -258,6 +259,99 @@ describe("lệnh sản xuất phụ kiện: giá vốn thành phẩm = tổng v�
     await run([phuKien.id], (ctx) => sell(ctx, phuKien.id, 3, T(20), 2));
     expect((await saleRow(2)).unitCostOut.toString()).toBe("68000");
     expect((await saleRow(1)).qtyProvisional.toString()).toBe("2"); // vẫn treo tới khi có nhập THƯỜNG
+    await checkAll(w);
+  });
+});
+
+/** Lệnh SX số n tại `at`: NVL ghi TRƯỚC, rồi thành phẩm (costRef PRODUCTION_USE n). */
+async function productionOrder(ctx: EngineCtx, n: number, at: Date, uses: [number, number][], out: [number, number]) {
+  for (const [productId, qty] of uses) await postIssue(ctx, { productId, qty, docType: "PRODUCTION_USE", docId: n, docLineId: n, at });
+  await postReceipt(ctx, {
+    productId: out[0], qty: out[1], unitCost: 0, docType: "PRODUCTION_OUT", docId: n, docLineId: n, at,
+    costRef: { docType: "PRODUCTION_USE", docLineId: n, qty: out[1] },
+  });
+}
+const outLayer = async (productId: number, n: number) =>
+  (await layersOf(productId)).find((l) => l.sourceDocType === "PRODUCTION_OUT" && l.sourceDocId === n)!.unitCost.toString();
+
+describe("lan truyền nhiều tầng / nhiều nhánh (review Task 7)", () => {
+  it("BOM 2 tầng M → bán thành phẩm S → thành phẩm F: đổi giá M lan tới S, F và đơn bán F (mô hình duyệt bao đóng bắc cầu)", async () => {
+    const w = await newWorld(3);
+    const [m, s, f] = w.products.map((p) => p.id) as [number, number, number];
+    const run = engine(w);
+    await run([m], (ctx) => buy(ctx, m, 100, 1000, T(0), 1));
+    await run([m, s], (ctx) => productionOrder(ctx, 7, T(10), [[m, 10]], [s, 5])); // S = 10.000/5 = 2.000
+    await run([s, f], (ctx) => productionOrder(ctx, 8, T(20), [[s, 4]], [f, 2])); // F = 4×2.000/2 = 4.000
+    await run([f], (ctx) => sell(ctx, f, 1, T(30), 1));
+    expect([await outLayer(s, 7), await outLayer(f, 8), (await saleRow(1)).unitCostOut.toString()]).toEqual(["2000", "4000", "4000"]);
+    await run([m], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 1100 }));
+    expect([await outLayer(s, 7), await outLayer(f, 8), (await saleRow(1)).unitCostOut.toString()]).toEqual(["2200", "4400", "4400"]);
+    await checkAll(w);
+  });
+
+  it("CÙNG NVL cho hai lệnh SX / hai thành phẩm: FIFO NVL chia lô giữa hai lệnh; đổi giá lô cũ → cả hai thành phẩm tính lại", async () => {
+    const w = await newWorld(3);
+    const [m, f1, f2] = w.products.map((p) => p.id) as [number, number, number];
+    const run = engine(w);
+    await run([m], async (ctx) => { await buy(ctx, m, 10, 100, T(0), 1); await buy(ctx, m, 10, 200, T(1), 2); });
+    await run([m, f1], (ctx) => productionOrder(ctx, 7, T(10), [[m, 8]], [f1, 4])); // 8@100 → 200
+    await run([m, f2], (ctx) => productionOrder(ctx, 8, T(11), [[m, 8]], [f2, 2])); // (2@100 + 6@200)/2 = 700
+    expect([await outLayer(f1, 7), await outLayer(f2, 8)]).toEqual(["200", "700"]);
+    await run([m], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 150 }));
+    expect([await outLayer(f1, 7), await outLayer(f2, 8)]).toEqual(["300", "750"]); // 1.200/4; (300 + 1.200)/2
+    await checkAll(w);
+  });
+
+  it("đổi giá HAI NVL của cùng lệnh SX trong MỘT giao dịch → thành phẩm = hai giá mới", async () => {
+    const w = await newWorld(3);
+    const [m1, m2, f] = w.products.map((p) => p.id) as [number, number, number];
+    const run = engine(w);
+    await run([m1, m2], async (ctx) => { await buy(ctx, m1, 100, 30000, T(0), 1); await buy(ctx, m2, 100, 2000, T(0), 2); });
+    await run([m1, m2, f], (ctx) => productionOrder(ctx, 7, T(10), [[m1, 10], [m2, 20]], [f, 5]));
+    await run([f], (ctx) => sell(ctx, f, 2, T(20), 1));
+    await run([m1, m2], async (ctx) => {
+      await updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 31000 });
+      await updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 2500 });
+    });
+    expect([await outLayer(f, 7), (await saleRow(1)).unitCostOut.toString()]).toEqual(["72000", "72000"]); // (310.000 + 50.000)/5
+    await checkAll(w);
+  });
+
+  it("trả hàng của đơn bán đã ăn lớp THÀNH PHẨM (phụ thuộc chồng phụ thuộc): đổi giá NVL → thành phẩm → đơn bán → lớp trả → đơn bán sau", async () => {
+    const w = await newWorld(3);
+    const [m1, m2, f] = w.products.map((p) => p.id) as [number, number, number];
+    const run = engine(w);
+    await run([m1, m2], async (ctx) => { await buy(ctx, m1, 100, 1000, T(0), 1); await buy(ctx, m2, 100, 10, T(0), 2); });
+    await run([m1, m2, f], (ctx) => productionOrder(ctx, 7, T(10), [[m1, 10], [m2, 10]], [f, 5])); // (10.000 + 100)/5 = 2.020
+    await run([f], (ctx) => sell(ctx, f, 2, T(20), 1));
+    await run([f], (ctx) => postReceipt(ctx, {
+      productId: f, qty: 1, unitCost: 0, docType: "RETURN_IN", docId: 1, docLineId: 1, at: T(30),
+      costRef: { docType: "SALE", docLineId: 1, qty: 2 },
+    }));
+    await run([f], (ctx) => sell(ctx, f, 4, T(40), 2)); // 3 thành phẩm + 1 hàng trả
+    const ret = async () => (await layersOf(f)).find((l) => l.sourceDocType === "RETURN_IN")!.unitCost.toString();
+    expect([await ret(), (await saleRow(2)).unitCostOut.toString()]).toEqual(["2020", "2020"]);
+    await run([m1], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 1500 }));
+    // thành phẩm (15.000 + 100)/5 = 3.020 → đơn #1 3.020 → lớp trả 3.020 → đơn #2 3.020
+    expect([await outLayer(f, 7), (await saleRow(1)).unitCostOut.toString(), await ret(), (await saleRow(2)).unitCostOut.toString()])
+      .toEqual(["3020", "3020", "3020", "3020"]);
+    await expect(run([f], (ctx) => removeDocument(ctx, "SALE", 1))).rejects.toThrow(DependentDocumentsError);
+    await checkAll(w);
+  });
+
+  it("tháo dỡ F → M CÙNG `at` với lệnh SX M → F (vòng mã M→F→M): ghi sau nên hợp lệ, hội tụ; đổi giá M lan vòng mà không chu trình", async () => {
+    const w = await newWorld(2);
+    const [m, f] = w.products.map((p) => p.id) as [number, number];
+    const run = engine(w);
+    await run([m], (ctx) => buy(ctx, m, 100, 1000, T(0), 1));
+    await run([m, f], async (ctx) => {
+      await productionOrder(ctx, 7, T(10), [[m, 10]], [f, 5]); // F = 2.000
+      await productionOrder(ctx, 8, T(10), [[f, 2]], [m, 4]); // tháo 2 F → 4 M = 4.000/4 = 1.000
+    });
+    await run([m], (ctx) => sell(ctx, m, 92, T(20), 1)); // 90 lô mua + 2 hàng tháo dỡ
+    expect([await outLayer(f, 7), await outLayer(m, 8), (await saleRow(1)).unitCostOut.toString()]).toEqual(["2000", "1000", "1000"]);
+    await run([m], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 1200 }));
+    expect([await outLayer(f, 7), await outLayer(m, 8), (await saleRow(1)).unitCostOut.toString()]).toEqual(["2400", "1200", "1200"]);
     await checkAll(w);
   });
 });
