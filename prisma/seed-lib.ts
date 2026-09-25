@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { PERMISSIONS, ROLE_DEFAULTS, resolveRolePermissions, type PermissionDef } from "../src/lib/permissions/catalog";
+import { toIct } from "../src/lib/time";
 import { hashPassword } from "../src/server/auth/password";
 
 export interface SeedOptions {
@@ -11,6 +12,12 @@ export interface SeedOptions {
 const ADMIN_ROLE = "Giám đốc";
 /** Vai trò mẫu có mặc định wildcard "*" (giữ MỌI quyền của danh mục). */
 const WILDCARD_ROLES = Object.entries(ROLE_DEFAULTS).filter(([, spec]) => spec === "*").map(([name]) => name);
+
+/** Tên kỳ đầu tiên theo NGÀY ICT (không theo múi giờ máy chủ — container thường chạy UTC). */
+export function initialPeriodName(now: Date): string {
+  const t = toIct(now);
+  return `Kỳ khởi tạo ${String(t.d).padStart(2, "0")}/${String(t.m + 1).padStart(2, "0")}/${t.y}`;
+}
 
 export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promise<void> {
   const catalog = opts.catalog ?? PERMISSIONS;
@@ -71,12 +78,7 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
 
   // 4. Kỳ đầu tiên (luôn có đúng 1 kỳ OPEN)
   if ((await prisma.period.count()) === 0) {
-    const now = new Date();
-    const dd = String(now.getDate()).padStart(2, "0");
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    await prisma.period.create({
-      data: { name: `Kỳ khởi tạo ${dd}/${mm}/${now.getFullYear()}`, status: "OPEN", isOpen: true },
-    });
+    await prisma.period.create({ data: { name: initialPeriodName(new Date()), status: "OPEN", isOpen: true } });
   }
 
   // 5. Admin khởi tạo (chỉ khi bảng users trống và có mật khẩu). KHÔNG log mật khẩu.

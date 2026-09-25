@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { seed } from "../prisma/seed-lib";
+import { initialPeriodName, seed } from "../prisma/seed-lib";
 import { PERMISSIONS } from "@/lib/permissions/catalog";
 import { loadActor } from "@/server/auth/actor";
 import { BCRYPT_COST } from "@/server/auth/password";
@@ -21,6 +21,13 @@ describe("seed", () => {
     const open = await prisma.period.findMany({ where: { isOpen: true } });
     expect(open).toHaveLength(1);
     expect(open[0]!.status).toBe("OPEN");
+    expect(open[0]!.name).toBe(initialPeriodName(new Date()));
+  });
+
+  it("tên kỳ đầu theo NGÀY ICT, không theo múi giờ máy chủ (container UTC)", () => {
+    // 17:30Z 31/12/2026 = 00:30 ICT 01/01/2027 — server UTC dùng getDate() sẽ ra 31/12/2026
+    expect(initialPeriodName(new Date("2026-12-31T17:30:00Z"))).toBe("Kỳ khởi tạo 01/01/2027");
+    expect(initialPeriodName(new Date("2026-09-24T16:59:59Z"))).toBe("Kỳ khởi tạo 24/09/2026");
   });
 
   it("idempotent: chạy 2 lần không nhân đôi dữ liệu", async () => {
