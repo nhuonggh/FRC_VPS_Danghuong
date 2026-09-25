@@ -43,6 +43,7 @@ model StockLedger {
   @@index([periodId, productId, at])
   @@index([docType, docId])
   @@index([docType, docLineId])
+  @@index([periodId, productId, qtyProvisional])
   @@map("stock_ledger")
 }
 
@@ -92,4 +93,30 @@ model CostConsumption {
   @@index([ledgerId])
   @@index([docType, docLineId])
   @@map("cost_consumptions")
+}
+
+enum RecomputeStatus {
+  PENDING
+  RUNNING
+  FAILED
+
+  @@map("recompute_status")
+}
+
+// Hàng đợi tính lại giá vốn chạy nền (spec 3.5: chạm quá ~2.000 dòng → chạy nền, chặn xuất mã đó tới khi xong).
+// Mỗi mã hàng tối đa 1 job; job xong thì xoá dòng. Không FK để không kéo quan hệ ngược vào Product.
+// Đây là bảng hạ tầng, KHÔNG phải chứng từ/sổ cái → không nằm trong TRANSACTIONAL_MODELS (không cần createdBy).
+model RecomputeJob {
+  id        Int             @id @default(autoincrement())
+  periodId  Int
+  productId Int             @unique
+  fromAt    DateTime
+  status    RecomputeStatus @default(PENDING)
+  attempts  Int             @default(0)
+  error     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([status, id])
+  @@map("recompute_jobs")
 }
