@@ -23,8 +23,6 @@ describe("OfflineBanner", () => {
     expect(region).toBeEmptyDOMElement();
     act(() => { window.dispatchEvent(new Event("offline")); });
     expect(screen.getByRole("status")).toHaveTextContent(TEXT);
-    // không tự tắt
-    expect(screen.getByRole("status")).toHaveTextContent(TEXT);
     act(() => { window.dispatchEvent(new Event("online")); });
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
