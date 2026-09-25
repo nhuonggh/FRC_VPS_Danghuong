@@ -97,3 +97,11 @@ Hệ quả tại **cùng `at`** (vd chứng từ lùi ngày: `docTimestamp` cho 
   (tối đa 3 lần, `retryOnDeadlock`) trên dữ liệu đã commit ⇒ kết quả đúng, chỉ chậm hơn. Vì vậy `work` KHÔNG được có tác
   dụng phụ ngoài `ctx.tx`. Module có thể giảm xác suất này bằng cách khai báo sẵn trong `products` các mã NVL/thành phẩm
   liên quan (vd sửa giá phiếu nhập NVL: thêm mã thành phẩm của các lệnh SX dùng lô đó nếu biết).
+- **Module phải tuần tự hoá việc sửa đồng thời CÙNG một dòng chứng từ** (vd khoá dòng `SELECT … FOR UPDATE` trên chứng
+  từ / dòng chứng từ trước khi gọi engine): hai giao dịch cùng thêm dòng xuất ở các mã KHÁC nhau vào cùng `docLineId`
+  (vd hai người cùng sửa định mức một dòng bán tôn xốp) có thể mỗi bên chỉ thấy tổng vốn dòng một phần. Khoá của engine
+  chỉ tính các dòng sổ đã commit / của chính giao dịch.
+- **Hết lượt chạy lại:** `retryOnDeadlock` chỉ thử 3 lần; khi nhiều giao dịch cùng tranh NVL dùng chung trong BOM, lần
+  thứ 3 vẫn deadlock thì lỗi deadlock thô của Postgres/Prisma (`40P01` / `P2034` / "deadlock detected") tới người gọi.
+  Tầng API và worker nền (Task 8) phải đổi lỗi này thành phản hồi "đang bận, thử lại" (không phải 500), hoặc khai báo
+  sẵn các mã BOM liên quan trong `products` để khoá theo thứ tự tăng dần ngay từ đầu.

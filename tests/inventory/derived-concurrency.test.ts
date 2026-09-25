@@ -24,6 +24,16 @@ function gate() {
   return { opened, held, open, markHeld };
 }
 
+/**
+ * Dọn dẹp CHẮC CHẮN (gọi trong finally): mở cổng để giao dịch đang giữ khoá chạy tiếp và kết thúc, rồi chờ MỌI giao
+ * dịch đã khởi chạy xong (thành công hay lỗi). Không có bước này, một assertion đỏ / blockedOrDone hết giờ để giao dịch A
+ * treo giữ khoá tới 30 giây → TRUNCATE của resetDb ở test sau bị chặn → đổ dây sang các test khác.
+ */
+async function release(g: ReturnType<typeof gate>, txs: Promise<unknown>[]): Promise<void> {
+  g.open();
+  await Promise.allSettled(txs);
+}
+
 /** Chờ tới khi `p` đã xong HOẶC có giao dịch đang chờ khoá (bất kỳ loại) trong DB test hiện tại. */
 async function blockedOrDone(p: Promise<unknown>, timeoutMs = 10_000): Promise<"blocked" | "done"> {
   let settled = false;
@@ -63,14 +73,21 @@ describe("lan truyền khác mã dưới ghi đồng thời: không mất cập 
   it("lệnh SX: A đổi giá M1 (giữ mở SAU khi tính xong), C đổi giá M2 → thành phẩm = M1 mới + M2 mới, đơn bán theo", async () => {
     const { w, run, m1, m2, f } = await productionWorld();
     const g = gate();
-    const a = run([m1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 31000 }), {
-      finalize: async () => { g.markHeld(); await g.opened; },
-    });
-    await Promise.race([g.held, a]);
-    const c = run([m2.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 2500 }));
-    await blockedOrDone(c);
-    g.open();
-    await Promise.all([a, c]);
+    const txs: Promise<unknown>[] = [];
+    try {
+      const a = run([m1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 31000 }), {
+        finalize: async () => { g.markHeld(); await g.opened; },
+      });
+      txs.push(a);
+      await Promise.race([g.held, a]);
+      const c = run([m2.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 2500 }));
+      txs.push(c);
+      await blockedOrDone(c);
+      g.open();
+      await Promise.all([a, c]);
+    } finally {
+      await release(g, txs);
+    }
     // (10×31.000 + 20×2.500)/5 = 72.000 (giá cũ lẫn: 70.000 nếu C ghi đè bằng M1 cũ)
     expect((await layersOf(f.id))[0]!.unitCost.toString()).toBe("72000");
     expect((await saleRow(1)).unitCostOut.toString()).toBe("72000");
@@ -89,14 +106,21 @@ describe("lan truyền khác mã dưới ghi đồng thời: không mất cập 
       await postIssue(ctx, { productId: b1.id, qty: 10, docType: "SALE", docId: 9, docLineId: 91, at: T(5) });
     });
     const g = gate();
-    const a = run([a1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 120 }), {
-      finalize: async () => { g.markHeld(); await g.opened; },
-    });
-    await Promise.race([g.held, a]);
-    const c = run([b1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 15 }));
-    await blockedOrDone(c);
-    g.open();
-    await Promise.all([a, c]);
+    const txs: Promise<unknown>[] = [];
+    try {
+      const a = run([a1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 120 }), {
+        finalize: async () => { g.markHeld(); await g.opened; },
+      });
+      txs.push(a);
+      await Promise.race([g.held, a]);
+      const c = run([b1.id], (ctx) => updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 15 }));
+      txs.push(c);
+      await blockedOrDone(c);
+      g.open();
+      await Promise.all([a, c]);
+    } finally {
+      await release(g, txs);
+    }
     // Chủ dòng ghi ngược vào dòng đơn: lần gọi CUỐI (bên commit sau) phải là 10×120 + 10×15 = 1.350 (lỗi: 1.150)
     expect(calls.at(-1)!.totalCost.toString()).toBe("1350");
     for (const p of w.products) await assertChainExact(w, p.id);
@@ -107,20 +131,27 @@ describe("lan truyền khác mã dưới ghi đồng thời: không mất cập 
     const g = gate();
     let aRuns = 0;
     let cRuns = 0;
-    const a = run([m1.id], async (ctx) => {
-      aRuns++;
-      await updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 31000 });
-      g.markHeld();
-      await g.opened; // A giữ M1, chưa flush
-    });
-    await Promise.race([g.held, a]);
-    const c = run([m2.id], async (ctx) => {
-      cRuns++;
-      await updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 2500 });
-    });
-    expect(await blockedOrDone(c)).toBe("blocked"); // C lan truyền dòng 7 → cần khoá M1 (A đang giữ)
-    g.open(); // A flush → lan truyền dòng 7 → cần khoá M2 (C đang giữ) ⇒ deadlock
-    await Promise.all([a, c]);
+    const txs: Promise<unknown>[] = [];
+    try {
+      const a = run([m1.id], async (ctx) => {
+        aRuns++;
+        await updateLayerCost(ctx, { docType: "PURCHASE", docId: 1, unitCost: 31000 });
+        g.markHeld();
+        await g.opened; // A giữ M1, chưa flush
+      });
+      txs.push(a);
+      await Promise.race([g.held, a]);
+      const c = run([m2.id], async (ctx) => {
+        cRuns++;
+        await updateLayerCost(ctx, { docType: "PURCHASE", docId: 2, unitCost: 2500 });
+      });
+      txs.push(c);
+      expect(await blockedOrDone(c)).toBe("blocked"); // C lan truyền dòng 7 → cần khoá M1 (A đang giữ)
+      g.open(); // A flush → lan truyền dòng 7 → cần khoá M2 (C đang giữ) ⇒ deadlock
+      await Promise.all([a, c]);
+    } finally {
+      await release(g, txs);
+    }
     expect(aRuns + cRuns, "đúng một giao dịch bị hủy vì deadlock và chạy lại").toBe(3);
     expect((await layersOf(f.id))[0]!.unitCost.toString()).toBe("72000");
     expect((await saleRow(1)).unitCostOut.toString()).toBe("72000");
