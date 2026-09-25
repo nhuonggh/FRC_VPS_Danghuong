@@ -160,6 +160,38 @@ describe("RoleDetail — ma trận quyền", () => {
     await waitFor(() => expect(nav.refresh).toHaveBeenCalled());
   });
 
+  it("tắt rồi bật lại cùng một quyền → trở về đúng tập gốc: KHÔNG dirty, Hủy không hỏi xác nhận", async () => {
+    await editPerms();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem đơn hàng" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem đơn hàng" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hủy chỉnh sửa" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Chỉnh sửa quyền" })).toBeInTheDocument(); // đã thoát chế độ sửa
+  });
+
+  it("thứ tự mã từ máy chủ khác thứ tự danh mục vẫn không gây dirty giả (bật/tắt lại quyền khác)", async () => {
+    nav.search = "tab=permissions";
+    render(<RoleDetail {...base} role={{ ...base.role, permissionCodes: ["order.create", "user.view", "order.view"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: "Chỉnh sửa quyền" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem người dùng" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem người dùng" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hủy chỉnh sửa" }));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("bật/tắt thật sự thay đổi → vẫn dirty (Hủy hỏi xác nhận); danh sách gửi đi theo thứ tự danh mục", async () => {
+    apiFetch.mockResolvedValueOnce({ ok: true });
+    confirm.mockResolvedValueOnce(false);
+    await editPerms();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem người dùng" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hủy chỉnh sửa" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Xem giá vốn" }));
+    await userEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+    expect(apiFetch.mock.calls[0]![1].json.codes).toEqual(["user.view", "cost.view", "order.view", "order.create"]);
+  });
+
   it("'Chọn cả nhóm' bật mọi quyền trong nhóm; bấm lại thành 'Bỏ chọn nhóm' và tắt hết", async () => {
     await editPerms();
     await userEvent.click(screen.getByRole("button", { name: "Chọn cả nhóm Hệ thống" }));

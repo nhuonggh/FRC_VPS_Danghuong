@@ -43,6 +43,8 @@ beforeEach(async () => {
 });
 
 const newUser = (over = {}) => ({ username: "nam", fullName: "Nguyễn Nam", roleIds: [roleId["Bán hàng"]!], ...over });
+const postRole = (body: unknown, key: string | null = "rk1") =>
+  createRolePOST(req("/api/roles", "POST", body, key ? { "idempotency-key": key } : {}), undefined);
 const post = (body: unknown, key: string | null = "k1") =>
   createUserPOST(req("/api/users", "POST", body, key ? { "idempotency-key": key } : {}), undefined);
 
@@ -52,7 +54,7 @@ const WRITE_ROUTES: [string, () => Promise<Response>, string?][] = [
   ["PATCH /api/users/[id]/section-update", () => userSection(req("/x", "PATCH", { section: "profile", fullName: "Tên mới" }), ctx(staffId))],
   ["POST /api/users/[id]/lock", () => lockRoute(req("/x", "POST", { locked: true }), ctx(staffId))],
   ["POST /api/users/[id]/reset-password", () => resetRoute(req("/x", "POST"), ctx(staffId))],
-  ["POST /api/roles", () => createRolePOST(req("/x", "POST", { name: "Nhóm mới" }), undefined)],
+  ["POST /api/roles", () => postRole({ name: "Nhóm mới" })],
   ["DELETE /api/roles/[id]", () => deleteRoleRoute(req("/x", "DELETE"), ctx(roleId["Bán hàng"]!))],
   ["PATCH /api/roles/[id]/section-update", () => roleSection(req("/x", "PATCH", { section: "info", name: "Nhóm mới" }), ctx(roleId["Bán hàng"]!))],
 ];
@@ -259,7 +261,7 @@ describe("POST /api/account/change-password", () => {
 describe("/api/roles", () => {
   it("tạo nhóm, đổi thông tin, đặt quyền, xoá nhóm trống", async () => {
     loginAs(adminId);
-    const { id } = await (await createRolePOST(req("/x", "POST", { name: "Trợ lý" }), undefined)).json();
+    const { id } = await (await postRole({ name: "Trợ lý" })).json();
     expect((await roleSection(req("/x", "PATCH", { section: "info", name: "Trợ lý kho", description: "d" }), ctx(id))).status).toBe(200);
     expect((await roleSection(req("/x", "PATCH", { section: "permissions", codes: ["order.view"] }), ctx(id))).status).toBe(200);
     expect(await prisma.rolePermission.count({ where: { roleId: id } })).toBe(1);
@@ -269,11 +271,35 @@ describe("/api/roles", () => {
 
   it("tên trống → 400; tên trùng → 409; xoá nhóm hệ thống → 409; section lạ → 400; nhóm không tồn tại → 404", async () => {
     loginAs(adminId);
-    expect((await createRolePOST(req("/x", "POST", { name: "" }), undefined)).status).toBe(400);
-    expect((await createRolePOST(req("/x", "POST", { name: "Kế toán" }), undefined)).status).toBe(409);
+    expect((await postRole({ name: "" })).status).toBe(400);
+    expect((await postRole({ name: "Kế toán" }, "k2")).status).toBe(409);
     expect((await deleteRoleRoute(req("/x", "DELETE"), ctx(roleId["Kế toán"]!))).status).toBe(409);
     expect((await roleSection(req("/x", "PATCH", { section: "x" }), ctx(roleId["Kế toán"]!))).status).toBe(400);
     expect((await roleSection(req("/x", "PATCH", { section: "info", name: "Ok" }), ctx(999999))).status).toBe(404);
+  });
+
+  it("POST /api/roles: thiếu/sai Idempotency-Key → 400 tiếng Việt, không tạo nhóm", async () => {
+    loginAs(adminId);
+    const r1 = await postRole({ name: "Trợ lý" }, null);
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).error).toBe("Thiếu Idempotency-Key.");
+    const r2 = await postRole({ name: "Trợ lý" }, "a b");
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).error).toMatch(/Idempotency-Key không hợp lệ/);
+    expect(await prisma.role.count({ where: { name: "Trợ lý" } })).toBe(0);
+    expect(await prisma.idempotencyKey.count()).toBe(0);
+  });
+
+  it("POST /api/roles: gửi lại cùng khoá (mất phản hồi) → 200 cùng id, KHÔNG 409 'đã tồn tại'; khoá mới cùng tên → 409", async () => {
+    loginAs(adminId);
+    const first = await postRole({ name: "Trợ lý" }, "same");
+    expect(first.status).toBe(200);
+    const { id } = await first.json();
+    const retry = await postRole({ name: "Trợ lý" }, "same");
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ id });
+    expect(await prisma.role.count({ where: { name: "Trợ lý" } })).toBe(1);
+    expect((await postRole({ name: "Trợ lý" }, "other")).status).toBe(409);
   });
 
   it("gỡ user.manage khỏi nhóm của quản trị viên cuối cùng → 409, quyền nguyên vẹn", async () => {
@@ -300,7 +326,7 @@ describe("bắt đổi mật khẩu: API bị chặn cho tới khi đổi (trừ
       () => post(newUser()),
       () => lockRoute(req("/x", "POST", { locked: true }), ctx(staffId)),
       () => resetRoute(req("/x", "POST"), ctx(staffId)),
-      () => createRolePOST(req("/x", "POST", { name: "Nhóm mới" }), undefined),
+      () => postRole({ name: "Nhóm mới" }),
     ]) {
       const r = await call();
       expect(r.status).toBe(403);

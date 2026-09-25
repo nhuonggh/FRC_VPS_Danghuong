@@ -2,6 +2,7 @@
 
 import { signOut } from "next-auth/react";
 import { useRef, useState } from "react";
+import { toast } from "@/lib/toast";
 
 /** Trang đổi mật khẩu nằm NGOÀI khung ứng dụng (không có menu người dùng) → cần lối thoát riêng, kể cả khi bị bắt đổi. */
 export function SignOutButton() {
@@ -13,6 +14,8 @@ export function SignOutButton() {
     setPending(true);
     try {
       await signOut({ callbackUrl: "/login" });
+    } catch {
+      toast.error("Không đăng xuất được. Vui lòng thử lại."); // nút được bật lại ở finally
     } finally {
       busy.current = false;
       setPending(false);

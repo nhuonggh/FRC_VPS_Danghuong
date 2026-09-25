@@ -1,9 +1,10 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { ALL_PERMISSION_CODES } from "@/lib/permissions/catalog";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
+import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { assertCanGrant } from "@/server/users/privilege";
 import { assertAdminRemains, lockAdminInvariant } from "@/server/users/service";
 import type { RoleInfoInput } from "./schemas";
@@ -34,6 +35,20 @@ export async function createRole(db: Db, actor: Actor, input: RoleInfoInput) {
   }
   await writeAudit(db, { userId: actor.userId, action: "role.create", entity: "Role", entityId: role.id, after: { name, description: role.description } });
   return { id: role.id };
+}
+
+/**
+ * Tạo nhóm quyền an toàn khi gửi lại: cùng (người dùng, "role.create", khoá) chạy đúng 1 lần; lần lặp trả lại cùng
+ * `{ id }` (thay vì 409 "tên đã tồn tại" khi mất phản hồi rồi thử lại). Kiểm tra quyền chạy TRƯỚC để lặp lại không lách được quyền.
+ */
+export async function createRoleIdempotent(
+  prisma: PrismaClient,
+  actor: Actor,
+  key: string,
+  input: RoleInfoInput,
+): Promise<{ id: number }> {
+  assertCan(actor.perms, "role.manage");
+  return withIdempotency(prisma, { userId: actor.userId, scope: "role.create", key }, (tx) => createRole(tx, actor, input));
 }
 
 export async function updateRoleInfo(db: Db, actor: Actor, roleId: number, input: RoleInfoInput) {

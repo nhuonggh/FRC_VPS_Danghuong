@@ -65,13 +65,25 @@ function InfoSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
 
 const cssId = (code: string) => code.replace(/[^a-zA-Z0-9]/g, "-");
 
+/**
+ * Đưa tập mã về THỨ TỰ DANH MỤC (mã lạ, nếu có, giữ nguyên thứ tự và xếp cuối). RHF so sánh mảng theo thứ tự nên tắt rồi
+ * bật lại một quyền mà nối vào cuối sẽ bị coi là "đã sửa" (isDirty) dù tập mã y hệt → hỏi xác nhận bỏ thay đổi oan.
+ * Dùng cho CẢ giá trị gốc lẫn mọi lần đổi để hai bên luôn cùng thứ tự.
+ */
+const inCatalogOrder = (catalog: CatalogItem[], codes: Iterable<string>): string[] => {
+  const want = new Set(codes);
+  const known = catalog.map((c) => c.code);
+  const knownSet = new Set(known);
+  return [...known.filter((c) => want.has(c)), ...[...want].filter((c) => !knownSet.has(c))];
+};
+
 function PermissionsSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
   const s = useSectionForm(ctx, "permissions", {
-    schema: rolePermissionsSchema, defaults: { codes: p.role.permissionCodes },
+    schema: rolePermissionsSchema, defaults: { codes: inCatalogOrder(p.catalog, p.role.permissionCodes) },
     save: (v) => apiFetch(`/api/roles/${p.role.id}/section-update`, { method: "PATCH", json: { section: "permissions", codes: v.codes } }).then(() => {}),
   });
   const selected = s.form.watch("codes");
-  const set = (codes: string[]) => s.form.setValue("codes", codes, { shouldDirty: true });
+  const set = (codes: Iterable<string>) => s.form.setValue("codes", inCatalogOrder(p.catalog, codes), { shouldDirty: true });
   const held = new Set(p.actorPerms);
   const original = new Set(p.role.permissionCodes);
   // Được bật/tắt khi: người sửa có quyền đó, HOẶC nhóm đã có sẵn quyền đó (giữ nguyên/gỡ đều không phải "thêm quyền mới")
