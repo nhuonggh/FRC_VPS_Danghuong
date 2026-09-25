@@ -5,6 +5,8 @@ import {
 import { assertDocDateInPeriod } from "@/server/period/guard";
 import { restoreLayerRemaining } from "./layers";
 import { assertLocked } from "./lock";
+import { lineSnapshot } from "./owners";
+import { unitCostOf } from "./replay";
 import { markDirty } from "./unit-of-work";
 import type { DecInput, EngineCtx, InDocType, OutDocType, Tx } from "./types";
 
@@ -42,11 +44,20 @@ export interface ReceiptInput {
 export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ ledgerId: number; layerId: number }> {
   assertLocked(ctx, i.productId);
   const qty = requirePositive(i.qty);
-  const unitCost = requireNonNegativeCost(i.unitCost);
+  let unitCost = requireNonNegativeCost(i.unitCost);
   // costRef.qty là mẫu số khi lan truyền giá vốn (flush/propagate) → phải > 0, không được lẳng lặng bỏ qua
   const costRefQty = i.costRef ? D(i.costRef.qty) : null;
   if (costRefQty && !costRefQty.gt(0)) throw new InvalidCostRefError();
   assertDocDateInPeriod(ctx.period, i.at);
+  if (i.costRef && costRefQty) {
+    // Giá lớp phụ thuộc là HÀM của dòng gốc — đúng công thức propagate dùng. Nếu dòng gốc đã có dòng sổ, lấy
+    // giá từ đó thay cho `unitCost` người gọi truyền: nếu không, giá lớp sẽ phụ thuộc LỊCH SỬ tính lại (chỉ được
+    // sửa khi dòng gốc tình cờ bị chạm) → tính lại từ đầu ≠ tính lại từng phần. Dòng gốc chưa có dòng sổ (sẽ
+    // đăng sau trong cùng giao dịch) → tạm dùng `unitCost`; flush lan truyền lại khi dòng gốc được tính.
+    // Dòng gốc thuộc kỳ đã kết sổ (trả hàng đơn kỳ cũ — spec 4.4) cũng đi đường này.
+    const refRows = await ctx.tx.stockLedger.count({ where: { docType: i.costRef.docType, docLineId: i.costRef.docLineId, qtyOut: { gt: 0 } } });
+    if (refRows > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
+  }
 
   const ledger = await ctx.tx.stockLedger.create({
     data: {

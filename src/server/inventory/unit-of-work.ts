@@ -1,5 +1,9 @@
+import type { PrismaClient } from "@prisma/client";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
+import { EngineInvariantError, ReplayTooLargeError } from "./errors";
 import { lockProducts } from "./lock";
+import { getCostOwner, lineSnapshot } from "./owners";
+import { replayProduct, unitCostOf, type TouchedLine } from "./replay";
 import { DEFAULT_INLINE_LIMIT, type EngineCtx, type Tx } from "./types";
 
 export interface EngineOptions {
@@ -49,4 +53,108 @@ export async function retryOnDeadlock<T>(fn: () => Promise<T>, attempts = 3): Pr
       await new Promise((r) => setTimeout(r, 20 + Math.random() * 60));
     }
   }
+}
+
+// Thay ở Task 8 bằng import từ ./recompute
+async function deferRecompute(_ctx: EngineCtx, productId: number, fromAt: Date): Promise<never> {
+  throw new EngineInvariantError(`Mã hàng ${productId} (từ ${fromAt.toISOString()}): tính lại nền chưa được bật (Task 8).`);
+}
+async function mergeRecomputeJob(_ctx: EngineCtx, productId: number, fromAt: Date): Promise<never> {
+  throw new EngineInvariantError(`Mã hàng ${productId} (từ ${fromAt.toISOString()}) đang tính lại nền (Task 8).`);
+}
+
+const MAX_FLUSH_ITERATIONS = 10_000; // đồ thị phụ thuộc là DAG → luôn hội tụ; chặn phòng vòng lặp do dữ liệu hỏng
+
+/** Đồng bộ giá vốn dòng về chủ sở hữu + cập nhật lớp PHỤ THUỘC; lớp đổi giá thì đánh dấu tính lại tiếp. */
+async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> {
+  const seen = new Set<string>();
+  for (const t of touched) {
+    const key = `${t.docType}:${t.docLineId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const snap = await lineSnapshot(ctx.tx, t.docType, t.docLineId);
+    const owner = getCostOwner(t.docType);
+    if (owner) await owner(ctx.tx, snap);
+    const derived = await ctx.tx.costLayer.findMany({
+      where: { costRefType: t.docType, costRefId: t.docLineId, periodId: ctx.period.id },
+    });
+    for (const layer of derived) {
+      // postReceipt bảo đảm costRefQty > 0; gặp dữ liệu hỏng thì dừng hẳn thay vì lẳng lặng bỏ qua
+      if (!layer.costRefQty || !layer.costRefQty.gt(0)) {
+        throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);
+      }
+      const next = unitCostOf(snap.totalCost, layer.costRefQty);
+      if (!next.equals(layer.unitCost)) {
+        await ctx.tx.costLayer.update({ where: { id: layer.id }, data: { unitCost: next } });
+        markDirty(ctx, layer.productId, layer.at);
+      }
+    }
+  }
+}
+
+/**
+ * Tính lại mọi mã hàng dirty (mã nhỏ nhất trước) cho tới khi hội tụ. Mã phát sinh thêm do lan truyền
+ * (NVL → thành phẩm → dòng bán) được khoá bổ sung tại đây.
+ */
+export async function flush(ctx: EngineCtx): Promise<void> {
+  for (let i = 0; ctx.dirty.size > 0; i++) {
+    if (i > MAX_FLUSH_ITERATIONS) throw new EngineInvariantError("Tính lại giá vốn không hội tụ (nghi ngờ dữ liệu phụ thuộc vòng).");
+    const productId = Math.min(...ctx.dirty.keys());
+    const fromAt = ctx.dirty.get(productId)!;
+    ctx.dirty.delete(productId);
+    await lockProducts(ctx, [productId]);
+
+    if (ctx.mode === "inline") {
+      const p = await ctx.tx.product.findUniqueOrThrow({ where: { id: productId }, select: { recomputing: true } });
+      if (p.recomputing) { await mergeRecomputeJob(ctx, productId, fromAt); continue; }
+    }
+    let result;
+    try {
+      result = await replayProduct(ctx, productId, fromAt);
+    } catch (e) {
+      if (e instanceof ReplayTooLargeError && ctx.mode === "inline") { await deferRecompute(ctx, productId, fromAt); continue; }
+      throw e;
+    }
+    await propagate(ctx, result.touched);
+  }
+}
+
+export interface WithInventoryOptions extends EngineOptions {
+  /** Chạy SAU flush, TRONG cùng transaction (vd worker nền dọn cờ `recomputing`). */
+  finalize?: (ctx: EngineCtx) => Promise<void>;
+}
+
+/**
+ * Cách DUY NHẤT module nghiệp vụ được đụng vào kho: mở transaction → khoá mã hàng → `work` (ghi chứng từ + post/remove)
+ * → flush (tính lại chuỗi, đồng bộ giá vốn về dòng chứng từ) → finalize → commit → hook afterCommit.
+ * Deadlock được tự thử lại tối đa 3 lần (chạy lại TOÀN BỘ `work` — `work` không được có tác dụng phụ ngoài `ctx.tx`).
+ */
+export async function withInventoryTx<R>(
+  prisma: PrismaClient,
+  opts: WithInventoryOptions,
+  work: (ctx: EngineCtx) => Promise<R>,
+): Promise<R> {
+  let hooks: (() => void)[] = [];
+  const result = await retryOnDeadlock(() =>
+    prisma.$transaction(
+      async (tx) => {
+        const ctx = await beginEngine(tx, opts);
+        const r = await work(ctx);
+        await flush(ctx);
+        if (opts.finalize) await opts.finalize(ctx);
+        hooks = ctx.afterCommit;
+        return r;
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    ),
+  );
+  // Dữ liệu ĐÃ commit: hook hỏng chỉ ghi log, không biến thao tác thành công thành lỗi cho người gọi
+  for (const h of hooks) {
+    try {
+      h();
+    } catch (e) {
+      console.error("[inventory] afterCommit hook lỗi:", e);
+    }
+  }
+  return result;
 }

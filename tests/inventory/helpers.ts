@@ -1,5 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { expect } from "vitest";
+import { postIssue, postReceipt } from "@/server/inventory/ports";
+import type { EngineCtx } from "@/server/inventory/types";
+import { withInventoryTx, type WithInventoryOptions } from "@/server/inventory/unit-of-work";
 import { prisma } from "../helpers/db";
 import { makePeriod, makeProduct, makeUser } from "../helpers/factories";
 
@@ -50,3 +53,22 @@ export async function assertLedgerBalanced(productId: number, periodId: number):
      GROUP BY sl.id`;
   for (const o of outs) expect(D(o.consumed).plus(o.prov).toString(), `dòng xuất ${o.id}: Σconsumption + provisional = qtyOut`).toBe(D(o.qty_out).toString());
 }
+
+type EngineExtra = Partial<Pick<WithInventoryOptions, "inlineLimit" | "mode" | "finalize">>;
+
+/** engine(w)(products, ctx => …, extra?) — chạy 1 công việc trong withInventoryTx của thế giới test. */
+export const engine = (w: World) =>
+  <R,>(products: number[], work: (ctx: EngineCtx) => Promise<R>, extra: EngineExtra = {}) =>
+    withInventoryTx(prisma, { periodId: w.periodId, userId: w.userId, products, ...extra }, work);
+
+/** Nhập: chứng từ PURCHASE số n (docId = docLineId = n). */
+export const buy = (ctx: EngineCtx, productId: number, qty: Prisma.Decimal.Value, unitCost: Prisma.Decimal.Value, at: Date, n: number) =>
+  postReceipt(ctx, { productId, qty, unitCost, docType: "PURCHASE", docId: n, docLineId: n, at });
+
+/** Bán: chứng từ SALE số n (docId = docLineId = n). */
+export const sell = (ctx: EngineCtx, productId: number, qty: Prisma.Decimal.Value, at: Date, n: number) =>
+  postIssue(ctx, { productId, qty, docType: "SALE", docId: n, docLineId: n, at });
+
+export const saleRow = (docId: number) => prisma.stockLedger.findFirstOrThrow({ where: { docType: "SALE", docId } });
+export const layersOf = (productId: number) => prisma.costLayer.findMany({ where: { productId }, orderBy: [{ at: "asc" }, { id: "asc" }] });
+export const consOf = (ledgerId: number) => prisma.costConsumption.findMany({ where: { ledgerId }, orderBy: { id: "asc" } });
