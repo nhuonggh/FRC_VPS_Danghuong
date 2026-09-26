@@ -68,14 +68,34 @@ npm test                                   # hoặc: npx vitest run tests/invent
 
 ## Triển khai
 
-**Chưa cấu hình deploy** (chưa có Dockerfile / GitHub Actions / Caddy; service `app` trong `docker-compose.yml` là chỗ
-giữ chỗ). Xem plan `docs/superpowers/plans/2026-09-24-01a-gd0-infra-schema.md` **Task 2** — bước đầu là thu thập
-`docs/infra/INPUTS.md` (tên miền, VPS, registry…) trước khi viết bất kỳ file deploy nào.
+Tự động khi push `main` (`.github/workflows/deploy.yml`): test → build 2 image (`Dockerfile`: target `runner` =
+`node server.js`, target `migrator` = `prisma migrate deploy` / `prisma db seed`) → đẩy lên registry riêng → SSH vào VPS:
+migrate + seed → thay container `dherp_app` → kiểm `/api/health`. Tên miền `https://dherp.sheetapp.store` (Caddy).
 
-### Trước khi go-live (chưa làm — cổng chặn của chủ dự án)
+Tài liệu hạ tầng (`docs/infra/`):
 
+- [`INPUTS.md`](docs/infra/INPUTS.md) — giá trị thật (slug `dherp`, domain, cổng, registry, repo) — không có secret.
+- [`RUNBOOK.md`](docs/infra/RUNBOOK.md) — những gì đã cấp phát trên VPS và cách làm lại; tạo lại container, rollback,
+  xoay secret, gỡ `BOOTSTRAP_ADMIN_PASSWORD` sau lần đăng nhập đầu.
+- [`VERIFY.md`](docs/infra/VERIFY.md) — checklist xác minh sau deploy.
+- [`caddy/dherp.caddy`](docs/infra/caddy/dherp.caddy) — bản tham chiếu site Caddy.
+
+Mẫu biến môi trường production: `.env.example`.
+
+### Đã có
+
+- Image non-root, runner chỉ chứa bản standalone; cổng app chỉ publish `127.0.0.1:3004`, ra ngoài qua Caddy (HTTPS).
+- App chạy bằng role `app_rw` (không sửa/xoá được `audit_log`); migrate bằng owner; migrate + seed chạy trước khi thay
+  container (lỗi thì bản cũ vẫn chạy); probe sức khoẻ sau deploy; tag image theo git sha để rollback.
+
+### Trước khi go-live (còn lại — cổng chặn của chủ dự án)
+
+- Làm hết [`docs/infra/VERIFY.md`](docs/infra/VERIFY.md) sau lần deploy đầu, gồm **gỡ `BOOTSTRAP_ADMIN_PASSWORD`** khỏi
+  `.env` trên VPS và tạo lại container.
 - **Giới hạn tần suất đăng nhập** (chống dò mật khẩu): ở Caddy (rate limit) hoặc trong app.
-- **Header bảo mật** ở Caddy: `X-Frame-Options: DENY` / CSP `frame-ancestors 'none'`, cùng các header cơ bản khác.
+- **Header bảo mật** ở Caddy: `X-Frame-Options: DENY` / CSP `frame-ancestors 'none'`, cùng các header cơ bản khác
+  (site file hiện chỉ có `reverse_proxy`).
+- **Backup DB định kỳ** ra ngoài VPS (hiện chỉ có lệnh `pg_dump` thủ công trong RUNBOOK mục 8).
 - Tuỳ chọn: **kiểm `Origin`** cho mọi request không phải GET tới `/api/*` (phòng CSRF bổ sung cho cookie SameSite).
 - IP trong nhật ký lấy từ hop đầu `X-Forwarded-For`: chỉ đáng tin khi app đứng sau Caddy (Caddy ghi đè header này) —
   không mở cổng app trực tiếp ra Internet.

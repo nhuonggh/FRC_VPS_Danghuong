@@ -1,0 +1,6 @@
+# Bản tham chiếu. File thật trên VPS: /opt/caddy/sites/dherp.caddy
+# (Caddy chạy trong container `caddy`; /opt/caddy/Caddyfile có `import /etc/caddy/sites/*.caddy`).
+# Upstream = TÊN CONTAINER app trên network pgnet, KHÔNG phải 127.0.0.1 (127.0.0.1 trong container caddy là chính nó).
+dherp.sheetapp.store {
+    reverse_proxy dherp_app:3000
+}
