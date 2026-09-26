@@ -27,15 +27,18 @@ Mã: `src/lib/auth.ts` (`buildAuthOptions`), `src/server/auth/google.ts` (`decid
    `src/lib/auth-errors.ts`; mã lạ → thông báo chung, không in lại mã.
 4. Callback `jwt` tra lại user theo email đã xác minh và đặt `uid` = id DB; token dựng mới (bỏ email/ảnh/`sub` Google).
 5. Quyền **không** nằm trong JWT: mỗi request `loadActor` đọc lại user + quyền từ DB → khoá tài khoản / đổi quyền / gỡ nhóm
-   có hiệu lực ngay cho cả phiên Google. Phiên Google còn bị cắt ngay khi quản trị viên GỠ email của user (thu hồi Google).
-   Đổi email sang địa chỉ khác KHÔNG cắt phiên Google đang mở (JWT chỉ giữ uid) — muốn cắt ngay: Khoá tài khoản.
+   có hiệu lực ngay cho cả phiên Google. JWT Google còn mang `authAt` (ms lúc đăng nhập Google — không dùng `iat`);
+   `loadActor` trả null cho phiên Google khi user không còn email, thiếu `authAt`, hoặc `users.emailChangedAt > authAt`
+   → quản trị viên gỡ HOẶC đổi email sang địa chỉ khác thì phiên Google đang mở bị cắt ở request kế tiếp (không thêm truy vấn).
+   `emailChangedAt` đặt khi giá trị email thật sự đổi/gỡ (setUserEmail), khi tạo user có email, và khi seed tạo admin có email.
+7. Claim email phải là ASCII in được TRƯỚC khi chuẩn hoá (chặn ký tự Unicode bị gập chữ thường thành ASCII như dấu Kelvin).
 6. Chuyển hướng: `callbackUrl` phía client qua `safeCallbackUrl` (chỉ đường dẫn nội bộ); phía server callback `redirect`
    (`sameOriginRedirect`) chỉ cho cùng origin.
 
 ## `users.email` — chìa khoá đăng nhập Google
 
 - Tuỳ chọn (NULL = không đăng nhập Google). Lưu dạng chuẩn hoá; DB chặn bằng `UNIQUE` + CHECK `users_email_normalized_chk`
-  (`email = lower(email) AND email = btrim(email) AND email <> ''`) — migration `20260926090000_user_email`.
+  (chữ thường, không khoảng trắng, không rỗng) — migration `20260926090000_user_email`.
 - Đặt/đổi/gỡ **chỉ** qua quản trị người dùng (`user.manage`): tạo mới (`POST /api/users`, có Idempotency-Key) hoặc phần
   "Đăng nhập Google" trên trang chi tiết (`PATCH …/section-update`, `section: "email"`). Không có trang tự sửa email.
 - Đổi email = trao chìa khoá vào tài khoản → cùng rào với "Cấp lại mật khẩu": không leo thang đặc quyền
@@ -43,7 +46,18 @@ Mã: `src/lib/auth.ts` (`buildAuthOptions`), `src/server/auth/google.ts` (`decid
   `user.set_email` với email cũ/mới. Không đổi giá trị → không ghi, không audit.
 - Trùng email → 409 `{ error, fields: { email } }` ("Email đã được dùng cho tài khoản khác."), kể cả khi 2 yêu cầu đồng thời
   (bắt P2002 trên cột email).
-- Seed: `BOOTSTRAP_ADMIN_EMAIL` gán cho `admin` khi tạo mới, hoặc khi `admin` đã có mà email còn NULL; không ghi đè email đã có.
+- Seed: `BOOTSTRAP_ADMIN_EMAIL` chỉ dùng khi seed TẠO `admin`; admin đã tồn tại → bỏ qua (không gán, không khôi phục email đã
+  bị gỡ). Chỉ ASCII. Xoá biến sau lần deploy đầu.
+- **Rủi ro đã chấp nhận**: người giữ `user.manage` gán được email Google của mình cho tài khoản KHÔNG cao quyền hơn mình rồi
+  đăng nhập vào đó — cùng năng lực với "Cấp lại mật khẩu" cho tài khoản đó (đã có từ trước). Bù lại: mọi thay đổi có nhật ký
+  `user.set_email` (cũ/mới, người thực hiện), cần rà định kỳ.
+
+## Mật khẩu tạm có hạn
+
+`users.tempPasswordExpiresAt` = bây giờ + `TEMP_PASSWORD_TTL_HOURS` (72) mỗi khi phát mật khẩu tạm: tạo user, "Cấp lại mật
+khẩu", seed tạo admin, script cứu hộ `admin:reset`. Tự đổi mật khẩu → NULL. `verifyCredentials` từ chối (cùng lỗi INVALID như
+sai mật khẩu — không lộ) khi `mustChangePassword && tempPasswordExpiresAt < now`. Migration backfill hạn cho các tài khoản đang
+chờ đổi mật khẩu. Vì vậy người chỉ dùng Google không để lại mật khẩu tạm dùng được mãi. Cứu hộ: RUNBOOK mục 13.
 
 ## Bắt đổi mật khẩu (`mustChangePassword`)
 
@@ -61,4 +75,5 @@ Mã: `src/lib/auth.ts` (`buildAuthOptions`), `src/server/auth/google.ts` (`decid
 `tests/auth/google.test.ts` (thuần), `tests/auth/auth-options.test.ts` (callback signIn/jwt/session/redirect, không mạng,
 secret giả không lọt vào JWT/session), `tests/auth/google-session.test.ts` (amr ↔ mustChangePassword, route thật),
 `tests/db/user-email.test.ts` (UNIQUE/CHECK/app_rw), `tests/users/email.test.ts`, `tests/api/users-email.test.ts`,
-`tests/ui/login-google.test.tsx`, `tests/ui/user-email-ui.test.tsx`, `tests/seed.test.ts` (BOOTSTRAP_ADMIN_EMAIL).
+`tests/ui/login-google.test.tsx`, `tests/ui/user-email-ui.test.tsx`, `tests/seed.test.ts` (BOOTSTRAP_ADMIN_EMAIL),
+`tests/auth/credentials.test.ts` (mật khẩu tạm hết hạn), `tests/scripts/admin-reset.test.ts` (cứu hộ).

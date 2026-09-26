@@ -88,7 +88,7 @@ Hai file tách biệt, cùng chủ `deploy_dherp`, mode `600`. Container app **c
 |---|---|
 | `MIGRATE_DATABASE_URL` | `postgresql://dherp_user:<OWNER_PASSWORD>@postgres_dherp:5432/dherp_db` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | mật khẩu đăng nhập đầu của `admin` — **xoá sau lần đăng nhập đầu** (mục 10) |
-| `BOOTSTRAP_ADMIN_EMAIL` | tuỳ chọn — email Google của chủ hệ thống, gán cho `admin` (mục 13). Không phải secret |
+| `BOOTSTRAP_ADMIN_EMAIL` | tuỳ chọn — email Google gán cho `admin` CHỈ khi seed tạo admin (mục 13); **xoá sau lần deploy đầu** |
 
 `DATABASE_URL` không cần trong `.env.migrate`: `prisma.config.ts` tự lấy `MIGRATE_DATABASE_URL` khi thiếu → migrate và
 seed đều chạy bằng owner. `NODE_ENV=production` đã đặt sẵn trong image. Không đặt `RECOMPUTE_WORKER` trên production
@@ -201,8 +201,8 @@ cần đụng container app — lần deploy sau (hoặc lệnh `docker run --rm
 
 Sau khi `admin` đăng nhập lần đầu và đã **đổi mật khẩu** (hệ thống bắt buộc), xoá biến khỏi `.env.migrate`:
 
-    sed -i '/^BOOTSTRAP_ADMIN_PASSWORD=/d' /home/deploy_dherp/app/.env.migrate
-    grep -c '^BOOTSTRAP_ADMIN_PASSWORD=' /home/deploy_dherp/app/.env.migrate
+    sed -i -E '/^BOOTSTRAP_ADMIN_(PASSWORD|EMAIL)=/d' /home/deploy_dherp/app/.env.migrate
+    grep -cE '^BOOTSTRAP_ADMIN_(PASSWORD|EMAIL)=' /home/deploy_dherp/app/.env.migrate
 
 Kỳ vọng `0`. **Không cần tạo lại container app**: biến này chỉ đưa vào container migrator (`--rm`, tự xoá sau mỗi lần
 chạy), chưa từng nằm trong `dherp_app`. Kiểm: `docker exec dherp_app printenv BOOTSTRAP_ADMIN_PASSWORD` không in gì.
@@ -247,16 +247,38 @@ Làm hết [VERIFY.md](VERIFY.md). Build pass / Actions xanh KHÔNG phải bằn
 chi tiết người dùng → phần **Đăng nhập Google** → nhập email Google của họ (hoặc nhập ngay khi tạo người dùng). Người đó bấm
 "Đăng nhập bằng Google" và vào đúng tài khoản đó, với đúng nhóm quyền của tài khoản. Tài khoản Google không khớp email nào,
 email chưa được Google xác minh, hoặc tài khoản bị khoá → quay lại `/login` với thông báo "Tài khoản Google này chưa được cấp
-quyền vào hệ thống. Liên hệ quản trị viên." Gỡ email (để trống) = thu hồi đăng nhập Google của người đó (phiên Google đang mở bị cắt ở thao tác kế tiếp; đổi sang email khác thì phiên cũ còn tới khi hết hạn 12 giờ — cần cắt ngay thì Khoá).
+quyền vào hệ thống. Liên hệ quản trị viên." Gỡ email (để trống) = thu hồi đăng nhập Google của người đó. Gỡ HOẶC đổi sang email khác đều cắt phiên Google đang mở ở
+thao tác kế tiếp (so `emailChangedAt` với lúc đăng nhập Google); lưu lại đúng email cũ không cắt.
 
-**Admin đầu tiên**: đặt `BOOTSTRAP_ADMIN_EMAIL=<email Google của chủ hệ thống>` trong `.env.migrate` → lần deploy/seed kế tiếp
-gán cho `admin` (khi tạo mới, hoặc khi `admin` đã tồn tại mà email còn trống; **không** ghi đè email đã có; có dòng nhật ký
-`user.set_email` do "Hệ thống"). Biến này không phải secret, giữ lại được. Chạy tay không cần chờ deploy:
+**Admin đầu tiên**: đặt `BOOTSTRAP_ADMIN_EMAIL=<email Google của chủ hệ thống>` trong `.env.migrate` CÙNG LÚC với
+`BOOTSTRAP_ADMIN_PASSWORD`, **trước** lần deploy tạo `admin`. Biến chỉ được đọc khi seed TẠO `admin` (bảng `users` trống):
+nếu `admin` đã tồn tại, seed bỏ qua — không gán, không khôi phục email mà quản trị viên đã gỡ. Sau lần deploy đầu **xoá dòng
+này** (cùng lúc với mục 10). Admin đã có mà chưa có email → gán trên giao diện (phần "Đăng nhập Google").
 
-    docker run --rm --network pgnet --env-file /home/deploy_dherp/app/.env.migrate registry.francophiles.com.vn/dherp:migrate npx prisma db seed
+**Mật khẩu tạm có hạn 72 giờ** (`TEMP_PASSWORD_TTL_HOURS`): mật khẩu khởi tạo của `admin`, mật khẩu tạm khi tạo người dùng và
+khi "Cấp lại mật khẩu" hết hạn nếu chưa đổi — đăng nhập bằng nó báo "Tên đăng nhập hoặc mật khẩu không đúng" như sai mật
+khẩu. Người dùng thường: quản trị viên bấm "Cấp lại mật khẩu" (đặt lại hạn). Đổi mật khẩu thành công → hết ràng buộc hạn.
+
+**Cứu hộ `admin`** (Google không dùng được VÀ mật khẩu tạm đã hết hạn / không ai khác có `user.manage`) — chạy bằng
+`deploy_dherp` trên VPS, mật khẩu KHÔNG vào lịch sử shell, KHÔNG in ra log, KHÔNG nằm trên dòng lệnh:
+
+    read -rs NEW_ADMIN_PASSWORD && export NEW_ADMIN_PASSWORD
+    docker run --rm --network pgnet --env-file /home/deploy_dherp/app/.env.migrate -e NEW_ADMIN_PASSWORD registry.francophiles.com.vn/dherp:migrate npx tsx scripts/admin-reset.ts
+    unset NEW_ADMIN_PASSWORD
+
+(`-e NEW_ADMIN_PASSWORD` không kèm giá trị = lấy từ môi trường hiện tại.) Kỳ vọng dòng
+`Đã đặt mật khẩu tạm mới cho 'admin' (bắt đổi ở lần đăng nhập đầu, hết hạn sau 72 giờ).` Script đặt mật khẩu mới (phải đủ
+mạnh: ≥ 8 ký tự, có chữ và số, không chứa tên đăng nhập), `mustChangePassword = true`, hạn 72 giờ, ghi nhật ký
+`user.reset_password` (người thực hiện: Hệ thống, `via: admin:reset`); KHÔNG đổi khoá, email, vai trò. Tài khoản khác:
+thêm `-e ADMIN_USERNAME=<tên>`. Đăng nhập ngay và đổi mật khẩu. Máy dev: `NEW_ADMIN_PASSWORD=… npm run admin:reset`.
+Không dùng `UPDATE users SET "passwordHash"=…` tay (dễ sai băm/chuẩn hoá, không có nhật ký).
 
 **Bắt đổi mật khẩu**: chỉ áp cho phiên đăng nhập bằng mật khẩu. Phiên Google dùng app bình thường dù tài khoản còn cờ
-"Chờ đổi mật khẩu" (danh tính do Google chứng minh; họ có thể không biết mật khẩu tạm).
+"Chờ đổi mật khẩu" (danh tính do Google chứng minh; họ có thể không biết mật khẩu tạm — mật khẩu tạm đó tự hết hạn sau 72 giờ).
+
+**Rủi ro đã chấp nhận**: người có `user.manage` gán được email Google của mình cho tài khoản NGANG quyền (không cao hơn) rồi
+đăng nhập vào đó — cùng mức năng lực với "Cấp lại mật khẩu" cho tài khoản đó. Mọi lần đổi email đều có nhật ký
+`user.set_email` (email cũ/mới, người thực hiện). Rà định kỳ Nhật ký thao tác với hành động này.
 
 **Xoay `GOOGLE_CLIENT_SECRET`**: Console → client → *Add secret* → sửa `.env` → tạo lại container → xoá secret cũ trên Console.
 Phiên đang đăng nhập không bị ảnh hưởng (JWT chỉ giữ id user). Tắt Google: xoá 2 dòng khỏi `.env` rồi tạo lại container.

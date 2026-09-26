@@ -54,7 +54,8 @@ npm test                                   # hoặc: npx vitest run tests/invent
 
 - **`.env` — KHÔNG commit** (đã trong `.gitignore`, cùng `.env.local`, `.env.*.local`). Biến dùng: `DATABASE_URL`,
   `MIGRATE_DATABASE_URL`, `AUTH_SECRET`, `NEXTAUTH_URL`, tuỳ chọn `BOOTSTRAP_ADMIN_PASSWORD` (seed admin lần đầu),
-  `BOOTSTRAP_ADMIN_EMAIL` (email Google gán cho admin), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (bật đăng nhập
+  `BOOTSTRAP_ADMIN_EMAIL` (email Google gán cho admin — chỉ khi seed tạo admin), `npm run admin:reset` (cứu hộ mật khẩu admin,
+  `NEW_ADMIN_PASSWORD`), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (bật đăng nhập
   Google — để trống thì chỉ có tên/mật khẩu; dev/test/CI chạy không có), `RECOMPUTE_WORKER=off` (tắt worker tính lại nền).
 - **Production** tách 2 file (mẫu `.env.example`, `.env.migrate.example`): `.env` cho container app (không có
   `MIGRATE_DATABASE_URL`/`BOOTSTRAP_ADMIN_PASSWORD`), `.env.migrate` cho image migrator (migrate + seed). `.env.migrate`
