@@ -9,7 +9,7 @@ const requireActor = vi.fn();
 vi.mock("@/server/auth/session", () => ({ requireActor: (...a: unknown[]) => requireActor(...a) }));
 
 const actor = (perms: string[], fullName = "Trần Văn An"): SessionActor =>
-  ({ userId: 1, username: "an", fullName, perms: new Set(perms), mustChangePassword: false });
+  ({ userId: 1, username: "an", fullName, perms: new Set(perms), mustChangePassword: false, authMethod: "password" });
 
 async function renderHome() {
   render(await HomePage());

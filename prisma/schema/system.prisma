@@ -3,7 +3,10 @@ model User {
   username           String   @unique
   passwordHash       String
   fullName           String
-  isLocked           Boolean  @default(false)
+  // Email Google được phép đăng nhập vào tài khoản này (khớp CHÍNH XÁC, email_verified). NULL = không đăng nhập Google.
+  // Lưu dạng lowercase + trim — CHECK users_email_normalized_chk (migration SQL thô) chặn ở DB.
+  email              String?  @unique
+  isLocked          Boolean  @default(false)
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

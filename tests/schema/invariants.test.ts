@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
   TRANSACTIONAL_MODELS,
@@ -20,6 +21,22 @@ describe("bất biến schema (DMMF thật)", () => {
 
   it("mọi cột Decimal khai báo @db.Decimal với độ chính xác chuẩn", () => {
     expect(badDecimalFields(models)).toEqual([]);
+  });
+});
+
+describe("User.email (đăng nhập Google — DMMF thật)", () => {
+  const user = Prisma.dmmf.datamodel.models.find((m) => m.name === "User")!;
+  const email = user.fields.find((f) => f.name === "email");
+
+  it("có cột email: String, TUỲ CHỌN (NULL = không đăng nhập Google), @unique", () => {
+    expect(email).toMatchObject({ type: "String", isRequired: false, isUnique: true, isList: false });
+  });
+
+  it("không có cột Google nào khác (không lưu sub/token/ảnh — không adapter)", () => {
+    const names = user.fields.map((f) => f.name);
+    expect(names.filter((n) => /google|sub|token|image|avatar|provider/i.test(n))).toEqual([]);
+    expect(Prisma.dmmf.datamodel.models.map((m) => m.name)).not.toEqual(expect.arrayContaining(["Account"]));
+    expect(Prisma.dmmf.datamodel.models.map((m) => m.name)).not.toEqual(expect.arrayContaining(["VerificationToken"]));
   });
 });
 

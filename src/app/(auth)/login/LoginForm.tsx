@@ -1,25 +1,30 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { loginErrorMessage } from "@/lib/auth-errors";
 import { safeCallbackUrl } from "@/lib/safe-callback";
 
-// Sai tên hay sai mật khẩu đều CredentialsSignin → một thông báo chung (không lộ tài khoản có tồn tại hay không)
-const MESSAGES: Record<string, string> = {
-  CredentialsSignin: "Tên đăng nhập hoặc mật khẩu không đúng.",
-  LOCKED: "Tài khoản đã bị khóa. Liên hệ giám đốc để mở khóa.",
-};
-
-export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
+/**
+ * `googleEnabled`: server tự suy ra (có đủ GOOGLE_CLIENT_ID + SECRET) — client KHÔNG bao giờ nhận client id/secret.
+ * `error`: mã `?error=` trên URL (lỗi OAuth Google chuyển về /login) — dịch qua loginErrorMessage, không in nguyên mã.
+ */
+export function LoginForm({
+  callbackUrl, error, googleEnabled = false,
+}: { callbackUrl?: string; error?: string; googleEnabled?: boolean }) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [pending, setPending] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
   const busy = useRef(false); // chặn Enter/bấm đúp kể cả trước khi state `pending` kịp cập nhật
-  const [errors, setErrors] = useState<{ username?: string; password?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{ username?: string; password?: string; form?: string }>(() => {
+    const form = loginErrorMessage(error);
+    return form ? { form } : {};
+  });
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +42,8 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
     try {
       const res = await signIn("credentials", { username: username.trim(), password, redirect: false });
       if (!res || res.error || res.ok === false) {
-        setErrors({ form: MESSAGES[res?.error ?? ""] ?? "Không đăng nhập được, vui lòng thử lại." });
+        // Sai tên hay sai mật khẩu đều CredentialsSignin → một thông báo chung (không lộ tài khoản có tồn tại hay không)
+        setErrors({ form: loginErrorMessage(res?.error || "Default")! });
         return;
       }
       ok = true;
@@ -54,36 +60,70 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
     }
   }
 
+  async function onGoogle() {
+    if (busy.current) return;
+    busy.current = true;
+    setGooglePending(true);
+    setErrors({});
+    try {
+      // Trình duyệt chuyển sang Google (redirect mặc định) → giữ nút khoá cho tới khi rời trang.
+      // callbackUrl chỉ nhận đường dẫn nội bộ; server chặn thêm lớp nữa (callback `redirect` cùng origin).
+      await signIn("google", { callbackUrl: safeCallbackUrl(callbackUrl) });
+    } catch {
+      busy.current = false;
+      setGooglePending(false);
+      setErrors({ form: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại." });
+    }
+  }
+
+  const locked = pending || googlePending;
   const field = "h-11 w-full rounded-sm border bg-canvas px-3 text-sm hover:border-border-strong";
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4">
-      {errors.form && (
-        <div role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">{errors.form}</div>
-      )}
-      <div>
-        <label htmlFor="username" className="mb-1 block text-sm font-medium">Tên đăng nhập</label>
-        <input id="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)}
-          aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
-          className={`${field} ${errors.username ? "border-danger" : "border-border"}`} />
-        {errors.username && <p id="username-error" className="mt-1 text-xs text-danger">{errors.username}</p>}
-      </div>
-      <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium">Mật khẩu</label>
-        <div className="relative">
-          <input id="password" type={show ? "text" : "password"} autoComplete="current-password" value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : undefined}
-            className={`${field} pr-11 ${errors.password ? "border-danger" : "border-border"}`} />
-          <button type="button" aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShow((s) => !s)}
-            className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-fg-muted hover:text-fg">
-            {show ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
-          </button>
+    <div className="space-y-4">
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
+        {errors.form && (
+          <div role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">{errors.form}</div>
+        )}
+        <div>
+          <label htmlFor="username" className="mb-1 block text-sm font-medium">Tên đăng nhập</label>
+          <input id="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)}
+            aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
+            className={`${field} ${errors.username ? "border-danger" : "border-border"}`} />
+          {errors.username && <p id="username-error" className="mt-1 text-xs text-danger">{errors.username}</p>}
         </div>
-        {errors.password && <p id="password-error" className="mt-1 text-xs text-danger">{errors.password}</p>}
-      </div>
-      <button type="submit" disabled={pending} className="h-11 w-full rounded-sm bg-accent text-sm font-medium text-fg-on-accent disabled:opacity-60">
-        {pending ? "Đang đăng nhập" : "Đăng nhập"}
-      </button>
-    </form>
+        <div>
+          <label htmlFor="password" className="mb-1 block text-sm font-medium">Mật khẩu</label>
+          <div className="relative">
+            <input id="password" type={show ? "text" : "password"} autoComplete="current-password" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : undefined}
+              className={`${field} pr-11 ${errors.password ? "border-danger" : "border-border"}`} />
+            <button type="button" aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShow((s) => !s)}
+              className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-fg-muted hover:text-fg">
+              {show ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
+            </button>
+          </div>
+          {errors.password && <p id="password-error" className="mt-1 text-xs text-danger">{errors.password}</p>}
+        </div>
+        <button type="submit" disabled={locked} className="h-11 w-full rounded-sm bg-accent text-sm font-medium text-fg-on-accent disabled:opacity-60">
+          {pending ? "Đang đăng nhập" : "Đăng nhập"}
+        </button>
+      </form>
+      {googleEnabled && (
+        <>
+          <div className="flex items-center gap-3 text-xs text-fg-muted">
+            <span className="h-px flex-1 bg-border" aria-hidden />
+            <span>hoặc</span>
+            <span className="h-px flex-1 bg-border" aria-hidden />
+          </div>
+          {/* Nút phụ (outline), không dùng logo thương hiệu (giữ kỷ luật token màu), cao ≥ 44px */}
+          <button type="button" onClick={() => void onGoogle()} disabled={locked} aria-busy={googlePending}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-sm border border-border bg-surface text-sm font-medium text-fg hover:bg-hover disabled:opacity-60">
+            {googlePending && <LoaderCircle size={16} aria-hidden className="animate-spin motion-reduce:animate-none" />}
+            {googlePending ? "Đang chuyển tới Google" : "Đăng nhập bằng Google"}
+          </button>
+        </>
+      )}
+    </div>
   );
 }

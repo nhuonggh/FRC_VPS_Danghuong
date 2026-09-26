@@ -1,10 +1,17 @@
 import type { PrismaClient } from "@prisma/client";
 import { PERMISSIONS, ROLE_DEFAULTS, resolveRolePermissions, type PermissionDef } from "../src/lib/permissions/catalog";
 import { toIct } from "../src/lib/time";
+// KHÔNG import zod/schemas: image migrator chỉ có prisma + @prisma/client + tsx + bcryptjs (Dockerfile stage migrator)
+import { looksLikeEmail, normalizeEmail } from "../src/server/auth/normalize";
 import { hashPassword } from "../src/server/auth/password";
 
 export interface SeedOptions {
   bootstrapAdminPassword?: string;
+  /**
+   * Email đăng nhập Google cho `admin` (BOOTSTRAP_ADMIN_EMAIL, tuỳ chọn). Gán khi TẠO admin, hoặc khi `admin` đã tồn tại
+   * mà email còn NULL. KHÔNG BAO GIỜ ghi đè email đã có (quản trị viên có thể đã đổi trên giao diện).
+   */
+  bootstrapAdminEmail?: string;
   /** Danh mục quyền để đồng bộ (mặc định PERMISSIONS). Chỉ tiêm để test mô phỏng "bản sau thêm quyền mới". */
   catalog?: readonly PermissionDef[];
 }
@@ -21,6 +28,8 @@ export function initialPeriodName(now: Date): string {
 
 export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promise<void> {
   const catalog = opts.catalog ?? PERMISSIONS;
+  // Kiểm email TRƯỚC mọi thao tác ghi: sai định dạng → dừng seed (deploy dừng trước khi thay container, bản cũ vẫn chạy)
+  const adminEmail = parseBootstrapEmail(opts.bootstrapAdminEmail);
 
   // 1+2. Quyền + vai trò mẫu trong MỘT transaction (nguyên tử: sập giữa chừng thì không còn quyền/vai trò nửa vời).
   await prisma.$transaction(
@@ -91,6 +100,7 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
         data: {
           username: "admin",
           fullName: "Quản trị hệ thống",
+          email: adminEmail,
           passwordHash,
           mustChangePassword: true,
           roles: { create: { roleId: role.id } },
@@ -98,4 +108,30 @@ export async function seed(prisma: PrismaClient, opts: SeedOptions = {}): Promis
       });
     });
   }
+
+  // 6. `admin` đã tồn tại nhưng chưa có email → gán (idempotent; không ghi đè email đã có; email đã thuộc người khác → bỏ qua).
+  if (adminEmail) {
+    await prisma.$transaction(async (tx) => {
+      const admin = await tx.user.findUnique({ where: { username: "admin" }, select: { id: true, email: true } });
+      if (!admin || admin.email !== null) return;
+      if (await tx.user.findUnique({ where: { email: adminEmail }, select: { id: true } })) {
+        console.warn("[seed] BOOTSTRAP_ADMIN_EMAIL đã được gán cho tài khoản khác — bỏ qua, không gán cho admin.");
+        return;
+      }
+      await tx.user.update({ where: { id: admin.id }, data: { email: adminEmail } });
+      // Email = khoá đăng nhập Google → luôn để lại dấu vết (người thực hiện: hệ thống)
+      await tx.auditLog.create({
+        data: { userId: null, action: "user.set_email", entity: "User", entityId: String(admin.id), beforeJson: { email: null }, afterJson: { email: adminEmail } },
+      });
+    });
+  }
+}
+
+/** BOOTSTRAP_ADMIN_EMAIL → email đã chuẩn hoá (cùng quy tắc form người dùng), rỗng → null, sai định dạng → ném lỗi. */
+export function parseBootstrapEmail(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const email = normalizeEmail(raw);
+  if (email === "") return null;
+  if (!looksLikeEmail(email)) throw new Error("BOOTSTRAP_ADMIN_EMAIL không phải email hợp lệ.");
+  return email;
 }

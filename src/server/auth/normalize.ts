@@ -10,5 +10,18 @@ export const normalizePassword = (plain: string): string => plain.normalize("NFC
 
 export const passwordByteLength = (plain: string): number => Buffer.byteLength(normalizePassword(plain), "utf8");
 
+/**
+ * Email (khoá khớp đăng nhập Google): NFC + bỏ khoảng trắng đầu/cuối + chữ thường. Dùng cho cả lưu (users.email,
+ * CHECK users_email_normalized_chk) lẫn tra cứu từ hồ sơ Google — hai phía luôn cùng một dạng.
+ */
+export const normalizeEmail = (email: string): string => email.normalize("NFC").trim().toLowerCase();
+
+/**
+ * Kiểm định dạng email tối thiểu (1 "@", có miền có dấu chấm, không khoảng trắng, ≤ 254 ký tự) — cho seed chạy trong
+ * image migrator (không có zod). Form/API dùng zod `emailSchema` (chặt hơn).
+ */
+export const looksLikeEmail = (email: string): boolean =>
+  email.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email);
+
 /** Tên đăng nhập: NFC + bỏ khoảng trắng đầu/cuối + chữ thường. Dùng cho cả tạo user lẫn đăng nhập. */
 export const normalizeUsername = (username: string): string => username.normalize("NFC").trim().toLowerCase();

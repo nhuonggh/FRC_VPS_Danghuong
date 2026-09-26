@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChangePasswordPage from "@/app/change-password/page";
 import { ChangePasswordForm } from "@/app/change-password/ChangePasswordForm";
 import { SignOutButton } from "@/app/change-password/SignOutButton";
@@ -46,6 +46,35 @@ describe("/login (server)", () => {
     getActor.mockResolvedValue(null);
     const tree = await LoginPage({ searchParams: Promise.resolve({ callbackUrl: ["/a", "/b"] }) });
     expect(find(tree, LoginForm)?.props).toMatchObject({ callbackUrl: "/a" });
+  });
+});
+
+describe("/login (server) — Google", () => {
+  const saved = { id: process.env.GOOGLE_CLIENT_ID, secret: process.env.GOOGLE_CLIENT_SECRET };
+  const setEnv = (id?: string, secret?: string) => {
+    if (id === undefined) delete process.env.GOOGLE_CLIENT_ID; else process.env.GOOGLE_CLIENT_ID = id;
+    if (secret === undefined) delete process.env.GOOGLE_CLIENT_SECRET; else process.env.GOOGLE_CLIENT_SECRET = secret;
+  };
+  afterEach(() => setEnv(saved.id, saved.secret));
+
+  it("không có biến Google → googleEnabled=false", async () => {
+    setEnv(undefined, undefined);
+    getActor.mockResolvedValue(null);
+    expect(find(await LoginPage({ searchParams: Promise.resolve({}) }), LoginForm)?.props).toMatchObject({ googleEnabled: false });
+  });
+
+  it("đủ biến → googleEnabled=true; props xuống client KHÔNG chứa client id/secret", async () => {
+    setEnv("fake-client-id.apps.googleusercontent.test", "fake-client-secret-XYZ");
+    getActor.mockResolvedValue(null);
+    const props = find(await LoginPage({ searchParams: Promise.resolve({}) }), LoginForm)?.props;
+    expect(props).toMatchObject({ googleEnabled: true });
+    expect(JSON.stringify(props)).not.toMatch(/fake-client-id|fake-client-secret/);
+  });
+
+  it("?error= (lặp → lấy giá trị đầu) chuyển xuống form", async () => {
+    getActor.mockResolvedValue(null);
+    const tree = await LoginPage({ searchParams: Promise.resolve({ error: ["GoogleNotAllowed", "x"], callbackUrl: "/a" }) });
+    expect(find(tree, LoginForm)?.props).toMatchObject({ error: "GoogleNotAllowed", callbackUrl: "/a" });
   });
 });
 
