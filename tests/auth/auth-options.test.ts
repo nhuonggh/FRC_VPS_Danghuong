@@ -7,7 +7,7 @@ import { makeUser } from "../helpers/factories";
 
 // KHÔNG gọi mạng: callback được gọi trực tiếp với hồ sơ/tài khoản Google giả. Mọi "secret" dưới đây là giá trị giả.
 const FAKE = {
-  GOOGLE_CLIENT_ID: "fake-client-id-123.apps.googleusercontent.test",
+  GOOGLE_CLIENT_ID: "fake-client-id-123.example",
   GOOGLE_CLIENT_SECRET: "fake-client-secret-XYZ",
   AUTH_SECRET: "fake-auth-secret-for-tests",
 };
@@ -109,7 +109,9 @@ describe("callback jwt / session", () => {
       token: { name: "Tên Google", email: "boss@example.test", picture: "https://img.example.test/p.png", sub: "109876543210" },
       user: googleUser(), account: googleAccount(), profile: googleProfile({ uid: 1, id: 1 }),
     });
-    expect(token).toEqual({ name: "Quản trị hệ thống", sub: String(u.id), uid: u.id, amr: "google" });
+    const t0 = Date.now();
+    expect(token).toEqual({ name: "Quản trị hệ thống", sub: String(u.id), uid: u.id, amr: "google", authAt: expect.any(Number) });
+    expect(Math.abs((token as { authAt: number }).authAt - t0)).toBeLessThan(5_000); // authAt = lúc đăng nhập, không phải iat
   });
 
   it("Google: hồ sơ không hợp lệ lọt tới jwt → ném lỗi (phòng thủ lớp 2), không phát token", async () => {
@@ -120,6 +122,7 @@ describe("callback jwt / session", () => {
   it("Credentials: uid từ authorize + amr=password (như trước)", async () => {
     const token = await jwt({ token: { name: "Nam", sub: "5" }, user: { id: "5", name: "Nam" }, account: { provider: "credentials", type: "credentials", providerAccountId: "5" } });
     expect(token).toMatchObject({ uid: 5, amr: "password", sub: "5", name: "Nam" });
+    expect(token).not.toHaveProperty("authAt"); // authAt chỉ cho phiên Google
   });
 
   it("request sau (không account/user) → giữ nguyên token", async () => {
@@ -130,7 +133,7 @@ describe("callback jwt / session", () => {
   it("session: chỉ id + name + amr (không email/ảnh); amr lạ → password", async () => {
     const s = (token: JWT) =>
       cb().session!({ session: { user: { id: 0, name: "cũ", email: "leak@example.test", image: "x" } as never, expires: "2099-01-01" } as Session, token, user: undefined as never, newSession: undefined, trigger: "update" } as never) as Session;
-    expect(s({ uid: 9, name: "A", amr: "google" }).user).toEqual({ id: 9, name: "A", amr: "google" });
+    expect(s({ uid: 9, name: "A", amr: "google", authAt: 123 }).user).toEqual({ id: 9, name: "A", amr: "google", authAt: 123 });
     expect(s({ uid: 9, name: "A" }).user).toEqual({ id: 9, name: "A", amr: "password" });
     expect(s({ uid: 9, name: "A", amr: "admin" as never }).user.amr).toBe("password");
   });
@@ -148,7 +151,7 @@ describe("callback jwt / session", () => {
     for (const secret of [FAKE.GOOGLE_CLIENT_ID, FAKE.GOOGLE_CLIENT_SECRET, FAKE.AUTH_SECRET, ACCESS_TOKEN, ID_TOKEN, REFRESH_TOKEN, "109876543210", "https://img.example.test/p.png"]) {
       expect(blob).not.toContain(secret);
     }
-    expect(Object.keys(decoded!).sort()).toEqual(["amr", "exp", "iat", "jti", "name", "sub", "uid"]);
+    expect(Object.keys(decoded!).sort()).toEqual(["amr", "authAt", "exp", "iat", "jti", "name", "sub", "uid"]);
   });
 });
 

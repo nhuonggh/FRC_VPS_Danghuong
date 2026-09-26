@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { normalizeEmail } from "./normalize";
+import { isPrintableAscii, normalizeEmail } from "./normalize";
 
 /**
  * Đăng nhập Google (thay D-1: Credentials + Google). KHÔNG adapter, KHÔNG tự tạo user, KHÔNG nối tài khoản theo tên/sub:
@@ -46,6 +46,8 @@ export function verifiedGoogleEmail(profile: GoogleProfileLike | null | undefine
   | { ok: false; reason: "NO_EMAIL" | "UNVERIFIED" } {
   const raw = profile?.email;
   if (typeof raw !== "string" || !normalizeEmail(raw)) return { ok: false, reason: "NO_EMAIL" };
+  // Claim có ký tự ngoài ASCII in được (Kelvin sign, tab, ký tự điều khiển…) → coi như không có email dùng được
+  if (!isPrintableAscii(raw)) return { ok: false, reason: "NO_EMAIL" };
   if (profile?.email_verified !== true) return { ok: false, reason: "UNVERIFIED" };
   return { ok: true, email: normalizeEmail(raw) };
 }

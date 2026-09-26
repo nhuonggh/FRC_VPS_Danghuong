@@ -65,3 +65,22 @@ describe("users.email — ràng buộc DB (migration 20260926090000_user_email)"
     })).rejects.toThrow(/users_email_normalized_chk/);
   });
 });
+
+describe("users.emailChangedAt / tempPasswordExpiresAt (migration 20260926100000_user_temp_password_expiry)", () => {
+  it("cột timestamptz, NULL được; app_rw đọc/ghi được", async () => {
+    const cols = await prisma.$queryRaw<{ column_name: string; data_type: string; is_nullable: string }[]>`
+      SELECT column_name, data_type, is_nullable FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name IN ('emailChangedAt', 'tempPasswordExpiresAt') ORDER BY column_name`;
+    expect(cols).toEqual([
+      { column_name: "emailChangedAt", data_type: "timestamp with time zone", is_nullable: "YES" },
+      { column_name: "tempPasswordExpiresAt", data_type: "timestamp with time zone", is_nullable: "YES" },
+    ]);
+    const u = await makeUser();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL ROLE app_rw");
+      await tx.$executeRawUnsafe(`UPDATE users SET "emailChangedAt" = now(), "tempPasswordExpiresAt" = now() + interval '72 hours' WHERE id = ${u.id}`);
+      const rows = await tx.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM users WHERE "emailChangedAt" IS NOT NULL AND "tempPasswordExpiresAt" IS NOT NULL`);
+      expect(rows[0]!.n).toBe(1);
+    });
+  });
+});

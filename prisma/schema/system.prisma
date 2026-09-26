@@ -6,7 +6,11 @@ model User {
   // Email Google được phép đăng nhập vào tài khoản này (khớp CHÍNH XÁC, email_verified). NULL = không đăng nhập Google.
   // Lưu dạng lowercase + trim — CHECK users_email_normalized_chk (migration SQL thô) chặn ở DB.
   email              String?  @unique
-  isLocked          Boolean  @default(false)
+  // Lần cuối giá trị email đổi/gỡ. Phiên Google mở TRƯỚC mốc này bị vô hiệu (loadActor so với authAt trong JWT).
+  emailChangedAt     DateTime? @db.Timestamptz(3)
+  // Hạn của MẬT KHẨU TẠM (khi mustChangePassword): quá hạn → verifyCredentials từ chối như sai mật khẩu. NULL = không có hạn.
+  tempPasswordExpiresAt DateTime? @db.Timestamptz(3)
+  isLocked         Boolean  @default(false)
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

@@ -19,6 +19,19 @@ export interface SessionActor {
  * Chính sách "bắt đổi mật khẩu": chỉ phiên mật khẩu. Người vào bằng Google có thể không có/không biết mật khẩu
  * (mật khẩu tạm do admin cấp) — bắt họ đổi sẽ khoá họ ngoài hệ thống mà không tăng an toàn.
  */
+/**
+ * Phiên Google còn hiệu lực? Hết khi: user không còn email (bị gỡ), thiếu authAt, hoặc email đổi SAU lúc đăng nhập Google
+ * (emailChangedAt > authAt). Dùng dòng user loadActor đã đọc — không thêm truy vấn.
+ */
+export function googleSessionStillValid(
+  user: { email: string | null; emailChangedAt: Date | null },
+  authAt: number | undefined,
+): boolean {
+  if (!user.email) return false;
+  if (typeof authAt !== "number" || !Number.isFinite(authAt)) return false;
+  return !user.emailChangedAt || user.emailChangedAt.getTime() <= authAt;
+}
+
 export const mustChangePasswordApplies = (flag: boolean, authMethod: AuthMethod): boolean =>
   flag && authMethod === "password";
 
@@ -43,6 +56,8 @@ export async function loadActor(
   prisma: PrismaClient,
   userId: number,
   authMethod: AuthMethod = "password",
+  /** Phiên Google: ms epoch lúc đăng nhập Google (JWT authAt). */
+  authAt?: number,
 ): Promise<SessionActor | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -51,8 +66,7 @@ export async function loadActor(
     },
   });
   if (!user || user.isLocked) return null;
-  // Phiên Google mà quản trị viên đã GỠ email (thu hồi đăng nhập Google) → hết hiệu lực ngay ở request kế tiếp
-  if (authMethod === "google" && !user.email) return null;
+  if (authMethod === "google" && !googleSessionStillValid(user, authAt)) return null;
   const perms = unionPermissionCodes(user.roles.map((ur) => ur.role));
   return {
     userId: user.id,

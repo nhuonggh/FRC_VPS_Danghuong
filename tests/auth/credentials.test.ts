@@ -94,3 +94,35 @@ describe("verifyCredentials", () => {
     });
   });
 });
+
+describe("mật khẩu tạm có hạn (TEMP_PASSWORD_TTL_HOURS)", () => {
+  const past = () => new Date(Date.now() - 60_000);
+  const future = () => new Date(Date.now() + 60 * 60_000);
+
+  it("TTL = 72 giờ; tempPasswordExpiry cộng đúng", async () => {
+    const { TEMP_PASSWORD_TTL_HOURS, tempPasswordExpiry } = await import("@/server/auth/password");
+    expect(TEMP_PASSWORD_TTL_HOURS).toBe(72);
+    expect(tempPasswordExpiry(new Date("2026-09-26T00:00:00Z")).toISOString()).toBe("2026-09-29T00:00:00.000Z");
+  });
+
+  it("mật khẩu tạm QUÁ HẠN + đúng mật khẩu → INVALID (y hệt sai mật khẩu, không lộ)", async () => {
+    await makeUser({ username: "nam", mustChangePassword: true, tempPasswordExpiresAt: past(), passwordHash: await hashPassword("Tam12345") });
+    expect(await verifyCredentials(prisma, "nam", "Tam12345")).toEqual({ ok: false, reason: "INVALID" });
+    expect(await verifyCredentials(prisma, "nam", "sai")).toEqual({ ok: false, reason: "INVALID" });
+  });
+
+  it("quá hạn + bị khoá → vẫn INVALID (không lộ trạng thái khoá khi mật khẩu đã hết hạn)", async () => {
+    await makeUser({ username: "nam", isLocked: true, mustChangePassword: true, tempPasswordExpiresAt: past(), passwordHash: await hashPassword("Tam12345") });
+    expect(await verifyCredentials(prisma, "nam", "Tam12345")).toEqual({ ok: false, reason: "INVALID" });
+  });
+
+  it("chưa hết hạn → vào được", async () => {
+    await makeUser({ username: "nam", mustChangePassword: true, tempPasswordExpiresAt: future(), passwordHash: await hashPassword("Tam12345") });
+    expect((await verifyCredentials(prisma, "nam", "Tam12345")).ok).toBe(true);
+  });
+
+  it("đã đổi mật khẩu (mustChangePassword=false) → hạn cũ không còn tác dụng", async () => {
+    await makeUser({ username: "nam", mustChangePassword: false, tempPasswordExpiresAt: past(), passwordHash: await hashPassword("Xuong2026") });
+    expect((await verifyCredentials(prisma, "nam", "Xuong2026")).ok).toBe(true);
+  });
+});

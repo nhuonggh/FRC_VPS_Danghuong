@@ -260,49 +260,41 @@ describe("quyền MỚI thêm vào danh mục ở bản sau (seed chạy lại)"
   });
 });
 
-describe("BOOTSTRAP_ADMIN_EMAIL (đăng nhập Google cho admin)", () => {
+describe("BOOTSTRAP_ADMIN_EMAIL (chỉ khi TẠO admin) + hạn mật khẩu khởi tạo", () => {
   const counts = async () => JSON.stringify(await Promise.all([
     prisma.user.count(), prisma.permission.count(), prisma.role.count(), prisma.rolePermission.count(),
     prisma.companySetting.count(), prisma.period.count(), prisma.auditLog.count(),
   ]));
 
-  it("tạo admin kèm email (chuẩn hoá); seed lần 2 → cùng số dòng mọi bảng", async () => {
+  it("tạo admin kèm email (chuẩn hoá) + emailChangedAt + hạn mật khẩu tạm 72 giờ; seed lần 2 → cùng số dòng", async () => {
     await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "  Boss@Example.TEST " });
-    expect((await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).email).toBe("boss@example.test");
-    const before = await counts();
-    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "  Boss@Example.TEST " });
-    expect(await counts()).toBe(before);
-  });
-
-  it("admin đã có, email NULL → gán (có audit hệ thống); lần sau không đổi gì", async () => {
-    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123" });
-    expect((await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).email).toBeNull();
-    await seed(prisma, { bootstrapAdminEmail: "boss@example.test" });
     const admin = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
     expect(admin.email).toBe("boss@example.test");
-    const log = await prisma.auditLog.findFirstOrThrow({ where: { action: "user.set_email" } });
-    expect(log).toMatchObject({ userId: null, entityId: String(admin.id), beforeJson: { email: null }, afterJson: { email: "boss@example.test" } });
+    expect(admin.emailChangedAt).not.toBeNull();
+    expect(Math.abs(admin.tempPasswordExpiresAt!.getTime() - (Date.now() + 72 * 3600_000))).toBeLessThan(60_000);
     const before = await counts();
-    await seed(prisma, { bootstrapAdminEmail: "boss@example.test" });
+    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "  Boss@Example.TEST " });
     expect(await counts()).toBe(before);
   });
 
-  it("KHÔNG ghi đè email đã có (quản trị viên đã đổi trên giao diện)", async () => {
+  it("admin ĐÃ tồn tại với email NULL (vd quản trị viên đã gỡ) → seed KHÔNG gán/khôi phục", async () => {
+    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "boss@example.test" });
+    await prisma.user.update({ where: { username: "admin" }, data: { email: null } }); // gỡ trên giao diện
+    const before = await counts();
+    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "boss@example.test" });
+    await seed(prisma, { bootstrapAdminEmail: "boss@example.test" });
+    expect((await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).email).toBeNull();
+    expect(await counts()).toBe(before);
+  });
+
+  it("KHÔNG ghi đè email đã có", async () => {
     await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "old@example.test" });
     await prisma.user.update({ where: { username: "admin" }, data: { email: "changed@example.test" } });
     await seed(prisma, { bootstrapAdminEmail: "old@example.test" });
     expect((await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).email).toBe("changed@example.test");
   });
 
-  it("email đã thuộc user khác → bỏ qua (không lỗi deploy), admin vẫn NULL", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123" });
-    await prisma.user.create({ data: { username: "nam", passwordHash: "x", fullName: "Nam", email: "boss@example.test" } });
-    await seed(prisma, { bootstrapAdminEmail: "boss@example.test" });
-    expect((await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).email).toBeNull();
-  });
-
-  it("không có user admin → không làm gì; chuỗi rỗng → như không đặt", async () => {
+  it("không có mật khẩu khởi tạo → không tạo admin, email bị bỏ qua; chuỗi rỗng → NULL", async () => {
     await seed(prisma, { bootstrapAdminEmail: "boss@example.test" });
     expect(await prisma.user.count()).toBe(0);
     await seed(prisma, { bootstrapAdminPassword: "Mat-khau-tam-123", bootstrapAdminEmail: "" });
@@ -316,10 +308,13 @@ describe("BOOTSTRAP_ADMIN_EMAIL (đăng nhập Google cho admin)", () => {
     expect(await prisma.user.count()).toBe(0);
   });
 
-  it("parseBootstrapEmail", () => {
+  it("parseBootstrapEmail: chuẩn hoá; chỉ ASCII in được (như zod) — chặn dấu Kelvin, chữ có dấu, tab", () => {
     expect(parseBootstrapEmail(undefined)).toBeNull();
     expect(parseBootstrapEmail("  ")).toBeNull();
     expect(parseBootstrapEmail(" A@B.Test ")).toBe("a@b.test");
     expect(() => parseBootstrapEmail("a@b")).toThrow();
+    for (const bad of ["Kim@example.test", "nguyễn@example.test", "\ta@example.test", "a@example.test\n"]) {
+      expect(() => parseBootstrapEmail(bad)).toThrow("BOOTSTRAP_ADMIN_EMAIL không phải email hợp lệ.");
+    }
   });
 });

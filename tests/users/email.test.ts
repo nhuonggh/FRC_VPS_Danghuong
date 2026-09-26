@@ -4,7 +4,8 @@ import { ForbiddenError } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { DomainError, FieldConflictError } from "@/server/http/errors";
 import { createUserSchema, emailSectionSchema } from "@/server/users/schemas";
-import { createUser, createUserIdempotent, setUserEmail, toStoredEmail } from "@/server/users/service";
+import { verifyCredentials } from "@/server/auth/credentials";
+import { changeOwnPassword, createUser, createUserIdempotent, resetPassword, setUserEmail, toStoredEmail } from "@/server/users/service";
 import { seed } from "../../prisma/seed-lib";
 import { prisma, resetDb } from "../helpers/db";
 
@@ -150,5 +151,48 @@ describe("setUserEmail", () => {
 
   it("user không tồn tại → 404", async () => {
     await expect(tx((db) => setUserEmail(db, admin, 999999, "x@example.test"))).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("hạn mật khẩu tạm (tạo / cấp lại / tự đổi) + emailChangedAt", () => {
+  const near = (d: Date | null, hours: number) => {
+    expect(d).not.toBeNull();
+    expect(Math.abs(d!.getTime() - (Date.now() + hours * 3600_000))).toBeLessThan(60_000);
+  };
+
+  it("tạo user → hạn = bây giờ + 72 giờ; có email → emailChangedAt đặt, không email → NULL", async () => {
+    const a = await tx((db) => createUser(db, admin, input({ email: "a@example.test" })));
+    const b = await tx((db) => createUser(db, admin, input({ username: "lan" })));
+    const [ua, ub] = await Promise.all([a.id, b.id].map((id) => prisma.user.findUniqueOrThrow({ where: { id } })));
+    near(ua!.tempPasswordExpiresAt, 72);
+    expect(ua!.emailChangedAt).not.toBeNull();
+    expect(ub!.emailChangedAt).toBeNull();
+  });
+
+  it("mật khẩu tạm hết hạn bị từ chối; cấp lại mật khẩu (reset) đặt lại hạn và mở lại đăng nhập", async () => {
+    const { id, tempPassword } = await tx((db) => createUser(db, admin, input()));
+    await prisma.user.update({ where: { id }, data: { tempPasswordExpiresAt: new Date(Date.now() - 1000) } });
+    expect((await verifyCredentials(prisma, "nam", tempPassword)).ok).toBe(false);
+    const r = await tx((db) => resetPassword(db, admin, id));
+    near((await prisma.user.findUniqueOrThrow({ where: { id } })).tempPasswordExpiresAt, 72);
+    expect((await verifyCredentials(prisma, "nam", r.tempPassword)).ok).toBe(true);
+  });
+
+  it("tự đổi mật khẩu → xoá hạn (NULL)", async () => {
+    const { id, tempPassword } = await tx((db) => createUser(db, admin, input()));
+    await tx((db) => changeOwnPassword(db, { userId: id, perms: new Set() } as Actor, { current: tempPassword, next: "Xuong2026" }));
+    const u = await prisma.user.findUniqueOrThrow({ where: { id } });
+    expect(u).toMatchObject({ mustChangePassword: false, tempPasswordExpiresAt: null });
+  });
+
+  it("setUserEmail: đổi/gỡ → emailChangedAt tăng; không đổi giá trị → giữ nguyên", async () => {
+    const { id } = await tx((db) => createUser(db, admin, input()));
+    await tx((db) => setUserEmail(db, admin, id, "a@example.test"));
+    const t1 = (await prisma.user.findUniqueOrThrow({ where: { id } })).emailChangedAt!;
+    await tx((db) => setUserEmail(db, admin, id, "A@example.test"));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).emailChangedAt).toEqual(t1);
+    await new Promise((r) => setTimeout(r, 5));
+    await tx((db) => setUserEmail(db, admin, id, ""));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).emailChangedAt!.getTime()).toBeGreaterThan(t1.getTime());
   });
 });

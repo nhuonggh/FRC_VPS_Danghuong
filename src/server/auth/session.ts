@@ -15,7 +15,7 @@ export const getActor = cache(async (): Promise<SessionActor | null> => {
   const uid = session?.user?.id;
   if (!uid) return null;
   // amr từ JWT (do chính server ký) — chỉ đúng "google" mới được miễn bắt đổi mật khẩu
-  return loadActor(prisma, uid, toAuthMethod(session?.user?.amr));
+  return loadActor(prisma, uid, toAuthMethod(session?.user?.amr), session?.user?.authAt);
 });
 
 /** Dùng ở đầu mỗi page/layout/route: chưa đăng nhập → /login; thiếu quyền → /403. */

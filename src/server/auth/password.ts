@@ -4,6 +4,17 @@ import { MAX_PASSWORD_BYTES, normalizePassword, passwordByteLength } from "./nor
 
 export const BCRYPT_COST = 10;
 
+/** Mật khẩu tạm (tạo user, cấp lại, admin khởi tạo, admin:reset) hết hạn sau số giờ này nếu chưa đổi. */
+export const TEMP_PASSWORD_TTL_HOURS = 72;
+export const tempPasswordExpiry = (now: Date = new Date()): Date =>
+  new Date(now.getTime() + TEMP_PASSWORD_TTL_HOURS * 60 * 60 * 1000);
+
+/** Mật khẩu tạm đã hết hạn? Chỉ áp khi tài khoản còn bắt đổi mật khẩu; hạn NULL = không hết hạn. */
+export const isTempPasswordExpired = (
+  u: { mustChangePassword: boolean; tempPasswordExpiresAt: Date | null },
+  now: Date = new Date(),
+): boolean => u.mustChangePassword && u.tempPasswordExpiresAt !== null && u.tempPasswordExpiresAt.getTime() < now.getTime();
+
 const TOO_LONG = `Mật khẩu tối đa ${MAX_PASSWORD_BYTES} byte (ký tự có dấu chiếm nhiều byte hơn).`;
 
 /** Băm mật khẩu (đã chuẩn hoá NFC). Ném lỗi nếu >72 byte thay vì để bcrypt cắt cụt im lặng. */

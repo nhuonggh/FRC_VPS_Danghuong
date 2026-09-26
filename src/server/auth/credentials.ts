@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { normalizeUsername } from "./normalize";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, isTempPasswordExpired, verifyPassword } from "./password";
 
 export type CredentialResult =
   | { ok: true; user: { id: number; fullName: string } }
@@ -24,6 +24,8 @@ export async function verifyCredentials(
   const user = await prisma.user.findUnique({ where: { username: normalizeUsername(username) } });
   const passwordOk = await verify(password, user?.passwordHash ?? (await getDummyHash()));
   if (!user || !passwordOk) return { ok: false, reason: "INVALID" };
+  // Mật khẩu tạm quá hạn → CÙNG lỗi như sai mật khẩu (không lộ "đúng nhưng hết hạn"); quản trị viên cấp lại để mở lại.
+  if (isTempPasswordExpired(user)) return { ok: false, reason: "INVALID" };
   // Chỉ báo LOCKED khi đã đúng mật khẩu → kẻ đoán mật khẩu không biết tài khoản có tồn tại
   if (user.isLocked) return { ok: false, reason: "LOCKED" };
   return { ok: true, user: { id: user.id, fullName: user.fullName } };

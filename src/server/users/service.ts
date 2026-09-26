@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
 import { normalizeEmail, normalizePassword, normalizeUsername } from "@/server/auth/normalize";
 import {
-  generateTempPassword, hashPassword, validatePasswordStrength, verifyPassword,
+  generateTempPassword, hashPassword, tempPasswordExpiry, validatePasswordStrength, verifyPassword,
 } from "@/server/auth/password";
 import { DomainError, FieldConflictError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
@@ -85,9 +85,11 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
       data: {
         username,
         email,
+        emailChangedAt: email ? new Date() : null,
         fullName: input.fullName.normalize("NFC").trim(),
         passwordHash: await hashPassword(tempPassword),
         mustChangePassword: true,
+        tempPasswordExpiresAt: tempPasswordExpiry(),
         roles: { create: roles.map((r) => ({ roleId: r.id })) },
       },
     });
@@ -157,7 +159,8 @@ export async function setUserEmail(db: Db, actor: Actor, userId: number, rawEmai
     if (other && other.id !== userId) throw emailTaken();
   }
   try {
-    await db.user.update({ where: { id: userId }, data: { email } });
+    // emailChangedAt: phiên Google mở trước mốc này hết hiệu lực (giờ của app — cùng đồng hồ với authAt trong JWT)
+    await db.user.update({ where: { id: userId }, data: { email, emailChangedAt: new Date() } });
   } catch (e) {
     if (isEmailUniqueViolation(e)) throw emailTaken();
     throw e;
@@ -205,7 +208,7 @@ export async function resetPassword(db: Db, actor: Actor, userId: number) {
   await getUserOrThrow(db, userId);
   await assertCanAffectUser(db, actor, userId); // không chiếm tài khoản mạnh hơn mình
   const tempPassword = generateTempPassword();
-  await db.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(tempPassword), mustChangePassword: true } });
+  await db.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(tempPassword), mustChangePassword: true, tempPasswordExpiresAt: tempPasswordExpiry() } });
   await writeAudit(db, { userId: actor.userId, action: "user.reset_password", entity: "User", entityId: userId });
   return { tempPassword };
 }
@@ -217,6 +220,6 @@ export async function changeOwnPassword(db: Db, actor: Actor, input: { current: 
   if (normalizePassword(input.next) === normalizePassword(input.current)) throw new DomainError("Mật khẩu mới phải khác mật khẩu hiện tại.", 400);
   const weak = validatePasswordStrength(input.next, u.username);
   if (weak) throw new DomainError(weak, 400);
-  await db.user.update({ where: { id: u.id }, data: { passwordHash: await hashPassword(input.next), mustChangePassword: false } });
+  await db.user.update({ where: { id: u.id }, data: { passwordHash: await hashPassword(input.next), mustChangePassword: false, tempPasswordExpiresAt: null } });
   await writeAudit(db, { userId: actor.userId, action: "user.change_password", entity: "User", entityId: u.id });
 }

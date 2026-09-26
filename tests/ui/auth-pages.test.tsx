@@ -64,7 +64,7 @@ describe("/login (server) — Google", () => {
   });
 
   it("đủ biến → googleEnabled=true; props xuống client KHÔNG chứa client id/secret", async () => {
-    setEnv("fake-client-id.apps.googleusercontent.test", "fake-client-secret-XYZ");
+    setEnv("fake-client-id.example", "fake-client-secret-XYZ");
     getActor.mockResolvedValue(null);
     const props = find(await LoginPage({ searchParams: Promise.resolve({}) }), LoginForm)?.props;
     expect(props).toMatchObject({ googleEnabled: true });

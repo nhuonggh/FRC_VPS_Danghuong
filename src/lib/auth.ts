@@ -56,7 +56,8 @@ export function buildAuthOptions(env: Env = process.env, db: PrismaClient = pris
           const d = await decideGoogleSignIn(profile as Record<string, unknown> | undefined, lookup);
           if (!d.ok) throw new Error(GOOGLE_NOT_ALLOWED); // phòng thủ lớp 2 (signIn đã chặn)
           // Token mới tinh: bỏ email/ảnh/sub của Google, không giữ access/id/refresh token.
-          return { name: d.user.fullName, sub: String(d.user.id), uid: d.user.id, amr: "google" };
+          // authAt: thời điểm xác thực Google (KHÔNG dùng iat — iat đổi khi token được gia hạn). loadActor so với emailChangedAt.
+          return { name: d.user.fullName, sub: String(d.user.id), uid: d.user.id, amr: "google", authAt: Date.now() };
         }
         if (user) {
           token.uid = Number(user.id);
@@ -65,7 +66,10 @@ export function buildAuthOptions(env: Env = process.env, db: PrismaClient = pris
         return token;
       },
       session({ session, token }) {
-        session.user = { id: token.uid as number, name: token.name ?? null, amr: toAuthMethod(token.amr) };
+        session.user = {
+          id: token.uid as number, name: token.name ?? null, amr: toAuthMethod(token.amr),
+          ...(typeof token.authAt === "number" ? { authAt: token.authAt } : {}),
+        };
         return session;
       },
       redirect({ url, baseUrl }) {

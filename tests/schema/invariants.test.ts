@@ -32,6 +32,14 @@ describe("User.email (đăng nhập Google — DMMF thật)", () => {
     expect(email).toMatchObject({ type: "String", isRequired: false, isUnique: true, isList: false });
   });
 
+  it("emailChangedAt + tempPasswordExpiresAt: DateTime tuỳ chọn, Timestamptz", () => {
+    for (const name of ["emailChangedAt", "tempPasswordExpiresAt"]) {
+      const f = user.fields.find((x) => x.name === name);
+      expect(f).toMatchObject({ type: "DateTime", isRequired: false });
+      expect((f as unknown as { nativeType?: [string, string[]] }).nativeType?.[0]).toBe("Timestamptz");
+    }
+  });
+
   it("không có cột Google nào khác (không lưu sub/token/ảnh — không adapter)", () => {
     const names = user.fields.map((f) => f.name);
     expect(names.filter((n) => /google|sub|token|image|avatar|provider/i.test(n))).toEqual([]);

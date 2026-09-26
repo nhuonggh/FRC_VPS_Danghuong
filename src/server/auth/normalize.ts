@@ -17,6 +17,12 @@ export const passwordByteLength = (plain: string): number => Buffer.byteLength(n
 export const normalizeEmail = (email: string): string => email.normalize("NFC").trim().toLowerCase();
 
 /**
+ * Chỉ ký tự ASCII in được (0x20–0x7E). Kiểm TRÊN CHUỖI THÔ trước khi chuẩn hoá: ký tự Unicode như dấu Kelvin (U+212A)
+ * bị toLowerCase() gập thành "k" ASCII → hai email khác nhau có thể khớp cùng một tài khoản. Email hợp lệ (zod) chỉ là ASCII.
+ */
+export const isPrintableAscii = (raw: string): boolean => /^[ -~]*$/.test(raw);
+
+/**
  * Kiểm định dạng email tối thiểu (1 "@", có miền có dấu chấm, không khoảng trắng, ≤ 254 ký tự) — cho seed chạy trong
  * image migrator (không có zod). Form/API dùng zod `emailSchema` (chặt hơn).
  */
