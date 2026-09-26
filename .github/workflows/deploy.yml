@@ -1,0 +1,172 @@
+# =============================================================================
+# CI/CD: test (gate) → build + push 2 image → deploy lên VPS qua SSH (khuôn skill setup-project)
+# Secret KHÔNG viết ở đây — đặt trong GitHub Secrets (docs/infra/RUNBOOK.md mục GitHub Secrets).
+# =============================================================================
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Hai lần deploy không bao giờ chồng nhau (lần sau chờ lần trước xong, không huỷ giữa chừng)
+concurrency:
+  group: deploy-dherp
+  cancel-in-progress: false
+
+env:
+  SLUG: dherp
+  IMAGE_NAME: ${{ secrets.REGISTRY_URL }}/dherp
+  APP_PORT: ${{ secrets.APP_PORT }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Bộ test chạy tuần tự trên 1 DB thật (~8 phút ở máy dev) → chừa dư
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dh_test
+        ports:
+          - 5434:5432 # khớp .env.test (localhost:5434/dh_test)
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run typecheck
+      # Một tiến trình vitest duy nhất (vitest.config.mts: fileParallelism: false — các file dùng chung 1 DB).
+      # Env lấy từ .env.test (tests/setup-env.ts), DB là service postgres ở trên.
+      - run: npm test
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to private registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASS }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- App image: LUÔN ghi rõ target: runner (pitfalls mục 1) ---
+      - name: Build & push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Migrate image (migrate deploy + seed): target: migrator ---
+      - name: Build & push migrate image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: migrator
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:migrate
+            ${{ env.IMAGE_NAME }}:migrate-${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Deploy: migrate + seed TRƯỚC, fail thì container cũ vẫn chạy; rồi mới swap; rồi probe sức khoẻ ---
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASS: ${{ secrets.REGISTRY_PASS }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: IMAGE_NAME,IMAGE_TAG,APP_PORT,SLUG,REGISTRY_URL,REGISTRY_USER,REGISTRY_PASS
+          script: |
+            set -eu
+            ENV_FILE="$HOME/app/.env"
+            APP_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
+            MIGRATE_IMAGE="$IMAGE_NAME:migrate-$IMAGE_TAG"
+
+            echo "==> Login registry"
+            printf '%s' "$REGISTRY_PASS" | docker login "$REGISTRY_URL" -u "$REGISTRY_USER" --password-stdin
+
+            echo "==> Pull images ($IMAGE_TAG)"
+            docker pull "$APP_IMAGE"
+            docker pull "$MIGRATE_IMAGE"
+
+            PREV_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${SLUG}_app" 2>/dev/null || echo none)"
+            echo "==> Image đang chạy trước deploy (dùng để rollback): $PREV_IMAGE"
+
+            echo "==> Migrate TRƯỚC (fail thì container cũ vẫn chạy)"
+            docker run --rm --network pgnet --env-file "$ENV_FILE" "$MIGRATE_IMAGE"
+
+            echo "==> Seed (idempotent: quyền, vai trò, công ty, kỳ đầu, admin khởi tạo nếu bảng users trống)"
+            docker run --rm --network pgnet --env-file "$ENV_FILE" "$MIGRATE_IMAGE" npx prisma db seed
+
+            echo "==> Swap app container"
+            docker stop "${SLUG}_app" 2>/dev/null || true
+            docker rm   "${SLUG}_app" 2>/dev/null || true
+            docker run -d \
+              --name "${SLUG}_app" \
+              --restart always \
+              --network pgnet \
+              --env-file "$ENV_FILE" \
+              -p "127.0.0.1:${APP_PORT}:3000" \
+              "$APP_IMAGE"
+
+            echo "==> Health probe /api/health (tối đa ~60s)"
+            ok=0
+            for i in $(seq 1 30); do
+              if docker exec "${SLUG}_app" node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+                ok=1; break
+              fi
+              sleep 2
+            done
+            if [ "$ok" != 1 ]; then
+              echo "!! App không phản hồi /api/health. Log gần nhất:"
+              docker logs --tail 80 "${SLUG}_app" || true
+              echo "!! Rollback: xem docs/infra/RUNBOOK.md mục Rollback (image trước: $PREV_IMAGE)"
+              exit 1
+            fi
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsS --max-time 5 "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null
+              echo "==> Cổng host 127.0.0.1:${APP_PORT} OK"
+            fi
+            echo "==> App healthy: $APP_IMAGE"
+
+            echo "==> Dọn image CỦA DỰ ÁN NÀY: giữ 3 bản app + 3 bản migrate gần nhất (image đang chạy không bị xoá)"
+            docker images "$IMAGE_NAME" --format '{{.Tag}}' | grep -E '^[0-9a-f]{40}$' | tail -n +4 \
+              | xargs -r -I{} docker rmi "$IMAGE_NAME:{}" || true
+            docker images "$IMAGE_NAME" --format '{{.Tag}}' | grep -E '^migrate-[0-9a-f]{40}$' | tail -n +4 \
+              | xargs -r -I{} docker rmi "$IMAGE_NAME:{}" || true
+            # CHỈ image lơ lửng mang nhãn project=dherp (Dockerfile) — không bao giờ prune toàn VPS
+            docker image prune -f --filter "label=project=dherp"
