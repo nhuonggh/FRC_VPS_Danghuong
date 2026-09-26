@@ -1,7 +1,13 @@
 import { toast, useToastStore } from "./toast";
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly code?: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+    /** Lỗi theo field từ server (400 ValidationError, 409 FieldConflictError) — form hiện ngay tại ô. */
+    public readonly fields?: Record<string, string>,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -42,8 +48,8 @@ export async function apiFetch<T = unknown>(url: string, init: Init = {}): Promi
     throw new SessionExpiredError();
   }
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-    throw new ApiError(res.status, data.error ?? "Có lỗi xảy ra, vui lòng thử lại.", data.code);
+    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; fields?: Record<string, string> };
+    throw new ApiError(res.status, data.error ?? "Có lỗi xảy ra, vui lòng thử lại.", data.code, data.fields);
   }
   return (await res.json().catch(() => ({}))) as T;
 }

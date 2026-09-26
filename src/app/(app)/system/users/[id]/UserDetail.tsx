@@ -13,10 +13,10 @@ import { toastApiError } from "@/lib/api-error-toast";
 import { confirm } from "@/lib/confirm-store";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
-import { profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
+import { emailSectionSchema, profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
 
 interface Props {
-  user: { id: number; username: string; fullName: string; isLocked: boolean; mustChangePassword: boolean; createdAt: string; roles: { id: number; name: string }[] };
+  user: { id: number; username: string; fullName: string; email: string | null; isLocked: boolean; mustChangePassword: boolean; createdAt: string; roles: { id: number; name: string }[] };
   roles: { id: number; name: string }[];
   history: { id: number; action: string; at: string; by: string }[];
   /** user.manage — không có thì mọi phần là chữ tĩnh, không bút chì, không nút Khóa/Cấp lại mật khẩu. */
@@ -25,7 +25,7 @@ interface Props {
 }
 
 const ACTION_LABEL: Record<string, string> = {
-  "user.create": "Tạo tài khoản", "user.update_profile": "Sửa họ tên", "user.set_roles": "Đổi nhóm quyền",
+  "user.create": "Tạo tài khoản", "user.update_profile": "Sửa họ tên", "user.set_email": "Đổi email đăng nhập Google", "user.set_roles": "Đổi nhóm quyền",
   "user.lock": "Khóa tài khoản", "user.unlock": "Mở khóa tài khoản", "user.reset_password": "Cấp lại mật khẩu", "user.change_password": "Đổi mật khẩu",
 };
 
@@ -54,6 +54,37 @@ function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
           <DetailField label="Tên đăng nhập">{p.user.username}</DetailField>
           <DetailField label="Tạo lúc">{formatDateTime(p.user.createdAt)}</DetailField>
         </dl>
+      )}
+    </DetailSection>
+  );
+}
+
+/** Email = khoá đăng nhập Google (khớp chính xác). Không có email → tài khoản chỉ đăng nhập bằng mật khẩu. */
+function EmailSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
+  const s = useSectionForm(ctx, "email", {
+    schema: emailSectionSchema, defaults: { email: p.user.email ?? "" },
+    save: (v) => apiFetch(`/api/users/${p.user.id}/section-update`, { method: "PATCH", json: { section: "email", ...v } }).then(() => {}),
+  });
+  const editing = p.canManage && s.editing;
+  const err = s.form.formState.errors.email;
+  return (
+    <DetailSection title="Đăng nhập Google" editing={editing}
+      action={!p.canManage ? null : editing
+        ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} />
+        : <EditButton label="Chỉnh sửa email đăng nhập Google" onClick={() => ctx.beginEdit("email")} />}>
+      {editing ? (
+        <div>
+          <label htmlFor="email" className="mb-1 block text-xs text-fg-muted">Email</label>
+          <input id="email" type="email" inputMode="email" autoComplete="off" {...s.form.register("email")} aria-invalid={!!err}
+            aria-describedby={err ? "email-error email-hint" : "email-hint"}
+            className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${err ? "border-danger" : "border-border"}`} />
+          {err && <p id="email-error" className="mt-1 text-xs text-danger">{err.message}</p>}
+          <p id="email-hint" className="mt-1 text-xs text-fg-muted">
+            Tài khoản Google (đã xác minh) có đúng email này sẽ đăng nhập được vào tài khoản này. Để trống = chỉ đăng nhập bằng mật khẩu.
+          </p>
+        </div>
+      ) : (
+        <dl><DetailField label="Email">{p.user.email}</DetailField></dl>
       )}
     </DetailSection>
   );
@@ -93,7 +124,7 @@ function RolesSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
 
 export function UserDetail(p: Props) {
   const router = useRouter();
-  const nav = useDetailNav(["info", "roles", "history"], { profile: "info", roles: "roles" });
+  const nav = useDetailNav(["info", "roles", "history"], { profile: "info", email: "info", roles: "roles" });
   const [temp, setTemp] = useState<string | null>(null);
   const busy = useRef(false); // 1 thao tác ghi (khóa / cấp lại mật khẩu) tại một thời điểm
 
@@ -152,7 +183,7 @@ export function UserDetail(p: Props) {
           facts: [{ label: "Nhóm quyền", value: p.user.roles.length }, { label: "Tạo lúc", value: formatDateTime(p.user.createdAt) }],
         }}
         tabs={[
-          { key: "info", label: "Thông tin", render: (ctx) => <ProfileSection ctx={ctx} p={p} /> },
+          { key: "info", label: "Thông tin", render: (ctx) => <div className="space-y-6"><ProfileSection ctx={ctx} p={p} /><EmailSection ctx={ctx} p={p} /></div> },
           { key: "roles", label: "Nhóm quyền", count: p.user.roles.length, render: (ctx) => <RolesSection ctx={ctx} p={p} /> },
           {
             key: "history", label: "Nhật ký", count: p.history.length,

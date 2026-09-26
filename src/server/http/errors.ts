@@ -12,6 +12,14 @@ export class ValidationError extends DomainError {
   }
 }
 
+/** 409 gắn với field cụ thể (vd email đã dùng) — phản hồi kèm `fields` để form báo lỗi ngay tại ô. */
+export class FieldConflictError extends DomainError {
+  constructor(message: string, public readonly fields: Record<string, string>) {
+    super(message, 409, "CONFLICT");
+    this.name = "FieldConflictError";
+  }
+}
+
 export class UnauthorizedError extends DomainError {
   constructor() {
     super("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", 401, "UNAUTHORIZED");

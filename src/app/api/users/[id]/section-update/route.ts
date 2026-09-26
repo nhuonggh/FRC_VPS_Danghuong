@@ -4,8 +4,8 @@ import { requireActorApi } from "@/server/auth/session";
 import { ValidationError } from "@/server/http/errors";
 import { apiHandler } from "@/server/http/handler";
 import { idParam, readJson } from "@/server/http/read-json";
-import { profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
-import { setUserRoles, updateProfile } from "@/server/users/service";
+import { emailSectionSchema, profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
+import { setUserEmail, setUserRoles, updateProfile } from "@/server/users/service";
 
 const envelope = z.object({ section: z.string().optional() });
 
@@ -19,6 +19,12 @@ export const PATCH = apiHandler(async (req, ctx: { params: Promise<{ id: string 
     case "profile": {
       const v = profileSectionSchema.parse(raw);
       await prisma.$transaction((tx) => updateProfile(tx, actor, id, v));
+      return { ok: true };
+    }
+    case "email": {
+      // Email = khoá đăng nhập Google: chỉ user.manage (đầu route), rào đặc quyền + audit trong setUserEmail
+      const v = emailSectionSchema.parse(raw);
+      await prisma.$transaction((tx) => setUserEmail(tx, actor, id, v.email));
       return { ok: true };
     }
     case "roles": {

@@ -18,7 +18,7 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
   const idem = useIdempotencyKey();
   const [created, setCreated] = useState<{ id: number; username: string; password: string | null } | null>(null);
   const { register, control, handleSubmit, setError, formState: { errors, isDirty } } = useForm<Values>({
-    resolver: zodResolver(createUserSchema), defaultValues: { username: "", fullName: "", roleIds: [] },
+    resolver: zodResolver(createUserSchema), defaultValues: { username: "", fullName: "", email: "", roleIds: [] },
   });
 
   const submit = handleSubmit(async (v) => {
@@ -27,9 +27,10 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
       // Cùng khoá cho mọi lần gửi lại của form này: bấm đúp / mất mạng rồi gửi lại không tạo 2 người
       r = await apiFetch<{ id: number; tempPassword: string | null }>("/api/users", { method: "POST", json: v, idempotencyKey: idem.key });
     } catch (e) {
-      // 409 duy nhất khi tạo = trùng tên đăng nhập → báo ngay tại ô, giữ nguyên dữ liệu (không cần banner)
+      // 409 khi tạo = trùng email (server gửi kèm fields.email) hoặc trùng tên đăng nhập → báo ngay tại ô, giữ dữ liệu
       if (e instanceof ApiError && e.status === 409) {
-        setError("username", { message: e.message }, { shouldFocus: true });
+        if (e.fields?.email) setError("email", { message: e.fields.email }, { shouldFocus: true });
+        else setError("username", { message: e.message }, { shouldFocus: true });
         return;
       }
       throw e; // lỗi khác → banner của NewPage (giữ dữ liệu đang nhập)
@@ -56,6 +57,14 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
               <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} aria-describedby={errors.fullName ? "fullName-error" : undefined}
                 className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.fullName ? "border-danger" : "border-border"}`} />
               {errors.fullName && <p id="fullName-error" className="mt-1 text-xs text-danger">{errors.fullName.message}</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="email" className="mb-1 block text-xs text-fg-muted">Email đăng nhập Google (không bắt buộc)</label>
+              <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? "email-error email-hint" : "email-hint"}
+                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.email ? "border-danger" : "border-border"}`} />
+              {errors.email && <p id="email-error" className="mt-1 text-xs text-danger">{errors.email.message}</p>}
+              <p id="email-hint" className="mt-1 text-xs text-fg-muted">Có email → người này đăng nhập được bằng tài khoản Google đúng email đó.</p>
             </div>
           </div>
           <h2 className="pt-2 text-base font-semibold">Nhóm quyền</h2>

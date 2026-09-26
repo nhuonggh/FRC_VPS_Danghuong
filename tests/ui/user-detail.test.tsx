@@ -19,7 +19,7 @@ vi.mock("@/lib/confirm-store", () => ({ confirm: (...a: unknown[]) => confirm(..
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 const base: React.ComponentProps<typeof UserDetail> = {
-  user: { id: 5, username: "lan.tran", fullName: "Trần Thị Lan", isLocked: false, mustChangePassword: false, createdAt: "2026-09-01T03:00:00.000Z", roles: [{ id: 2, name: "Kế toán" }] },
+  user: { id: 5, username: "lan.tran", fullName: "Trần Thị Lan", email: null, isLocked: false, mustChangePassword: false, createdAt: "2026-09-01T03:00:00.000Z", roles: [{ id: 2, name: "Kế toán" }] },
   roles: [{ id: 1, name: "Giám đốc" }, { id: 2, name: "Kế toán" }],
   history: [{ id: 9, action: "user.reset_password", at: "2026-09-02T04:00:00.000Z", by: "Nguyễn Văn Nam" }],
   canManage: true,

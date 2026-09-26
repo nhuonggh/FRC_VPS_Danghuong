@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { ForbiddenError } from "@/lib/permissions/guard";
-import { DomainError, ValidationError } from "./errors";
+import { DomainError, FieldConflictError, ValidationError } from "./errors";
 import { clientIpFromHeaders, runWithRequestContext } from "./request-context";
 import "./zod-vi";
 
@@ -14,6 +14,7 @@ export function toErrorResponse(e: unknown): NextResponse {
   }
   if (e instanceof ForbiddenError) return NextResponse.json({ error: e.message }, { status: 403 });
   if (e instanceof ValidationError) return NextResponse.json({ error: e.message, fields: e.fields }, { status: 400 });
+  if (e instanceof FieldConflictError) return NextResponse.json({ error: e.message, fields: e.fields }, { status: 409 });
   if (e instanceof DomainError) return NextResponse.json({ error: e.message }, { status: e.status });
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
     return NextResponse.json({ error: "Dữ liệu đã tồn tại, vui lòng kiểm tra lại." }, { status: 409 });

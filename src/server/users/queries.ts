@@ -7,6 +7,7 @@ export interface UserRow {
   id: number;
   username: string;
   fullName: string;
+  email: string | null;
   isLocked: boolean;
   mustChangePassword: boolean;
   createdAt: Date;
@@ -16,7 +17,7 @@ export interface UserRow {
 const SORTABLE = ["fullName", "username", "createdAt"] as const;
 
 const USER_SELECT = {
-  id: true, username: true, fullName: true, isLocked: true, mustChangePassword: true, createdAt: true,
+  id: true, username: true, fullName: true, email: true, isLocked: true, mustChangePassword: true, createdAt: true,
   roles: { select: { role: { select: { id: true, name: true } } } },
 } as const; // KHÔNG chọn passwordHash
 
@@ -32,7 +33,7 @@ export async function listUsers(db: PrismaClient, params: ListParams) {
   const roleFilter = (params.filters.role ?? []).map(Number);
   const scoped = users.filter(
     (u) =>
-      (!needle || normalizeSearch(`${u.username} ${u.fullName}`).includes(needle)) &&
+      (!needle || normalizeSearch(`${u.username} ${u.fullName} ${u.email ?? ""}`).includes(needle)) &&
       (roleFilter.length === 0 || u.roles.some((r) => roleFilter.includes(r.id))),
   );
   const stats = { all: scoped.length, active: scoped.filter((u) => !u.isLocked).length, locked: scoped.filter((u) => u.isLocked).length };

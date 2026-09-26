@@ -20,7 +20,7 @@ vi.mock("@/lib/toast", () => ({ toast: { success: (...a: unknown[]) => toastSucc
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 const user = (over: Partial<UserRow> & { id: number }): UserRow => ({
-  username: `u${over.id}`, fullName: `Người ${over.id}`, isLocked: false, mustChangePassword: false,
+  username: `u${over.id}`, fullName: `Người ${over.id}`, email: null, isLocked: false, mustChangePassword: false,
   createdAt: new Date("2026-09-01T03:00:00Z"), roles: [{ id: 1, name: "Kế toán" }], ...over,
 });
 const rows = [user({ id: 1, fullName: "Nguyễn Văn Nam" }), user({ id: 2, fullName: "Trần Thị Lan", isLocked: true }), user({ id: 3 })];

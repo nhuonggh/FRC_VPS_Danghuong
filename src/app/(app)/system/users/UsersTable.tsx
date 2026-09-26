@@ -7,7 +7,7 @@ import { TempPasswordDialog } from "@/components/ui/TempPasswordDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { toastApiError } from "@/lib/api-error-toast";
 import { confirm } from "@/lib/confirm-store";
-import { formatDate } from "@/lib/format";
+import { formatDate, NULL_TEXT } from "@/lib/format";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 import { toast } from "@/lib/toast";
 import type { UserRow } from "@/server/users/queries";
@@ -22,6 +22,7 @@ export function UsersTable({
   const columns: Column<UserRow>[] = [
     { key: "fullName", label: "Họ tên", sortable: true, primaryOnMobile: true, render: (u) => u.fullName },
     { key: "username", label: "Tên đăng nhập", sortable: true, render: (u) => <span className="font-mono text-xs">{u.username}</span> },
+    { key: "email", label: "Email", render: (u) => u.email ? <span className="break-all text-xs">{u.email}</span> : NULL_TEXT },
     { key: "roles", label: "Nhóm quyền", render: (u) => <div className="flex flex-wrap gap-1">{u.roles.map((r) => <Badge key={r.id} tone="info">{r.name}</Badge>)}</div> },
     { key: "status", label: "Trạng thái", render: (u) => (u.isLocked ? <Badge tone="danger">Đã khóa</Badge> : <Badge tone="success">Hoạt động</Badge>) },
     { key: "createdAt", label: "Tạo lúc", sortable: true, render: (u) => formatDate(u.createdAt) },

@@ -34,7 +34,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </>}
       filters={
         <div className="flex flex-wrap items-center gap-2">
-          <SearchBox basePath={BASE} params={params} placeholder="Tìm họ tên, tên đăng nhập…" />
+          <SearchBox basePath={BASE} params={params} placeholder="Tìm họ tên, tên đăng nhập, email…" />
           <MultiSelectFilter label="Nhóm quyền" paramKey="role" basePath={BASE} params={params} options={roles.map((r) => ({ value: String(r.id), label: r.name }))} />
         </div>
       }

@@ -9,14 +9,28 @@ export const usernameSchema = z
 
 export const fullNameSchema = z.string({ required_error: "Nhập họ tên." }).trim().min(2, "Nhập họ tên.").max(80, "Họ tên tối đa 80 ký tự.");
 
+/**
+ * Email đăng nhập Google (tuỳ chọn): trim + chữ thường (cùng dạng normalizeEmail/CHECK ở DB). Chuỗi rỗng = không đặt
+ * (service lưu NULL). Kiểu vào = kiểu ra (string) để dùng thẳng với react-hook-form/zodResolver.
+ */
+export const emailSchema = z
+  .string({ invalid_type_error: "Email không hợp lệ." })
+  .trim()
+  .toLowerCase()
+  .max(254, "Email tối đa 254 ký tự.")
+  .refine((v) => v === "" || z.string().email().safeParse(v).success, "Email không hợp lệ.");
+
 export const createUserSchema = z.object({
   username: usernameSchema,
   fullName: fullNameSchema,
+  email: emailSchema.optional(),
   roleIds: z.array(z.number().int()).min(1, "Chọn ít nhất 1 nhóm quyền."),
 });
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 export const profileSectionSchema = z.object({ fullName: fullNameSchema });
+/** Phần "Đăng nhập Google" trên trang chi tiết: chỉ email ("" = gỡ email → tài khoản không đăng nhập Google được nữa). */
+export const emailSectionSchema = z.object({ email: emailSchema });
 export const rolesSectionSchema = z.object({ roleIds: z.array(z.number().int()).min(1, "Chọn ít nhất 1 nhóm quyền.") });
 
 export const changePasswordSchema = z

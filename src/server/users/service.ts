@@ -2,11 +2,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
-import { normalizePassword, normalizeUsername } from "@/server/auth/normalize";
+import { normalizeEmail, normalizePassword, normalizeUsername } from "@/server/auth/normalize";
 import {
   generateTempPassword, hashPassword, validatePasswordStrength, verifyPassword,
 } from "@/server/auth/password";
-import { DomainError } from "@/server/http/errors";
+import { DomainError, FieldConflictError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { assertCanAffectUser, assertCanAssignRoles } from "./privilege";
 import type { CreateUserInput } from "./schemas";
@@ -49,6 +49,19 @@ export async function assertAdminRemains(db: Db): Promise<void> {
   }
 }
 
+const EMAIL_TAKEN = "Email đã được dùng cho tài khoản khác.";
+const emailTaken = () => new FieldConflictError(EMAIL_TAKEN, { email: EMAIL_TAKEN });
+
+/** Email lưu DB: chuẩn hoá; rỗng/thiếu → NULL (khớp CHECK users_email_normalized_chk). */
+export const toStoredEmail = (raw: string | null | undefined): string | null => {
+  const v = raw == null ? "" : normalizeEmail(raw);
+  return v === "" ? null : v;
+};
+
+/** P2002 trên cột email (hai yêu cầu đồng thời cùng email: cả hai qua bước kiểm tra, bên chậm hơn vấp UNIQUE). */
+const isEmailUniqueViolation = (e: unknown) =>
+  e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && JSON.stringify(e.meta ?? {}).includes("email");
+
 async function loadRoles(db: Db, roleIds: number[]) {
   const ids = [...new Set(roleIds)];
   if (ids.length === 0) throw new DomainError("Chọn ít nhất 1 nhóm quyền.", 400);
@@ -61,6 +74,8 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
   assertCan(actor.perms, "user.manage");
   const username = normalizeUsername(input.username);
   if (await db.user.findUnique({ where: { username } })) throw new DomainError("Tên đăng nhập đã tồn tại.");
+  const email = toStoredEmail(input.email);
+  if (email && (await db.user.findUnique({ where: { email } }))) throw emailTaken();
   const roles = await loadRoles(db, input.roleIds);
   await assertCanAssignRoles(db, actor, roles.map((r) => r.id)); // không tạo user mạnh hơn mình
   const tempPassword = generateTempPassword();
@@ -69,6 +84,7 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
     user = await db.user.create({
       data: {
         username,
+        email,
         fullName: input.fullName.normalize("NFC").trim(),
         passwordHash: await hashPassword(tempPassword),
         mustChangePassword: true,
@@ -76,7 +92,8 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
       },
     });
   } catch (e) {
-    // Hai yêu cầu đồng thời cùng tên: cả hai qua bước kiểm tra ở trên, bên chậm hơn vấp UNIQUE
+    // Hai yêu cầu đồng thời cùng tên/email: cả hai qua bước kiểm tra ở trên, bên chậm hơn vấp UNIQUE
+    if (isEmailUniqueViolation(e)) throw emailTaken();
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       throw new DomainError("Tên đăng nhập đã tồn tại.");
     }
@@ -84,7 +101,7 @@ export async function createUser(db: Db, actor: Actor, input: CreateUserInput) {
   }
   await writeAudit(db, {
     userId: actor.userId, action: "user.create", entity: "User", entityId: user.id,
-    after: { username, fullName: user.fullName, roles: roles.map((r) => r.name) }, // KHÔNG mật khẩu/hash
+    after: { username, fullName: user.fullName, email, roles: roles.map((r) => r.name) }, // KHÔNG mật khẩu/hash
   });
   return { id: user.id, username, tempPassword };
 }
@@ -120,6 +137,34 @@ export async function updateProfile(db: Db, actor: Actor, userId: number, input:
   await writeAudit(db, {
     userId: actor.userId, action: "user.update_profile", entity: "User", entityId: userId,
     before: { fullName: u.fullName }, after: { fullName },
+  });
+}
+
+/**
+ * Đặt/gỡ email đăng nhập Google. Email = CHÌA KHOÁ vào tài khoản qua Google → đổi email tương đương cấp lại mật khẩu:
+ * cùng rào như resetPassword (user.manage + không tác động tài khoản mạnh hơn mình + khoá tư vấn chống TOCTOU),
+ * và ghi audit giá trị cũ/mới. Không đổi → không ghi gì.
+ */
+export async function setUserEmail(db: Db, actor: Actor, userId: number, rawEmail: string | null) {
+  assertCan(actor.perms, "user.manage");
+  await lockAdminInvariant(db);
+  const u = await getUserOrThrow(db, userId);
+  await assertCanAffectUser(db, actor, userId); // chặn gắn email của mình vào tài khoản Giám đốc để chiếm quyền
+  const email = toStoredEmail(rawEmail);
+  if (email === u.email) return;
+  if (email) {
+    const other = await db.user.findUnique({ where: { email }, select: { id: true } });
+    if (other && other.id !== userId) throw emailTaken();
+  }
+  try {
+    await db.user.update({ where: { id: userId }, data: { email } });
+  } catch (e) {
+    if (isEmailUniqueViolation(e)) throw emailTaken();
+    throw e;
+  }
+  await writeAudit(db, {
+    userId: actor.userId, action: "user.set_email", entity: "User", entityId: userId,
+    before: { email: u.email }, after: { email },
   });
 }
 
