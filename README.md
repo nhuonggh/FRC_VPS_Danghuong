@@ -55,6 +55,9 @@ npm test                                   # hoặc: npx vitest run tests/invent
 - **`.env` — KHÔNG commit** (đã trong `.gitignore`, cùng `.env.local`, `.env.*.local`). Biến dùng: `DATABASE_URL`,
   `MIGRATE_DATABASE_URL`, `AUTH_SECRET`, `NEXTAUTH_URL`, tuỳ chọn `BOOTSTRAP_ADMIN_PASSWORD` (seed admin lần đầu),
   `RECOMPUTE_WORKER=off` (tắt worker tính lại nền).
+- **Production** tách 2 file (mẫu `.env.example`, `.env.migrate.example`): `.env` cho container app (không có
+  `MIGRATE_DATABASE_URL`/`BOOTSTRAP_ADMIN_PASSWORD`), `.env.migrate` cho image migrator (migrate + seed). `.env.migrate`
+  cũng nằm trong `.gitignore`. Chi tiết: `docs/infra/RUNBOOK.md` mục 4.
 - **`.env.test` — được commit, chỉ chứa giá trị bỏ đi** (DB test cục bộ cổng 5434, secret giả). Không bao giờ đặt
   secret thật vào đây.
 
@@ -80,18 +83,19 @@ Tài liệu hạ tầng (`docs/infra/`):
 - [`VERIFY.md`](docs/infra/VERIFY.md) — checklist xác minh sau deploy.
 - [`caddy/dherp.caddy`](docs/infra/caddy/dherp.caddy) — bản tham chiếu site Caddy.
 
-Mẫu biến môi trường production: `.env.example`.
+Mẫu biến môi trường production: `.env.example` (container app) và `.env.migrate.example` (migrate + seed).
 
 ### Đã có
 
 - Image non-root, runner chỉ chứa bản standalone; cổng app chỉ publish `127.0.0.1:3004`, ra ngoài qua Caddy (HTTPS).
-- App chạy bằng role `app_rw` (không sửa/xoá được `audit_log`); migrate bằng owner; migrate + seed chạy trước khi thay
+- App chạy bằng role `app_rw` (không sửa/xoá được `audit_log`); migrate + seed bằng owner qua file env riêng
+  (`.env.migrate`, container app không giữ mật khẩu owner); migrate + seed chạy trước khi thay
   container (lỗi thì bản cũ vẫn chạy); probe sức khoẻ sau deploy; tag image theo git sha để rollback.
 
 ### Trước khi go-live (còn lại — cổng chặn của chủ dự án)
 
 - Làm hết [`docs/infra/VERIFY.md`](docs/infra/VERIFY.md) sau lần deploy đầu, gồm **gỡ `BOOTSTRAP_ADMIN_PASSWORD`** khỏi
-  `.env` trên VPS và tạo lại container.
+  `.env.migrate` trên VPS, và chuyển `.env` cũ sang layout 2 file (RUNBOOK mục 4) trước lần push `main` đầu.
 - **Giới hạn tần suất đăng nhập** (chống dò mật khẩu): ở Caddy (rate limit) hoặc trong app.
 - **Header bảo mật** ở Caddy: `X-Frame-Options: DENY` / CSP `frame-ancestors 'none'`, cùng các header cơ bản khác
   (site file hiện chỉ có `reverse_proxy`).

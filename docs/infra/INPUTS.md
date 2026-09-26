@@ -16,7 +16,7 @@ Tên suy ra (không phải secret):
 
 | Thành phần | Giá trị |
 |---|---|
-| User Linux deploy | `deploy_dherp` (nhóm `docker`), `.env` tại `/home/deploy_dherp/app/.env` (mode 600) |
+| User Linux deploy | `deploy_dherp` (nhóm `docker`), env app `/home/deploy_dherp/app/.env` + env migrator `/home/deploy_dherp/app/.env.migrate` (cả hai mode 600) |
 | Container app | `dherp_app` (restart always, network `pgnet`) |
 | Container DB | `postgres_dherp` (postgres:15, giới hạn RAM 1g, restart unless-stopped, network `pgnet`, dữ liệu `/opt/postgres_dherp`) |
 | Database / owner | `dherp_db` / `dherp_user` |

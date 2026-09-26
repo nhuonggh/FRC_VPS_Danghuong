@@ -112,7 +112,12 @@ jobs:
           envs: IMAGE_NAME,IMAGE_TAG,APP_PORT,SLUG,REGISTRY_URL,REGISTRY_USER,REGISTRY_PASS
           script: |
             set -eu
-            ENV_FILE="$HOME/app/.env"
+            ENV_FILE="$HOME/app/.env"                  # app: NODE_ENV, DATABASE_URL (app_rw), AUTH_SECRET, NEXTAUTH_URL
+            MIGRATE_ENV_FILE="$HOME/app/.env.migrate"  # migrator: MIGRATE_DATABASE_URL (owner), BOOTSTRAP_ADMIN_PASSWORD
+            for f in "$ENV_FILE" "$MIGRATE_ENV_FILE"; do [ -f "$f" ] || { echo "!! Thiếu $f"; exit 1; }; done
+            if grep -qE "^(MIGRATE_DATABASE_URL|BOOTSTRAP_ADMIN_PASSWORD)=" "$ENV_FILE"; then
+              echo "!! $ENV_FILE chứa biến của migrator — chuyển sang .env.migrate (RUNBOOK mục 4)"; exit 1
+            fi
             APP_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
             MIGRATE_IMAGE="$IMAGE_NAME:migrate-$IMAGE_TAG"
 
@@ -127,10 +132,10 @@ jobs:
             echo "==> Image đang chạy trước deploy (dùng để rollback): $PREV_IMAGE"
 
             echo "==> Migrate TRƯỚC (fail thì container cũ vẫn chạy)"
-            docker run --rm --network pgnet --env-file "$ENV_FILE" "$MIGRATE_IMAGE"
+            docker run --rm --network pgnet --env-file "$MIGRATE_ENV_FILE" "$MIGRATE_IMAGE"
 
             echo "==> Seed (idempotent: quyền, vai trò, công ty, kỳ đầu, admin khởi tạo nếu bảng users trống)"
-            docker run --rm --network pgnet --env-file "$ENV_FILE" "$MIGRATE_IMAGE" npx prisma db seed
+            docker run --rm --network pgnet --env-file "$MIGRATE_ENV_FILE" "$MIGRATE_IMAGE" npx prisma db seed
 
             echo "==> Swap app container"
             docker stop "${SLUG}_app" 2>/dev/null || true

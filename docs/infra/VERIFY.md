@@ -36,8 +36,10 @@ Lệnh chạy trên VPS bằng user `deploy_dherp` (hoặc root khi ghi chú). G
 
 ## Bảo mật
 - [ ] `git log --all -- .env` → rỗng; `git grep -nEi "password|secret"` không có giá trị thật
-- [ ] `stat -c '%a %U' /home/deploy_dherp/app/.env` → `600 deploy_dherp`
-- [ ] `BOOTSTRAP_ADMIN_PASSWORD` đã xoá khỏi `.env` sau lần đăng nhập đầu VÀ container đã được tạo lại:
-      `docker exec dherp_app printenv BOOTSTRAP_ADMIN_PASSWORD` không in gì (RUNBOOK mục 10)
+- [ ] `stat -c '%a %U %n' /home/deploy_dherp/app/.env /home/deploy_dherp/app/.env.migrate` → cả hai `600 deploy_dherp`
+- [ ] `grep -c MIGRATE /home/deploy_dherp/app/.env` → `0`; `grep -c BOOTSTRAP /home/deploy_dherp/app/.env` → `0`
+- [ ] `docker exec dherp_app sh -c 'printenv | grep -cE "^(MIGRATE_DATABASE_URL|BOOTSTRAP_ADMIN_PASSWORD)="'` → `0`
+- [ ] `BOOTSTRAP_ADMIN_PASSWORD` đã xoá khỏi `.env.migrate` sau lần đăng nhập đầu:
+      `grep -c '^BOOTSTRAP_ADMIN_PASSWORD=' /home/deploy_dherp/app/.env.migrate` → `0` (RUNBOOK mục 10)
 - [ ] `ss -ltn | grep 3004` chỉ lắng nghe `127.0.0.1` (không mở cổng app ra Internet — IP trong nhật ký dựa vào Caddy)
 - [ ] Container của dự án khác trên VPS không đổi trạng thái (so `docker ps` trước/sau)
