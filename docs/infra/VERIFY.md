@@ -25,6 +25,17 @@ Lệnh chạy trên VPS bằng user `deploy_dherp` (hoặc root khi ghi chú). G
 - [ ] Tài khoản bị khoá không đăng nhập được
 - [ ] Gọi `/api/users` khi chưa đăng nhập → `401` JSON; mở `/` khi chưa đăng nhập → chuyển `/login`
 
+## Auth (Google — chỉ khi đã đặt `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, RUNBOOK mục 13)
+- [ ] Chưa đặt 2 biến: `/login` KHÔNG có nút "Đăng nhập bằng Google"; đăng nhập mật khẩu như cũ
+- [ ] Đã đặt + tạo lại container: `/login` có nút "Đăng nhập bằng Google" dưới vạch "hoặc"; xem nguồn trang không chứa Client ID/secret
+- [ ] `admin` có email (qua `BOOTSTRAP_ADMIN_EMAIL` hoặc giao diện) → đăng nhập Google bằng ĐÚNG email đó trên trình duyệt THẬT → vào `/` (không bị ép sang `/change-password` dù admin còn "Chờ đổi mật khẩu")
+- [ ] Tài khoản Google KHÔNG khớp email người dùng nào → quay lại `/login` với "Tài khoản Google này chưa được cấp quyền vào hệ thống. Liên hệ quản trị viên."; bảng `users` không thêm dòng mới
+- [ ] Khoá người dùng có email → Google của họ bị từ chối cùng thông báo; phiên Google đang mở bị đăng xuất ở thao tác kế tiếp
+- [ ] (email_verified) Chỉ tài khoản Google đã xác minh email mới vào được — kiểm bằng unit test `tests/auth/google.test.ts` (Google thật luôn xác minh Gmail/Workspace; không cần tạo tài khoản chưa xác minh)
+- [ ] Đổi email người dùng trên giao diện → Nhật ký thao tác có dòng "user.set_email" với email cũ/mới
+- [ ] `https://dherp.sheetapp.store/api/auth/signin?callbackUrl=https://evil.example` rồi đăng nhập → về trang của dherp, không sang evil.example
+- [ ] `docker logs dherp_app` không in Client secret, access/id token
+
 ## CRUD
 - [ ] Tạo 1 người dùng qua UI; reload còn; sửa; khoá/mở khoá
 - [ ] Mỗi thao tác trên xuất hiện trong Nhật ký thao tác (giá trị cũ/mới), IP là IP máy khách thật (không phải IP của Caddy)
@@ -35,7 +46,7 @@ Lệnh chạy trên VPS bằng user `deploy_dherp` (hoặc root khi ghi chú). G
 - [ ] Thử rollback một lần theo RUNBOOK mục 8 (chạy lại tag sha trước, rồi trả lại bản mới)
 
 ## Bảo mật
-- [ ] `git log --all -- .env` → rỗng; `git grep -nEi "password|secret"` không có giá trị thật
+- [ ] `git log --all -- .env` → rỗng; `git grep -nEi "password|secret"` không có giá trị thật (kể cả `GOOGLE_CLIENT_SECRET`)
 - [ ] `stat -c '%a %U %n' /home/deploy_dherp/app/.env /home/deploy_dherp/app/.env.migrate` → cả hai `600 deploy_dherp`
 - [ ] `grep -c MIGRATE /home/deploy_dherp/app/.env` → `0`; `grep -c BOOTSTRAP /home/deploy_dherp/app/.env` → `0`
 - [ ] `docker exec dherp_app sh -c 'printenv | grep -cE "^(MIGRATE_DATABASE_URL|BOOTSTRAP_ADMIN_PASSWORD)="'` → `0`

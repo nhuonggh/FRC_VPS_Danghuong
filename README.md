@@ -7,7 +7,7 @@ chuỗi khi sửa/hủy chứng từ, tính lại chạy nền). Đặc tả: `d
 ## Công nghệ
 
 Next.js 15 (App Router) · React 19 · TypeScript · Prisma 6 + PostgreSQL 15 · next-auth v4 (đăng nhập tài khoản/mật
-khẩu, bcrypt) · TanStack Query · react-hook-form + zod · Tailwind CSS 3 · Vitest (+ Testing Library) chạy trên DB
+khẩu, bcrypt; tuỳ chọn thêm Google — chỉ tài khoản đã được quản trị viên gán email, xem `docs/conventions/auth.md`) · TanStack Query · react-hook-form + zod · Tailwind CSS 3 · Vitest (+ Testing Library) chạy trên DB
 PostgreSQL thật.
 
 ## Scripts (`package.json`)
@@ -54,7 +54,8 @@ npm test                                   # hoặc: npx vitest run tests/invent
 
 - **`.env` — KHÔNG commit** (đã trong `.gitignore`, cùng `.env.local`, `.env.*.local`). Biến dùng: `DATABASE_URL`,
   `MIGRATE_DATABASE_URL`, `AUTH_SECRET`, `NEXTAUTH_URL`, tuỳ chọn `BOOTSTRAP_ADMIN_PASSWORD` (seed admin lần đầu),
-  `RECOMPUTE_WORKER=off` (tắt worker tính lại nền).
+  `BOOTSTRAP_ADMIN_EMAIL` (email Google gán cho admin), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (bật đăng nhập
+  Google — để trống thì chỉ có tên/mật khẩu; dev/test/CI chạy không có), `RECOMPUTE_WORKER=off` (tắt worker tính lại nền).
 - **Production** tách 2 file (mẫu `.env.example`, `.env.migrate.example`): `.env` cho container app (không có
   `MIGRATE_DATABASE_URL`/`BOOTSTRAP_ADMIN_PASSWORD`), `.env.migrate` cho image migrator (migrate + seed). `.env.migrate`
   cũng nằm trong `.gitignore`. Chi tiết: `docs/infra/RUNBOOK.md` mục 4.
@@ -66,7 +67,7 @@ npm test                                   # hoặc: npx vitest run tests/invent
 - `docs/spec/` — đặc tả tổng; `docs/superpowers/plans/` — kế hoạch từng giai đoạn (00 master, 01a/b/c GĐ0, 02 engine FIFO).
 - `docs/engine-fifo.md` — API công khai `@/server/inventory`, thứ tự sự kiện, hợp đồng cho module nghiệp vụ (plan 03+),
   khoá/đồng thời, tính lại nền, checklist kết sổ (K5).
-- `docs/conventions/` — quy ước màn danh sách, phân quyền, dữ liệu nhạy cảm.
+- `docs/conventions/` — quy ước màn danh sách, phân quyền, dữ liệu nhạy cảm, đăng nhập (`auth.md`: mật khẩu + Google).
 - `db/db_schema.sql` — schema sinh tự động (`npm run db:schema`).
 
 ## Triển khai
@@ -79,7 +80,8 @@ Tài liệu hạ tầng (`docs/infra/`):
 
 - [`INPUTS.md`](docs/infra/INPUTS.md) — giá trị thật (slug `dherp`, domain, cổng, registry, repo) — không có secret.
 - [`RUNBOOK.md`](docs/infra/RUNBOOK.md) — những gì đã cấp phát trên VPS và cách làm lại; tạo lại container, rollback,
-  xoay secret, gỡ `BOOTSTRAP_ADMIN_PASSWORD` sau lần đăng nhập đầu.
+  xoay secret, gỡ `BOOTSTRAP_ADMIN_PASSWORD` sau lần đăng nhập đầu, bật đăng nhập Google (mục 13: OAuth client,
+  redirect URI `https://dherp.sheetapp.store/api/auth/callback/google`, cách cấp quyền cho người dùng).
 - [`VERIFY.md`](docs/infra/VERIFY.md) — checklist xác minh sau deploy.
 - [`caddy/dherp.caddy`](docs/infra/caddy/dherp.caddy) — bản tham chiếu site Caddy.
 

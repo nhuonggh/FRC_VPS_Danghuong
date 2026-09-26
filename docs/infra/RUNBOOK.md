@@ -79,6 +79,8 @@ Hai file tách biệt, cùng chủ `deploy_dherp`, mode `600`. Container app **c
 | `DATABASE_URL` | `postgresql://app_rw:<APP_PASSWORD>@postgres_dherp:5432/dherp_db` |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `NEXTAUTH_URL` | `https://dherp.sheetapp.store` |
+| `GOOGLE_CLIENT_ID` | tuỳ chọn — Client ID OAuth (mục 13); để trống = tắt đăng nhập Google |
+| `GOOGLE_CLIENT_SECRET` | tuỳ chọn — Client secret OAuth (mục 13); **secret**, chỉ nằm ở `.env` này |
 
 `/home/deploy_dherp/app/.env.migrate` — image migrator: `migrate deploy` + `db seed` (mẫu: `.env.migrate.example`):
 
@@ -86,6 +88,7 @@ Hai file tách biệt, cùng chủ `deploy_dherp`, mode `600`. Container app **c
 |---|---|
 | `MIGRATE_DATABASE_URL` | `postgresql://dherp_user:<OWNER_PASSWORD>@postgres_dherp:5432/dherp_db` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | mật khẩu đăng nhập đầu của `admin` — **xoá sau lần đăng nhập đầu** (mục 10) |
+| `BOOTSTRAP_ADMIN_EMAIL` | tuỳ chọn — email Google của chủ hệ thống, gán cho `admin` (mục 13). Không phải secret |
 
 `DATABASE_URL` không cần trong `.env.migrate`: `prisma.config.ts` tự lấy `MIGRATE_DATABASE_URL` khi thiếu → migrate và
 seed đều chạy bằng owner. `NODE_ENV=production` đã đặt sẵn trong image. Không đặt `RECOMPUTE_WORKER` trên production
@@ -219,3 +222,45 @@ chạy), chưa từng nằm trong `dherp_app`. Kiểm: `docker exec dherp_app pr
 ## 12. Xác minh
 
 Làm hết [VERIFY.md](VERIFY.md). Build pass / Actions xanh KHÔNG phải bằng chứng.
+
+## 13. Đăng nhập Google (tuỳ chọn — thay D-1: Credentials + Google)
+
+Đăng nhập tên/mật khẩu **luôn còn** (admin khởi tạo, dự phòng). Google chỉ bật khi `.env` có ĐỦ `GOOGLE_CLIENT_ID` và
+`GOOGLE_CLIENT_SECRET`; thiếu 1 trong 2 → app chạy y như trước, nút Google không hiện. Quy tắc: [docs/conventions/auth.md](../conventions/auth.md).
+
+**Tạo OAuth client** (Google Cloud Console → APIs & Services):
+
+1. *OAuth consent screen*: loại **Internal** nếu mọi người dùng thuộc cùng Google Workspace; nếu dùng Gmail cá nhân → **External**,
+   rồi **Publish app** (ở chế độ Testing chỉ tài khoản trong danh sách test user đăng nhập được). Scope: `openid`, `email`, `profile`.
+2. *Credentials → Create credentials → OAuth client ID*, loại **Web application**:
+   - **Authorized JavaScript origins**: `https://dherp.sheetapp.store`
+   - **Authorized redirect URIs** (đúng từng ký tự, không `/` thừa): `https://dherp.sheetapp.store/api/auth/callback/google`
+3. Chép Client ID + Client secret vào `/home/deploy_dherp/app/.env` (KHÔNG vào `.env.migrate`, KHÔNG commit, KHÔNG dán chat):
+
+       GOOGLE_CLIENT_ID=<CLIENT_ID>
+       GOOGLE_CLIENT_SECRET=<CLIENT_SECRET>
+
+4. **Tạo lại container** (mục 7) — `docker restart` không nạp lại `.env`. `NEXTAUTH_URL` phải đúng
+   `https://dherp.sheetapp.store` (redirect URI suy ra từ biến này).
+
+**Cấp quyền cho người dùng — không có tự đăng ký**: quản trị viên (quyền `user.manage`) mở *Hệ thống → Người dùng →*
+chi tiết người dùng → phần **Đăng nhập Google** → nhập email Google của họ (hoặc nhập ngay khi tạo người dùng). Người đó bấm
+"Đăng nhập bằng Google" và vào đúng tài khoản đó, với đúng nhóm quyền của tài khoản. Tài khoản Google không khớp email nào,
+email chưa được Google xác minh, hoặc tài khoản bị khoá → quay lại `/login` với thông báo "Tài khoản Google này chưa được cấp
+quyền vào hệ thống. Liên hệ quản trị viên." Gỡ email (để trống) = thu hồi đăng nhập Google của người đó (phiên Google đang mở bị cắt ở thao tác kế tiếp; đổi sang email khác thì phiên cũ còn tới khi hết hạn 12 giờ — cần cắt ngay thì Khoá).
+
+**Admin đầu tiên**: đặt `BOOTSTRAP_ADMIN_EMAIL=<email Google của chủ hệ thống>` trong `.env.migrate` → lần deploy/seed kế tiếp
+gán cho `admin` (khi tạo mới, hoặc khi `admin` đã tồn tại mà email còn trống; **không** ghi đè email đã có; có dòng nhật ký
+`user.set_email` do "Hệ thống"). Biến này không phải secret, giữ lại được. Chạy tay không cần chờ deploy:
+
+    docker run --rm --network pgnet --env-file /home/deploy_dherp/app/.env.migrate registry.francophiles.com.vn/dherp:migrate npx prisma db seed
+
+**Bắt đổi mật khẩu**: chỉ áp cho phiên đăng nhập bằng mật khẩu. Phiên Google dùng app bình thường dù tài khoản còn cờ
+"Chờ đổi mật khẩu" (danh tính do Google chứng minh; họ có thể không biết mật khẩu tạm).
+
+**Xoay `GOOGLE_CLIENT_SECRET`**: Console → client → *Add secret* → sửa `.env` → tạo lại container → xoá secret cũ trên Console.
+Phiên đang đăng nhập không bị ảnh hưởng (JWT chỉ giữ id user). Tắt Google: xoá 2 dòng khỏi `.env` rồi tạo lại container.
+
+**Lỗi thường gặp**: `redirect_uri_mismatch` → URI ở bước 2 sai (http/https, `www`, `/` cuối). Về `/login` với "sự cố cấu
+hình" → thiếu/sai `NEXTAUTH_URL` hoặc `AUTH_SECRET`. "Chưa được cấp quyền" dù đã nhập email → kiểm email đúng tài khoản Google
+(chữ hoa/thường không quan trọng), tài khoản không bị khoá, và consent screen đã Publish (External).
