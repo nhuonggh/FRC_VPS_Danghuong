@@ -1,12 +1,25 @@
-node_modules
-.next
+# Không đưa secret, lịch sử git, artefact build hay tài liệu vào build context.
+# (.env* chặn cả .env.test/.env.example — build không cần chúng; biến thật chỉ vào qua --env-file lúc chạy)
+.env
+.env.*
 .git
 .github
-.env
-.env.local
-.env.*.local
-docker-compose.yml
-README.md
-*.md
-docs
+.gitignore
+node_modules
+.next
+.vitest
+coverage
+.superpowers
+.claude
 tests
+docs
+db
+# design/: app import design/app-override.css (src/app/layout) — chỉ giữ CSS, bỏ phần tài liệu
+design/*
+!design/*.css
+*.md
+*.tsbuildinfo
+docker-compose.yml
+Dockerfile
+.dockerignore
+npm-debug.log*
