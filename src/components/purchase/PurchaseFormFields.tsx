@@ -1,0 +1,35 @@
+"use client";
+
+import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
+import { useState } from "react";
+import { Combobox, Field, inputClass, type ComboOption } from "@/components/ui";
+import { apiFetch } from "@/lib/api-fetch";
+import { formatCurrency, formatQty } from "@/lib/format";
+import type { PurchaseInput } from "@/server/purchase/schemas";
+import type { ProductOption } from "@/server/products/queries";
+
+export const emptyPurchaseLine = { productId: undefined, qty: undefined, unit: "", factor: 1, purchasePrice: undefined, rollInfo: "" } as unknown as PurchaseInput["lines"][number];
+const asNumber = (value: unknown) => Number(value) || 0;
+const round3 = (value: number) => Math.round(value * 1000) / 1000;
+
+export function PurchaseFormFields({ form, initialSupplier = null, initialProducts = [], maxDate }: { form: UseFormReturn<PurchaseInput>; initialSupplier?: ComboOption | null; initialProducts?: ProductOption[]; maxDate: string }) {
+  const { register, control, watch, setValue, formState: { errors } } = form;
+  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const lines = watch("lines");
+  const [products, setProducts] = useState(() => new Map(initialProducts.map((product) => [product.value, product])));
+  const supplier = watch("partnerId") ? initialSupplier : null;
+  const loadProducts = (q: string) => apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
+  const loadSuppliers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/suppliers/search?q=${encodeURIComponent(q)}`);
+  const goodsTotal = lines.reduce((sum, line) => sum + asNumber(line?.qty) * asNumber(line?.purchasePrice), 0);
+  return <div className="space-y-5">
+    <div className="grid gap-4 sm:grid-cols-3"><Controller control={control} name="partnerId" render={({ field }) => <Combobox label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => field.onChange(option ? Number(option.value) : undefined)} error={errors.partnerId?.message} />} />
+      <Field id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} className={inputClass(errors.date)} /></Field>
+      <Field id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message}><input id="freightCost" type="number" min={0} step="any" {...register("freightCost", { valueAsNumber: true })} className={`${inputClass(errors.freightCost)} tabular text-right`} /></Field></div>
+    <div className="overflow-x-auto rounded-sm border border-border"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Hệ số</th><th className="px-2 py-2 text-right">SL gốc</th><th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú cuộn</th><th aria-label="Thao tác" /></tr></thead><tbody>{fields.map((field, index) => {
+      const line = lines[index] ?? emptyPurchaseLine; const error = errors.lines?.[index]; const product = products.get(line.productId); const units = product?.units ?? []; const qtyBase = asNumber(line.qty) && asNumber(line.factor) ? round3(asNumber(line.qty) / asNumber(line.factor)) : 0;
+      return <tr key={field.id} className="border-b border-border align-top last:border-b-0"><td className="min-w-64 px-2 py-2"><Controller control={control} name={`lines.${index}.productId`} render={({ field: item }) => <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product ?? null} loadOptions={async (q) => { const result = await loadProducts(q); setProducts((current) => new Map([...current, ...result.map((row) => [row.value, row] as const)])); return result; }} placeholder="Tìm mã, tên…" onChange={(option) => { item.onChange(option ? Number(option.value) : undefined); const selected = option as ProductOption | null; if (selected) setProducts((current) => new Map(current).set(selected.value, selected)); setValue(`lines.${index}.unit`, selected?.baseUnit ?? "", { shouldValidate: true }); setValue(`lines.${index}.factor`, 1, { shouldValidate: true }); }} error={error?.productId?.message} />} /></td><td className="px-2 py-2"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td><td className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} className={`${inputClass(error?.qty)} tabular text-right`} /></td><td className="px-2 py-2"><input aria-label={`Hệ số dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.factor`, { valueAsNumber: true })} className={`${inputClass(error?.factor)} tabular text-right`} /></td><td className="px-2 py-2 text-right tabular">{qtyBase ? formatQty(qtyBase) : "—"}</td><td className="px-2 py-2"><input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.purchasePrice`, { valueAsNumber: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} /></td><td className="px-2 py-2 text-right tabular">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td><td className="px-2 py-2"><input aria-label={`Ghi chú cuộn dòng ${index + 1}`} {...register(`lines.${index}.rollInfo`)} className={inputClass(error?.rollInfo)} /></td><td className="px-2 py-2"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td></tr>;
+    })}</tbody><tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={6} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot></table></div>
+    <button type="button" onClick={() => append(emptyPurchaseLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
+    <Field id="note" label="Ghi chú" error={errors.note?.message}><textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+  </div>;
+}

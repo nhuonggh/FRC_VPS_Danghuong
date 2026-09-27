@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ictStartOfDay, toIct } from "@/lib/time";
+import { ictStartOfDay, ictYmd, toIct } from "@/lib/time";
 
 describe("time (Asia/Ho_Chi_Minh, UTC+7)", () => {
   it("23:50 ICT 30/09 (16:50Z) vẫn là ngày 30/09", () => {
@@ -48,5 +48,10 @@ describe("time (Asia/Ho_Chi_Minh, UTC+7)", () => {
   it("ictStartOfDay khớp toIct: 0h ICT thứ Hai", () => {
     expect(ictStartOfDay(2026, 9, 5).toISOString()).toBe("2026-10-04T17:00:00.000Z");
     expect(toIct(ictStartOfDay(2026, 9, 5)).dow).toBe(0);
+  });
+
+  it("ictYmd luôn dùng lịch ICT, không dùng timezone của máy chạy", () => {
+    expect(ictYmd(new Date("2026-09-30T16:59:59Z"))).toBe("2026-09-30");
+    expect(ictYmd(new Date("2026-09-30T17:00:00Z"))).toBe("2026-10-01");
   });
 });

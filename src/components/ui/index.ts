@@ -15,4 +15,5 @@ export { QuickTimeFilter } from "./QuickTimeFilter";
 export { SearchBox } from "./SearchBox";
 export { Field, inputClass } from "./Field";
 export { EditableSection } from "./EditableSection";
+export { ReasonDialog } from "./ReasonDialog";
 export { ToastHost } from "./Toast";

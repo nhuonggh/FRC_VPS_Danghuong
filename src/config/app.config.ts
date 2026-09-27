@@ -86,8 +86,8 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "receiving", label: "Nhập hàng",
         functions: [
-          { key: "purchase-new", label: "Lập phiếu nhập", desc: "Quy đổi đơn vị, sinh lô FIFO, phân bổ cước", icon: "package-plus", view: "form", path: "/purchase/orders/new", codes: ["19"], perm: "purchase.create", planned: P },
-          { key: "purchase-list", label: "Danh sách phiếu nhập", desc: "Xem, tìm, sửa phiếu nhập", icon: "clipboard-list", view: "table", path: "/purchase/orders", codes: ["20"], perm: "purchase.view", planned: P },
+          { key: "purchase-new", label: "Lập phiếu nhập", desc: "Quy đổi đơn vị, sinh lô FIFO, phân bổ cước", icon: "package-plus", view: "form", path: "/purchase/orders/new", codes: ["19"], perm: "purchase.create" },
+          { key: "purchase-list", label: "Danh sách phiếu nhập", desc: "Xem, tìm, sửa phiếu nhập", icon: "clipboard-list", view: "table", path: "/purchase/orders", codes: ["20"], perm: "purchase.view" },
           { key: "stock-in-adj", label: "Nhập kho đầu kỳ / không NCC", desc: "Hàng lệch, dư — không sinh công nợ", icon: "layers", view: "table", path: "/purchase/adjustments-in", codes: ["21"], perm: "stock_adjust.manage", planned: P },
           { key: "supplier-list", label: "Nhà cung cấp", desc: "Danh sách NCC", icon: "building-2", view: "table", path: "/purchase/suppliers", codes: ["10"], perm: "partner.view" },
         ],
