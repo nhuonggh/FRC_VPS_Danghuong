@@ -79,6 +79,9 @@ jobs:
           context: .
           target: runner
           push: true
+          # registry:2 riêng không giữ được manifest attestation (index con) -> pull lỗi "manifest unknown"
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -92,6 +95,9 @@ jobs:
           context: .
           target: migrator
           push: true
+          # registry:2 riêng không giữ được manifest attestation (index con) -> pull lỗi "manifest unknown"
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.IMAGE_NAME }}:migrate
             ${{ env.IMAGE_NAME }}:migrate-${{ env.IMAGE_TAG }}

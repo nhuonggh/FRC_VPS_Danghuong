@@ -66,6 +66,8 @@ Private key (`cat ~/.ssh/id_ed25519`, cả dòng BEGIN/END) → GitHub Secret `V
 
 Workflow cũng tự `docker login` mỗi lần deploy bằng `REGISTRY_USER`/`REGISTRY_PASS` (qua biến môi trường SSH, không in ra log).
 
+Lưu ý build: registry `registry:2` riêng không lưu được manifest attestation của buildx. Cả hai bước build trong `deploy.yml` đặt `provenance: false` và `sbom: false`; thiếu 2 dòng này thì `docker pull` trên VPS báo `manifest unknown` (đã gặp ở lần deploy đầu, 2026-09-27).
+
 ## 4. Thư mục + 2 file env production
 
 Hai file tách biệt, cùng chủ `deploy_dherp`, mode `600`. Container app **chỉ** nhận `.env`; image migrator **chỉ** nhận
