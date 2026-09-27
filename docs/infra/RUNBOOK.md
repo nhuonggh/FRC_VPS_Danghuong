@@ -66,7 +66,13 @@ Private key (`cat ~/.ssh/id_ed25519`, cả dòng BEGIN/END) → GitHub Secret `V
 
 Workflow cũng tự `docker login` mỗi lần deploy bằng `REGISTRY_USER`/`REGISTRY_PASS` (qua biến môi trường SSH, không in ra log).
 
-Lưu ý build: registry `registry:2` riêng không lưu được manifest attestation của buildx. Cả hai bước build trong `deploy.yml` đặt `provenance: false` và `sbom: false`; thiếu 2 dòng này thì `docker pull` trên VPS báo `manifest unknown` (đã gặp ở lần deploy đầu, 2026-09-27).
+Lưu ý build — bài học lần deploy đầu (2026-09-27):
+
+- Registry chung có cron **GC hằng tuần**: `0 3 * * 0 docker exec registry bin/registry garbage-collect --delete-untagged …` (Chủ nhật 03:00 giờ VPS, tức 01:00 UTC; log `/var/log/registry-gc.log`). Lần push đầu của dự án này rơi đúng phút GC chạy: GC xoá blob/manifest chưa gắn tag, để lại `_layers` link mồ côi, khiến pull báo `manifest unknown` rồi `blob ... EOF`, và các lần push sau bỏ qua upload vì registry tưởng blob còn.
+- Vì GC `--delete-untagged` xoá mọi manifest không có tag (kể cả manifest attestation con của buildx), cả hai bước build đặt `provenance: false` và `sbom: false` (image là 1 manifest đơn, được gắn tag).
+- **Không push/deploy vào Chủ nhật quanh 03:00 giờ VPS (±15 phút).**
+- Xử lý khi gặp lại `manifest unknown`/`blob unknown` với repo `dherp`: xoá thư mục repo của CHÍNH dự án này trong storage registry (`/opt/registry/data/docker/registry/v2/repositories/dherp`) rồi chạy lại workflow. Không đụng repo của dự án khác, không đổi mật khẩu/htpasswd, không khởi động lại registry.
+- Ghi nhận cho chủ registry: repo `crm` và `lms` cũng còn hàng nghìn link layer mồ côi (blob đã bị GC xoá) — pull lại image cũ chưa được đẩy lại sẽ lỗi.
 
 ## 4. Thư mục + 2 file env production
 
