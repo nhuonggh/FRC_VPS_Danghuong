@@ -1691,7 +1691,7 @@ git commit -m "feat(catalog): màn Cài đặt danh mục — mini-sidebar, bả
 ---
 ### Task 4: Khung Import Excel dùng lại được (đọc số Việt Nam, xem trước, ghi, file loại, mẫu)
 
-**Tiến độ thực hiện 27/09/2026:** Đã triển khai khung import dùng chung và test parser/reader; chờ commit/CI trước khi đóng task. Các task 5, 7 và dữ liệu đầu kỳ phải dùng khung này, không tự đọc Excel riêng.
+**Tiến độ thực hiện 27/09/2026:** Đã triển khai khung import dùng chung và test parser/reader; commit `113364b`, chờ CI deploy trước khi đóng task. Các task 5, 7 và dữ liệu đầu kỳ phải dùng khung này, không tự đọc Excel riêng.
 
 **Mã:** nền cho 9, 10, 11 và D1–D2 (plan 05-D8 dùng lại). **Files:**
 - Create: `src/lib/parse-number.ts`
