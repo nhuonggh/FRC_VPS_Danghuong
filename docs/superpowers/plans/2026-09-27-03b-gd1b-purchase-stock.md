@@ -314,6 +314,8 @@ git commit -m "feat(db): phiếu nhập hàng + nhập không NCC (mã 19–21),
 
 ### Task 10: Cầu nối Idempotency-Key + giao dịch kho
 
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. `withIdempotentInventoryTx` không lồng transaction; chiếm/lưu khoá trong `ctx.tx` của FIFO. Typecheck và 3 file / 17 test idempotency–barrel xanh.
+
 **Mã:** nền cho 19, 21 (và plan 04/05). **Files:**
 - Modify: `src/server/idempotency/with-idempotency.ts` (tách `claimIdempotencyKey` / `saveIdempotencyResult`, hành vi cũ giữ nguyên)
 - Create: `src/server/idempotency/with-inventory-tx.ts`
