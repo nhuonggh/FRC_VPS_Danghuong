@@ -62,6 +62,8 @@ Lệnh: như 03a (`rtk proxy npx vitest run …`, DB test cổng 5434, không ch
 
 ### Task 9: Schema nhập hàng & nhập không NCC (migration `purchasing`) + tên field nhạy cảm
 
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. Migration `20260927125310_purchasing` đã áp dụng DB dev; test schema/quyền 3 file / 21 test và lint xanh. `npm run db:schema` chưa chạy được cục bộ vì WSL không có `/bin/bash`; không ảnh hưởng Prisma schema/migration hoặc test.
+
 **Mã:** 19, 20, 21 (dữ liệu). **Files:**
 - Create: `prisma/schema/purchase.prisma`, `prisma/migrations/<ts>_purchasing/migration.sql` (sinh + CHECK)
 - Modify: `prisma/schema/master.prisma` (`Partner.purchases`, `Product.purchaseLines/adjustmentLines`), `prisma/schema/period.prisma` (`Period.purchases/stockAdjustments`)

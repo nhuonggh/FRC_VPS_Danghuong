@@ -9,23 +9,25 @@ enum PeriodStatus {
 // (tương đương partial unique index mà Prisma không mô hình được). CHECK ở migration SQL thô
 // giữ isOpen luôn khớp status.
 model Period {
-  id        Int          @id @default(autoincrement())
-  name      String
-  status    PeriodStatus @default(OPEN)
-  isOpen    Boolean?     @unique
-  openedAt  DateTime     @default(now())
-  closedAt  DateTime?
-  closedBy  Int?
+  id       Int          @id @default(autoincrement())
+  name     String
+  status   PeriodStatus @default(OPEN)
+  isOpen   Boolean?     @unique
+  openedAt DateTime     @default(now())
+  closedAt DateTime?
+  closedBy Int?
 
-  openingStock    OpeningStock[]
-  openingDebt     OpeningDebt[]
-  openingCash     OpeningCash[]
-  openingDiscount OpeningDiscount[]
-  layers          CostLayer[]
-  ledger          StockLedger[]
-  partnerLedger   PartnerLedger[]
-  cashLedger      CashLedger[]
-  discountLedger  DiscountLedger[]
+  openingStock     OpeningStock[]
+  openingDebt      OpeningDebt[]
+  openingCash      OpeningCash[]
+  openingDiscount  OpeningDiscount[]
+  layers           CostLayer[]
+  ledger           StockLedger[]
+  partnerLedger    PartnerLedger[]
+  cashLedger       CashLedger[]
+  discountLedger   DiscountLedger[]
+  purchases        Purchase[]
+  stockAdjustments StockAdjustment[]
 
   @@map("periods")
 }

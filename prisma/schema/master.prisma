@@ -43,14 +43,15 @@ model Partner {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  group         PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  owner         User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  mergedInto    Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedFrom    Partner[]         @relation("PartnerMerge")
-  openingDebts  OpeningDebt[]
-  openingDisc   OpeningDiscount[]
-  partnerLedger PartnerLedger[]
+  group          PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner          User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  mergedInto     Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom     Partner[]         @relation("PartnerMerge")
+  openingDebts   OpeningDebt[]
+  openingDisc    OpeningDiscount[]
+  partnerLedger  PartnerLedger[]
   discountLedger DiscountLedger[]
+  purchases      Purchase[]
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -73,10 +74,12 @@ model Product {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  units        ProductUnit[]
-  openingStock OpeningStock[]
-  layers       CostLayer[]
-  ledger       StockLedger[]
+  units           ProductUnit[]
+  openingStock    OpeningStock[]
+  layers          CostLayer[]
+  ledger          StockLedger[]
+  purchaseLines   PurchaseLine[]
+  adjustmentLines StockAdjustmentLine[]
 
   @@index([searchText])
   @@index([kind])

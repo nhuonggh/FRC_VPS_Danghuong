@@ -1,19 +1,19 @@
 model User {
-  id                 Int      @id @default(autoincrement())
-  username           String   @unique
-  passwordHash       String
-  fullName           String
+  id                    Int       @id @default(autoincrement())
+  username              String    @unique
+  passwordHash          String
+  fullName              String
   // Email Google được phép đăng nhập vào tài khoản này (khớp CHÍNH XÁC, email_verified). NULL = không đăng nhập Google.
   // Lưu dạng lowercase + trim — CHECK users_email_normalized_chk (migration SQL thô) chặn ở DB.
-  email              String?  @unique
+  email                 String?   @unique
   // Lần cuối giá trị email đổi/gỡ. Phiên Google mở TRƯỚC mốc này bị vô hiệu (loadActor so với authAt trong JWT).
-  emailChangedAt     DateTime? @db.Timestamptz(3)
+  emailChangedAt        DateTime? @db.Timestamptz(3)
   // Hạn của MẬT KHẨU TẠM (khi mustChangePassword): quá hạn → verifyCredentials từ chối như sai mật khẩu. NULL = không có hạn.
   tempPasswordExpiresAt DateTime? @db.Timestamptz(3)
-  isLocked         Boolean  @default(false)
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  isLocked              Boolean   @default(false)
+  mustChangePassword    Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   roles         UserRole[]
   ownedPartners Partner[]  @relation("PartnerOwner")
