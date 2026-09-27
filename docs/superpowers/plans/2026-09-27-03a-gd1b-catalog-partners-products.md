@@ -1691,7 +1691,7 @@ git commit -m "feat(catalog): màn Cài đặt danh mục — mini-sidebar, bả
 ---
 ### Task 4: Khung Import Excel dùng lại được (đọc số Việt Nam, xem trước, ghi, file loại, mẫu)
 
-**Tiến độ thực hiện 27/09/2026:** Đã triển khai khung import dùng chung và test parser/reader; commit `113364b`, chờ CI deploy trước khi đóng task. Các task 5, 7 và dữ liệu đầu kỳ phải dùng khung này, không tự đọc Excel riêng.
+**Tiến độ thực hiện 27/09/2026:** Đã triển khai và deploy CI xanh khung import dùng chung; commit `113364b`. Các task 5, 7 và dữ liệu đầu kỳ phải dùng khung này, không tự đọc Excel riêng.
 
 **Mã:** nền cho 9, 10, 11 và D1–D2 (plan 05-D8 dùng lại). **Files:**
 - Create: `src/lib/parse-number.ts`
@@ -2689,7 +2689,7 @@ git commit -m "feat(import): khung Import Excel — số kiểu Việt Nam, xem 
 
 ### Task 5: Khách hàng & NCC — backend (mã tự sinh, tìm không dấu, phạm vi "khách của mình")
 
-> **Tiến độ 27/09/2026:** Đã triển khai backend và kiểm thử trọng yếu; commit/push thực hiện cùng đợt này, CI/deploy chờ user cập nhật ở phiên kế tiếp.
+> **Tiến độ 27/09/2026:** Đã triển khai backend, kiểm thử trọng yếu và deploy CI xanh; commit `ec9fc92`, bản sửa scope người phụ trách `4958808`.
 
 **Mã:** 9, 10. **Files:**
 - Create: `src/server/partners/{schemas,codes,service,queries,import-spec}.ts`

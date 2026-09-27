@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (Task 1–3 của plan 03a đã deploy CI xanh; Task 4–5 đã commit/push và chờ kết quả CI/deploy do user cập nhật ở phiên sau). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (Task 1–5 của plan 03a và các commit tài liệu liên quan đã deploy CI xanh theo user xác nhận). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -91,18 +91,19 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 16 | **GĐ1b / Plan 03a Task 1** — schema danh mục nền đã thực thi | commit `6ea147a`, CI deploy xanh `36294966806`: migration `catalog_foundation`, CHECK DB, factories, test DB/invariant, typecheck/lint |
 | 17 | **GĐ1b / Plan 03a Task 2** — Catalog Settings backend đã thực thi | commit `cdb4032`, CI deploy xanh `36295568250`: 8 section data-driven, zod, CRUD/audit, 409, query/search/options, test/typecheck/lint |
-| 18 | **GĐ1b / Plan 03a Task 5** — backend Khách hàng/NCC | Mã KH/NCC tự sinh có khoá transaction, schema/CRUD/audit/idempotency, phạm vi “khách của mình”, tìm không dấu, export Excel và ImportSpec dùng Task 4; không có `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; test service/query/schema/import, typecheck/lint xanh; commit/push chờ CI/deploy |
+| 18 | **GĐ1b / Plan 03a Task 5** — backend Khách hàng/NCC | Mã KH/NCC tự sinh có khoá transaction, schema/CRUD/audit/idempotency, phạm vi “khách của mình”, tìm không dấu, export Excel và ImportSpec dùng Task 4; không có `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; test service/query/schema/import, typecheck/lint và CI/deploy xanh |
+| 19 | **GĐ1b / Plan 03a Task 4–5 + cập nhật kế hoạch** — deploy đã xác nhận | CI/CD xanh do user xác nhận: `113364b`, `4445761`, `ec9fc92`, `4958808`, `af0be47`. Task 1–5 đủ điều kiện chuyển sang Task 6. |
 | 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
 
 | Hạng mục | Tình trạng | Bước tiếp |
 |---|---|---|
-| Deploy Task 1–3 (`6ea147a`, `cdb4032`, `40a85e6`) | **CI/CD xanh** | Task 4–5 đã push tiếp lên `main`; chờ kết quả CI/deploy của các commit mới |
+| Deploy Task 1–5 và tài liệu kế hoạch | **CI/CD xanh** theo user xác nhận | `main` đã có Task 4–5 và addendum quỹ hậu kiểm; sẵn sàng triển khai Task 6 khi user giao việc |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
-| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** (`36301145062`) | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09; commit layout chờ deploy |
-| **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | ĐÃ commit `113364b`; chờ CI/deploy | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh |
-| **GĐ1b / Plan 03a Task 5** — Backend Khách hàng/NCC | ĐÃ triển khai, commit/push chờ CI/deploy | Mã KH/NCC tự sinh an toàn khi tạo đồng thời; CRUD theo section/audit/idempotency; thiếu `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; scope “khách của mình”; tìm không dấu, Excel export và ImportSpec D1. |
+| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09. |
+| **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | **CI/CD xanh** (`113364b`) | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh. |
+| **GĐ1b / Plan 03a Task 5** — Backend Khách hàng/NCC | **CI/CD xanh** (`ec9fc92`, `4958808`) | Mã KH/NCC tự sinh an toàn khi tạo đồng thời; CRUD theo section/audit/idempotency; thiếu `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; scope “khách của mình”; tìm không dấu, Excel export và ImportSpec D1. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
@@ -117,7 +118,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | Thứ tự | Plan | Nội dung | Điều kiện vào |
 |---|---|---|---|
-| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–5 của 03a đã thực thi; còn Task 6–8, toàn bộ 03b/03c | user đã duyệt plan và chọn **subagent-driven** (2026-09-27); deploy Task 4–5 đang chờ kết quả CI/user xác nhận |
+| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–5 của 03a đã thực thi và deploy xanh; còn Task 6–8, toàn bộ 03b/03c | user đã duyệt plan và chọn **subagent-driven** (2026-09-27); bước kế tiếp là Task 6 |
 | 2 | 04 — GĐ1c (chưa viết) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
 | 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
@@ -155,7 +156,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 11 | Chính sách GC registry sau này (cron đã tắt): chạy tay khi đĩa đầy, có `--dry-run`, ngoài giờ deploy; hoặc đề xuất chủ registry dùng GC thường (không `--delete-untagged`) | user (chủ registry) | Đĩa VPS còn 78 GB, không gấp |
 | 13 | **Đã xác nhận mặc định cho plan 03b (2026-09-27):** cước không vào công nợ NCC; người lập phiếu nhập cần `purchase_price.view`; nhập không NCC dùng giá nhập gần nhất; XNT dùng giá trị sổ sách; `isCoil` và chiều hệ số quy đổi theo D-12 | user/khách | Giữ `TODO: confirm` tại các điểm cần bảng định mức/dữ liệu thật; thay đổi sau này phải cập nhật plan và test |
 | 14 | Cho phép xoá DB dev cũ `dh_dev` trong container local `postgres_dh_local` (`.env` dev trỏ `dh_dev_b`) | user | Chỉ máy dev, không ảnh hưởng VPS |
-| 15 | **Đã duyệt bổ sung phạm vi Plan 05:** quỹ tiền mặt chung hậu kiểm (3 kế toán lập trước; thủ quỹ kiểm tra/trả lại/chốt sau), công nợ cập nhật ngay và tách đã/chưa kiểm tra | user | Chi tiết tại `docs/superpowers/plans/2026-09-27-05-gd2-cash-review-requirements.md`; chờ kết quả deploy Task 4–5 rồi mới triển khai theo kế hoạch. Bốn lựa chọn về sửa phiếu/chốt quỹ/chênh lệch/quyền sửa sau kiểm tra vẫn cần xác nhận trước khi viết plan kỹ thuật GĐ2. |
+| 15 | **Đã duyệt bổ sung phạm vi Plan 05:** quỹ tiền mặt chung hậu kiểm (3 kế toán lập trước; thủ quỹ kiểm tra/trả lại/chốt sau), công nợ cập nhật ngay và tách đã/chưa kiểm tra | user | Chi tiết tại `docs/superpowers/plans/2026-09-27-05-gd2-cash-review-requirements.md`; deploy Task 4–5 đã xanh. Bốn lựa chọn về sửa phiếu/chốt quỹ/chênh lệch/quyền sửa sau kiểm tra vẫn cần xác nhận trước khi viết plan kỹ thuật GĐ2. |
 
 ## 8. Quyết định khoá & rulings (tóm tắt)
 
