@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (plan 03a/03b/03c + master plan đã commit, merge `main`, đang qua CI/CD; chưa thực thi code GĐ1b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (Task 1–2 của plan 03a đã commit, deploy CI xanh; chưa thực thi Task 3–8 hay plan 03b/03c). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -89,15 +89,15 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 12 | **Plan 03a** viết xong (Task 1–8, ~6.000 dòng, TDD đủ code + test): migration `catalog_foundation` (Vehicle, Driver, Route, ExpenseType, ProcessingType, `isActive`, `Product.isCoil`), Catalog Settings (7 danh mục nhỏ, một file cấu hình `CATALOG_SECTIONS`), khung Import Excel dùng lại (`parseViNumber`, xem trước/ghi/file lỗi/mẫu), KH & NCC (mã, tìm không dấu, phạm vi "khách của mình", import), sản phẩm + đơn vị quy đổi (`convertToBase`, import 1.300 SP) | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 13 | **Plan 03b** viết xong (Task 9–15, ~4.900 dòng): schema nhập hàng + nhập không NCC + field nhạy cảm mới (`purchaseAmount`, `freightCost`…), cầu nối `withIdempotentInventoryTx`, phiếu nhập hàng, nhập kho không NCC, báo cáo/giao diện kho | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
-| 16 | **GĐ1b / Plan 03a Task 1** — schema danh mục nền đã thực thi | migration `catalog_foundation`: Vehicle/Driver/Route/ExpenseType/ProcessingType, `isActive`, `Product.isCoil`, CHECK DB, factories và test DB; test mục tiêu + invariant, typecheck và lint xanh |
-| 17 | **GĐ1b / Plan 03a Task 2** — Catalog Settings backend đã thực thi | 8 section data-driven, zod schema dùng chung, CRUD transaction + audit, 409 trùng/xóa đang dùng, query/search/options; test, typecheck, lint xanh |
+| 16 | **GĐ1b / Plan 03a Task 1** — schema danh mục nền đã thực thi | commit `6ea147a`, CI deploy xanh `36294966806`: migration `catalog_foundation`, CHECK DB, factories, test DB/invariant, typecheck/lint |
+| 17 | **GĐ1b / Plan 03a Task 2** — Catalog Settings backend đã thực thi | commit `cdb4032`, CI deploy xanh `36295568250`: 8 section data-driven, zod, CRUD/audit, 409, query/search/options, test/typecheck/lint |
 | 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
 
 | Hạng mục | Tình trạng | Bước tiếp |
 |---|---|---|
-| CI run `dce08cb` (thêm bước chờ ngoài cửa sổ GC; cùng mã app) | đang chạy/xếp hàng lúc ghi file | kiểm `gh run list -R nhuonggh/FRC_VPS_Danghuong`; nếu xanh thì không làm gì; nếu đỏ đọc log (`gh run view <id> --log-failed`) |
+| Deploy Task 1 + Task 2 (`6ea147a`, `cdb4032`) | **CI/CD xanh**; `main` = `cdb4032` | Task 3 có thể bắt đầu; mọi commit `main` vẫn deploy theo workflow |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
 | **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | CHƯA làm | bước kế tiếp: route API, bảng/action kebab, danh sách/tạo mới/chi tiết |
 
