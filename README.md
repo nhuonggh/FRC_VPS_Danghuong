@@ -74,7 +74,7 @@ npm test                                   # hoặc: npx vitest run tests/invent
 ## Triển khai
 
 Tự động khi push `main` (`.github/workflows/deploy.yml`): test → build 2 image (`Dockerfile`: target `runner` =
-`node server.js`, target `migrator` = `prisma migrate deploy` / `prisma db seed`) → tar.gz → scp + `docker load` trên VPS (registry chung đang hỏng, xem RUNBOOK mục 3) → SSH vào VPS:
+`node server.js`, target `migrator` = `prisma migrate deploy` / `prisma db seed`) → đẩy lên registry riêng → SSH vào VPS:
 migrate + seed → thay container `dherp_app` → kiểm `/api/health`. Tên miền `https://dherp.sheetapp.store` (Caddy).
 
 Tài liệu hạ tầng (`docs/infra/`):
