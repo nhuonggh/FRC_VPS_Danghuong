@@ -4468,7 +4468,7 @@ git commit -m "feat(partners): màn Khách hàng & Nhà cung cấp — danh sác
 
 ### Task 7: Sản phẩm — backend (đơn vị & quy đổi, định mức tồn, tìm không dấu, import D2)
 
-> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. Phạm vi: `products/{units,schemas,service,queries,import-spec}`, validation/import smoke test, typecheck và lint.
+> Tiến độ 27/09: hoàn thành code, CI/deploy xanh theo user xác nhận. Phạm vi: `products/{units,schemas,service,queries,import-spec}`, validation/import smoke test, typecheck và lint.
 
 **Mã:** 11, 12, 25 (cấu hình `minStock`). **Files:**
 - Create: `src/server/products/{schemas,units,service,queries,import-spec}.ts`
@@ -5233,6 +5233,8 @@ git commit -m "feat(products): SP backend — đơn vị & quy đổi (D-12), đ
 ---
 
 ### Task 8: Sản phẩm — API & giao diện, đóng plan 03a
+
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. Đã mở API và menu Sản phẩm; 3 file / 8 test `tests/products` xanh, typecheck/lint xanh; production build đã compile thành công.
 
 **Mã:** 11, 12, 25 (cấu hình). **Files:**
 - Create: `src/app/api/products/route.ts`, `src/app/api/products/[id]/section-update/route.ts`, `src/app/api/products/{search,export,import,import-template}/route.ts`

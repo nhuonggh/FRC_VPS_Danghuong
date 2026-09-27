@@ -119,7 +119,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "products", label: "Sản phẩm",
         functions: [
-          { key: "product-list", label: "Danh mục sản phẩm", desc: "~1.300 mã, đơn vị tính & quy đổi", icon: "package", view: "table", path: "/inventory/products", codes: ["11", "12"], perm: "product.view", planned: P },
+          { key: "product-list", label: "Danh mục sản phẩm", desc: "~1.300 mã, đơn vị tính & quy đổi", icon: "package", view: "table", path: "/inventory/products", codes: ["11", "12"], perm: "product.view" },
         ],
       },
     ],

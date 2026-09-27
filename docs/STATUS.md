@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (Task 1–6 của plan 03a đã deploy CI xanh theo user xác nhận; Task 7 hoàn thành code, chờ CI/deploy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (Task 1–7 của plan 03a đã deploy CI xanh theo user xác nhận; Task 8 hoàn thành code, chờ CI/deploy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -106,7 +106,8 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | **CI/CD xanh** (`113364b`) | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh. |
 | **GĐ1b / Plan 03a Task 5** — Backend Khách hàng/NCC | **CI/CD xanh** (`ec9fc92`, `4958808`) | Mã KH/NCC tự sinh an toàn khi tạo đồng thời; CRUD theo section/audit/idempotency; thiếu `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; scope “khách của mình”; tìm không dấu, Excel export và ImportSpec D1. |
 | **GĐ1b / Plan 03a Task 6** — API và giao diện Khách hàng/NCC | **CI/CD xanh** (`51640a3`, user xác nhận) | Danh sách/tìm/lọc/phân trang/import-export; tạo mới; detail sửa từng section; API và menu đã mở cho Khách hàng/NCC. |
-| **GĐ1b / Plan 03a Task 7** — Backend sản phẩm | Đã hoàn thành code, chờ CI/deploy | Đơn vị/quy đổi D-12 dùng Decimal, định mức tồn, tìm không dấu, export và import D2; chưa tạo API/UI (Task 8). |
+| **GĐ1b / Plan 03a Task 7** — Backend sản phẩm | **CI/CD xanh** (`492d5de`, user xác nhận) | Đơn vị/quy đổi D-12 dùng Decimal, định mức tồn, tìm không dấu, export và import D2. |
+| **GĐ1b / Plan 03a Task 8** — API và giao diện Sản phẩm | Hoàn thành code, chờ CI/deploy | API create/section/search/export/import; danh sách/tạo mới/chi tiết theo section; menu đã mở. Typecheck/lint và 8 test sản phẩm xanh. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
@@ -121,7 +122,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | Thứ tự | Plan | Nội dung | Điều kiện vào |
 |---|---|---|---|
-| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–6 deploy xanh; Task 7 hoàn thành code chờ CI; còn Task 8, toàn bộ 03b/03c | user đã duyệt plan; sau CI Task 7 sẽ thực hiện Task 8 để đóng 03a |
+| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–7 deploy xanh; Task 8 hoàn thành code chờ CI; còn toàn bộ 03b/03c | user đã duyệt plan; CI Task 8 xanh sẽ đóng 03a |
 | 2 | 04 — GĐ1c (chưa viết) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
 | 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
@@ -129,8 +130,8 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Bàn giao phiên kế tiếp — thứ tự đề nghị:**
 1. Ghi kết quả CI/deploy của `113364b`, `4445761`, `ec9fc92` và commit sửa quy tắc owner kế tiếp vào mục 4/5; nếu đỏ thì xử lý đúng log trước khi làm chức năng mới.
-2. Ghi kết quả CI/deploy **Task 7**; nếu xanh, thực hiện Task 8 (API/UI Sản phẩm và review/quality gate 03a).
-3. Sau Task 8 CI xanh, đóng plan 03a rồi mới mở 03b.
+2. Ghi kết quả CI/deploy **Task 8**; nếu xanh, đóng plan 03a và mở Task 9 (nhập hàng, thuộc plan 03b).
+3. Plan 03b/03c vẫn chưa thực thi; GĐ2 quỹ hậu kiểm chỉ mở sau Plan 04 và các quyết định nghiệp vụ còn treo.
 
 **Hợp đồng bắt buộc của engine cho plan 03+** (đủ ở `docs/engine-fifo.md` §0/§3/§5/§6/§8):
 - Mỗi dòng nghiệp vụ lưu `at` + `seq` cùng dòng; sửa chứng từ không đổi ngày phải dùng lại `at`, và truyền lại `seq` đã lưu khi khôi phục.
