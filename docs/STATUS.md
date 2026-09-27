@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (cuối phiên deploy đầu tiên). Người cập nhật: Claude. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (đã hoàn tất bộ plan 03a/03b/03c và cập nhật master plan; chưa thực thi code GĐ1b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -20,7 +20,7 @@ file `prisma/schema/`) · PostgreSQL 15 · next-auth v4 (Credentials + Google) �
 UI theo skill `crm-design` (trang chi tiết full-page, không split panel). Hạ tầng theo skill `setup-project`.
 
 **Trạng thái một dòng:** GĐ0 (nền tảng) + GĐ1a (engine FIFO) xong và **đã deploy chạy thật** tại https://dherp.sheetapp.store;
-chưa có màn nghiệp vụ nào (danh mục, nhập/bán hàng… là plan 03–07, chưa viết).
+chưa có màn nghiệp vụ nào trong code. Plan 03 (GĐ1b) đã viết đủ 03a/03b/03c — CHƯA thực thi; plan 04–07 chưa viết.
 
 ## 2. Quy tắc bất di bất dịch (đọc kỹ)
 
@@ -85,28 +85,33 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 8 | **Hạ tầng VPS DHERP** (user, DB, `.env`/`.env.migrate`, GitHub Secrets, Caddy, cert) + Dockerfile/deploy.yml/RUNBOOK/VERIFY | build + chạy thử image cục bộ; migrate + seed 2 lần idempotent |
 | 9 | **Deploy đầu tiên thành công** 2026-09-27 (CI run `36286414314`) | `/api/health` 200; DB seed: 50 quyền, 5 vai trò, 1 kỳ mở, user `admin`; `/login` 200 có nút Google; Google chấp nhận redirect URI; các site khác không bị ảnh hưởng |
 | 10 | Xử lý sự cố registry chung (xem mục 3): tắt cron GC, restart registry, sửa lại tag `crm` | crm_app/lms_app và site của họ không bị gián đoạn; dữ liệu crm nguyên vẹn (DB, uploads) |
+| 11 | User chốt các mục cũ (2026-09-27): #1, #2, #3 đóng; #5 (nhánh/merge chỉ khi user duyệt) xác nhận; #4 duyệt bắt đầu plan 03; #6 (backup) chưa cần; #7 (Caddy header + rate limit + Origin) đồng ý | đã ghi vào mục 7 |
+| 12 | **Plan 03a** viết xong (Task 1–8, ~6.000 dòng, TDD đủ code + test): migration `catalog_foundation` (Vehicle, Driver, Route, ExpenseType, ProcessingType, `isActive`, `Product.isCoil`), Catalog Settings (7 danh mục nhỏ, một file cấu hình `CATALOG_SECTIONS`), khung Import Excel dùng lại (`parseViNumber`, xem trước/ghi/file lỗi/mẫu), KH & NCC (mã, tìm không dấu, phạm vi "khách của mình", import), sản phẩm + đơn vị quy đổi (`convertToBase`, import 1.300 SP) | `docs/superpowers/plans/2026-09-27-03a-gd1b-catalog-partners-products.md` — chưa thực thi, chưa commit |
+| 13 | **Plan 03b** viết xong (Task 9–15, ~4.900 dòng): schema nhập hàng + nhập không NCC + field nhạy cảm mới (`purchaseAmount`, `freightCost`…), cầu nối `withIdempotentInventoryTx`, phiếu nhập hàng (phân bổ cước theo giá trị, làm tròn phần dư lớn nhất, công nợ phải trả, sửa/hủy, cước nhập sau, export), nhập kho không NCC (mã 21), báo cáo kho (tồn, thẻ kho, XNT, tra cứu cuộn, tồn theo SP; SQL window function, test hiệu năng 1.300 SP) và giao diện kho | `docs/superpowers/plans/2026-09-27-03b-gd1b-purchase-stock.md` — chưa thực thi, chưa commit; cuối file có bảng "Cần khách xác nhận" (mục 7 #13) |
+| 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | `docs/superpowers/plans/2026-09-27-03c-gd1b-bom-company-home.md` — chưa thực thi, chưa commit |
+| 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
 
 | Hạng mục | Tình trạng | Bước tiếp |
 |---|---|---|
 | CI run `dce08cb` (thêm bước chờ ngoài cửa sổ GC; cùng mã app) | đang chạy/xếp hàng lúc ghi file | kiểm `gh run list -R nhuonggh/FRC_VPS_Danghuong`; nếu xanh thì không làm gì; nếu đỏ đọc log (`gh run view <id> --log-failed`) |
-| Bàn giao đăng nhập lần đầu cho user | user tự làm | xem mục 7 (#1, #2) |
+| **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
 **Nợ vận hành ngay (nhỏ, làm trước khi giao khách):**
-1. Sao lưu `pg_dump` hằng đêm cho `postgres_dherp` + bản ngoài máy chủ (task D9 của plan 05; cần thêm cron trên VPS → xem mục 7 #6).
-2. Chống dò mật khẩu đăng nhập (rate limit ở Caddy hoặc trong app), header bảo mật (X-Frame-Options / CSP `frame-ancestors`) ở Caddy, kiểm `Origin`
-   cho request không phải GET tới `/api/*` (tuỳ chọn) — xem mục 7 #7.
-3. Sửa tag `lms` trong registry (chờ user cho phép — mục 7 #3).
-4. Tạo lại Google client secret (user làm, hướng dẫn ở mục 7 #2).
+1. ~~Sao lưu `pg_dump` hằng đêm~~ — **user: chưa cần (2026-09-27)**; hoãn, nhắc lại trước khi nhập dữ liệu thật/go-live (task D9 plan 05).
+2. **Đã duyệt, chưa làm:** chống dò mật khẩu đăng nhập (rate limit trong app; Caddy nếu module hỗ trợ), header bảo mật (X-Frame-Options / CSP
+   `frame-ancestors`, nosniff, Referrer-Policy) chỉ trong `dherp.caddy` của dự án này, kiểm `Origin` cho request không phải GET tới `/api/*`.
+   Sửa file trong repo `docs/infra/caddy/dherp.caddy` + áp dụng trên VPS (`caddy validate` → `reload`); không đụng site khác.
+3. ~~Sửa tag `lms`~~ và ~~Google client secret~~ — user đã đóng #1, #2, #3 (2026-09-27); không còn việc của AI.
 
 **Lộ trình sản phẩm** (chi tiết + interface + test từng task: `docs/superpowers/plans/2026-09-24-00-master-plan.md` mục 5):
 
 | Thứ tự | Plan | Nội dung | Điều kiện vào |
 |---|---|---|---|
-| 1 | **03 — GĐ1b** (chưa viết) | Catalog Settings + 7 danh mục nhỏ, KH & NCC, sản phẩm + đơn vị quy đổi (import 1.300 SP), nhập hàng (phân bổ cước theo giá trị, công nợ phải trả), sổ kho/tồn/XNT, BOM có phiên bản, cấu hình công ty + trang chủ | user duyệt bắt đầu (mục 7 #4); viết plan bằng `superpowers:writing-plans` sau khi đọc `docs/engine-fifo.md` |
+| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Danh mục, KH/NCC, SP/quy đổi/import, nhập hàng/kho/báo cáo, BOM phiên bản, công ty/mẫu in, trang chủ | user đã duyệt plan và chọn **subagent-driven** (2026-09-27); bước kế là thực thi code theo task, chưa được merge/push `main` nếu chưa hỏi |
 | 2 | 04 — GĐ1c (chưa viết) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
 | 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
@@ -131,22 +136,18 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | # | Việc | Ai làm | Khuyến nghị / ghi chú |
 |---|---|---|---|
-| 1 | Đăng nhập lần đầu: mở https://dherp.sheetapp.store, bấm **Đăng nhập bằng Google** (email Google của chủ dự án đã gán cho `admin`), hoặc user `admin` + mật khẩu tạm trong `/home/deploy_dherp/app/.env.migrate` (dòng `BOOTSTRAP_ADMIN_PASSWORD`, tự hết hạn sau 72 giờ) | user | Sau khi vào được: **xoá 2 dòng `BOOTSTRAP_ADMIN_PASSWORD` và `BOOTSTRAP_ADMIN_EMAIL` khỏi `.env.migrate`**; đổi mật khẩu |
-| 2 | Tạo lại Google client secret (secret cũ đã dán vào chat): Google Console → Credentials → OAuth client → Add secret → sửa `GOOGLE_CLIENT_SECRET` trong `/home/deploy_dherp/app/.env` (nano) → **chạy lại workflow Deploy** (tab Actions → Run workflow) để container nạp `.env` mới → thử đăng nhập Google → xoá secret cũ | user (AI hướng dẫn) | Nếu Google consent screen ở chế độ External, phải Publish để mọi tài khoản đăng nhập được |
-| 3 | **Sửa tag `lms` trong registry** (sao lưu repo `lms`, xoá thư mục repo, push lại `lms:latest` từ image local; `lms:migrate` không có local nên chỉ có lại khi deploy lại `lms`) | user cho phép RÕ ("sửa lms") | `lms_app` vẫn chạy bằng image local nên không gấp. Cách thay thế: để họ deploy lại từ workflow |
-| 4 | **Cho phép bắt đầu plan 03 (GĐ1b)**: viết plan chi tiết rồi thực thi subagent-driven | user | Đề xuất: đồng ý ngay |
-| 5 | Quy trình nhánh/merge từ nay: làm trên nhánh tính năng, **chỉ merge/push `main` khi user duyệt** (mỗi lần push main = CI ~20 phút + deploy) | user | Nếu chỉ sửa docs, chỉ push nhánh, không push `main` |
-| 6 | Sao lưu DB hằng đêm cho `postgres_dherp` (cron `pg_dump` trên VPS + bản ngoài máy chủ) — cần thêm dòng vào crontab root dùng chung | user duyệt vị trí lưu bản ngoài máy chủ | Khuyến nghị làm trước khi nhập dữ liệu thật; chưa có backup nào cho DB dherp |
-| 7 | Cổng go-live: rate limit đăng nhập, header bảo mật ở Caddy (chỉ sửa `dherp.caddy` của dự án này), kiểm `Origin` | user duyệt | Khuyến nghị: đồng ý, thay đổi nhỏ, chỉ trong phạm vi dherp |
+| — | **Đã chốt 2026-09-27 (giữ để tra cứu):** #1 đăng nhập lần đầu, #2 Google secret, #3 tag `lms` → user đóng, không còn việc. #4 bắt đầu plan 03 → **đã duyệt**. #5 nhánh/merge chỉ khi user duyệt → **xác nhận** (áp dụng cho mọi việc dưới đây). #6 backup → **chưa cần** (hoãn; nhắc trước go-live/nhập dữ liệu thật, hiện DB dherp chưa có backup). #7 rate limit + header Caddy + kiểm Origin → **đồng ý**, chỉ sửa `dherp.caddy` của dự án này | user | AI làm #7 trên nhánh riêng (mục 5); mọi push `main` vẫn hỏi trước |
+| A | **Đã duyệt 2026-09-27:** rà plan 03 hoàn tất và chọn thực thi **subagent-driven** (mỗi task implementer + reviewer độc lập) | user | Có thể bắt đầu Task 1 khi mở đợt code; merge/push `main` vẫn hỏi riêng |
 | 8 | Xác nhận với khách: **D-4** xuất kho FIFO lúc xác nhận đơn (không phải lúc giao); **D-5** responsive theo cơ chế crm-design nhưng chỉ nghiệm thu trên PC | user/khách | Đang áp dụng D-4, D-5 |
 | 9 | Xác nhận với khách (giả định nghiệp vụ, `docs/engine-fifo.md` §8): (1) trả hàng và thành phẩm SX không bù đơn treo cũ (đơn treo chờ nhập mua/đầu kỳ/kiểm kê; đóng kỳ bị chặn khi còn dòng treo → cần "kiểm kho điều chỉnh"); (2) lớp phụ thuộc không sớm hơn nguồn; (3) cùng thời điểm: nhập thường trước, rồi xuất + lớp phụ thuộc theo thứ tự ghi; (4) giá tạm tính theo kỳ; (5) quyền Giám đốc có thể bị thu hẹp bởi người có `role.manage` + `user.manage` (spec 6.6); (6) xuất Excel nhật ký tối đa 10.000 dòng; (7) quyền mặc định từng vai trò (Kế toán, Bán hàng, Thủ kho); (8) người có `user.manage` có thể gán email Google cho đồng nghiệp ngang quyền (chấp nhận, có audit) | user/khách | |
 | 10 | Chấp nhận/không 7 lỗ hổng `npm audit` còn lại (không chạm production) | user | Khuyến nghị chấp nhận, theo dõi khi nâng Next/Prisma |
 | 11 | Chính sách GC registry sau này (cron đã tắt): chạy tay khi đĩa đầy, có `--dry-run`, ngoài giờ deploy; hoặc đề xuất chủ registry dùng GC thường (không `--delete-untagged`) | user (chủ registry) | Đĩa VPS còn 78 GB, không gấp |
-| 12 | Cho phép xoá DB dev cũ `dh_dev` trong container local `postgres_dh_local` (`.env` dev trỏ `dh_dev_b`) | user | Chỉ máy dev, không ảnh hưởng VPS |
+| 13 | **Đã xác nhận mặc định cho plan 03b (2026-09-27):** cước không vào công nợ NCC; người lập phiếu nhập cần `purchase_price.view`; nhập không NCC dùng giá nhập gần nhất; XNT dùng giá trị sổ sách; `isCoil` và chiều hệ số quy đổi theo D-12 | user/khách | Giữ `TODO: confirm` tại các điểm cần bảng định mức/dữ liệu thật; thay đổi sau này phải cập nhật plan và test |
+| 14 | Cho phép xoá DB dev cũ `dh_dev` trong container local `postgres_dh_local` (`.env` dev trỏ `dh_dev_b`) | user | Chỉ máy dev, không ảnh hưởng VPS |
 
 ## 8. Quyết định khoá & rulings (tóm tắt)
 
-Bảng đầy đủ D-1…D-10: `docs/superpowers/plans/2026-09-24-00-master-plan.md` mục 1. Thay đổi so với bản gốc:
+Bảng đầy đủ D-1…D-22: `docs/superpowers/plans/2026-09-24-00-master-plan.md` mục 1. Thay đổi so với bản gốc:
 - **D-1**: Credentials **+ Google** (user yêu cầu). Google chỉ cho tài khoản đã có email khớp, email đã xác minh, chưa khoá; không tự tạo tài khoản;
   phiên Google không bị bắt đổi mật khẩu; mật khẩu tạm hết hạn 72 giờ; đổi/xoá email cắt phiên Google.
 - **D-7**: thứ tự FIFO là `(at, class, seq)` — đã thêm cột `stock_ledger.seq` (sequence riêng, UNIQUE) thay vì `(at, id)`; class 0 = nhập thường,
@@ -170,8 +171,9 @@ Dev cục bộ: `docker compose up -d pgtest` (DB test cổng 5434), `npm run li
 | Cần gì | Đọc |
 |---|---|
 | Spec nguồn | `../MASTER_SPEC_TRIEN_KHAI_v2.md` |
-| Kế hoạch tổng + quyết định D-1…D-10 + lộ trình task GĐ1–GĐ4 | `docs/superpowers/plans/2026-09-24-00-master-plan.md` |
+| Kế hoạch tổng + quyết định D-1…D-22 + lộ trình task GĐ1–GĐ4 | `docs/superpowers/plans/2026-09-24-00-master-plan.md` |
 | Plan đã thực thi | `…-01a…`, `…-01b…`, `…-01c…`, `…-02-gd1a-fifo-engine.md` (cùng thư mục) |
+| Plan đã viết, CHƯA thực thi (GĐ1b) | `…-03a-gd1b-catalog-partners-products.md` (Task 1–8), `…-03b-gd1b-purchase-stock.md` (Task 9–15), `…-03c-gd1b-bom-company-home.md` (Task 16–19) — thư mục `docs/superpowers/plans/`, chưa commit |
 | Engine FIFO: hợp đồng, truy vết spec 3.7, giả định khách, khoá | `docs/engine-fifo.md` |
 | Auth (Credentials + Google) | `docs/conventions/auth.md`, `docs/infra/RUNBOOK.md` mục 13 |
 | Hạ tầng: runbook as-built, checklist xác minh, giá trị, Caddy, sự cố registry | `docs/infra/{RUNBOOK,VERIFY,INPUTS,REGISTRY-GC}.md`, `docs/infra/caddy/dherp.caddy` |
