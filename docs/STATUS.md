@@ -155,6 +155,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 11 | Chính sách GC registry sau này (cron đã tắt): chạy tay khi đĩa đầy, có `--dry-run`, ngoài giờ deploy; hoặc đề xuất chủ registry dùng GC thường (không `--delete-untagged`) | user (chủ registry) | Đĩa VPS còn 78 GB, không gấp |
 | 13 | **Đã xác nhận mặc định cho plan 03b (2026-09-27):** cước không vào công nợ NCC; người lập phiếu nhập cần `purchase_price.view`; nhập không NCC dùng giá nhập gần nhất; XNT dùng giá trị sổ sách; `isCoil` và chiều hệ số quy đổi theo D-12 | user/khách | Giữ `TODO: confirm` tại các điểm cần bảng định mức/dữ liệu thật; thay đổi sau này phải cập nhật plan và test |
 | 14 | Cho phép xoá DB dev cũ `dh_dev` trong container local `postgres_dh_local` (`.env` dev trỏ `dh_dev_b`) | user | Chỉ máy dev, không ảnh hưởng VPS |
+| 15 | **Đã duyệt bổ sung phạm vi Plan 05:** quỹ tiền mặt chung hậu kiểm (3 kế toán lập trước; thủ quỹ kiểm tra/trả lại/chốt sau), công nợ cập nhật ngay và tách đã/chưa kiểm tra | user | Chi tiết tại `docs/superpowers/plans/2026-09-27-05-gd2-cash-review-requirements.md`; chờ kết quả deploy Task 4–5 rồi mới triển khai theo kế hoạch. Bốn lựa chọn về sửa phiếu/chốt quỹ/chênh lệch/quyền sửa sau kiểm tra vẫn cần xác nhận trước khi viết plan kỹ thuật GĐ2. |
 
 ## 8. Quyết định khoá & rulings (tóm tắt)
 
