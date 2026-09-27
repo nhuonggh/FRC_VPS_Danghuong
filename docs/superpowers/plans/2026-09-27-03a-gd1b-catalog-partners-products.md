@@ -273,7 +273,7 @@ git commit -m "feat(db): danh mục nền (xe, lái xe, tuyến, loại chi, ki�
   - `countAllCatalogs(db): Promise<Record<CatalogKey, number>>`, `getCatalogItem(db, key, id): Promise<CatalogRow>`, `getLinkedRecords(db, key, id): Promise<LinkedRecord[] | null>`
   - `listActiveOptions(db, key): Promise<{ value: number; label: string }[]>` — cho ô chọn ở module khác (chỉ mục đang bật).
 
-- [ ] **Step 1: Test cấu hình (đỏ)** — `tests/config/catalog-sections.test.ts`
+- [x] **Step 1: Test cấu hình (đỏ)** — `tests/config/catalog-sections.test.ts`
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -317,9 +317,9 @@ describe("CATALOG_SECTIONS", () => {
 });
 ```
 
-- [ ] **Step 2: Chạy → đỏ** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`; module chưa có).
+- [x] **Step 2: Chạy → đỏ** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`; module chưa có).
 
-- [ ] **Step 3: Viết `src/config/catalog-sections.ts`**
+- [x] **Step 3: Viết `src/config/catalog-sections.ts`**
 
 ```ts
 import { z } from "zod";
@@ -406,9 +406,9 @@ export function catalogSchema(section: CatalogSection) {
 }
 ```
 
-- [ ] **Step 4: Chạy → xanh** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`).
+- [x] **Step 4: Chạy → xanh** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`).
 
-- [ ] **Step 5: Test service (đỏ)** — `tests/catalog/service.test.ts`
+- [x] **Step 5: Test service (đỏ)** — `tests/catalog/service.test.ts`
 
 ```ts
 import type { Prisma } from "@prisma/client";
@@ -537,9 +537,9 @@ describe("deleteCatalogItem", () => {
 });
 ```
 
-- [ ] **Step 6: Chạy → đỏ** (`rtk proxy npx vitest run tests/catalog/service.test.ts`; module chưa có).
+- [x] **Step 6: Chạy → đỏ** (`rtk proxy npx vitest run tests/catalog/service.test.ts`; module chưa có).
 
-- [ ] **Step 7: Viết `src/server/catalog/adapters.ts`**
+- [x] **Step 7: Viết `src/server/catalog/adapters.ts`**
 
 ```ts
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -576,7 +576,7 @@ const DELEGATES: Record<CatalogKey, (db: Db) => unknown> = {
 export const delegate = (db: Db, key: CatalogKey): Delegate => DELEGATES[key](db) as Delegate;
 ```
 
-- [ ] **Step 8: Viết `src/server/catalog/service.ts`**
+- [x] **Step 8: Viết `src/server/catalog/service.ts`**
 
 ```ts
 import { Prisma } from "@prisma/client";
@@ -694,9 +694,9 @@ export async function deleteCatalogItem(db: Db, actor: Actor, key: string, id: n
 
 Ghi chú thực thi: `mapError` trả `never` nên `row`/`after` được TypeScript coi là đã gán sau `try/catch`. Nếu trình biên dịch phàn nàn "used before assigned", khai báo `let row!: CatalogRow;`.
 
-- [ ] **Step 9: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog/service.test.ts`).
+- [x] **Step 9: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog/service.test.ts`).
 
-- [ ] **Step 10: Test truy vấn (đỏ)** — `tests/catalog/queries.test.ts`
+- [x] **Step 10: Test truy vấn (đỏ)** — `tests/catalog/queries.test.ts`
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
@@ -773,7 +773,7 @@ describe("getLinkedRecords", () => {
 });
 ```
 
-- [ ] **Step 11: Chạy → đỏ**, rồi viết `src/server/catalog/queries.ts`
+- [x] **Step 11: Chạy → đỏ**, rồi viết `src/server/catalog/queries.ts`
 
 ```ts
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -861,9 +861,9 @@ export async function getLinkedRecords(db: Db, key: string, id: number): Promise
 }
 ```
 
-- [ ] **Step 12: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog tests/config/catalog-sections.test.ts`), lint + typecheck.
+- [x] **Step 12: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog tests/config/catalog-sections.test.ts`), lint + typecheck.
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 rtk proxy npm run lint && rtk proxy npm run typecheck

@@ -90,6 +90,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 13 | **Plan 03b** viết xong (Task 9–15, ~4.900 dòng): schema nhập hàng + nhập không NCC + field nhạy cảm mới (`purchaseAmount`, `freightCost`…), cầu nối `withIdempotentInventoryTx`, phiếu nhập hàng, nhập kho không NCC, báo cáo/giao diện kho | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 16 | **GĐ1b / Plan 03a Task 1** — schema danh mục nền đã thực thi | migration `catalog_foundation`: Vehicle/Driver/Route/ExpenseType/ProcessingType, `isActive`, `Product.isCoil`, CHECK DB, factories và test DB; test mục tiêu + invariant, typecheck và lint xanh |
+| 17 | **GĐ1b / Plan 03a Task 2** — Catalog Settings backend đã thực thi | 8 section data-driven, zod schema dùng chung, CRUD transaction + audit, 409 trùng/xóa đang dùng, query/search/options; test, typecheck, lint xanh |
 | 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
@@ -98,7 +99,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 |---|---|---|
 | CI run `dce08cb` (thêm bước chờ ngoài cửa sổ GC; cùng mã app) | đang chạy/xếp hàng lúc ghi file | kiểm `gh run list -R nhuonggh/FRC_VPS_Danghuong`; nếu xanh thì không làm gì; nếu đỏ đọc log (`gh run view <id> --log-failed`) |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
-| **GĐ1b / Plan 03a Task 2** — Catalog Settings backend | CHƯA làm | bước kế tiếp sau Task 1: cấu hình section, CRUD service/query, audit và test |
+| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | CHƯA làm | bước kế tiếp: route API, bảng/action kebab, danh sách/tạo mới/chi tiết |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
