@@ -62,6 +62,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Registry chung có cron GC Chủ nhật 03:00 giờ VPS (CEST). Không push/pull trong cửa sổ đó (docs/infra/REGISTRY-GC.md).
+      - name: Tránh cửa sổ GC của registry (CN 02:45–03:15 giờ VPS)
+        run: |
+          for i in $(seq 1 40); do
+            dow=$(TZ=Europe/Paris date +%u); hm=$(TZ=Europe/Paris date +%H%M)
+            if [ "$dow" = 7 ] && [ "$hm" -ge 0245 ] && [ "$hm" -lt 0315 ]; then
+              echo "Đang trong cửa sổ GC registry (CN $hm giờ Paris) — chờ 60s"; sleep 60
+            else
+              exit 0
+            fi
+          done
+          echo "Vẫn trong cửa sổ GC sau 40 phút"; exit 1
+
       - name: Log in to private registry
         uses: docker/login-action@v3
         with:
