@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (đã hoàn tất bộ plan 03a/03b/03c và cập nhật master plan; chưa thực thi code GĐ1b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (plan 03a/03b/03c + master plan đã commit, merge `main`, đang qua CI/CD; chưa thực thi code GĐ1b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -86,9 +86,9 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 9 | **Deploy đầu tiên thành công** 2026-09-27 (CI run `36286414314`) | `/api/health` 200; DB seed: 50 quyền, 5 vai trò, 1 kỳ mở, user `admin`; `/login` 200 có nút Google; Google chấp nhận redirect URI; các site khác không bị ảnh hưởng |
 | 10 | Xử lý sự cố registry chung (xem mục 3): tắt cron GC, restart registry, sửa lại tag `crm` | crm_app/lms_app và site của họ không bị gián đoạn; dữ liệu crm nguyên vẹn (DB, uploads) |
 | 11 | User chốt các mục cũ (2026-09-27): #1, #2, #3 đóng; #5 (nhánh/merge chỉ khi user duyệt) xác nhận; #4 duyệt bắt đầu plan 03; #6 (backup) chưa cần; #7 (Caddy header + rate limit + Origin) đồng ý | đã ghi vào mục 7 |
-| 12 | **Plan 03a** viết xong (Task 1–8, ~6.000 dòng, TDD đủ code + test): migration `catalog_foundation` (Vehicle, Driver, Route, ExpenseType, ProcessingType, `isActive`, `Product.isCoil`), Catalog Settings (7 danh mục nhỏ, một file cấu hình `CATALOG_SECTIONS`), khung Import Excel dùng lại (`parseViNumber`, xem trước/ghi/file lỗi/mẫu), KH & NCC (mã, tìm không dấu, phạm vi "khách của mình", import), sản phẩm + đơn vị quy đổi (`convertToBase`, import 1.300 SP) | `docs/superpowers/plans/2026-09-27-03a-gd1b-catalog-partners-products.md` — chưa thực thi, chưa commit |
-| 13 | **Plan 03b** viết xong (Task 9–15, ~4.900 dòng): schema nhập hàng + nhập không NCC + field nhạy cảm mới (`purchaseAmount`, `freightCost`…), cầu nối `withIdempotentInventoryTx`, phiếu nhập hàng (phân bổ cước theo giá trị, làm tròn phần dư lớn nhất, công nợ phải trả, sửa/hủy, cước nhập sau, export), nhập kho không NCC (mã 21), báo cáo kho (tồn, thẻ kho, XNT, tra cứu cuộn, tồn theo SP; SQL window function, test hiệu năng 1.300 SP) và giao diện kho | `docs/superpowers/plans/2026-09-27-03b-gd1b-purchase-stock.md` — chưa thực thi, chưa commit; cuối file có bảng "Cần khách xác nhận" (mục 7 #13) |
-| 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | `docs/superpowers/plans/2026-09-27-03c-gd1b-bom-company-home.md` — chưa thực thi, chưa commit |
+| 12 | **Plan 03a** viết xong (Task 1–8, ~6.000 dòng, TDD đủ code + test): migration `catalog_foundation` (Vehicle, Driver, Route, ExpenseType, ProcessingType, `isActive`, `Product.isCoil`), Catalog Settings (7 danh mục nhỏ, một file cấu hình `CATALOG_SECTIONS`), khung Import Excel dùng lại (`parseViNumber`, xem trước/ghi/file lỗi/mẫu), KH & NCC (mã, tìm không dấu, phạm vi "khách của mình", import), sản phẩm + đơn vị quy đổi (`convertToBase`, import 1.300 SP) | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
+| 13 | **Plan 03b** viết xong (Task 9–15, ~4.900 dòng): schema nhập hàng + nhập không NCC + field nhạy cảm mới (`purchaseAmount`, `freightCost`…), cầu nối `withIdempotentInventoryTx`, phiếu nhập hàng, nhập kho không NCC, báo cáo/giao diện kho | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
+| 14 | **Plan 03c** viết xong (Task 16–19): BOM có phiên bản + `resolveBom`, cấu hình công ty và mẫu in có redaction secret, trang chủ theo quyền/dữ liệu thật, quality gate và rà chéo 03a–03c | Đã commit `7ba722c`, merge `main` `d09a4b6`; chưa thực thi |
 | 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
@@ -173,7 +173,7 @@ Dev cục bộ: `docker compose up -d pgtest` (DB test cổng 5434), `npm run li
 | Spec nguồn | `../MASTER_SPEC_TRIEN_KHAI_v2.md` |
 | Kế hoạch tổng + quyết định D-1…D-22 + lộ trình task GĐ1–GĐ4 | `docs/superpowers/plans/2026-09-24-00-master-plan.md` |
 | Plan đã thực thi | `…-01a…`, `…-01b…`, `…-01c…`, `…-02-gd1a-fifo-engine.md` (cùng thư mục) |
-| Plan đã viết, CHƯA thực thi (GĐ1b) | `…-03a-gd1b-catalog-partners-products.md` (Task 1–8), `…-03b-gd1b-purchase-stock.md` (Task 9–15), `…-03c-gd1b-bom-company-home.md` (Task 16–19) — thư mục `docs/superpowers/plans/`, chưa commit |
+| Plan đã viết, CHƯA thực thi (GĐ1b) | `…-03a-gd1b-catalog-partners-products.md` (Task 1–8), `…-03b-gd1b-purchase-stock.md` (Task 9–15), `…-03c-gd1b-bom-company-home.md` (Task 16–19) — đã commit/merge `main`, chưa code |
 | Engine FIFO: hợp đồng, truy vết spec 3.7, giả định khách, khoá | `docs/engine-fifo.md` |
 | Auth (Credentials + Google) | `docs/conventions/auth.md`, `docs/infra/RUNBOOK.md` mục 13 |
 | Hạ tầng: runbook as-built, checklist xác minh, giá trị, Caddy, sự cố registry | `docs/infra/{RUNBOOK,VERIFY,INPUTS,REGISTRY-GC}.md`, `docs/infra/caddy/dherp.caddy` |
