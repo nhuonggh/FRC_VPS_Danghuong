@@ -41,3 +41,15 @@ export async function makeCashAccount(over: Partial<Prisma.CashAccountUncheckedC
     data: { type: "CASH", name: `Quỹ ${next()}`, ...over },
   });
 }
+
+export async function makeWarehouse(name = `Kho ${next()}`) {
+  return prisma.warehouse.create({ data: { name } });
+}
+
+export async function makeProcessingType(name = `Kiểu ${next()}`) {
+  return prisma.processingType.create({ data: { name } });
+}
+
+export async function makeVehicle(plate = `51C-${next()}`) {
+  return prisma.vehicle.create({ data: { plate } });
+}

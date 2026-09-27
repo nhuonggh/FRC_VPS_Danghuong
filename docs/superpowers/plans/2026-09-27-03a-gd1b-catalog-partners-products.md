@@ -74,7 +74,7 @@ Các đầu vào spec ngầm dự tính nhưng không task nào tự kiểm — 
 - Consumes: bảng `partner_groups`, `warehouses`, `products`, `product_units`, `cash_accounts` của GĐ0.
 - Produces: model Prisma `Vehicle`, `Driver`, `Route`, `ExpenseType`, `ProcessingType`; cột `isActive` trên `PartnerGroup`/`Warehouse`; `Product.isCoil`; factory `makeWarehouse`, `makeProcessingType`, `makeVehicle`.
 
-- [ ] **Step 1: Viết test trước (đỏ)** — `tests/db/catalog-foundation.test.ts`
+- [x] **Step 1: Viết test trước (đỏ)** — `tests/db/catalog-foundation.test.ts`
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
@@ -117,12 +117,12 @@ describe("danh mục nền — cột & ràng buộc mới", () => {
 });
 ```
 
-- [ ] **Step 2: Chạy để thấy đỏ**
+- [x] **Step 2: Chạy để thấy đỏ**
 
 Run: `docker compose up -d pgtest` rồi `rtk proxy npx vitest run tests/db/catalog-foundation.test.ts`
 Expected: FAIL — `prisma.vehicle` không tồn tại / cột `isActive`, `isCoil` chưa có.
 
-- [ ] **Step 3: Sửa `prisma/schema/master.prisma`**
+- [x] **Step 3: Sửa `prisma/schema/master.prisma`**
 
 Thêm `isActive` vào `PartnerGroup` và `Warehouse`, `isCoil` vào `Product`, sửa comment `ProductUnit`, thêm 5 model. Các phần khác của file giữ nguyên.
 
@@ -206,7 +206,7 @@ model ProcessingType {
 }
 ```
 
-- [ ] **Step 4: Sinh migration rồi bổ sung CHECK**
+- [x] **Step 4: Sinh migration rồi bổ sung CHECK**
 
 Run: `rtk proxy npx prisma migrate dev --name catalog_foundation --create-only` (DB dev từ `.env`).
 Mở `prisma/migrations/<timestamp>_catalog_foundation/migration.sql`, kiểm có `ALTER TABLE ... ADD COLUMN "isActive"`, `"isCoil"`, 5 `CREATE TABLE`, rồi **thêm cuối file**:
@@ -223,7 +223,7 @@ ALTER TABLE "partners" ADD CONSTRAINT "partners_kind_chk" CHECK ("isCustomer" OR
 Run: `rtk proxy npx prisma migrate dev` (áp dụng lên DB dev), rồi `rtk proxy npx prisma generate`.
 Expected: "Your database is now in sync".
 
-- [ ] **Step 5: Thêm factory** — cuối `tests/helpers/factories.ts`
+- [x] **Step 5: Thêm factory** — cuối `tests/helpers/factories.ts`
 
 ```ts
 export async function makeWarehouse(name = `Kho ${next()}`) {
@@ -239,12 +239,12 @@ export async function makeVehicle(plate = `51C-${next()}`) {
 }
 ```
 
-- [ ] **Step 6: Chạy lại**
+- [x] **Step 6: Chạy lại**
 
 Run: `rtk proxy npx vitest run tests/db/catalog-foundation.test.ts tests/schema/invariants.test.ts`
 Expected: PASS (invariants vẫn xanh: Decimal đúng độ chính xác chuẩn, không có cột số dư).
 
-- [ ] **Step 7: Sinh lại `db/db_schema.sql` và commit**
+- [x] **Step 7: Sinh lại `db/db_schema.sql` và commit**
 
 ```bash
 rtk proxy npm run db:schema
