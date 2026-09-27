@@ -486,6 +486,8 @@ git commit -m "feat(idempotency): withIdempotentInventoryTx — ghép Idempotenc
 
 ### Task 11: Phiếu nhập hàng — backend (tạo / sửa / hủy / cước nhập sau, danh sách, chi tiết, export)
 
+> **Tiến độ 28/09/2026:** Hoàn thành code và kiểm thử cục bộ; commit/deploy đang chờ. Đã tạo `schemas`, `freight`, `codes`, `service`, `queries`, `export` cùng 8 test. Chưa tạo route, menu hay UI — phần đó thuộc Task 12.
+
 **Mã:** 19, 20. **Files:**
 - Create: `src/server/purchase/{schemas,freight,codes,service,queries,export}.ts`
 - Test: `tests/purchase/{schemas,freight,service,edit,queries}.test.ts`
