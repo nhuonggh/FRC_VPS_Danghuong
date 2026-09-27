@@ -875,6 +875,8 @@ git commit -m "feat(catalog): Catalog Settings backend — 8 mục danh mục, a
 
 ### Task 3: Catalog Settings — API, khung bảng kebab, giao diện
 
+**Tiến độ thực hiện 27/09/2026:** Đã code API CRUD/toggle/export, menu kebab, mini-sidebar và các route danh sách/tạo mới/chi tiết cho 8 danh mục; đã bỏ cờ `planned`. Chờ CI deploy xác nhận trước khi đóng task.
+
 **Mã:** 8, 13–18 (màn hình). **Files:**
 - Modify: `src/components/ui/DataTable.tsx` (`actionsVariant`, icon `power`), `tests/ui/data-table.test.tsx`
 - Create: `src/app/api/catalog/[section]/route.ts`, `src/app/api/catalog/[section]/[id]/route.ts`, `src/app/api/catalog/[section]/[id]/toggle/route.ts`, `src/app/api/catalog/[section]/export/route.ts`

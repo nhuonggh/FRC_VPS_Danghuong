@@ -2,7 +2,7 @@
 
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, Check, Columns3, Eye, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Columns3, Eye, Lock, MoreHorizontal, Pencil, Power, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -25,13 +25,13 @@ export interface Column<T> {
 export interface RowAction {
   key: string;
   label: string;
-  icon: "eye" | "pencil" | "trash" | "lock";
+  icon: "eye" | "pencil" | "trash" | "lock" | "power";
   href?: string;
   onClick?: () => void;
   danger?: boolean;
 }
 
-const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock };
+const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock, power: Power };
 const MAX_INLINE_ACTIONS = 3;
 // Chạm ≥44px dưới md (mobile), 32px từ md (PC)
 const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover md:h-8 md:w-8";
@@ -44,6 +44,8 @@ interface Props<T> {
   rowKey: (row: T) => string | number;
   rowHref?: (row: T) => string;
   rowActions?: (row: T) => RowAction[];
+  /** Danh mục dùng menu kebab để bảng gọn, action vẫn khả dụng trên mobile. */
+  actionsVariant?: "inline" | "kebab";
   /** Cột sort hiện tại ('-name' = giảm dần). */
   sort?: string;
   buildSortHref?: (sort: string | undefined) => string;
@@ -63,7 +65,7 @@ function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
 /** Ô rỗng (null/undefined/false/"") → "—", không bao giờ để trống hay hiện 0 thay cho "chưa có". */
 const isEmptyNode = (n: React.ReactNode) => n === null || n === undefined || n === false || n === "";
 
-export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, sort, buildSortHref }: Props<T>) {
+export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref }: Props<T>) {
   const router = useRouter();
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
@@ -92,8 +94,8 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
   const actionsCell = (row: T) => {
     const actions = rowActions?.(row) ?? [];
     if (actions.length === 0) return null;
-    const inline = actions.length > MAX_INLINE_ACTIONS ? actions.slice(0, MAX_INLINE_ACTIONS) : actions;
-    const rest = actions.length > MAX_INLINE_ACTIONS ? actions.slice(MAX_INLINE_ACTIONS) : [];
+    const inline = actionsVariant === "kebab" ? [] : actions.length > MAX_INLINE_ACTIONS ? actions.slice(0, MAX_INLINE_ACTIONS) : actions;
+    const rest = actionsVariant === "kebab" ? actions : actions.length > MAX_INLINE_ACTIONS ? actions.slice(MAX_INLINE_ACTIONS) : [];
     const iconBtn = ICON_BTN;
     return (
       <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -108,7 +110,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
         })}
         {rest.length > 0 && (
           <Dropdown.Root>
-            <Dropdown.Trigger aria-label="Thêm thao tác" className={iconBtn}><MoreHorizontal size={16} aria-hidden /></Dropdown.Trigger>
+            <Dropdown.Trigger aria-label={actionsVariant === "kebab" ? "Thao tác" : "Thêm thao tác"} title={actionsVariant === "kebab" ? "Thao tác" : "Thêm thao tác"} className={iconBtn}><MoreHorizontal size={16} aria-hidden /></Dropdown.Trigger>
             <Dropdown.Portal>
               <Dropdown.Content align="end" className="z-dropdown min-w-40 rounded-md border border-border bg-raised p-1 shadow-md">
                 {rest.map((a) => (

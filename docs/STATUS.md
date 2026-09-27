@@ -99,7 +99,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 |---|---|---|
 | Deploy Task 1 + Task 2 (`6ea147a`, `cdb4032`) | **CI/CD xanh**; `main` = `cdb4032` | Task 3 có thể bắt đầu; mọi commit `main` vẫn deploy theo workflow |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
-| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | CHƯA làm | bước kế tiếp: route API, bảng/action kebab, danh sách/tạo mới/chi tiết |
+| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | ĐÃ code; chờ CI deploy | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; route guard và test UI/query xanh cục bộ |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 

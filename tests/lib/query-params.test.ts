@@ -79,6 +79,9 @@ describe("buildListHref — bỏ khoá khi = mặc định", () => {
   it("đổi page giữ nguyên các query khác", () => {
     expect(buildListHref("/x", base, { page: 5 })).toBe("/x?q=abc&status=a%2Cb&sort=-name&page=5");
   });
+  it("giữ query định danh đã có trong basePath", () => {
+    expect(buildListHref("/system/catalog-settings?section=warehouses", base, { page: 1 })).toBe("/system/catalog-settings?section=warehouses&q=abc&status=a%2Cb&sort=-name");
+  });
   it("page=1 và pageSize mặc định không lên URL", () => {
     expect(buildListHref("/x", base, { page: 1 })).toBe("/x?q=abc&status=a%2Cb&sort=-name");
     expect(buildListHref("/x", base, { pageSize: 20 })).toBe("/x?q=abc&status=a%2Cb&sort=-name");

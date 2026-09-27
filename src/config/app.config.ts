@@ -247,7 +247,7 @@ export const APP_NAV: readonly NavModule[] = [
         functions: [
           { key: "company", label: "Công ty & mẫu in", desc: "Thông tin công ty, bật/tắt mẫu in", icon: "building-2", view: "form", path: "/system/company", codes: ["6"], perm: "company.manage", planned: P },
           // 1 Function duy nhất cho mọi danh mục nhỏ; các loại nằm ở mini-sidebar trong trang (?section=) — catalog-settings.md
-          { key: "catalog-settings", label: "Cài đặt danh mục", desc: "Nhóm khách, kho, xe & lái xe, tuyến, loại thu chi, ngân hàng, kiểu gia công", icon: "sliders-horizontal", view: "catalog", path: "/system/catalog-settings", codes: ["8", "13", "14", "15", "16", "17", "18"], perm: "catalog.manage", planned: P },
+          { key: "catalog-settings", label: "Cài đặt danh mục", desc: "Nhóm khách, kho, xe & lái xe, tuyến, loại thu chi, ngân hàng, kiểu gia công", icon: "sliders-horizontal", view: "catalog", path: "/system/catalog-settings", codes: ["8", "13", "14", "15", "16", "17", "18"], perm: "catalog.manage" },
         ],
       },
     ],
