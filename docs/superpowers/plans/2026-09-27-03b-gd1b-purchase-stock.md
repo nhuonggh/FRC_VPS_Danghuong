@@ -486,7 +486,7 @@ git commit -m "feat(idempotency): withIdempotentInventoryTx — ghép Idempotenc
 
 ### Task 11: Phiếu nhập hàng — backend (tạo / sửa / hủy / cước nhập sau, danh sách, chi tiết, export)
 
-> **Tiến độ 28/09/2026:** Hoàn thành code và kiểm thử cục bộ; commit/deploy đang chờ. Đã tạo `schemas`, `freight`, `codes`, `service`, `queries`, `export` cùng 8 test. Chưa tạo route, menu hay UI — phần đó thuộc Task 12.
+> **Tiến độ 28/09/2026:** CI/deploy xanh (`ac1ea55`, workflow `36355333283`, user xác nhận). Đã tạo `schemas`, `freight`, `codes`, `service`, `queries`, `export` cùng 8 test. Route, menu và UI thuộc Task 12.
 
 **Mã:** 19, 20. **Files:**
 - Create: `src/server/purchase/{schemas,freight,codes,service,queries,export}.ts`
@@ -1546,6 +1546,8 @@ git commit -m "feat(purchase): danh sách/chi tiết/export phiếu nhập — l
 ---
 
 ### Task 12: Phiếu nhập hàng — API và giao diện (danh sách, lập phiếu, chi tiết, sửa, hủy, cước nhập sau)
+
+> **Tiến độ 28/09/2026:** Đã commit `ba24d33`, chờ CI/deploy sau khi push: API tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do. Kiểm cục bộ: 17 test liên quan, lint và typecheck xanh.
 
 **Mã:** 19, 20. **Files:**
 - Modify: `src/lib/time.ts` (thêm `ictYmd`), `tests/lib/time.test.ts`; `src/server/purchase/service.ts` (dùng `ictYmd`); `src/server/products/queries.ts` (thêm `productOptionsByIds`); `src/components/ui/index.ts`

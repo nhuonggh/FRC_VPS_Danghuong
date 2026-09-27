@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–8 của plan 03a đã deploy CI xanh theo user xác nhận; Task 9–10 chờ CI/deploy; Task 11 hoàn thành code, chờ CI/deploy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-28** (Task 1–11 đã deploy CI xanh; Task 12 đã commit `ba24d33`, chờ CI/deploy sau push; Task 13 có hai file dở chưa commit). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -108,9 +108,10 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03a Task 6** — API và giao diện Khách hàng/NCC | **CI/CD xanh** (`51640a3`, user xác nhận) | Danh sách/tìm/lọc/phân trang/import-export; tạo mới; detail sửa từng section; API và menu đã mở cho Khách hàng/NCC. |
 | **GĐ1b / Plan 03a Task 7** — Backend sản phẩm | **CI/CD xanh** (`492d5de`, user xác nhận) | Đơn vị/quy đổi D-12 dùng Decimal, định mức tồn, tìm không dấu, export và import D2. |
 | **GĐ1b / Plan 03a Task 8** — API và giao diện Sản phẩm | **CI/CD xanh** (`c3a961a`, user xác nhận) | API create/section/search/export/import; danh sách/tạo mới/chi tiết theo section; menu đã mở. |
-| **GĐ1b / Plan 03b Task 9** — Schema nhập hàng / nhập kho không NCC | Hoàn thành code, chờ CI/deploy | Migration `purchasing`: Purchase/PurchaseLine/StockAdjustment, CHECK DB, FK RESTRICT/CASCADE và SENSITIVE_FIELDS D-16; 21 test schema/quyền xanh. |
-| **GĐ1b / Plan 03b Task 10** — Idempotency + transaction kho | Hoàn thành code, chờ CI/deploy | `withIdempotentInventoryTx` đặt khoá idempotency trong chính transaction FIFO; không tạo trùng sổ/lớp khi retry hoặc request đồng thời. 17 test idempotency/kho xanh. |
-| **GĐ1b / Plan 03b Task 11** — Backend phiếu nhập hàng | Hoàn thành code, chờ CI/deploy | Tạo/sửa/hủy phiếu, phân bổ cước theo giá trị vào giá vốn, công nợ NCC không gồm cước, idempotency trong transaction FIFO, khóa dòng/kỳ; danh sách/chi tiết/xuất Excel che giá ở server theo quyền. 8 test purchase + lint/typecheck xanh. |
+| **GĐ1b / Plan 03b Task 9** — Schema nhập hàng / nhập kho không NCC | **CI/CD xanh** (user xác nhận) | Migration `purchasing`: Purchase/PurchaseLine/StockAdjustment, CHECK DB, FK RESTRICT/CASCADE và SENSITIVE_FIELDS D-16; 21 test schema/quyền xanh. |
+| **GĐ1b / Plan 03b Task 10** — Idempotency + transaction kho | **CI/CD xanh** (user xác nhận) | `withIdempotentInventoryTx` đặt khoá idempotency trong chính transaction FIFO; không tạo trùng sổ/lớp khi retry hoặc request đồng thời. 17 test idempotency/kho xanh. |
+| **GĐ1b / Plan 03b Task 12** — API và giao diện phiếu nhập | **Đã commit, chờ CI/deploy** (`ba24d33`) | Route tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do; quyền giá được lọc ở server. Kiểm cục bộ: 17 test liên quan + lint/typecheck xanh. |
+| **GĐ1b / Plan 03b Task 11** — Backend phiếu nhập hàng | **CI/CD xanh** (`ac1ea55`, user xác nhận; workflow `36355333283`) | Tạo/sửa/hủy phiếu, phân bổ cước theo giá trị vào giá vốn, công nợ NCC không gồm cước, idempotency trong transaction FIFO, khóa dòng/kỳ; danh sách/chi tiết/xuất Excel che giá ở server theo quyền. 8 test purchase + lint/typecheck xanh. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
@@ -125,7 +126,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | Thứ tự | Plan | Nội dung | Điều kiện vào |
 |---|---|---|---|
-| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–8 deploy xanh; Task 9–10 chờ CI; Task 11 hoàn thành code chờ CI; còn Task 12–19 | Task 12 là API/giao diện phiếu nhập, dùng trực tiếp nền Task 9–11 |
+| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–11 deploy xanh; Task 12 đã push chờ CI/deploy; Task 13–15 chưa hoàn tất; còn Task 16–19 | Xác nhận CI/deploy Task 12, rồi hoàn tất Task 13–15 và kiểm cuối 03b |
 | 2 | 04 — GĐ1c (chưa viết) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
 | 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
@@ -133,8 +134,8 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Bàn giao phiên kế tiếp — thứ tự đề nghị:**
 1. Ghi kết quả CI/deploy của `113364b`, `4445761`, `ec9fc92` và commit sửa quy tắc owner kế tiếp vào mục 4/5; nếu đỏ thì xử lý đúng log trước khi làm chức năng mới.
-2. Ghi kết quả CI/deploy **Task 9–11**; nếu xanh, tiếp tục Task 12: API/giao diện phiếu nhập.
-3. Task 12 mới mở menu và luồng người dùng; Task 11 chỉ là backend, chưa thay đổi giao diện.
+2. Theo dõi và ghi kết quả CI/deploy **Task 12** (`ba24d33`); nếu đỏ, xử lý theo log trước khi sang chức năng mới.
+3. Sau khi xanh: hoàn tất Task 13 — nhập kho không nhà cung cấp (hai file sơ khởi đang chưa commit), rồi Task 14 báo cáo kho và Task 15 giao diện kho.
 
 **Hợp đồng bắt buộc của engine cho plan 03+** (đủ ở `docs/engine-fifo.md` §0/§3/§5/§6/§8):
 - Mỗi dòng nghiệp vụ lưu `at` + `seq` cùng dòng; sửa chứng từ không đổi ngày phải dùng lại `at`, và truyền lại `seq` đã lưu khi khôi phục.
