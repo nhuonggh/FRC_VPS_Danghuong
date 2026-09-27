@@ -3508,7 +3508,7 @@ git commit -m "feat(partners): KH/NCC backend — mã tự sinh, tìm không d�
 - Consumes: Task 5 (service/queries/import-spec), Task 4 (`ImportExportMenu`, `handleImportPost`, `handleTemplateGet`), Task 2 (`listActiveOptions`).
 - Produces: API `POST /api/partners` (Idempotency-Key) → `{ id, code }`; `PATCH /api/partners/:id/section-update` body `{ section: "profile" | "credit" | "owner" | "status", ... }`; `GET /api/partner-lists/:kind/search?q=` → `ComboOption[]`; `GET …/export`; `POST …/import?mode=`; `GET …/import-template` (`:kind` = `customers` | `suppliers`). Component `Field`, `inputClass`, `EditableSection` (dùng lại ở mọi form/trang chi tiết sau).
 
-- [ ] **Step 1: Bổ sung phần thiếu của Task 5 — người tạo phải thấy được bản ghi của mình.** Nếu người tạo có `partner.manage` nhưng thiếu `partner.view_all` mà để trống "người phụ trách" thì khách vừa tạo nằm ngoài phạm vi của chính họ (biến mất khỏi danh sách). Quy tắc: thiếu `view_all` ⇒ mặc định người phụ trách = chính họ.
+- [x] **Step 1: Bổ sung phần thiếu của Task 5 — người tạo phải thấy được bản ghi của mình.** Đã thực hiện trong commit Task 5: nếu người tạo có `partner.manage` nhưng thiếu `partner.view_all` và để trống "người phụ trách" thì mặc định gán chính họ; người có `partner.view_all` giữ `null` để tạo bản ghi chưa phân công. Có test bảo vệ cả hai nhánh.
 
 Thêm test vào `tests/partners/service.test.ts` (trong `describe("createPartner")`):
 

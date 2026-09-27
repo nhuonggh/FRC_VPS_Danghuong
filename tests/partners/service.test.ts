@@ -16,6 +16,11 @@ describe("partner service", () => {
     expect(result.code).toBe("KH000001");
     expect(row).toMatchObject({ ownerUserId: actor.userId, searchText: "kh000001 nguyen van dat 0912345678" });
   });
+  it("người có partner.view_all giữ đối tác chưa phân công khi để trống người phụ trách", async () => {
+    const manager: Actor = { userId: (await makeUser()).id, perms: new Set(["partner.manage", "partner.view", "partner.view_all"]) };
+    const result = await tx((db) => createPartner(db, manager, input({ name: "Khách quản lý" })));
+    expect((await prisma.partner.findUniqueOrThrow({ where: { id: result.id } })).ownerUserId).toBeNull();
+  });
   it("chỉ cho sửa đối tác trong phạm vi và audit thay đổi trạng thái", async () => {
     const created = await tx((db) => createPartner(db, actor, input()));
     await tx((db) => setPartnerActive(db, actor, created.id, { isActive: false }));

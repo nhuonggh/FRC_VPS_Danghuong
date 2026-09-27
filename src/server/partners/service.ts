@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { assertCan } from "@/lib/permissions/guard";
+import { assertCan, can } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { normalizeSearch } from "@/lib/search";
 import { writeAudit } from "@/server/audit/write";
@@ -31,8 +31,8 @@ const codeTaken = () => new FieldConflictError("Mã đã tồn tại.", { code: 
 export async function createPartner(db: Db, actor: Actor, input: CreatePartnerInput): Promise<{ id: number; code: string }> {
   assertCan(actor.perms, "partner.manage");
   await assertGroupUsable(db, input.groupId);
-  // ASSUMPTION: Khi không chọn người phụ trách, người tạo chịu trách nhiệm để vẫn nhìn thấy bản ghi theo phạm vi "khách của mình".
-  const ownerUserId = input.ownerUserId ?? actor.userId;
+  // Không có view_all thì người tạo phải thấy bản ghi theo phạm vi "khách của mình"; cấp quản lý giữ được bản ghi chưa phân công.
+  const ownerUserId = input.ownerUserId ?? (can(actor.perms, "partner.view_all") ? null : actor.userId);
   await assertOwnerUsable(db, ownerUserId);
   const code = input.code !== "" ? input.code.toUpperCase() : (await nextPartnerCodes(db, input.isCustomer ? "customer" : "supplier", 1))[0]!;
   try {
