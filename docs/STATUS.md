@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-27** (Task 1–2 của plan 03a đã commit, deploy CI xanh; chưa thực thi Task 3–8 hay plan 03b/03c). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-27** (Task 1–3 của plan 03a đã commit, deploy CI xanh; Task 4–8 và plan 03b/03c chưa thực thi). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -97,9 +97,9 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | Hạng mục | Tình trạng | Bước tiếp |
 |---|---|---|
-| Deploy Task 1 + Task 2 (`6ea147a`, `cdb4032`) | **CI/CD xanh**; `main` = `cdb4032` | Task 3 có thể bắt đầu; mọi commit `main` vẫn deploy theo workflow |
+| Deploy Task 1–3 (`6ea147a`, `cdb4032`, `40a85e6`) | **CI/CD xanh**; `main` = `40a85e6` | Task 4 có thể bắt đầu; mọi commit `main` vẫn deploy theo workflow |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
-| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | ĐÃ code; chờ CI deploy | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; route guard và test UI/query xanh cục bộ |
+| **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** (`36301145062`) | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09; commit layout chờ deploy |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 

@@ -877,6 +877,8 @@ git commit -m "feat(catalog): Catalog Settings backend — 8 mục danh mục, a
 
 **Tiến độ thực hiện 27/09/2026:** Đã code API CRUD/toggle/export, menu kebab, mini-sidebar và các route danh sách/tạo mới/chi tiết cho 8 danh mục; đã bỏ cờ `planned`. Chờ CI deploy xác nhận trước khi đóng task.
 
+**Điều chỉnh UX 27/09/2026:** Vùng nội dung của Catalog Settings phải `flex-1` để dùng hết phần trống sau mini-sidebar; KPI là lưới 3 cột trên desktop; search rộng tối đa vừa phải; khung bảng cao hết vùng làm việc để pagination bám đáy và cân hai biên. Mobile giữ thanh danh mục cuộn ngang và card list của `DataTable`.
+
 **Mã:** 8, 13–18 (màn hình). **Files:**
 - Modify: `src/components/ui/DataTable.tsx` (`actionsVariant`, icon `power`), `tests/ui/data-table.test.tsx`
 - Create: `src/app/api/catalog/[section]/route.ts`, `src/app/api/catalog/[section]/[id]/route.ts`, `src/app/api/catalog/[section]/[id]/toggle/route.ts`, `src/app/api/catalog/[section]/export/route.ts`

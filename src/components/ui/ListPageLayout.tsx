@@ -1,10 +1,14 @@
+import clsx from "clsx";
+
 export function ListPageLayout({
-  title, actions, stats, filters, footer, children,
+  title, actions, stats, statsClassName, filters, footer, children,
 }: {
   title: string;
   /** Thêm mới / Import / Export — luôn hiển thị cả khi danh sách rỗng. */
   actions?: React.ReactNode;
   stats?: React.ReactNode;
+  /** Một số màn hình cần KPI trải theo lưới thay vì cụm flex tự co. */
+  statsClassName?: string;
   filters?: React.ReactNode;
   footer: React.ReactNode;
   children: React.ReactNode;
@@ -15,7 +19,7 @@ export function ListPageLayout({
         <h1 className="text-xl font-semibold">{title}</h1>
         <div className="flex flex-wrap items-center gap-2">{actions}</div>
       </div>
-      {stats && <div className="flex flex-wrap gap-3">{stats}</div>}
+      {stats && <div className={clsx("flex flex-wrap gap-3", statsClassName)}>{stats}</div>}
       {filters}
       {/* .page-container: khung cố định; chỉ vùng bảng cuộn, footer phân trang không nhảy */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-surface">
