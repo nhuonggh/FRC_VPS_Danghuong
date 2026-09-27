@@ -3495,6 +3495,8 @@ git commit -m "feat(partners): KH/NCC backend — mã tự sinh, tìm không d�
 ---
 ### Task 6: Khách hàng & NCC — API và giao diện (danh sách, tạo mới, chi tiết, nhập/xuất)
 
+> **Tiến độ 27/09/2026:** Đã triển khai API và 6 route giao diện; danh sách responsive, tạo mới idempotent, chi tiết sửa theo section, import/export và phân quyền scope. Kiểm thử `tests/partners` + `tests/config`, typecheck và lint xanh; production build đã compile thành công. Chờ CI/deploy để đóng task.
+
 **Mã:** 9, 10. **Files:**
 - Create: `src/components/ui/Field.tsx`, `src/components/ui/EditableSection.tsx` (+ export ở `src/components/ui/index.ts`)
 - Create: `src/server/partners/kind-param.ts`

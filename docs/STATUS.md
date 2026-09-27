@@ -93,6 +93,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | 17 | **GĐ1b / Plan 03a Task 2** — Catalog Settings backend đã thực thi | commit `cdb4032`, CI deploy xanh `36295568250`: 8 section data-driven, zod, CRUD/audit, 409, query/search/options, test/typecheck/lint |
 | 18 | **GĐ1b / Plan 03a Task 5** — backend Khách hàng/NCC | Mã KH/NCC tự sinh có khoá transaction, schema/CRUD/audit/idempotency, phạm vi “khách của mình”, tìm không dấu, export Excel và ImportSpec dùng Task 4; không có `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; test service/query/schema/import, typecheck/lint và CI/deploy xanh |
 | 19 | **GĐ1b / Plan 03a Task 4–5 + cập nhật kế hoạch** — deploy đã xác nhận | CI/CD xanh do user xác nhận: `113364b`, `4445761`, `ec9fc92`, `4958808`, `af0be47`. Task 1–5 đủ điều kiện chuyển sang Task 6. |
+| 20 | **GĐ1b / Plan 03a Task 6** — API và giao diện Khách hàng/NCC | Đã triển khai, chờ CI/deploy: 6 route trang, API create/section update/search/export/import/template; danh sách PC/mobile, tạo mới idempotent, detail theo section/audit, scope quyền và mở menu. Test partners/config, typecheck/lint xanh; build production compile thành công. |
 | 15 | Master plan đã cập nhật | Gom D-11…D-22 và tách roadmap 03 thành 03a/03b/03c |
 
 ## 5. ĐANG HOÀN THÀNH
@@ -104,6 +105,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09. |
 | **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | **CI/CD xanh** (`113364b`) | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh. |
 | **GĐ1b / Plan 03a Task 5** — Backend Khách hàng/NCC | **CI/CD xanh** (`ec9fc92`, `4958808`) | Mã KH/NCC tự sinh an toàn khi tạo đồng thời; CRUD theo section/audit/idempotency; thiếu `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; scope “khách của mình”; tìm không dấu, Excel export và ImportSpec D1. |
+| **GĐ1b / Plan 03a Task 6** — API và giao diện Khách hàng/NCC | ĐÃ triển khai, chờ CI/deploy | Danh sách/tìm/lọc/phân trang/import-export; tạo mới; detail sửa từng section; API và menu đã mở cho Khách hàng/NCC. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
@@ -118,7 +120,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 | Thứ tự | Plan | Nội dung | Điều kiện vào |
 |---|---|---|---|
-| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–5 của 03a đã thực thi và deploy xanh; còn Task 6–8, toàn bộ 03b/03c | user đã duyệt plan và chọn **subagent-driven** (2026-09-27); bước kế tiếp là Task 6 |
+| 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–5 deploy xanh; Task 6 đã triển khai chờ CI; còn Task 7–8, toàn bộ 03b/03c | user đã duyệt plan và chọn **subagent-driven** (2026-09-27); sau CI xanh, bước kế tiếp là Task 7 |
 | 2 | 04 — GĐ1c (chưa viết) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
 | 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
@@ -126,8 +128,8 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Bàn giao phiên kế tiếp — thứ tự đề nghị:**
 1. Ghi kết quả CI/deploy của `113364b`, `4445761`, `ec9fc92` và commit sửa quy tắc owner kế tiếp vào mục 4/5; nếu đỏ thì xử lý đúng log trước khi làm chức năng mới.
-2. Khi xanh, thực hiện **Task 6** của plan 03a: API và giao diện Khách hàng/NCC, dùng đúng backend Task 4–5; kiểm thử quyền/phạm vi và import/export từ giao diện.
-3. Tiếp theo Task 7 (Sản phẩm + đơn vị quy đổi/import), Task 8 (review/quality gate 03a), rồi mới mở 03b.
+2. Ghi kết quả CI/deploy Task 6; nếu xanh, thực hiện **Task 7**: Sản phẩm, đơn vị quy đổi và import D2.
+3. Tiếp theo Task 8 (review/quality gate 03a), rồi mới mở 03b.
 
 **Hợp đồng bắt buộc của engine cho plan 03+** (đủ ở `docs/engine-fifo.md` §0/§3/§5/§6/§8):
 - Mỗi dòng nghiệp vụ lưu `at` + `seq` cùng dòng; sửa chứng từ không đổi ngày phải dùng lại `at`, và truyền lại `seq` đã lưu khi khôi phục.

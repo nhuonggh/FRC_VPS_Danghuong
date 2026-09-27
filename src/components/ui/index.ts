@@ -13,4 +13,6 @@ export { TempPasswordDialog } from "./TempPasswordDialog";
 export { ExportButton } from "./ExportButton";
 export { QuickTimeFilter } from "./QuickTimeFilter";
 export { SearchBox } from "./SearchBox";
+export { Field, inputClass } from "./Field";
+export { EditableSection } from "./EditableSection";
 export { ToastHost } from "./Toast";

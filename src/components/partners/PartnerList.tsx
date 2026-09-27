@@ -1,0 +1,19 @@
+import { Plus } from "lucide-react";
+import Link from "next/link";
+import { ImportExportMenu } from "@/components/import/ImportExportMenu";
+import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, SearchBox, StatCard } from "@/components/ui";
+import type { Actor } from "@/lib/permissions/scope";
+import { prisma } from "@/lib/prisma";
+import { buildExportHref, buildListHref, parseListParams } from "@/lib/query-params";
+import type { PartnerKind } from "@/server/partners/codes";
+import { listPartners, PARTNER_FILTER_KEYS } from "@/server/partners/queries";
+import { KIND_UI } from "./kinds";
+import { PartnerTable } from "./PartnerTable";
+export async function PartnerList({ kind, actor, searchParams }: { kind: PartnerKind; actor: Actor; searchParams: Record<string, string | string[] | undefined> }) {
+  const ui = KIND_UI[kind], params = parseListParams(searchParams, PARTNER_FILTER_KEYS), viewAll = actor.perms.has("partner.view_all");
+  const [{ rows, total, stats }, groups, owners] = await Promise.all([listPartners(prisma, actor, params, kind), prisma.partnerGroup.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }), viewAll ? prisma.user.findMany({ where: { isLocked: false }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true } }) : Promise.resolve([])]);
+  const href = (patch: Parameters<typeof buildListHref>[2]) => buildListHref(ui.base, params, patch); const status = params.filters.status?.[0]; const canManage = actor.perms.has("partner.manage"), canImport = canManage && actor.perms.has("data.import"); const filtered = Boolean(params.q || params.filters.status || params.filters.group || params.filters.owner); const api = `/api/partner-lists/${ui.api}`;
+  return <ListPageLayout title={ui.title} actions={<><ImportExportMenu exportHref={buildExportHref(`${api}/export`, params)} importTitle={`Nhập ${ui.singular} từ Excel`} {...(canImport ? { importEndpoint: `${api}/import`, templateHref: `${api}/import-template` } : {})} />{canManage && <Link href={`${ui.base}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Thêm mới</Link>}</>} stats={<><StatCard label="Tổng" value={stats.all} href={href({ filters: { status: [] } })} active={!status} /><StatCard label="Đang hoạt động" value={stats.active} tone="success" href={href({ filters: { status: ["active"] } })} active={status === "active"} /><StatCard label="Đã tắt" value={stats.inactive} href={href({ filters: { status: ["inactive"] } })} active={status === "inactive"} /></>} filters={<div className="flex flex-wrap items-center gap-2"><SearchBox basePath={ui.base} params={params} placeholder="Tìm tên, mã, số điện thoại…" /><MultiSelectFilter label="Nhóm" paramKey="group" basePath={ui.base} params={params} options={groups.map((g) => ({ value: String(g.id), label: g.name }))} />{viewAll && <MultiSelectFilter label="Người phụ trách" paramKey="owner" basePath={ui.base} params={params} options={owners.map((o) => ({ value: String(o.id), label: o.fullName }))} />}</div>} footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => href(page)} />}>
+    {total === 0 ? <EmptyState kind={filtered ? "no-result" : "empty"} title={filtered ? `Không tìm thấy ${ui.singular} phù hợp` : `Chưa có ${ui.singular} nào`} description={filtered ? "Thử đổi từ khóa hoặc xóa bộ lọc." : undefined} action={filtered ? <Link href={ui.base} className="text-sm font-medium text-accent">Xóa bộ lọc</Link> : canManage ? <Link href={`${ui.base}/new`} className="text-sm font-medium text-accent">Thêm {ui.singular} đầu tiên</Link> : undefined} /> : <PartnerTable rows={rows} kind={kind} canManage={canManage} params={params} />}
+  </ListPageLayout>;
+}
