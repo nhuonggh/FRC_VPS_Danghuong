@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–11 đã deploy CI xanh; Task 12 đã commit `ba24d33`, chờ CI/deploy sau push; Task 13 có hai file dở chưa commit). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-28** (Task 1–11 đã deploy CI xanh; Task 12 đã push chờ CI/deploy; Task 13 đã chốt nền schema + tra giá gần nhất, tiếp tục triển khai không chờ deploy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -111,6 +111,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03b Task 9** — Schema nhập hàng / nhập kho không NCC | **CI/CD xanh** (user xác nhận) | Migration `purchasing`: Purchase/PurchaseLine/StockAdjustment, CHECK DB, FK RESTRICT/CASCADE và SENSITIVE_FIELDS D-16; 21 test schema/quyền xanh. |
 | **GĐ1b / Plan 03b Task 10** — Idempotency + transaction kho | **CI/CD xanh** (user xác nhận) | `withIdempotentInventoryTx` đặt khoá idempotency trong chính transaction FIFO; không tạo trùng sổ/lớp khi retry hoặc request đồng thời. 17 test idempotency/kho xanh. |
 | **GĐ1b / Plan 03b Task 12** — API và giao diện phiếu nhập | **Đã commit, chờ CI/deploy** (`ba24d33`) | Route tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do; quyền giá được lọc ở server. Kiểm cục bộ: 17 test liên quan + lint/typecheck xanh. |
+| **GĐ1b / Plan 03b Task 13** — Nhập kho không NCC | Đang triển khai | Đã có schema đầu vào và `lastPurchaseCost` (lấy giá vốn lần nhập mua gần nhất theo `(at, seq)`); còn service FIFO idempotent, route, UI, hủy và test. |
 | **GĐ1b / Plan 03b Task 11** — Backend phiếu nhập hàng | **CI/CD xanh** (`ac1ea55`, user xác nhận; workflow `36355333283`) | Tạo/sửa/hủy phiếu, phân bổ cước theo giá trị vào giá vốn, công nợ NCC không gồm cước, idempotency trong transaction FIFO, khóa dòng/kỳ; danh sách/chi tiết/xuất Excel che giá ở server theo quyền. 8 test purchase + lint/typecheck xanh. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)

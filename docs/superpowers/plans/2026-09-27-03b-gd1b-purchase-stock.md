@@ -2590,6 +2590,8 @@ git commit -m "feat(purchase): màn Phiếu nhập hàng — lập phiếu (quy 
 
 ### Task 13: Nhập kho không NCC (mã 21)
 
+> **Tiến độ 28/09/2026:** Đã chốt phần nền: `adjustmentInSchema` và `lastPurchaseCost` lấy giá vốn lô mua gần nhất theo `(at, seq)`. Tiếp tục service FIFO idempotent, route, UI, hủy và test mà không chờ deploy Task 12.
+
 **Mã:** 21 (spec 6.10 — khác K1). **Files:**
 - Create: `src/server/purchase/{adjustment-in,last-cost}.ts`
 - Create: `src/app/api/stock-adjustments-in/route.ts`, `src/app/api/stock-adjustments-in/[id]/cancel/route.ts`
