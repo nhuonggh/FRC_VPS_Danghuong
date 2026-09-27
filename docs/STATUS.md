@@ -100,6 +100,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | Deploy Task 1–3 (`6ea147a`, `cdb4032`, `40a85e6`) | **CI/CD xanh**; `main` = `40a85e6` | Task 4 có thể bắt đầu; mọi commit `main` vẫn deploy theo workflow |
 | **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
 | **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** (`36301145062`) | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09; commit layout chờ deploy |
+| **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | ĐÃ code; chờ commit/CI | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 

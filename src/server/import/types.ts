@@ -1,0 +1,10 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Actor } from "@/lib/permissions/scope";
+type Db = Prisma.TransactionClient | PrismaClient;
+export interface ImportColumn { key: string; header: string; aliases?: readonly string[]; required?: boolean; sample: string }
+export type ParseResult<T> = { ok: true; data: T } | { ok: false; errors: string[] };
+export interface ImportSpec<T, C = undefined> { entity: string; label: string; columns: readonly ImportColumn[]; loadContext(db: Db): Promise<C>; parseRow(cells: Record<string, unknown>, ctx: C): ParseResult<T>; keyOf(data: T): string; skipReason?(data: T): string | null; existingKeys(db: Db, keys: string[]): Promise<Set<string>>; create(tx: Prisma.TransactionClient, actor: Actor, rows: T[], ctx: C): Promise<void>; update(tx: Prisma.TransactionClient, actor: Actor, rows: T[], ctx: C): Promise<void> }
+export type RowStatus = "create" | "update" | "skip-existing" | "skip-reason" | "error";
+export interface PreviewRow { line: number; status: RowStatus; key: string | null; message: string | null; summary: string }
+export interface ImportPreview { total: number; counts: Record<RowStatus, number>; rows: PreviewRow[] }
+export interface ImportResult { created: number; updated: number; skippedExisting: number; skippedReason: number; failed: number; failures: { line: number; message: string }[] }
