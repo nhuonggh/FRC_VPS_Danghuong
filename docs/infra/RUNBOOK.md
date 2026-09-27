@@ -9,7 +9,7 @@ Giá trị thật: [INPUTS.md](INPUTS.md). Xác minh sau deploy: [VERIFY.md](VER
 ## 0. Quy tắc bất di bất dịch
 
 - VPS chạy **nhiều dự án khác**. Chỉ đụng tài nguyên mang tên `dherp`: user `deploy_dherp`, container `dherp_app`,
-  `postgres_dherp`, thư mục `/opt/postgres_dherp`, file `/opt/caddy/sites/dherp.caddy`, image `<REGISTRY>/dherp`.
+  `postgres_dherp`, thư mục `/opt/postgres_dherp`, file `/opt/caddy/sites/dherp.caddy`, image `dherp`.
 - **Cấm**: `docker system prune`, `docker image prune -a`, `docker volume prune`, `docker network prune`, restart/xoá
   container `caddy` hay container/DB của dự án khác, sửa site file khác trong `/opt/caddy/sites/`, sửa `Caddyfile` chung.
 - Caddy chỉ **reload** (không restart). Luôn `validate` trước `reload`.
@@ -58,15 +58,13 @@ Private key (`cat ~/.ssh/id_ed25519`, cả dòng BEGIN/END) → GitHub Secret `V
 **Không có bước sudoers/systemctl**: khác runbook gốc, Caddy ở đây chạy trong **container** `caddy` → reload bằng
 `docker exec` (mục 5); CI không reload Caddy (site file chỉ đổi khi đổi domain).
 
-## 3. Registry (đã làm)
+## 3. Vận chuyển image — KHÔNG dùng registry chung (quyết định 2026-09-27)
 
-`deploy_dherp` đã đăng nhập registry riêng (thông tin lưu ở `~/.docker/config.json` của user này):
+Registry dùng chung `registry.francophiles.com.vn` (container `registry`, /opt/registry/data) đang hỏng dữ liệu: kiểm tra chỉ đọc cho thấy các repo `crm`/`lms` có hàng nghìn liên kết layer nhưng file blob không còn trên đĩa (404 khi tải), và các layer đẩy lên từ dự án này bị "blob unknown"/"manifest unknown" khi pull. Đây là hạ tầng của dự án khác nên **không sửa**; chủ registry cần tự kiểm tra (nghi ngờ đã xoá tay thư mục blobs hoặc GC lỗi, và registry giữ cache mô tả blob trong RAM).
 
-    docker login registry.francophiles.com.vn
+Vì vậy workflow: build 2 image trên runner → `docker save` gzip → `scp` vào `/home/deploy_dherp/deploy/` → `docker load` trên VPS. Tên image local: `dherp:<sha>` (app) và `dherp:migrate-<sha>` (migrator); không cần `REGISTRY_*`. Các secret `REGISTRY_URL/USER/PASS` trong GitHub không còn dùng (có thể xoá). Muốn quay lại registry: sửa `deploy.yml` (push + `docker pull`) sau khi registry được sửa; giữ `provenance: false`/`sbom: false`.
 
-Workflow cũng tự `docker login` mỗi lần deploy bằng `REGISTRY_USER`/`REGISTRY_PASS` (qua biến môi trường SSH, không in ra log).
-
-Lưu ý build: registry `registry:2` riêng không lưu được manifest attestation của buildx. Cả hai bước build trong `deploy.yml` đặt `provenance: false` và `sbom: false`; thiếu 2 dòng này thì `docker pull` trên VPS báo `manifest unknown` (đã gặp ở lần deploy đầu, 2026-09-27).
+Còn sót trong registry: repo `dherp` với vài tag lỗi (dữ liệu của dự án này; có thể xoá thư mục repo `dherp` khi chủ registry chạy garbage-collect).
 
 ## 4. Thư mục + 2 file env production
 
@@ -164,15 +162,15 @@ Lệnh tạo lại container **y hệt workflow** (dùng khi sửa `.env`, xoay 
 
 ## 8. Rollback
 
-Mỗi bản deploy có tag bất biến `dherp:<git-sha>`; VPS giữ 3 bản gần nhất, registry giữ tất cả (tới khi GC registry).
+Mỗi bản deploy có tag bất biến `dherp:<git-sha>`; VPS giữ 3 bản gần nhất, không có bản lưu ở registry (image chỉ tồn tại trên VPS; muốn giữ lâu hơn thì tăng số bản giữ trong deploy.yml).
 Workflow in dòng `Image đang chạy trước deploy (dùng để rollback): …`. Xem các bản đang có:
 
-    docker images registry.francophiles.com.vn/dherp --format '{{.Tag}} {{.CreatedSince}} {{.Digest}}'
+    docker images dherp --format '{{.Tag}} {{.CreatedSince}} {{.Digest}}'
 
-Chạy lại bản trước (theo tag sha, hoặc chắc chắn hơn theo digest `registry.francophiles.com.vn/dherp@sha256:…`):
+Chạy lại bản trước (theo tag sha):
 
     docker stop dherp_app && docker rm dherp_app
-    docker run -d --name dherp_app --restart always --network pgnet --env-file /home/deploy_dherp/app/.env -p 127.0.0.1:3004:3000 registry.francophiles.com.vn/dherp:<SHA_TRUOC>
+    docker run -d --name dherp_app --restart always --network pgnet --env-file /home/deploy_dherp/app/.env -p 127.0.0.1:3004:3000 dherp:<SHA_TRUOC>
 
 **Giới hạn**: migration chỉ tiến, không có down. Rollback app chỉ an toàn khi migration của bản mới tương thích ngược với
 code cũ (thêm cột/bảng). Nếu migration đã đổi/xoá cấu trúc → khôi phục DB từ backup. Trước bản deploy có migration rủi ro,
@@ -265,7 +263,7 @@ khẩu. Người dùng thường: quản trị viên bấm "Cấp lại mật kh
 `deploy_dherp` trên VPS, mật khẩu KHÔNG vào lịch sử shell, KHÔNG in ra log, KHÔNG nằm trên dòng lệnh:
 
     read -rs NEW_ADMIN_PASSWORD && export NEW_ADMIN_PASSWORD
-    docker run --rm --network pgnet --env-file /home/deploy_dherp/app/.env.migrate -e NEW_ADMIN_PASSWORD registry.francophiles.com.vn/dherp:migrate npx tsx scripts/admin-reset.ts
+    docker run --rm --network pgnet --env-file /home/deploy_dherp/app/.env.migrate -e NEW_ADMIN_PASSWORD dherp:migrate npx tsx scripts/admin-reset.ts
     unset NEW_ADMIN_PASSWORD
 
 (`-e NEW_ADMIN_PASSWORD` không kèm giá trị = lấy từ môi trường hiện tại.) Kỳ vọng dòng

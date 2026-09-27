@@ -1,5 +1,5 @@
 # =============================================================================
-# CI/CD: test (gate) → build + push 2 image → deploy lên VPS qua SSH (khuôn skill setup-project)
+# CI/CD: test (gate) → build 2 image → scp lên VPS → docker load → migrate/seed → swap (khuôn skill setup-project, bỏ registry)
 # Secret KHÔNG viết ở đây — đặt trong GitHub Secrets (docs/infra/RUNBOOK.md mục GitHub Secrets).
 # =============================================================================
 name: Deploy
@@ -18,7 +18,7 @@ concurrency:
 
 env:
   SLUG: dherp
-  IMAGE_NAME: ${{ secrets.REGISTRY_URL }}/dherp
+  IMAGE_NAME: dherp
   APP_PORT: ${{ secrets.APP_PORT }}
   IMAGE_TAG: ${{ github.sha }}
 
@@ -62,60 +62,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to private registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_PASS }}
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- App image: LUÔN ghi rõ target: runner (pitfalls mục 1) ---
-      - name: Build & push app image
+      # Image KHÔNG đi qua registry dùng chung (registry.francophiles.com.vn đang hỏng dữ liệu blob — xem RUNBOOK mục 3):
+      # build → tar.gz → scp lên VPS → docker load. LUÔN ghi rõ target (pitfalls mục 1).
+      - name: Build app image (target runner)
         uses: docker/build-push-action@v6
         with:
           context: .
           target: runner
-          push: true
-          # registry:2 riêng không giữ được manifest attestation (index con) -> pull lỗi "manifest unknown"
+          push: false
           provenance: false
           sbom: false
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          outputs: type=docker,dest=/tmp/dherp-app.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --- Migrate image (migrate deploy + seed): target: migrator ---
-      - name: Build & push migrate image
+      - name: Build migrate image (target migrator)
         uses: docker/build-push-action@v6
         with:
           context: .
           target: migrator
-          push: true
-          # registry:2 riêng không giữ được manifest attestation (index con) -> pull lỗi "manifest unknown"
+          push: false
           provenance: false
           sbom: false
-          tags: |
-            ${{ env.IMAGE_NAME }}:migrate
-            ${{ env.IMAGE_NAME }}:migrate-${{ env.IMAGE_TAG }}
+          tags: ${{ env.IMAGE_NAME }}:migrate-${{ env.IMAGE_TAG }}
+          outputs: type=docker,dest=/tmp/dherp-migrate.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --- Deploy: migrate + seed TRƯỚC, fail thì container cũ vẫn chạy; rồi mới swap; rồi probe sức khoẻ ---
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        env:
-          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
-          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
-          REGISTRY_PASS: ${{ secrets.REGISTRY_PASS }}
+      - name: Compress images
+        run: gzip -1 /tmp/dherp-app.tar /tmp/dherp-migrate.tar && ls -la /tmp/dherp-*.tar.gz
+
+      - name: Upload images to VPS
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,APP_PORT,SLUG,REGISTRY_URL,REGISTRY_USER,REGISTRY_PASS
+          source: /tmp/dherp-app.tar.gz,/tmp/dherp-migrate.tar.gz
+          target: deploy
+          strip_components: 1
+          overwrite: true
+
+      # --- Deploy: migrate + seed TRƯỚC, fail thì container cũ vẫn chạy; rồi mới swap; rồi probe sức khoẻ ---
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: IMAGE_NAME,IMAGE_TAG,APP_PORT,SLUG
           script: |
             set -eu
             ENV_FILE="$HOME/app/.env"                  # app: NODE_ENV, DATABASE_URL (app_rw), AUTH_SECRET, NEXTAUTH_URL
@@ -127,12 +126,10 @@ jobs:
             APP_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
             MIGRATE_IMAGE="$IMAGE_NAME:migrate-$IMAGE_TAG"
 
-            echo "==> Login registry"
-            printf '%s' "$REGISTRY_PASS" | docker login "$REGISTRY_URL" -u "$REGISTRY_USER" --password-stdin
-
-            echo "==> Pull images ($IMAGE_TAG)"
-            docker pull "$APP_IMAGE"
-            docker pull "$MIGRATE_IMAGE"
+            echo "==> Nạp image từ file đã upload ($IMAGE_TAG)"
+            docker load -i "$HOME/deploy/dherp-app.tar.gz"
+            docker load -i "$HOME/deploy/dherp-migrate.tar.gz"
+            rm -f "$HOME/deploy/dherp-app.tar.gz" "$HOME/deploy/dherp-migrate.tar.gz"
 
             PREV_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${SLUG}_app" 2>/dev/null || echo none)"
             echo "==> Image đang chạy trước deploy (dùng để rollback): $PREV_IMAGE"

@@ -4,7 +4,7 @@ Build pass / Actions xanh KHÔNG phải bằng chứng. Phải mở trang thật
 Lệnh chạy trên VPS bằng user `deploy_dherp` (hoặc root khi ghi chú). Giá trị: [INPUTS.md](INPUTS.md).
 
 ## Hạ tầng
-- [ ] `docker ps --filter name=dherp_app` — `Up`, image `registry.francophiles.com.vn/dherp:<sha của commit vừa push>`, cổng `127.0.0.1:3004->3000/tcp`
+- [ ] `docker ps --filter name=dherp_app` — `Up`, image `dherp:<sha của commit vừa push>`, cổng `127.0.0.1:3004->3000/tcp`
 - [ ] `docker inspect --format '{{json .Config.Cmd}} {{.Config.User}}' dherp_app` → `["node","server.js"] nextjs`
 - [ ] `docker logs --tail 50 dherp_app` — không lỗi lặp (`NO_SECRET`, `ECONNREFUSED`, `P1001`, `[recompute]`)
 - [ ] `curl -fsS http://127.0.0.1:3004/api/health` → `{"status":"ok","db":true,"time":"…"}` (chỉ 3 khoá, không lộ lỗi)
