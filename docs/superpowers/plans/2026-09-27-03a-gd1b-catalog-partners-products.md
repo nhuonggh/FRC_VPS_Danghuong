@@ -2689,6 +2689,8 @@ git commit -m "feat(import): khung Import Excel — số kiểu Việt Nam, xem 
 
 ### Task 5: Khách hàng & NCC — backend (mã tự sinh, tìm không dấu, phạm vi "khách của mình")
 
+> **Tiến độ 27/09/2026:** Đã triển khai backend và kiểm thử trọng yếu; commit/push thực hiện cùng đợt này, CI/deploy chờ user cập nhật ở phiên kế tiếp.
+
 **Mã:** 9, 10. **Files:**
 - Create: `src/server/partners/{schemas,codes,service,queries,import-spec}.ts`
 - Modify: `src/server/audit/*` — không cần; `src/lib/permissions/catalog.ts` — không thêm quyền mới
