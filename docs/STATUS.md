@@ -122,8 +122,8 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Đã làm / đã push:**
 - Task 13: nhập kho không NCC — schema, `lastPurchaseCost`, service FIFO/idempotent, API tạo/hủy, form, danh sách, chi tiết/hủy và menu. **Chưa đóng** vì còn test chuyên biệt, kiểm tay và QA quyền giá.
-- Task 14: `onHandList` + trang Tồn hiện tại; `stockCard` backend; `xntReport` + trang XNT; `rollLookup` + trang Tra cứu cuộn. **Chưa đóng** vì còn export, tồn theo sản phẩm, kiểm cân sổ và hiệu năng.
-- Task 15: UI đã có Tồn hiện tại, XNT, Định mức tồn, Tra cứu cuộn; menu Tồn hiện tại đã mở. **Chưa đóng** vì còn thẻ kho UI, export, tab Tồn kho sản phẩm, mobile/dark-mode/redaction QA.
+- Task 14: `onHandList` + trang Tồn hiện tại; `stockCard` backend; `xntReport` + trang XNT; `rollLookup` + trang Tra cứu cuộn. Đã thay N+1 báo cáo bằng tổng hợp theo nhóm, có tổng XNT; **chưa đóng** vì còn kiểm cân sổ/hiệu năng trên dữ liệu lớn và QA.
+- Task 15: UI đã có Tồn hiện tại, XNT, Định mức tồn, Tra cứu cuộn, Thẻ kho và tab Tồn kho sản phẩm; export server/API cho 5 báo cáo; menu kho đã mở. **Chưa đóng** vì còn QA mobile/dark-mode/redaction và quality gate toàn Plan 03b.
 
 **Đang làm / thứ tự tiếp theo (không chờ deploy):**
 1. Dựng trang Thẻ kho (chọn sản phẩm, gọi `stockCard`) và tab Tồn kho tại chi tiết sản phẩm.
