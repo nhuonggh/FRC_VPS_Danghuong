@@ -38,12 +38,12 @@ describe("Trang chủ — Level 0 (module selector)", () => {
     expect(screen.queryByText("Kế toán")).toBeNull();
   });
 
-  it("module chỉ có chức năng 'planned' (chưa làm) bị ẩn; không có số liệu giả", async () => {
+  it("module chỉ có chức năng 'planned' bị ẩn; module Kho hiện khi stock.view đã có màn tồn kho", async () => {
     requireActor.mockResolvedValue(actor(["order.view", "stock.view", "user.view"]));
     await renderHome();
     expect(screen.queryByText("Bán hàng")).toBeNull();
-    expect(screen.queryByText("Kho")).toBeNull();
-    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText("Kho")).toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 
   it("không quyền nào → thông báo trống, không có thẻ", async () => {
