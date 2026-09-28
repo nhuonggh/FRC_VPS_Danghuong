@@ -6,7 +6,8 @@ import { useState } from "react";
 import { Combobox, Field, NewPage, inputClass } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
-import { adjustmentInSchema, type AdjustmentInInput } from "@/server/purchase/adjustment-in";
+// Schema thuần Zod: không import barrel service vì Client Component không được kéo engine FIFO vào bundle browser.
+import { adjustmentInSchema, type AdjustmentInInput } from "@/server/purchase/adjustment-schemas";
 import type { ProductOption } from "@/server/products/queries";
 const blank = { productId: undefined, qty: undefined, unitCost: null } as unknown as AdjustmentInInput["lines"][number];
 export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetCost: boolean }) {
