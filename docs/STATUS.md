@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 đang hoàn tất UI/test; Task 14 đã có truy vấn và trang Tồn hiện tại, chờ CI/deploy sau push). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 có backend + UI, còn test/QA; Task 14 đã có Tồn hiện tại, thẻ kho backend, XNT backend/UI; CI `8920dab` fail 1 test home đã sửa ở `62f87e8`, workflow mới đang chạy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -111,7 +111,9 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03b Task 9** — Schema nhập hàng / nhập kho không NCC | **CI/CD xanh** (user xác nhận) | Migration `purchasing`: Purchase/PurchaseLine/StockAdjustment, CHECK DB, FK RESTRICT/CASCADE và SENSITIVE_FIELDS D-16; 21 test schema/quyền xanh. |
 | **GĐ1b / Plan 03b Task 10** — Idempotency + transaction kho | **CI/CD xanh** (user xác nhận) | `withIdempotentInventoryTx` đặt khoá idempotency trong chính transaction FIFO; không tạo trùng sổ/lớp khi retry hoặc request đồng thời. 17 test idempotency/kho xanh. |
 | **GĐ1b / Plan 03b Task 12** — API và giao diện phiếu nhập | **CI/CD xanh** (`291085c`, user xác nhận) | Route tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do; quyền giá được lọc ở server. |
-| **GĐ1b / Plan 03b Task 13** — Nhập kho không NCC | Đang triển khai | Đã có schema đầu vào và `lastPurchaseCost` (lấy giá vốn lần nhập mua gần nhất theo `(at, seq)`); còn service FIFO idempotent, route, UI, hủy và test. |
+| **GĐ1b / Plan 03b Task 13** — Nhập kho không NCC | Đang triển khai | Đã có schema, giá nhập gần nhất, service FIFO idempotent, route tạo/hủy, form, danh sách và chi tiết/hủy; còn test chuyên biệt, kiểm tay quyền giá và QA đóng task. |
+| **GĐ1b / Plan 03b Task 14** — Báo cáo kho backend | Đang triển khai | Đã có truy vấn tồn hiện tại, thẻ kho cộng dồn theo `(at, seq)`, XNT đầu tháng–hiện tại; còn tra cứu cuộn hoàn thiện, tồn theo sản phẩm, export, đối chiếu/cân sổ và hiệu năng. |
+| **GĐ1b / Plan 03b Task 15** — Giao diện kho | Đang triển khai | Đã có trang Tồn hiện tại và XNT; còn Thẻ kho, Định mức tồn/Tra cứu cuộn hoàn thiện, export, tab Tồn kho sản phẩm và QA mobile/quyền giá. |
 | **GĐ1b / Plan 03b Task 11** — Backend phiếu nhập hàng | **CI/CD xanh** (`ac1ea55`, user xác nhận; workflow `36355333283`) | Tạo/sửa/hủy phiếu, phân bổ cước theo giá trị vào giá vốn, công nợ NCC không gồm cước, idempotency trong transaction FIFO, khóa dòng/kỳ; danh sách/chi tiết/xuất Excel che giá ở server theo quyền. 8 test purchase + lint/typecheck xanh. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)

@@ -3283,6 +3283,8 @@ git commit -m "feat(purchase): nhập kho không NCC (mã 21) — giá mặc đ�
 
 ### Task 14: Báo cáo kho — backend (tồn hiện tại, thẻ kho, XNT, tra cứu cuộn, tồn theo SP)
 
+> **Tiến độ 28/09/2026:** Đang triển khai. Đã có `onHandList`, `stockCard`, `xntReport` và trang Tồn hiện tại/XNT; còn tra cứu cuộn hoàn thiện, tồn theo sản phẩm, export, kiểm cân sổ và hiệu năng.
+
 **Mã:** 22, 23, 24, 25, 30. **Files:**
 - Create: `src/server/inventory-reports/{labels,on-hand,stock-card,xnt,rolls,product-stock,export}.ts`
 - Test: `tests/inventory-reports/{helpers.ts,on-hand,stock-card,xnt,rolls,product-stock,perf}.test.ts`
@@ -4176,6 +4178,8 @@ git commit -m "feat(inventory-reports): tồn hiện tại, thẻ kho (số dư 
 ---
 
 ### Task 15: Màn hình kho — giao diện (tồn kho, thẻ kho, XNT, định mức tồn, tra cứu cuộn, tab Tồn kho của sản phẩm) + đóng plan 03b
+
+> **Tiến độ 28/09/2026:** Đang triển khai. Đã có Tồn hiện tại và XNT; Định mức tồn/Tra cứu cuộn đang làm, còn Thẻ kho, export, tab sản phẩm và QA đóng plan.
 
 **Mã:** 22, 23, 24, 25, 30. **Files:**
 - Create: `src/app/api/inventory/{stock,min-stock,xnt,rolls,ledger}/export/route.ts`
