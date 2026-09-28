@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 có backend + UI, còn test/QA; Task 14 đã có Tồn hiện tại, thẻ kho backend, XNT backend/UI; CI `8920dab` fail 1 test home đã sửa ở `62f87e8`, workflow mới đang chạy). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 có backend + UI, còn test/QA; Task 14 có Tồn hiện tại, thẻ kho backend, XNT, tra cứu cuộn; Task 15 có 4 màn kho. Commit mới nhất `a2ce59f` đã push; còn export, tab tồn kho SP, test/QA và đóng 03b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -117,6 +117,23 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03b Task 11** — Backend phiếu nhập hàng | **CI/CD xanh** (`ac1ea55`, user xác nhận; workflow `36355333283`) | Tạo/sửa/hủy phiếu, phân bổ cước theo giá trị vào giá vốn, công nợ NCC không gồm cước, idempotency trong transaction FIFO, khóa dòng/kỳ; danh sách/chi tiết/xuất Excel che giá ở server theo quyền. 8 test purchase + lint/typecheck xanh. |
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
+
+### Bàn giao triển khai bắt buộc — đọc trước khi tiếp tục Plan 03b (28/09/2026)
+
+**Đã làm / đã push:**
+- Task 13: nhập kho không NCC — schema, `lastPurchaseCost`, service FIFO/idempotent, API tạo/hủy, form, danh sách, chi tiết/hủy và menu. **Chưa đóng** vì còn test chuyên biệt, kiểm tay và QA quyền giá.
+- Task 14: `onHandList` + trang Tồn hiện tại; `stockCard` backend; `xntReport` + trang XNT; `rollLookup` + trang Tra cứu cuộn. **Chưa đóng** vì còn export, tồn theo sản phẩm, kiểm cân sổ và hiệu năng.
+- Task 15: UI đã có Tồn hiện tại, XNT, Định mức tồn, Tra cứu cuộn; menu Tồn hiện tại đã mở. **Chưa đóng** vì còn thẻ kho UI, export, tab Tồn kho sản phẩm, mobile/dark-mode/redaction QA.
+
+**Đang làm / thứ tự tiếp theo (không chờ deploy):**
+1. Dựng trang Thẻ kho (chọn sản phẩm, gọi `stockCard`) và tab Tồn kho tại chi tiết sản phẩm.
+2. Tạo export server/API cho Tồn hiện tại, Định mức, Thẻ kho, XNT, Tra cứu cuộn; xuất đúng DTO đã redact theo `cost.view`.
+3. Viết/chạy test Task 13 và báo cáo kho: FIFO/idempotency, ẩn giá mọi đường ra, XNT = thẻ kho = tồn hiện tại, dữ liệu lớn ~1.300 mã.
+4. QA PC/mobile/dark mode/deep-link, cập nhật Task 13–15 sang hoàn thành, chạy full quality gate, rồi đóng Plan 03b.
+
+**Git/CI hiện tại:** commit mới nhất `a2ce59f` đã push `main`. CI trước `8920dab` fail duy nhất do test trang chủ chưa cập nhật khi module Kho được mở; bản sửa `62f87e8` đã push. Không tự đánh dấu deploy xanh nếu user chưa xác nhận kết quả workflow/site thật.
+
+**Cần user duyệt:** hiện không có quyết định nghiệp vụ mới; các mặc định 03b đã chốt vẫn áp dụng. Push `main` đã được user cho phép trong phiên này; deploy vẫn phải được xác nhận qua workflow/site thật.
 
 **Nợ vận hành ngay (nhỏ, làm trước khi giao khách):**
 1. ~~Sao lưu `pg_dump` hằng đêm~~ — **user: chưa cần (2026-09-27)**; hoãn, nhắc lại trước khi nhập dữ liệu thật/go-live (task D9 plan 05).
