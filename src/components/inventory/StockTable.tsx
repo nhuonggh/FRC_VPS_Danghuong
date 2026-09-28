@@ -1,0 +1,5 @@
+"use client";
+import { DataTable, type Column } from "@/components/ui";
+import { formatCurrency, formatQty } from "@/lib/format";
+import type { OnHandRow } from "@/server/inventory-reports/on-hand";
+export function StockTable({ rows }: { rows: OnHandRow[] }) { const showValue = rows.some((row) => row.stockValue !== undefined); const columns: Column<OnHandRow>[] = [{ key: "code", label: "Mã", primaryOnMobile: true, render: (x) => <span className="font-mono text-xs">{x.code}</span> }, { key: "name", label: "Sản phẩm", render: (x) => x.name }, { key: "onHand", label: "Tồn hiện tại", align: "right", render: (x) => `${formatQty(x.onHand)} ${x.baseUnit}` }, { key: "minStock", label: "Định mức", align: "right", render: (x) => formatQty(x.minStock) }, ...(showValue ? [{ key: "stockValue", label: "Giá trị tồn", align: "right" as const, render: (x: OnHandRow) => formatCurrency(x.stockValue) }] : [])]; return <DataTable id="stock-onhand" columns={columns} rows={rows} rowKey={(x) => x.productId} />; }

@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 đang hoàn tất UI/test; Task 14 đã bắt đầu truy vấn tồn hiện tại). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 đang hoàn tất UI/test; Task 14 đã có truy vấn và trang Tồn hiện tại, chờ CI/deploy sau push). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
