@@ -88,7 +88,7 @@ export const APP_NAV: readonly NavModule[] = [
         functions: [
           { key: "purchase-new", label: "Lập phiếu nhập", desc: "Quy đổi đơn vị, sinh lô FIFO, phân bổ cước", icon: "package-plus", view: "form", path: "/purchase/orders/new", codes: ["19"], perm: "purchase.create" },
           { key: "purchase-list", label: "Danh sách phiếu nhập", desc: "Xem, tìm, sửa phiếu nhập", icon: "clipboard-list", view: "table", path: "/purchase/orders", codes: ["20"], perm: "purchase.view" },
-          { key: "stock-in-adj", label: "Nhập kho đầu kỳ / không NCC", desc: "Hàng lệch, dư — không sinh công nợ", icon: "layers", view: "table", path: "/purchase/adjustments-in", codes: ["21"], perm: "stock_adjust.manage", planned: P },
+          { key: "stock-in-adj", label: "Nhập kho đầu kỳ / không NCC", desc: "Hàng lệch, dư — không sinh công nợ", icon: "layers", view: "table", path: "/purchase/adjustments-in", codes: ["21"], perm: "stock_adjust.manage" },
           { key: "supplier-list", label: "Nhà cung cấp", desc: "Danh sách NCC", icon: "building-2", view: "table", path: "/purchase/suppliers", codes: ["10"], perm: "partner.view" },
         ],
       },
@@ -101,7 +101,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "stock", label: "Tồn kho",
         functions: [
-          { key: "stock-onhand", label: "Tồn kho hiện tại", desc: "Tồn theo mã hàng", icon: "warehouse", view: "table", path: "/inventory/stock", codes: ["23"], perm: "stock.view", planned: P },
+          { key: "stock-onhand", label: "Tồn kho hiện tại", desc: "Tồn theo mã hàng", icon: "warehouse", view: "table", path: "/inventory/stock", codes: ["23"], perm: "stock.view" },
           { key: "stock-ledger", label: "Sổ kho / thẻ kho", desc: "Chi tiết nhập xuất từng mã", icon: "scroll-text", view: "table", path: "/inventory/ledger", codes: ["22"], perm: "stock.view", planned: P },
           { key: "stock-xnt", label: "Báo cáo xuất nhập tồn", desc: "XNT kèm giá", icon: "bar-chart-3", view: "report", path: "/inventory/xnt", codes: ["24"], perm: "stock.view", planned: P },
           { key: "stock-min", label: "Định mức tồn", desc: "Cảnh báo dưới định mức", icon: "sliders-horizontal", view: "table", path: "/inventory/min-stock", codes: ["25"], perm: "stock.view", planned: P },
