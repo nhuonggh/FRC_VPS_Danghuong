@@ -1,9 +1,16 @@
 import { prisma } from "@/lib/prisma";
-import { ictStartOfDay, toIct } from "@/lib/time";
+import { listTimeRange, parseListParams } from "@/lib/query-params";
 import { requireActorApi } from "@/server/auth/session";
 import { xlsxResponse } from "@/server/export/xlsx";
 import { toErrorResponse } from "@/server/http/handler";
 import { exportXntXlsx } from "@/server/inventory-reports/export";
 
 export const dynamic = "force-dynamic";
-export async function GET() { try { const actor = await requireActorApi("stock.view"), now = toIct(new Date()), from = ictStartOfDay(now.y, now.m, 1); return xlsxResponse("xuat-nhap-ton.xlsx", await exportXntXlsx(prisma, actor, from, new Date())); } catch (error) { return toErrorResponse(error); } }
+export async function GET(req: Request) { try {
+  const actor = await requireActorApi("stock.view");
+  const raw: Record<string, string[]> = {};
+  for (const [key, value] of new URL(req.url).searchParams) (raw[key] ??= []).push(value);
+  const params = parseListParams({ ...raw, timePreset: raw.timePreset ?? "thisMonth" });
+  const range = listTimeRange(params)!;
+  return xlsxResponse("xuat-nhap-ton.xlsx", await exportXntXlsx(prisma, actor, range.start, range.end, params.q));
+} catch (error) { return toErrorResponse(error); } }
