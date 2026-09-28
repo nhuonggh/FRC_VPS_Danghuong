@@ -121,7 +121,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 ### Bàn giao triển khai bắt buộc — đọc trước khi tiếp tục Plan 03b (28/09/2026)
 
 **Đã làm / đã push:**
-- Task 13: nhập kho không NCC — schema, `lastPurchaseCost`, service FIFO/idempotent, API tạo/hủy, form, danh sách, chi tiết/hủy và menu. **Chưa đóng** vì còn test chuyên biệt, kiểm tay và QA quyền giá.
+- Task 13: nhập kho không NCC — schema, `lastPurchaseCost`, service FIFO/idempotent, API tạo/hủy, form, danh sách, chi tiết/hủy và menu; đã có test idempotency/giá mặc định/hủy/redaction. **Chưa đóng** vì còn kiểm tay và QA quyền giá.
 - Task 14: `onHandList` + trang Tồn hiện tại; `stockCard` backend; `xntReport` + trang XNT; `rollLookup` + trang Tra cứu cuộn. Đã thay N+1 báo cáo bằng tổng hợp theo nhóm, có tổng XNT; **chưa đóng** vì còn kiểm cân sổ/hiệu năng trên dữ liệu lớn và QA.
 - Task 15: UI đã có Tồn hiện tại, XNT, Định mức tồn, Tra cứu cuộn, Thẻ kho và tab Tồn kho sản phẩm; export server/API cho 5 báo cáo; menu kho đã mở. **Chưa đóng** vì còn QA mobile/dark-mode/redaction và quality gate toàn Plan 03b.
 
