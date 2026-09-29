@@ -153,7 +153,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "bom", label: "Định mức",
         functions: [
-          { key: "bom-list", label: "Định mức NVL", desc: "Khai báo có phiên bản", icon: "sliders-horizontal", view: "table", path: "/production/bom", codes: ["51"], perm: "bom.manage", planned: P },
+          { key: "bom-list", label: "Định mức NVL", desc: "Khai báo có phiên bản", icon: "sliders-horizontal", view: "table", path: "/production/bom", codes: ["51"], perm: "bom.manage" },
           { key: "consumption-actual", label: "Tiêu hao thực tế", desc: "Từ kiểm kho", icon: "scale", view: "table", path: "/production/actual-consumption", codes: ["52"], perm: "bom.manage", planned: P },
           { key: "consumption-compare", label: "Đối chiếu định mức", desc: "Định mức vs thực tế", icon: "bar-chart-3", view: "report", path: "/production/compare", codes: ["53"], perm: "bom.manage", planned: P },
         ],
