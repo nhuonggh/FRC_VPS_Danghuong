@@ -105,3 +105,27 @@ export async function cancelDeliveryNote(tx: Tx, actor: Actor, id: number): Prom
   await syncDeliveryStatus(tx, order.id);
   await writeAudit(tx, { userId: actor.userId, action: "delivery.cancel", entity: "DeliveryNote", entityId: id, before: { code: note.code }, after: { isCancelled: true } });
 }
+
+/**
+ * Ghi lại công nợ của MỌI phiếu giao còn hiệu lực theo thành tiền/SL dòng HIỆN TẠI (sau khi sửa đơn đã giao một phần).
+ * Duyệt phiếu theo thứ tự thời gian, cộng dồn SL từng dòng — cùng công thức làm tròn luỹ kế lúc tạo phiếu.
+ */
+export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: number): Promise<void> {
+  const order = await tx.saleOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
+  const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
+  const lineById = new Map(order.lines.map((l) => [l.id, l]));
+  const cum = new Map<number, Prisma.Decimal>();
+  for (const note of notes) {
+    let value = D(0);
+    for (const dl of note.lines) {
+      const line = lineById.get(dl.orderLineId)!;
+      const before = cum.get(line.id) ?? D(0);
+      value = value.plus(deliveredValue(lineAmountOf(line), line.qty, before, dl.qty));
+      cum.set(line.id, before.plus(dl.qty));
+    }
+    await tx.partnerLedger.deleteMany({ where: { docType: "DELIVERY", docId: note.id } });
+    if (value.gt(0)) {
+      await tx.partnerLedger.create({ data: { periodId: note.periodId, partnerId: order.partnerId, debit: value, docType: "DELIVERY", docId: note.id, at: note.at, createdBy: actor.userId } });
+    }
+  }
+}

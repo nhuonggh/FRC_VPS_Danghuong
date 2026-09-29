@@ -11,6 +11,8 @@ const decimals = (n: number) => (v: number) => Number(v.toFixed(n)) === v;
 
 export const saleLineSchema = z
   .object({
+    /** Chỉ dùng khi SỬA đơn: id dòng hiện có (giữ vị trí `seq` trong chuỗi FIFO). Dòng không có id = dòng mới. */
+    id: z.number().int().positive().optional(),
     productId: z.number({ invalid_type_error: "Chọn sản phẩm." }).int().positive("Chọn sản phẩm."),
     unit: z.string().trim().min(1, "Chọn đơn vị.").max(10),
     qty: z.number({ invalid_type_error: "Nhập số lượng." }).finite().gt(0, "Số lượng phải lớn hơn 0.").max(999_999_999).refine(decimals(3), "Tối đa 3 chữ số thập phân."),

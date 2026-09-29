@@ -29,7 +29,7 @@ export interface PlannedLine {
 }
 
 /** Lập đơn cần đủ hai quyền: tạo đơn và xem giá bán (giá gợi ý và thành tiền luôn được tính). */
-function assertWriter(actor: Actor, permission: "order.create" | "order.edit") {
+export function assertWriter(actor: Actor, permission: "order.create" | "order.edit") {
   assertCan(actor.perms, permission);
   assertCan(actor.perms, "sale_price.view");
 }
@@ -39,7 +39,15 @@ function assertWriter(actor: Actor, permission: "order.create" | "order.edit") {
  * hiệu lực tại thời điểm đơn (D-20) và giữ `bomVersionId` làm snapshot. Chạy được cả ngoài transaction (để biết trước
  * danh sách mã cần khoá) lẫn trong transaction (kiểm lại).
  */
-export async function planLines(db: Db, input: SaleOrderInput, at: Date, keepInactive: ReadonlySet<number> = new Set()): Promise<PlannedLine[]> {
+export interface PlanOptions {
+  /** Mã đang có trong đơn được phép giữ dù đã ngừng bán (khi sửa đơn cũ). */
+  keepInactive?: ReadonlySet<number>;
+  /** id dòng hiện có → phiên bản BOM đã dùng: dòng không đổi mã/kiểu gia công GIỮ định mức cũ (đơn cũ không đổi khi BOM đổi). */
+  pinned?: ReadonlyMap<number, { productId: number; processingTypeId: number | null; bomVersionId: number | null }>;
+}
+
+export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: PlanOptions = {}): Promise<PlannedLine[]> {
+  const keepInactive = opts.keepInactive ?? new Set<number>();
   const ids = sortedUnique(input.lines.map((l) => l.productId));
   const products = await db.product.findMany({ where: { id: { in: ids } }, include: { units: true } });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -57,6 +65,13 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, keepIna
       out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: product.id, qtyBase }], bomVersionId: null });
       continue;
     }
+    const pin = line.id === undefined ? undefined : opts.pinned?.get(line.id);
+    if (pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId && pin.bomVersionId !== null) {
+      const version = await db.bomVersion.findUniqueOrThrow({ where: { id: pin.bomVersionId }, include: { lines: { orderBy: { id: "asc" } } } });
+      const pinnedIssues = version.lines.map((l) => ({ productId: l.materialProductId, qtyBase: l.qtyPerUnit.times(qtyBase).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP) }));
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: pinnedIssues, bomVersionId: pin.bomVersionId });
+      continue;
+    }
     const bom = await resolveBom(db, product.id, line.processingTypeId, at).catch((e: unknown) => {
       if (e instanceof DomainError && e.status === 404) throw new DomainError(`Dòng ${n}: ${product.code} chưa có định mức hiệu lực cho kiểu gia công đã chọn.`, 400);
       throw e;
@@ -68,7 +83,7 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, keepIna
   return out;
 }
 
-async function loadCustomer(tx: Db, actor: Actor, partnerId: number) {
+export async function loadCustomer(tx: Db, actor: Actor, partnerId: number) {
   // Ngoài phạm vi "khách của mình" trả cùng lỗi như không tồn tại (không lộ sự tồn tại của khách khác)
   const partner = await tx.partner.findFirst({ where: { id: partnerId, ...partnerScopeWhere(actor) }, select: { id: true, code: true, isCustomer: true, isActive: true, mergedIntoId: true } });
   if (!partner) throw new DomainError("Không tìm thấy khách hàng.", 404);
@@ -77,9 +92,10 @@ async function loadCustomer(tx: Db, actor: Actor, partnerId: number) {
 }
 
 /** Không có quyền sửa giá tay → giá phải đúng bằng giá bán gần nhất (khách này, hoặc bất kỳ khách). Kiểm ở SERVER. */
-async function assertPrices(tx: Db, actor: Actor, partnerId: number, lines: PlannedLine[]) {
+export async function assertPrices(tx: Db, actor: Actor, partnerId: number, lines: PlannedLine[], unchanged: (l: PlannedLine) => boolean = () => false) {
   if (can(actor.perms, "order.edit_price")) return;
   for (const l of lines) {
+    if (unchanged(l)) continue; // dòng giữ nguyên mã/đơn vị/giá của đơn cũ không bị coi là "sửa giá"
     const last = await lastSalePricePerBase(tx, l.input.productId, partnerId);
     if (!last) throw new DomainError(`Dòng ${l.index + 1}: ${l.productCode} chưa có giá bán tham chiếu — cần người có quyền sửa giá nhập giá lần đầu.`, 403);
     const expected = priceForUnit(last.perBase, l.factor);
@@ -91,6 +107,7 @@ async function assertPrices(tx: Db, actor: Actor, partnerId: number, lines: Plan
 
 export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleOrderInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
   assertWriter(actor, "order.create");
+  if (input.lines.some((l) => l.id !== undefined)) throw new DomainError("Đơn mới không được kèm id dòng.", 400);
   const tx = ctx.tx;
   const partner = await loadCustomer(tx, actor, input.partnerId);
   const at = docTimestamp(input.date, now);
