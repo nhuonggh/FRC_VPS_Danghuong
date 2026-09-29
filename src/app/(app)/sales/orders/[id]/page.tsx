@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { OrderDetail } from "@/components/sales/OrderDetail";
 import { prisma } from "@/lib/prisma";
+import { ictYmd } from "@/lib/time";
 import { requireActor } from "@/server/auth/session";
 import { DomainError } from "@/server/http/errors";
 import { getOrder } from "@/server/sales/queries";
@@ -15,5 +16,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     if (e instanceof DomainError && e.status === 404) notFound();
     throw e;
   });
-  return <OrderDetail order={order} />;
+  return (
+    <OrderDetail order={order} today={ictYmd(new Date())}
+      perms={{ canEdit: actor.perms.has("order.edit") && actor.perms.has("sale_price.view"), canCancel: actor.perms.has("order.cancel"), canRestore: actor.perms.has("order.restore") }} />
+  );
 }

@@ -46,3 +46,5 @@ export const saleOrderSchema = z
 
 export type SaleLineInput = z.infer<typeof saleLineSchema>;
 export type SaleOrderInput = z.infer<typeof saleOrderSchema>;
+
+export const cancelOrderSchema = z.object({ reason: z.string().trim().min(1, "Nhập lý do hủy.").max(300, "Lý do tối đa 300 ký tự.") });

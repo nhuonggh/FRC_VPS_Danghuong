@@ -90,3 +90,39 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
     expect(screen.queryByText(/Giá nhập gần nhất/)).toBeNull();
   });
 });
+
+describe("SaleOrderForm — chế độ SỬA đơn", () => {
+  const edit = {
+    orderId: 5, code: "DH000005", customer: { value: 7, label: "KH000007 — Nguyễn Văn Đạt" }, products: [PRODUCT],
+    defaults: {
+      partnerId: 7, date: "2026-09-10", expectedDeliveryDate: "2026-09-20", note: "",
+      lines: [{ id: 41, productId: 10, unit: "md", qty: 4, salePrice: 25_000, discountNow: 0, discountAccum: 0, processingTypeId: null }],
+    },
+  };
+
+  it("nạp sẵn dữ liệu; lưu gửi PATCH /api/orders/5 kèm id dòng, không cần Idempotency-Key; rồi về chi tiết đơn", async () => {
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if (url.startsWith("/api/orders/pricing")) return pricing;
+      if (url.startsWith("/api/orders/options/processing-types")) return [];
+      if (url === "/api/orders/5" && init?.method === "PATCH") return { id: 5 };
+      throw new Error(`unexpected ${url}`);
+    });
+    render(<SaleOrderForm today="2026-09-15" canEditPrice edit={edit} />);
+    expect(screen.getByRole("heading", { name: /Sửa đơn DH000005/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(4);
+    await userEvent.clear(screen.getByLabelText("Số lượng dòng 1"));
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "6");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    const patch = apiFetch.mock.calls.find((c) => c[0] === "/api/orders/5")!;
+    expect(patch[1]).toMatchObject({ method: "PATCH", json: { partnerId: 7, date: "2026-09-10", lines: [{ id: 41, productId: 10, qty: 6, salePrice: 25000 }] } });
+    expect(patch[1].idempotencyKey).toBeUndefined();
+  });
+
+  it("thiếu quyền sửa giá: dòng cũ GIỮ giá 25.000 (không bị ép về giá gần nhất 30.000)", async () => {
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/orders/pricing") ? pricing : []));
+    render(<SaleOrderForm today="2026-09-15" canEditPrice={false} edit={edit} />);
+    await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).startsWith("/api/orders/pricing"))).toBe(true));
+    expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(25000);
+  });
+});

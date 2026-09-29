@@ -179,7 +179,7 @@ describe("hủy và khôi phục (spec 3.7 [R])", () => {
     await cancelSaleOrderTx(prisma, actor, A.id, "x");
     await expect(cancelSaleOrderTx(prisma, actor, A.id, "x")).rejects.toMatchObject({ status: 409 });
     await expect(restoreSaleOrderTx(prisma, { userId: w.userId, perms: new Set(["order.cancel"]) }, A.id)).rejects.toThrow();
-    await expect(cancelSaleOrderTx(prisma, { userId: w.userId, perms: new Set(["order.restore"]) }, A.id)).rejects.toThrow();
+    await expect(cancelSaleOrderTx(prisma, { userId: w.userId, perms: new Set(["order.restore"]) }, A.id, "x")).rejects.toThrow();
   });
 
   it("đơn đã hủy không sửa được", async () => {

@@ -49,10 +49,10 @@ export const APP_NAV: readonly NavModule[] = [
         functions: [
           { key: "order-new", label: "Bán hàng", desc: "Lập đơn, chiết khấu, xuất kho FIFO", icon: "shopping-cart", view: "form", path: "/sales/orders/new", codes: ["31"], perm: "order.create" },
           { key: "order-list", label: "Danh sách đơn", desc: "Đơn theo 2 trục trạng thái giao hàng & thanh toán", icon: "receipt", view: "table", path: "/sales/orders", codes: ["32", "33"], perm: "order.view" },
-          { key: "order-deleted", label: "Đơn đã xóa", desc: "Xem, khôi phục đơn đã hủy", icon: "trash-2", view: "table", path: "/sales/orders-deleted", codes: ["34", "34a", "34b", "34c"], perm: "order.restore", planned: P },
+          { key: "order-deleted", label: "Đơn đã xóa", desc: "Xem, khôi phục đơn đã hủy", icon: "trash-2", view: "table", path: "/sales/orders-deleted", codes: ["34", "34a", "34b", "34c"], perm: "order.restore" },
           { key: "quote-list", label: "Báo giá", desc: "Lập báo giá, chuyển thành đơn", icon: "file-text", view: "table", path: "/sales/quotes", codes: ["35"], perm: "quote.manage", planned: P },
           { key: "deposit-list", label: "Tiền cọc", desc: "Quản lý tiền cọc của đơn", icon: "hand-coins", view: "table", path: "/sales/deposits", codes: ["36"], perm: "deposit.manage", planned: P },
-          { key: "delivery-note-list", label: "Phiếu xuất / giao", desc: "Giao hàng nhiều lần cho một đơn", icon: "package", view: "table", path: "/sales/delivery-notes", codes: ["37"], perm: "order.view", planned: P },
+          { key: "delivery-note-list", label: "Phiếu xuất / giao", desc: "Giao hàng nhiều lần cho một đơn", icon: "package", view: "table", path: "/sales/delivery-notes", codes: ["37"], perm: "order.view" },
         ],
       },
       {

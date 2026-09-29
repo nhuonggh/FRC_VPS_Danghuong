@@ -1,14 +1,27 @@
 "use client";
 
-import { Badge, DetailField, DetailPage, useDetailNav } from "@/components/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Badge, DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
+import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
+import { DeliveryPanel } from "./DeliveryPanel";
+import { RestoreButton } from "./RestoreButton";
 
-const ACTION_LABEL: Record<string, string> = { "sale.create": "Lập đơn" };
+const ACTION_LABEL: Record<string, string> = {
+  "sale.create": "Lập đơn", "sale.update": "Sửa đơn", "sale.cancel": "Hủy đơn", "sale.restore": "Khôi phục đơn",
+};
 
-export function OrderDetail({ order }: { order: OrderDetailDTO }) {
-  const nav = useDetailNav(["info", "lines", "history"]);
+export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean }
+
+export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; perms: OrderDetailPerms; today: string }) {
+  const router = useRouter();
+  const nav = useDetailNav(["info", "lines", "delivery", "history"]);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  async function cancelOrder(reason: string) { await apiFetch(`/api/orders/${order.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
   const showPrice = order.orderTotal !== undefined;
   const showCost = order.lines.some((l) => l.unitCostFifo !== undefined);
   const showProfit = order.lines.some((l) => l.lineProfit !== undefined);
@@ -73,9 +86,27 @@ export function OrderDetail({ order }: { order: OrderDetailDTO }) {
     </ul>
   );
 
+  const headerActions = (
+    <>
+      {order.isCancelled && perms.canRestore && <RestoreButton orderId={order.id} code={order.code} />}
+      {!order.isCancelled && perms.canEdit && (
+        <Link href={`/sales/orders/${order.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Sửa đơn</Link>
+      )}
+      {!order.isCancelled && perms.canCancel && (
+        <button type="button" onClick={() => setCancelOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft">Hủy đơn</button>
+      )}
+    </>
+  );
+
   return (
+    <div className="space-y-4">
+      {order.isCancelled && (
+        <div role="status" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">
+          Đơn đã hủy{order.cancelReason ? `. Lý do: ${order.cancelReason}` : ""}. {perms.canRestore ? "Bạn có thể khôi phục đơn." : ""}
+        </div>
+      )}
     <DetailPage
-      backHref="/sales/orders" backLabel="Quay lại danh sách đơn"
+      backHref="/sales/orders" backLabel="Quay lại danh sách đơn" headerActions={headerActions}
       summary={{
         title: order.partnerName, code: order.code,
         badges: [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
@@ -84,9 +115,13 @@ export function OrderDetail({ order }: { order: OrderDetailDTO }) {
       tabs={[
         { key: "info", label: "Thông tin", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
+        { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit} /> },
         { key: "history", label: "Lịch sử", count: order.history.length, render: () => history() },
       ]}
       {...nav}
     />
+      <ReasonDialog open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Hủy đơn ${order.code}?`}
+        description="Hàng được hoàn kho và giá vốn các đơn sau được tính lại. Đơn còn phiếu giao phải hủy phiếu giao trước." confirmLabel="Hủy đơn" onConfirm={cancelOrder} />
+    </div>
   );
 }

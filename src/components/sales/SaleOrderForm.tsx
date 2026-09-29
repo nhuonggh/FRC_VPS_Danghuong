@@ -20,20 +20,29 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  * Màn hình bán hàng (mã 31). Tồn/giá gần nhất/giá nhập gần nhất chỉ hiện khi server trả (theo quyền).
  * Thiếu quyền `order.edit_price` → ô giá khoá ở giá gần nhất; server cũng kiểm lại (không tin UI).
  */
-export function SaleOrderForm({ today, canEditPrice }: { today: string; canEditPrice: boolean }) {
+export interface SaleOrderEdit {
+  orderId: number;
+  code: string;
+  customer: ComboOption;
+  products: ProductOption[];
+  defaults: SaleOrderInput;
+}
+
+export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; canEditPrice: boolean; edit?: SaleOrderEdit }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
-    defaultValues: { partnerId: undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine] },
+    defaultValues: edit?.defaults ?? { partnerId: undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine] },
   });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  // keyName riêng: khoá `id` của dòng đơn (khi sửa) không được bị useFieldArray ghi đè
+  const { fields, append, remove } = useFieldArray({ control, name: "lines", keyName: "_key" });
   const lines = watch("lines");
   const partnerId = watch("partnerId");
 
-  const [customer, setCustomer] = useState<ComboOption | null>(null);
-  const [products, setProducts] = useState(() => new Map<number, ProductOption>());
+  const [customer, setCustomer] = useState<ComboOption | null>(edit?.customer ?? null);
+  const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const [processingTypes, setProcessingTypes] = useState<ComboOption[]>([]);
   const requested = useRef(new Set<string>());
@@ -61,11 +70,19 @@ export function SaleOrderForm({ today, canEditPrice }: { today: string; canEditP
       const suggested = dto?.units.find((u) => u.unit === l.unit)?.suggestedPrice;
       if (suggested == null) return;
       const current = getValues(`lines.${i}.salePrice`);
+      // Dòng đã có trong đơn (đang sửa) giữ giá cũ; chỉ điền khi ô trống (đổi mã/đơn vị đã xoá ô giá)
+      const existing = l.id !== undefined && !!num(current);
+      if (existing) return;
       if (!canEditPrice ? num(current) !== Number(suggested) : !num(current)) setValue(`lines.${i}.salePrice`, Number(suggested), { shouldValidate: true });
     });
   }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = handleSubmit(async (value) => {
+    if (edit) {
+      await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
+      router.replace(`/sales/orders/${edit.orderId}`);
+      return;
+    }
     const r = await apiFetch<{ id: number }>("/api/orders", { method: "POST", json: value, idempotencyKey: idem.key });
     router.replace(`/sales/orders/${r.id}`);
   });
@@ -79,7 +96,7 @@ export function SaleOrderForm({ today, canEditPrice }: { today: string; canEditP
   };
 
   return (
-    <NewPage backHref="/sales/orders" backLabel="Quay lại danh sách đơn" title="Bán hàng" submitLabel="Lập đơn" isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
+    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
           <Controller control={control} name="partnerId" render={({ field }) => (
@@ -106,7 +123,7 @@ export function SaleOrderForm({ today, canEditPrice }: { today: string; canEditP
             </thead>
             <tbody>
               {fields.map((field, index) => (
-                <LineRow key={field.id} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
+                <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   dto={lines[index]?.productId && partnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
                   processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}

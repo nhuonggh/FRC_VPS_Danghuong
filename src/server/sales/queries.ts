@@ -6,6 +6,7 @@ import { escapeLike, normalizeSearch } from "@/lib/search";
 import { timeRangeWhere } from "@/lib/time-presets";
 import { ictYmd } from "@/lib/time";
 import { DomainError } from "@/server/http/errors";
+import { productOptionsByIds } from "@/server/products/queries";
 import { delayDays, effectiveDeliveryStatus } from "./status";
 
 type Db = Prisma.TransactionClient | PrismaClient;
@@ -110,9 +111,13 @@ export interface OrderLineDTO {
   unitCostFifo?: string; lineProfit?: string | null;
   issues: { productCode: string; productName: string; qtyBase: string }[];
 }
+export interface OrderDeliveryDTO {
+  id: number; code: string; at: Date; isCancelled: boolean; note: string | null;
+  lines: { orderLineId: number; productName: string; unit: string; qty: string }[];
+}
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
   note: string | null; createdByName: string | null; cancelReason: string | null; originalDeliveryDate: string;
-  lines: OrderLineDTO[]; orderTotal?: string;
+  lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   history: { id: number; action: string; at: Date; userName: string | null }[];
 }
 
@@ -132,6 +137,10 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     },
   });
   if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
+  const notes = await db.deliveryNote.findMany({
+    where: { orderId: id }, orderBy: [{ at: "asc" }, { id: "asc" }],
+    include: { lines: { include: { orderLine: { select: { unit: true, product: { select: { name: true } } } } } } },
+  });
   const [audit, users] = await Promise.all([
     db.auditLog.findMany({ where: { entity: "SaleOrder", entityId: String(id) }, orderBy: { at: "asc" }, select: { id: true, action: true, at: true, userId: true } }),
     db.user.findMany({ where: { id: { in: [o.createdBy] } }, select: { id: true, fullName: true } }),
@@ -156,6 +165,10 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
     hasProvisional, isCancelled: o.isCancelled, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
     orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).toString(), lines,
+    deliveries: notes.map((n) => ({
+      id: n.id, code: n.code, at: n.at, isCancelled: n.isCancelled, note: n.note,
+      lines: n.lines.map((l) => ({ orderLineId: l.orderLineId, productName: l.orderLine.product.name, unit: l.orderLine.unit, qty: l.qty.toString() })),
+    })),
     history: audit.map((a) => ({ id: a.id, action: a.action, at: a.at, userName: a.userId === null ? null : auditUsers.get(a.userId) ?? null })),
   };
   return redactDeep(dto, actor.perms);
@@ -203,3 +216,49 @@ export async function advanceExpectedDeliveryDates(db: Db, now: Date = new Date(
 }
 /** Chỉ dùng trong test. */
 export const resetAdvanceMemo = () => { lastAdvanceYmd = ""; };
+
+/** Dữ liệu nạp form SỬA đơn (đúng dạng `SaleOrderInput`, kèm id dòng). Chỉ gọi cho người có quyền sửa + xem giá bán. */
+export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
+  const o = await db.saleOrder.findFirst({
+    where: { id, partner: partnerScopeWhere(actor) },
+    include: { partner: { select: { code: true, name: true } }, lines: { orderBy: { id: "asc" } } },
+  });
+  if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
+  if (o.isCancelled) throw new DomainError("Đơn đã hủy, không sửa được. Hãy khôi phục đơn trước.", 409);
+  return {
+    orderId: o.id, code: o.code,
+    customer: { value: o.partnerId, label: `${o.partner.code} — ${o.partner.name}` },
+    products: await productOptionsByIds(db, o.lines.map((l) => l.productId)),
+    defaults: {
+      partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
+      lines: o.lines.map((l) => ({
+        id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
+        discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId,
+      })),
+    },
+  };
+}
+
+export interface DeletedOrderDTO {
+  id: number; code: string; orderDate: Date; partnerName: string; cancelledAt: Date | null; cancelReason: string | null;
+  cancelledByName: string | null; orderTotal?: string;
+}
+
+/** Danh sách đơn đã hủy (mã 34): xem lý do, ai hủy, khôi phục. */
+export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams) {
+  const where: Prisma.SaleOrderWhereInput = { AND: [{ isCancelled: true }, { partner: partnerScopeWhere(actor) }, searchWhere(params.q)] };
+  const [rows, total] = await Promise.all([
+    db.saleOrder.findMany({
+      where, orderBy: { cancelledAt: "desc" }, skip: (params.page - 1) * params.pageSize, take: params.pageSize,
+      include: { partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+    }),
+    db.saleOrder.count({ where }),
+  ]);
+  const users = new Map((await db.user.findMany({ where: { id: { in: [...new Set(rows.flatMap((r) => (r.cancelledBy === null ? [] : [r.cancelledBy])))] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
+  const out: DeletedOrderDTO[] = rows.map((o) => ({
+    id: o.id, code: o.code, orderDate: o.orderDate, partnerName: o.partner.name, cancelledAt: o.cancelledAt, cancelReason: o.cancelReason,
+    cancelledByName: o.cancelledBy === null ? null : users.get(o.cancelledBy) ?? null,
+    orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
+  }));
+  return { rows: redactDeep(out, actor.perms), total };
+}
