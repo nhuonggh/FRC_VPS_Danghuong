@@ -62,6 +62,7 @@ Kế thừa master + D-11…D-22. Bổ sung:
 - [ ] **Chủ dòng SALE** (D-23) + cập nhật test owners.
 - [ ] `createSaleOrder(actor, input, key)` = `withIdempotentInventoryTx`: khoá dòng, lập mã `DH…`, quy đổi đơn vị (`convertToBase`), dòng có `processingTypeId` → `resolveBom(product, processingType, orderDate)` rồi `postIssue` từng NVL; ghi `at`/`seq`/`bomVersionId`; ghi `discount_ledger` phần `discount_accum`; audit (không giá vốn); ánh xạ `EngineBusyError`, `ProductRecomputingError`, `PeriodClosedError`.
 - [ ] Truy vấn giá: tồn hiện tại, **giá bán gần nhất của khách này** và **của bất kỳ khách**, giá nhập gần nhất (chỉ khi `purchase_price.view`) — một truy vấn cho cả trang, không N+1.
+- [ ] Quyền `order.edit_price` (xem bảng quyết định #4): catalog + seed vai trò + kiểm ở service.
 - [ ] UI `/sales/orders/new`: form nhiều dòng (combobox SP, đơn vị, SL, giá sửa tay, chiết khấu trừ ngay + tích lũy theo dòng, kiểu gia công), cột tồn/giá gợi ý ẩn theo quyền, cảnh báo "sẽ thành đơn treo" khi thiếu tồn, giữ dữ liệu khi 409/lỗi, phím tắt.
 - [ ] 🧪 (spec 3.7): tạo đơn nhiều dòng cùng mã; bán xuyên nhiều lớp (case 3.2 → 20.444,44); bán âm → `isProvisional` rồi nhập bù ở phiếu nhập (test cross-module); hai người bán cùng mã đồng thời; bấm hai lần; tôn xốp cộng vốn NVL đúng phiên bản BOM; thiếu quyền giá không thấy giá vốn/lãi ở DTO.
 
@@ -121,14 +122,18 @@ Kế thừa master + D-11…D-22. Bổ sung:
 - [ ] Rà chéo 03 ↔ 04: barrel engine, `docLineId` duy nhất theo `docType`, mọi đường ghi `SALE` đi qua `withIdempotentInventoryTx`, không còn `planned` sai, quyền server-side, audit không rò giá.
 - [ ] Cập nhật STATUS/master/`db_schema.sql`; **merge `main` chờ user duyệt** (migration chạm DB thật).
 
-## Cần khách xác nhận (dùng mặc định, để `TODO: confirm` trong mã)
+## Quyết định mặc định đã chốt (29/09, user cho dùng khuyến nghị) — vẫn nên báo lại khách
 
-1. **D-4:** xuất kho FIFO lúc xác nhận đơn (mặc định) hay lúc giao? Ảnh hưởng C1/C3.
-2. **D-26:** công nợ ghi khi **giao** (mặc định) hay khi **tạo đơn**?
-3. Hàng khách trả lỗi: nhập chung mã (mặc định) hay mã "hàng lỗi" riêng (spec mục 11 #3).
-4. Người bán có được sửa giá bán tay không giới hạn, hay có giá sàn/duyệt? (mặc định: sửa tự do, có audit)
-5. Quy tắc mã đơn `DH000001` liên tục hay theo tháng? (mặc định: liên tục, như phiếu nhập)
-6. 8 giả định của engine (`docs/engine-fifo.md` §8) — đặc biệt #1 (hàng trả không lấp đơn treo cũ).
+| # | Câu hỏi | Chốt | Vì sao / cách đổi sau |
+|---|---|---|---|
+| 1 | Xuất kho FIFO lúc nào (D-4) | **Lúc xác nhận đơn** | Tồn kho phản ánh hàng đã hứa cho khách; khớp thiết kế engine (đơn treo). Không làm tuỳ chọn: đổi thời điểm xuất làm đổi thứ tự FIFO của cả chuỗi, không phải công tắc rẻ |
+| 2 | Công nợ ghi khi nào (D-26) | **Khi giao** (theo phiếu giao) | Khớp spec 6.2 (công nợ sinh cùng kết quả giao). Toàn bộ ghi sổ đi qua `postPartnerLedger` nên nếu khách muốn "khi tạo đơn" thì đổi tập trung một chỗ + di trú, không phải công tắc chạy song song (hai chế độ ⇒ số dư lệch khi đổi giữa chừng) |
+| 3 | Hàng khách trả lỗi | **Nhập chung mã** | Mặc định của spec (mục 11 #3). Tách mã "hàng lỗi" cần danh mục ánh xạ mã — làm sau nếu khách cần |
+| 4 | Sửa giá bán tay | **Cho sửa, có audit — điều khiển bằng QUYỀN mới `order.edit_price`** | Giám đốc tự bật/tắt theo vai trò trong màn Nhóm quyền (đúng tinh thần "khách tự chỉnh được sau", không cần màn cài đặt riêng). Mặc định gán cho Giám đốc, Kế toán, Bán hàng; thiếu quyền ⇒ ô giá khoá, dùng giá gần nhất |
+| 5 | Mã đơn | **Liên tục** `DH000001` (như phiếu nhập) | Mã duy nhất, không phụ thuộc kỳ |
+| 6 | 8 giả định engine (`docs/engine-fifo.md` §8) | **Giữ mặc định** | Đã áp dụng từ GĐ1a; nêu trong buổi giao cho khách, đặc biệt #1 (hàng trả không lấp đơn treo cũ ⇒ cần "kiểm kho điều chỉnh") |
+
+Bổ sung vào Task C1: thêm mã quyền `order.edit_price` vào `catalog.ts`, seed vai trò (Giám đốc/Kế toán/Bán hàng), form khoá ô giá khi thiếu quyền, server từ chối giá khác giá gợi ý khi thiếu quyền (không chỉ ẩn ở UI) + test.
 
 ## Definition of Done 04
 
