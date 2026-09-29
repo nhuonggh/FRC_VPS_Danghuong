@@ -27,6 +27,8 @@ model Period {
   cashLedger       CashLedger[]
   discountLedger   DiscountLedger[]
   purchases        Purchase[]
+  saleOrders       SaleOrder[]
+  deliveryNotes    DeliveryNote[]
   stockAdjustments StockAdjustment[]
 
   @@map("periods")

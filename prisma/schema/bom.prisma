@@ -36,8 +36,9 @@ model BomVersion {
   createdBy Int
   createdAt DateTime         @default(now())
 
-  bom   Bom       @relation(fields: [bomId], references: [id], onDelete: Restrict)
-  lines BomLine[]
+  bom       Bom             @relation(fields: [bomId], references: [id], onDelete: Restrict)
+  lines     BomLine[]
+  saleLines SaleOrderLine[]
 
   @@unique([bomId, versionNo])
   @@index([bomId, status, validFrom(sort: Desc)])

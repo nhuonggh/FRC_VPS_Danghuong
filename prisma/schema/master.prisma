@@ -52,6 +52,7 @@ model Partner {
   partnerLedger  PartnerLedger[]
   discountLedger DiscountLedger[]
   purchases      Purchase[]
+  saleOrders     SaleOrder[]
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -82,6 +83,8 @@ model Product {
   adjustmentLines StockAdjustmentLine[]
   boms            Bom[]
   bomLines        BomLine[]
+  saleLines       SaleOrderLine[]
+  saleIssues      SaleLineIssue[]
 
   @@index([searchText])
   @@index([kind])
@@ -162,7 +165,8 @@ model ProcessingType {
   note     String?
   isActive Boolean @default(true)
 
-  boms Bom[]
+  boms      Bom[]
+  saleLines SaleOrderLine[]
 
   @@map("processing_types")
 }

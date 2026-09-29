@@ -1,0 +1,150 @@
+// GĐ1c (plan 04) — bán hàng. Xuất kho lúc XÁC NHẬN đơn (D-25); công nợ ghi khi GIAO (D-26).
+// Mọi số tiền là tổng theo DÒNG (không phải đơn giá) trừ `salePrice` là đơn giá theo đơn vị của dòng.
+
+enum DeliveryStatus {
+  NEW
+  WAITING_STOCK
+  READY
+  LOADED
+  DELIVERING
+  DELIVERED
+  PARTIAL
+  FAILED
+
+  @@map("delivery_status")
+}
+
+enum PaymentStatus {
+  UNPAID
+  DEPOSITED
+  PARTIAL
+  PAID
+  DEBT
+  PROMISED
+  OVERPAID
+
+  @@map("payment_status")
+}
+
+/// Hai trục trạng thái ĐỘC LẬP (spec 6.1). NEW/WAITING_STOCK/READY được suy ra khi đọc từ cờ treo của dòng.
+model SaleOrder {
+  id                   Int            @id @default(autoincrement())
+  periodId             Int
+  code                 String         @unique
+  partnerId            Int
+  deliveryStatus       DeliveryStatus @default(NEW)
+  paymentStatus        PaymentStatus  @default(UNPAID)
+  /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.
+  orderDate            DateTime
+  expectedDeliveryDate DateTime       @db.Date
+  originalDeliveryDate DateTime       @db.Date
+  note                 String?
+  isCancelled          Boolean        @default(false)
+  cancelledAt          DateTime?
+  cancelledBy          Int?
+  cancelReason         String?
+  createdBy            Int
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  period     Period          @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner    Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  lines      SaleOrderLine[]
+  deliveries DeliveryNote[]
+
+  @@index([periodId, orderDate])
+  @@index([partnerId, orderDate])
+  @@index([expectedDeliveryDate])
+  @@map("sale_orders")
+}
+
+model SaleOrderLine {
+  id               Int      @id @default(autoincrement())
+  orderId          Int
+  productId        Int
+  qty              Decimal  @db.Decimal(18, 3)
+  unit             String
+  factorUsed       Decimal  @db.Decimal(18, 6)
+  qtyBase          Decimal  @db.Decimal(18, 3)
+  /// Đơn giá theo `unit` của dòng.
+  salePrice        Decimal  @db.Decimal(18, 2)
+  /// Chiết khấu trừ ngay — SỐ TIỀN của cả dòng, giảm tiền phải thu.
+  discountNow      Decimal  @default(0) @db.Decimal(18, 2)
+  /// Chiết khấu tích lũy trả sau — SỐ TIỀN của cả dòng, KHÔNG giảm tiền phải thu (D-27).
+  discountAccum    Decimal  @default(0) @db.Decimal(18, 2)
+  /// Chủ dòng (engine) ghi lại sau mỗi lần tính; chỉ engine được sửa.
+  unitCostFifo     Decimal  @default(0) @db.Decimal(18, 4)
+  isProvisional    Boolean  @default(false)
+  processingTypeId Int?
+  /// Snapshot phiên bản BOM đã dùng (D-20) — đơn cũ không đổi khi BOM đổi.
+  bomVersionId     Int?
+  at               DateTime
+  createdAt        DateTime @default(now())
+
+  order          SaleOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  processingType ProcessingType?  @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+  bomVersion     BomVersion?      @relation(fields: [bomVersionId], references: [id], onDelete: Restrict)
+  issues         SaleLineIssue[]
+  deliveryLines  DeliveryLine[]
+  discountRows   DiscountLedger[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("sale_order_lines")
+}
+
+/// Mỗi mã hàng thực sự bị xuất kho cho một dòng bán (D-24): dòng thường = chính mã bán; dòng có BOM = từng NVL.
+/// `seq` lưu cùng dòng như `at` (engine-fifo §3) để sửa/khôi phục giữ đúng vị trí trong chuỗi FIFO.
+model SaleLineIssue {
+  id          Int     @id @default(autoincrement())
+  orderLineId Int
+  productId   Int
+  qtyBase     Decimal @db.Decimal(18, 3)
+  seq         BigInt?
+
+  orderLine SaleOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([orderLineId, productId])
+  @@index([productId])
+  @@map("sale_line_issues")
+}
+
+/// Phiếu giao nhiều lần (mục 37). Chỉ ghi nhận SL đã giao + công nợ; KHÔNG xuất kho lần hai (D-25).
+model DeliveryNote {
+  id          Int       @id @default(autoincrement())
+  periodId    Int
+  code        String    @unique
+  orderId     Int
+  at          DateTime
+  note        String?
+  isCancelled Boolean   @default(false)
+  cancelledAt DateTime?
+  cancelledBy Int?
+  createdBy   Int
+  createdAt   DateTime  @default(now())
+
+  period Period         @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  order  SaleOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines  DeliveryLine[]
+
+  @@index([orderId])
+  @@index([periodId, at])
+  @@map("delivery_notes")
+}
+
+model DeliveryLine {
+  id             Int     @id @default(autoincrement())
+  deliveryNoteId Int
+  orderLineId    Int
+  /// Theo đơn vị (`unit`) của dòng bán.
+  qty            Decimal @db.Decimal(18, 3)
+
+  deliveryNote DeliveryNote  @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  orderLine    SaleOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  @@index([deliveryNoteId])
+  @@index([orderLineId])
+  @@map("delivery_lines")
+}

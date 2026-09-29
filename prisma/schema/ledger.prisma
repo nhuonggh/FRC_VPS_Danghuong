@@ -48,7 +48,7 @@ model CashLedger {
 }
 
 // Sổ chiết khấu tích lũy: mỗi dòng đơn cộng amountIn; tất toán/đảo trừ amountOut.
-// orderLineId chưa có FK — bảng sale_order_lines do GĐ1c thêm và bổ sung FK ở migration đó.
+// orderLineId có FK RESTRICT tới sale_order_lines (migration sales_orders).
 model DiscountLedger {
   id           Int                   @id @default(autoincrement())
   periodId     Int
@@ -66,10 +66,12 @@ model DiscountLedger {
   createdBy    Int
   createdAt    DateTime              @default(now())
 
-  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  period    Period         @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  orderLine SaleOrderLine? @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
 
   @@index([periodId, partnerId, at])
   @@index([docType, docId])
+  @@index([orderLineId])
   @@map("discount_ledger")
 }

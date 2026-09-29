@@ -39,6 +39,7 @@ export const PERMISSIONS = [
   { code: "order.view", label: "Xem đơn hàng", group: "Bán hàng" },
   { code: "order.create", label: "Tạo đơn hàng", group: "Bán hàng" },
   { code: "order.edit", label: "Sửa đơn hàng", group: "Bán hàng" },
+  { code: "order.edit_price", label: "Sửa giá bán tay khi lập/sửa đơn (thiếu quyền = chỉ dùng giá gần nhất)", group: "Bán hàng" },
   { code: "order.cancel", label: "Hủy đơn hàng", group: "Bán hàng" },
   { code: "order.restore", label: "Khôi phục đơn đã hủy", group: "Bán hàng" },
   { code: "order.delete_draft", label: "Xóa hẳn đơn nháp/trùng", group: "Bán hàng" },
@@ -101,6 +102,10 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   closingValue: "cost.view",
   salePrice: "sale_price.view",
   lastSalePrice: "sale_price.view",
+  discountNow: "sale_price.view",
+  discountAccum: "sale_price.view",
+  lineAmount: "sale_price.view",
+  orderTotal: "sale_price.view",
 };
 
 type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly PermissionCode[] };
@@ -120,7 +125,7 @@ export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   },
   "Bán hàng": {
     allow: [
-      "partner.view", "product.view", "order.view", "order.create", "order.edit", "quote.manage", "deposit.manage",
+      "partner.view", "product.view", "order.view", "order.create", "order.edit", "order.edit_price", "quote.manage", "deposit.manage",
       "sale_price.view", "stock.view", "return.manage", "print.use",
     ],
   },
