@@ -47,9 +47,9 @@ describe("Trang chủ — Level 0 (module selector)", () => {
   });
 
   it("module chỉ có chức năng 'planned' bị ẩn; module Kho hiện khi stock.view đã có màn tồn kho", async () => {
-    requireActor.mockResolvedValue(actor(["quote.manage", "stock.view", "user.view"]));
+    requireActor.mockResolvedValue(actor(["return.manage", "stock.view", "user.view"]));
     await renderHome();
-    expect(screen.queryByText("Bán hàng")).toBeNull();
+    expect(screen.queryByText("Trả hàng")).toBeNull();
     expect(screen.getByText("Kho")).toBeInTheDocument();
     expect(moduleLinks()).toHaveLength(2);
   });

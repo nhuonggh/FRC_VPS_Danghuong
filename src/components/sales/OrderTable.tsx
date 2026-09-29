@@ -10,7 +10,7 @@ const BASE = "/sales/orders";
 
 export function OrderTable({ rows, params }: { rows: OrderRowDTO[]; params: ListParams }) {
   const columns: Column<OrderRowDTO>[] = [
-    { key: "code", label: "Mã đơn", sortable: true, primaryOnMobile: true, render: (o) => <span className="font-mono text-xs">{o.code}</span> },
+    { key: "code", label: "Mã đơn", sortable: true, primaryOnMobile: true, render: (o) => <><span className="font-mono text-xs">{o.code}</span>{o.isDraft && <> <Badge tone="warning">Nháp</Badge></>}</> },
     { key: "orderDate", label: "Ngày", sortable: true, render: (o) => formatDate(o.orderDate) },
     { key: "partnerName", label: "Khách hàng", render: (o) => <><strong>{o.partnerName}</strong><span className="block text-xs text-fg-muted">{o.partnerCode}</span></> },
     { key: "lineCount", label: "Số dòng", align: "right", render: (o) => o.lineCount },

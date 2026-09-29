@@ -29,6 +29,8 @@ model Period {
   purchases        Purchase[]
   saleOrders       SaleOrder[]
   deliveryNotes    DeliveryNote[]
+  quotes           Quote[]
+  receipts         Receipt[]
   stockAdjustments StockAdjustment[]
 
   @@map("periods")

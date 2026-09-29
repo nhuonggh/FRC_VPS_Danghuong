@@ -25,7 +25,7 @@ afterEach(cleanup);
 const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   id: 1, code: "DH000001", orderDate: new Date("2026-09-10T03:00:00Z"), partnerId: 1, partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt",
   deliveryStatus: "PARTIAL", paymentStatus: "UNPAID", expectedDeliveryDate: "2026-09-20", originalDeliveryDate: "2026-09-20", delayDays: 0,
-  hasProvisional: false, isCancelled: false, note: null, cancelReason: null, createdByName: "An", orderTotal: "300000", history: [],
+  hasProvisional: false, isCancelled: false, isDraft: false, deposits: [], depositTotal: "0", quote: null, note: null, cancelReason: null, createdByName: "An", orderTotal: "300000", history: [],
   lines: [{
     id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, bomVersionId: null,
     isProvisional: false, deliveredQty: "4", salePrice: "30000", discountNow: "0", discountAccum: "0", lineAmount: "300000", issues: [],
@@ -33,7 +33,7 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   deliveries: [{ id: 9, code: "PG000009", at: new Date("2026-09-12T03:00:00Z"), isCancelled: false, note: null, lines: [{ orderLineId: 11, productName: "Tôn xốp", unit: "md", qty: "4" }] }],
   ...over,
 });
-const ALL = { canEdit: true, canCancel: true, canRestore: true };
+const ALL = { canEdit: true, canCancel: true, canRestore: true, canConfirm: true, canDeleteDraft: true, canDeposit: true };
 const view = (o = order(), perms = ALL) => render(<OrderDetail order={o} perms={perms} today="2026-09-15" />);
 
 describe("OrderDetail — hành động theo quyền", () => {
@@ -45,7 +45,7 @@ describe("OrderDetail — hành động theo quyền", () => {
   });
 
   it("chỉ xem: không có nút nào", () => {
-    view(order(), { canEdit: false, canCancel: false, canRestore: false });
+    view(order(), { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false });
     expect(screen.queryByRole("link", { name: "Sửa đơn" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hủy đơn" })).toBeNull();
   });
@@ -120,9 +120,46 @@ describe("DeliveryPanel (tab Giao hàng)", () => {
   it("đã giao đủ ⇒ không còn form lập phiếu; chỉ xem không có nút hủy phiếu", () => {
     const full = order();
     full.lines[0]!.deliveredQty = "10";
-    view(full, { canEdit: false, canCancel: false, canRestore: false });
+    view(full, { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false });
     expect(screen.queryByRole("region", { name: "Lập phiếu giao" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Hủy phiếu giao/ })).toBeNull();
     expect(screen.getByText("PG000009")).toBeInTheDocument();
+  });
+});
+
+describe("OrderDetail — đơn nháp & tiền cọc", () => {
+  it("đơn nháp: banner + Xác nhận / Sửa nháp / Xóa nháp, không có Hủy đơn; Xác nhận gọi API sau confirm", async () => {
+    confirmFn.mockResolvedValue(true);
+    view(order({ isDraft: true, deliveryStatus: "NEW", deliveries: [] }));
+    expect(screen.getByRole("status")).toHaveTextContent("NHÁP");
+    expect(screen.getByRole("link", { name: "Sửa nháp" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hủy đơn" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Xác nhận đơn" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/1/confirm", { method: "POST" }));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("Xóa nháp: hỏi xác nhận rồi DELETE; từ chối thì không gọi API", async () => {
+    confirmFn.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    view(order({ isDraft: true, deliveries: [] }));
+    await userEvent.click(screen.getByRole("button", { name: "Xóa nháp" }));
+    expect(apiFetch).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Xóa nháp" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/1", { method: "DELETE" }));
+  });
+
+  it("không có quyền xác nhận/xóa nháp: hai nút ẩn", () => {
+    view(order({ isDraft: true, deliveries: [] }), { ...ALL, canConfirm: false, canDeleteDraft: false });
+    expect(screen.queryByRole("button", { name: "Xác nhận đơn" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Xóa nháp" })).toBeNull();
+  });
+
+  it("tab Tiền cọc: liệt kê phiếu + tổng, có nút chuyển thành số dư / hủy phiếu", () => {
+    search = "tab=deposits";
+    apiFetch.mockResolvedValue([{ id: 1, name: "Tiền mặt" }]);
+    view(order({ deposits: [{ id: 7, code: "PT000007", at: new Date("2026-09-11T03:00:00Z"), amount: "80000", cashAccountName: "Tiền mặt", note: null }], depositTotal: "80000" }));
+    expect(screen.getByText("PT000007")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chuyển cọc PT000007 thành số dư" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hủy phiếu cọc PT000007" })).toBeInTheDocument();
   });
 });

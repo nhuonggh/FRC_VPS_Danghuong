@@ -18,6 +18,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
   return (
     <OrderDetail order={order} today={ictYmd(new Date())}
-      perms={{ canEdit: actor.perms.has("order.edit") && actor.perms.has("sale_price.view"), canCancel: actor.perms.has("order.cancel"), canRestore: actor.perms.has("order.restore") }} />
+      perms={{ canEdit: actor.perms.has("order.edit") && actor.perms.has("sale_price.view"), canCancel: actor.perms.has("order.cancel"), canRestore: actor.perms.has("order.restore"), canConfirm: actor.perms.has("order.create") && actor.perms.has("sale_price.view"), canDeleteDraft: actor.perms.has("order.delete_draft"), canDeposit: actor.perms.has("deposit.manage") }} />
   );
 }

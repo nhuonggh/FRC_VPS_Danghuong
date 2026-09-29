@@ -53,6 +53,8 @@ model Partner {
   discountLedger DiscountLedger[]
   purchases      Purchase[]
   saleOrders     SaleOrder[]
+  quotes         Quote[]
+  receipts       Receipt[]
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -85,6 +87,7 @@ model Product {
   bomLines        BomLine[]
   saleLines       SaleOrderLine[]
   saleIssues      SaleLineIssue[]
+  quoteLines      QuoteLine[]
 
   @@index([searchText])
   @@index([kind])
@@ -120,6 +123,7 @@ model CashAccount {
 
   openingCash OpeningCash[]
   ledger      CashLedger[]
+  receipts    Receipt[]
 
   @@map("cash_accounts")
 }

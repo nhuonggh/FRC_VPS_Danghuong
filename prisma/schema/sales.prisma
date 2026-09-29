@@ -34,6 +34,8 @@ model SaleOrder {
   partnerId            Int
   deliveryStatus       DeliveryStatus @default(NEW)
   paymentStatus        PaymentStatus  @default(UNPAID)
+  /// Đơn nháp (từ báo giá): CHƯA xuất kho, chưa công nợ. Xác nhận ⇒ xuất kho FIFO (D-25). Chỉ đơn nháp mới xoá hẳn được (34c).
+  isDraft              Boolean        @default(false)
   /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.
   orderDate            DateTime
   expectedDeliveryDate DateTime       @db.Date
@@ -51,6 +53,8 @@ model SaleOrder {
   partner    Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   lines      SaleOrderLine[]
   deliveries DeliveryNote[]
+  quote      Quote?          @relation("QuoteConverted")
+  receipts   Receipt[]
 
   @@index([periodId, orderDate])
   @@index([partnerId, orderDate])
@@ -147,4 +151,95 @@ model DeliveryLine {
   @@index([deliveryNoteId])
   @@index([orderLineId])
   @@map("delivery_lines")
+}
+
+// ───────── C5: báo giá, đơn nháp, tiền cọc ─────────
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  CONVERTED
+  CANCELLED
+
+  @@map("quote_status")
+}
+
+/// Báo giá (mục 35): KHÔNG đụng kho. Chốt → "Chuyển thành đơn" sinh ĐƠN NHÁP (cũng không đụng kho).
+model Quote {
+  id               Int         @id @default(autoincrement())
+  periodId         Int
+  code             String      @unique
+  partnerId        Int
+  at               DateTime
+  status           QuoteStatus @default(DRAFT)
+  note             String?
+  convertedOrderId Int?        @unique
+  createdBy        Int
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  period         Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner        Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  convertedOrder SaleOrder?  @relation("QuoteConverted", fields: [convertedOrderId], references: [id], onDelete: SetNull)
+  lines          QuoteLine[]
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id        Int     @id @default(autoincrement())
+  quoteId   Int
+  productId Int
+  qty       Decimal @db.Decimal(18, 3)
+  unit      String
+  /// Đơn giá theo `unit`.
+  salePrice Decimal @db.Decimal(18, 2)
+  note      String?
+
+  quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([quoteId])
+  @@map("quote_lines")
+}
+
+enum ReceiptType {
+  THU_NO
+  COC
+  KHAC
+
+  @@map("receipt_type")
+}
+
+/// Phiếu thu. C5 chỉ dùng loại COC (tiền cọc); phiếu thu/sổ quỹ đầy đủ ở plan 05-D1 (khi đó dựng `cash_ledger` từ bảng này).
+/// Tiền vào là `credit` của khách trong partner_ledger ngay khi lập → khi giao (debit) số dư tự bù trừ.
+model Receipt {
+  id            Int         @id @default(autoincrement())
+  periodId      Int
+  code          String      @unique
+  partnerId     Int
+  type          ReceiptType
+  /// null = cọc đã chuyển thành số dư của khách (không gắn đơn nào).
+  orderId       Int?
+  amount        Decimal     @db.Decimal(18, 2)
+  cashAccountId Int
+  at            DateTime
+  note          String?
+  isCancelled   Boolean     @default(false)
+  cancelledAt   DateTime?
+  cancelledBy   Int?
+  createdBy     Int
+  createdAt     DateTime    @default(now())
+
+  period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner     Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  order       SaleOrder?  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@map("receipts")
 }

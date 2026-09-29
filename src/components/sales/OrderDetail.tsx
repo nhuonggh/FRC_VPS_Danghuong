@@ -5,23 +5,38 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge, DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
+import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
 import { DeliveryPanel } from "./DeliveryPanel";
+import { DepositPanel } from "./DepositPanel";
 import { RestoreButton } from "./RestoreButton";
 
 const ACTION_LABEL: Record<string, string> = {
   "sale.create": "Lập đơn", "sale.update": "Sửa đơn", "sale.cancel": "Hủy đơn", "sale.restore": "Khôi phục đơn",
 };
 
-export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean }
+export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean; canConfirm: boolean; canDeleteDraft: boolean; canDeposit: boolean }
 
 export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; perms: OrderDetailPerms; today: string }) {
   const router = useRouter();
-  const nav = useDetailNav(["info", "lines", "delivery", "history"]);
+  const nav = useDetailNav(["info", "lines", "delivery", "deposits", "history"]);
   const [cancelOpen, setCancelOpen] = useState(false);
   async function cancelOrder(reason: string) { await apiFetch(`/api/orders/${order.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
+  const [busy, setBusy] = useState(false);
+  async function confirmDraft() {
+    const ok = await confirm({ title: `Xác nhận đơn ${order.code}?`, description: "Đơn chính thức và hàng được XUẤT KHO ngay theo FIFO. Có thể sửa đơn sau khi xác nhận.", confirmLabel: "Xác nhận đơn" });
+    if (!ok || busy) return;
+    setBusy(true);
+    try { await apiFetch(`/api/orders/${order.id}/confirm`, { method: "POST" }); router.refresh(); } finally { setBusy(false); }
+  }
+  async function deleteDraft() {
+    const ok = await confirm({ title: `Xóa hẳn đơn nháp ${order.code}?`, description: "Đơn nháp bị xóa vĩnh viễn (chưa có kho/công nợ). Báo giá nguồn quay về trạng thái Đã gửi.", confirmLabel: "Xóa nháp", danger: true });
+    if (!ok || busy) return;
+    setBusy(true);
+    try { await apiFetch(`/api/orders/${order.id}`, { method: "DELETE" }); router.push("/sales/orders"); router.refresh(); } finally { setBusy(false); }
+  }
   const showPrice = order.orderTotal !== undefined;
   const showCost = order.lines.some((l) => l.unitCostFifo !== undefined);
   const showProfit = order.lines.some((l) => l.lineProfit !== undefined);
@@ -35,6 +50,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       <DetailField label="Ngày giao ban đầu">{formatDate(order.originalDeliveryDate)}</DetailField>
       <DetailField label="Ghi chú">{order.note}</DetailField>
       <DetailField label="Người lập">{order.createdByName}</DetailField>
+      <DetailField label="Báo giá nguồn">{order.quote ? <Link href={`/sales/quotes/${order.quote.id}`} className="text-accent hover:underline">{order.quote.code}</Link> : null}</DetailField>
     </dl>
   );
   const lines = () => (
@@ -86,13 +102,16 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
     </ul>
   );
 
+  const live = !order.isCancelled;
   const headerActions = (
     <>
       {order.isCancelled && perms.canRestore && <RestoreButton orderId={order.id} code={order.code} />}
-      {!order.isCancelled && perms.canEdit && (
-        <Link href={`/sales/orders/${order.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Sửa đơn</Link>
+      {live && order.isDraft && perms.canConfirm && <button type="button" onClick={confirmDraft} disabled={busy} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xác nhận đơn</button>}
+      {live && perms.canEdit && (
+        <Link href={`/sales/orders/${order.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">{order.isDraft ? "Sửa nháp" : "Sửa đơn"}</Link>
       )}
-      {!order.isCancelled && perms.canCancel && (
+      {live && order.isDraft && perms.canDeleteDraft && <button type="button" onClick={deleteDraft} disabled={busy} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft disabled:opacity-50">Xóa nháp</button>}
+      {live && !order.isDraft && perms.canCancel && (
         <button type="button" onClick={() => setCancelOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft">Hủy đơn</button>
       )}
     </>
@@ -100,6 +119,11 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
 
   return (
     <div className="space-y-4">
+      {order.isDraft && !order.isCancelled && (
+        <div role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">
+          Đơn NHÁP — chưa xuất kho, chưa ghi công nợ. Bấm “Xác nhận đơn” để xuất kho{perms.canConfirm ? "" : " (cần người có quyền lập đơn)"}.
+        </div>
+      )}
       {order.isCancelled && (
         <div role="status" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">
           Đơn đã hủy{order.cancelReason ? `. Lý do: ${order.cancelReason}` : ""}. {perms.canRestore ? "Bạn có thể khôi phục đơn." : ""}
@@ -109,13 +133,14 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       backHref="/sales/orders" backLabel="Quay lại danh sách đơn" headerActions={headerActions}
       summary={{
         title: order.partnerName, code: order.code,
-        badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
+        badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : order.isDraft ? [{ label: "Nháp", tone: "warning" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
         facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : [])],
       }}
       tabs={[
         { key: "info", label: "Thông tin", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
-        { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit} /> },
+        { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit && !order.isDraft} /> },
+        { key: "deposits", label: "Tiền cọc", count: order.deposits.length, render: () => <DepositPanel order={order} today={today} canDeposit={perms.canDeposit} /> },
         { key: "history", label: "Lịch sử", count: order.history.length, render: () => history() },
       ]}
       {...nav}

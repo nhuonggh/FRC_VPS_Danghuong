@@ -34,6 +34,8 @@ export interface OrderRowDTO {
   delayDays: number;
   hasProvisional: boolean;
   isCancelled: boolean;
+  /** Đơn nháp (từ báo giá): chưa xuất kho, chưa công nợ. */
+  isDraft: boolean;
   orderTotal?: string;
 }
 
@@ -74,7 +76,7 @@ export function orderWhere(actor: Actor, params: ListParams, now: Date): Prisma.
 }
 
 const lateWhere = (now: Date): Prisma.SaleOrderWhereInput => ({
-  isCancelled: false, deliveryStatus: { notIn: ["DELIVERED", "FAILED"] }, originalDeliveryDate: { lt: new Date(`${ictYmd(now)}T00:00:00Z`) },
+  isCancelled: false, isDraft: false, deliveryStatus: { notIn: ["DELIVERED", "FAILED"] }, originalDeliveryDate: { lt: new Date(`${ictYmd(now)}T00:00:00Z`) },
 });
 
 export async function listOrders(db: Db, actor: Actor, params: ListParams, now: Date = new Date()) {
@@ -96,7 +98,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
     return {
       id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
-      expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled,
+      expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
       orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
     };
   });
@@ -118,6 +120,8 @@ export interface OrderDeliveryDTO {
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
   note: string | null; createdByName: string | null; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
+  deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null }[]; depositTotal: string;
+  quote: { id: number; code: string } | null;
   history: { id: number; action: string; at: Date; userName: string | null }[];
 }
 
@@ -141,6 +145,10 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     where: { orderId: id }, orderBy: [{ at: "asc" }, { id: "asc" }],
     include: { lines: { include: { orderLine: { select: { unit: true, product: { select: { name: true } } } } } } },
   });
+  const [receipts, quoteRow] = await Promise.all([
+    db.receipt.findMany({ where: { orderId: id, isCancelled: false, type: "COC" }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { cashAccount: { select: { name: true } } } }),
+    db.quote.findUnique({ where: { convertedOrderId: id }, select: { id: true, code: true } }),
+  ]);
   const [audit, users] = await Promise.all([
     db.auditLog.findMany({ where: { entity: "SaleOrder", entityId: String(id) }, orderBy: { at: "asc" }, select: { id: true, action: true, at: true, userId: true } }),
     db.user.findMany({ where: { id: { in: [o.createdBy] } }, select: { id: true, fullName: true } }),
@@ -163,8 +171,11 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
     deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
-    hasProvisional, isCancelled: o.isCancelled, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
+    hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
     orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).toString(), lines,
+    deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note })),
+    depositTotal: receipts.reduce((s, r) => s.plus(r.amount), D(0)).toString(),
+    quote: quoteRow,
     deliveries: notes.map((n) => ({
       id: n.id, code: n.code, at: n.at, isCancelled: n.isCancelled, note: n.note,
       lines: n.lines.map((l) => ({ orderLineId: l.orderLineId, productName: l.orderLine.product.name, unit: l.orderLine.unit, qty: l.qty.toString() })),
@@ -208,7 +219,7 @@ export async function advanceExpectedDeliveryDates(db: Db, now: Date = new Date(
   const today = ictYmd(now);
   if (lastAdvanceYmd === today) return 0;
   const moved = await db.saleOrder.updateMany({
-    where: { isCancelled: false, deliveryStatus: { notIn: ["DELIVERED", "FAILED"] }, expectedDeliveryDate: { lt: new Date(`${today}T00:00:00Z`) } },
+    where: { isCancelled: false, isDraft: false, deliveryStatus: { notIn: ["DELIVERED", "FAILED"] }, expectedDeliveryDate: { lt: new Date(`${today}T00:00:00Z`) } },
     data: { expectedDeliveryDate: new Date(`${today}T00:00:00Z`) },
   });
   lastAdvanceYmd = today;

@@ -58,6 +58,7 @@ export async function createDeliveryNote(tx: Tx, actor: Actor, input: DeliveryNo
   assertCan(actor.perms, "order.edit");
   const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId);
   if (order.isCancelled) throw new DomainError("Đơn đã hủy, không giao được.", 409);
+  if (order.isDraft) throw new DomainError("Đơn nháp chưa xác nhận (chưa xuất kho), chưa giao được.", 409);
   const at = docTimestamp(input.date, now);
   if (ictYmd(at) < ictYmd(order.orderDate)) throw new DomainError("Ngày giao không được trước ngày đơn.", 400);
 

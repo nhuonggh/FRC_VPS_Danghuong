@@ -35,7 +35,7 @@ Kế thừa master + D-11…D-22. Bổ sung:
 
 | Tạo mới | Trách nhiệm |
 |---|---|
-| `prisma/schema/sales.prisma` + migration `sales_returns` | `SaleOrder/SaleOrderLine/SaleLineIssue`, `DeliveryNote/DeliveryLine`, `Quote/QuoteLine`, `Receipt`(chỉ loại `COC` cho 04), `Return/ReturnLine`, `DebtAdjustment`, `DebtTransfer`; enum trạng thái; FK bổ sung cho `discount_ledger.orderLineId`; CHECK |
+| `prisma/schema/sales.prisma` + migrations `sales_orders` (C1), `sales_quotes_deposits` (C5), sau đó `sales_returns` (C6+) | `SaleOrder/SaleOrderLine/SaleLineIssue`, `DeliveryNote/DeliveryLine`, `Quote/QuoteLine`, `Receipt`(chỉ loại `COC` cho 04), `Return/ReturnLine`, `DebtAdjustment`, `DebtTransfer`; enum trạng thái; FK bổ sung cho `discount_ledger.orderLineId`; CHECK |
 | `src/server/sales/{schemas,codes,service,queries,cost-owner,status,pricing}.ts` | tạo/sửa/hủy/khôi phục/xoá đơn; trạng thái; giá gần nhất |
 | `src/server/delivery/*`, `src/server/quotes/*`, `src/server/deposits/*` | phiếu giao, báo giá, cọc |
 | `src/server/returns/{service,queries,cost}.ts` | trả theo đơn / SP / NCC, `resolveReturnCostByProduct` |
