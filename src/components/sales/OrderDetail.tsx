@@ -109,7 +109,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       backHref="/sales/orders" backLabel="Quay lại danh sách đơn" headerActions={headerActions}
       summary={{
         title: order.partnerName, code: order.code,
-        badges: [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
+        badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
         facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : [])],
       }}
       tabs={[

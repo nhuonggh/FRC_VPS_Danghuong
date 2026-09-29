@@ -54,6 +54,8 @@ describe("OrderDetail — hành động theo quyền", () => {
     search = "tab=delivery";
     view(order({ isCancelled: true, cancelReason: "Khách đổi ý" }));
     expect(screen.getByRole("status")).toHaveTextContent("Lý do: Khách đổi ý");
+    expect(screen.getAllByText("Đã hủy").length).toBeGreaterThan(0); // nhãn trạng thái không còn "Sẵn hàng"
+    expect(screen.queryByText("Sẵn hàng")).toBeNull();
     expect(screen.getByRole("button", { name: "Khôi phục đơn DH000001" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sửa đơn" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Lập phiếu giao" })).toBeNull();
