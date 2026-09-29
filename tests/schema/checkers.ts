@@ -9,6 +9,8 @@ export const models: readonly DmmfModelLike[] = Prisma.dmmf.datamodel.models as 
 // Bảng CHỨNG TỪ/SỔ CÁI: bắt buộc periodId + createdBy + createdAt (D-3).
 // GĐ sau thêm bảng chứng từ mới → thêm tên vào danh sách này.
 export const TRANSACTIONAL_MODELS = ["StockLedger", "PartnerLedger", "CashLedger", "DiscountLedger", "Purchase", "StockAdjustment"];
+// Ngoại lệ có chủ ý (plan 03c Task 16): BOM là master/version reference nên KHÔNG có periodId; vẫn bắt buộc createdBy + createdAt.
+export const BOM_REFERENCE_MODELS = ["Bom", "BomVersion"];
 export const REQUIRED_VOUCHER_FIELDS = ["periodId", "createdBy", "createdAt"];
 export const BANNED_BALANCE_FIELD = /^(running|balance)/i;
 export const ALLOWED_DECIMAL_PRECISION = new Set(["18,2", "18,3", "18,4", "18,6"]);

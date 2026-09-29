@@ -80,6 +80,8 @@ model Product {
   ledger          StockLedger[]
   purchaseLines   PurchaseLine[]
   adjustmentLines StockAdjustmentLine[]
+  boms            Bom[]
+  bomLines        BomLine[]
 
   @@index([searchText])
   @@index([kind])
@@ -159,6 +161,8 @@ model ProcessingType {
   name     String  @unique
   note     String?
   isActive Boolean @default(true)
+
+  boms Bom[]
 
   @@map("processing_types")
 }

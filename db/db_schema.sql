@@ -753,3 +753,284 @@ ALTER TABLE "product_units" ADD CONSTRAINT "product_units_factor_pos_chk" CHECK 
 ALTER TABLE "products" ADD CONSTRAINT "products_min_stock_nonneg_chk" CHECK ("minStock" >= 0);
 ALTER TABLE "partners" ADD CONSTRAINT "partners_debt_limit_nonneg_chk" CHECK ("debtLimit" >= 0);
 ALTER TABLE "partners" ADD CONSTRAINT "partners_kind_chk" CHECK ("isCustomer" OR "isSupplier");
+
+-- >>> prisma/migrations/20260927125310_purchasing/migration.sql
+-- CreateEnum
+CREATE TYPE "stock_adjustment_type" AS ENUM ('IN_NO_SUPPLIER', 'LOSS', 'WRITE_OFF', 'STOCKTAKE');
+
+-- CreateTable
+CREATE TABLE "purchases" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "freightCost" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "purchaseTotal" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "purchases_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "purchase_lines" (
+    "id" SERIAL NOT NULL,
+    "purchaseId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "factorUsed" DECIMAL(18,6) NOT NULL,
+    "qtyBase" DECIMAL(18,3) NOT NULL,
+    "purchasePrice" DECIMAL(18,2) NOT NULL,
+    "purchaseAmount" DECIMAL(18,2) NOT NULL,
+    "allocatedFreight" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "rollInfo" TEXT,
+    "rollSearch" TEXT NOT NULL DEFAULT '',
+    "seq" BIGINT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "purchase_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stock_adjustments" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "type" "stock_adjustment_type" NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "stock_adjustments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stock_adjustment_lines" (
+    "id" SERIAL NOT NULL,
+    "adjustmentId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unitCost" DECIMAL(18,4) NOT NULL,
+    "seq" BIGINT,
+
+    CONSTRAINT "stock_adjustment_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "purchases_code_key" ON "purchases"("code");
+
+-- CreateIndex
+CREATE INDEX "purchases_periodId_at_idx" ON "purchases"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "purchases_partnerId_at_idx" ON "purchases"("partnerId", "at");
+
+-- CreateIndex
+CREATE INDEX "purchase_lines_purchaseId_idx" ON "purchase_lines"("purchaseId");
+
+-- CreateIndex
+CREATE INDEX "purchase_lines_productId_idx" ON "purchase_lines"("productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "stock_adjustments_code_key" ON "stock_adjustments"("code");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustments_periodId_at_idx" ON "stock_adjustments"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustment_lines_adjustmentId_idx" ON "stock_adjustment_lines"("adjustmentId");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustment_lines_productId_idx" ON "stock_adjustment_lines"("productId");
+
+-- AddForeignKey
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_purchaseId_fkey" FOREIGN KEY ("purchaseId") REFERENCES "purchases"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustments" ADD CONSTRAINT "stock_adjustments_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_adjustmentId_fkey" FOREIGN KEY ("adjustmentId") REFERENCES "stock_adjustments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Lớp chặn DB cho dữ liệu phiếu nhập: cả import/script cũng không ghi được số âm/0 sai quy ước.
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_amounts_nonneg_chk"
+  CHECK ("freightCost" >= 0 AND "purchaseTotal" >= 0);
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_values_chk"
+  CHECK ("qty" > 0 AND "factorUsed" > 0 AND "qtyBase" > 0 AND "purchasePrice" >= 0 AND "purchaseAmount" >= 0 AND "allocatedFreight" >= 0);
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_values_chk"
+  CHECK ("qty" > 0 AND "unitCost" >= 0);
+
+-- >>> prisma/migrations/20260929130000_bom_company_home/migration.sql
+-- CreateEnum
+CREATE TYPE "bom_version_status" AS ENUM ('DRAFT', 'ACTIVE', 'CANCELLED');
+
+-- AlterTable
+ALTER TABLE "company_settings" ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "updatedBy" INTEGER;
+
+-- CreateTable
+CREATE TABLE "boms" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "processingTypeId" INTEGER NOT NULL,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "boms_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "bom_versions" (
+    "id" SERIAL NOT NULL,
+    "bomId" INTEGER NOT NULL,
+    "versionNo" INTEGER NOT NULL,
+    "validFrom" DATE NOT NULL,
+    "status" "bom_version_status" NOT NULL DEFAULT 'ACTIVE',
+    "note" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "bom_versions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "bom_lines" (
+    "id" SERIAL NOT NULL,
+    "bomVersionId" INTEGER NOT NULL,
+    "materialProductId" INTEGER NOT NULL,
+    "qtyPerUnit" DECIMAL(18,3) NOT NULL,
+    "note" TEXT,
+
+    CONSTRAINT "bom_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "print_templates" (
+    "id" SERIAL NOT NULL,
+    "docType" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "webhookUrl" TEXT,
+    "secretCiphertext" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "title" TEXT,
+    "signerName" TEXT,
+    "phone" TEXT,
+    "qrImage" TEXT,
+    "showCompanyInfo" BOOLEAN NOT NULL DEFAULT true,
+    "footerNote" TEXT,
+    "createdBy" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedBy" INTEGER,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "print_templates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "boms_productId_processingTypeId_key" ON "boms"("productId", "processingTypeId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "bom_versions_bomId_versionNo_key" ON "bom_versions"("bomId", "versionNo");
+
+-- CreateIndex
+CREATE INDEX "bom_lines_materialProductId_idx" ON "bom_lines"("materialProductId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "bom_lines_bomVersionId_materialProductId_key" ON "bom_lines"("bomVersionId", "materialProductId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "print_templates_docType_name_key" ON "print_templates"("docType", "name");
+
+-- AddForeignKey
+ALTER TABLE "boms" ADD CONSTRAINT "boms_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "boms" ADD CONSTRAINT "boms_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_versions" ADD CONSTRAINT "bom_versions_bomId_fkey" FOREIGN KEY ("bomId") REFERENCES "boms"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_bomVersionId_fkey" FOREIGN KEY ("bomVersionId") REFERENCES "bom_versions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_materialProductId_fkey" FOREIGN KEY ("materialProductId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- ===== Ràng buộc DB (plan 03c Task 16) =====
+
+-- Một ngày hiệu lực chỉ có một phiên bản còn sống cho mỗi BOM (bản đã huỷ nhả ngày ra). Đua ghi → unique violation → service đổi thành 409.
+CREATE UNIQUE INDEX "bom_versions_bomId_validFrom_live_key" ON "bom_versions"("bomId", "validFrom") WHERE "status" <> 'CANCELLED';
+-- Truy vấn resolveBom: bản ACTIVE mới nhất có validFrom <= ngày.
+CREATE INDEX "bom_versions_bomId_status_validFrom_idx" ON "bom_versions"("bomId", "status", "validFrom" DESC);
+
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_qty_chk" CHECK ("qtyPerUnit" > 0);
+
+ALTER TABLE "print_templates" ADD CONSTRAINT "print_templates_doctype_chk" CHECK ("docType" ~ '^[A-Z][A-Z0-9_]{1,39}$');
+-- Webhook chỉ https (không cho http/file/... để GĐ2 không bị ép gọi địa chỉ nội bộ).
+ALTER TABLE "print_templates" ADD CONSTRAINT "print_templates_webhook_https_chk" CHECK ("webhookUrl" IS NULL OR "webhookUrl" ~ '^https://');
+
+-- company_settings luôn đúng một hàng id = 1; đảm bảo hàng tồn tại trên DB cũ (seed vẫn upsert idempotent).
+ALTER TABLE "company_settings" ADD CONSTRAINT "company_settings_singleton_chk" CHECK ("id" = 1);
+INSERT INTO "company_settings" ("id", "name") VALUES (1, 'Xưởng tôn Đặng Hương') ON CONFLICT ("id") DO NOTHING;
+
+-- D-19: BOM bất biến. Dòng định mức không bao giờ UPDATE/DELETE; phiên bản chỉ được đổi trạng thái hợp lệ; không xoá.
+CREATE FUNCTION bom_lines_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM "bom_versions" v JOIN "boms" b ON b."id" = v."bomId"
+      WHERE v."id" = NEW."bomVersionId" AND b."productId" = NEW."materialProductId"
+    ) THEN
+      RAISE EXCEPTION 'BOM: nguyên vật liệu không được trùng với chính thành phẩm' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'BOM: dòng định mức bất biến (tạo phiên bản mới thay vì sửa/xoá)' USING ERRCODE = '23514';
+END $$;
+CREATE TRIGGER bom_lines_guard_ins BEFORE INSERT ON "bom_lines" FOR EACH ROW EXECUTE FUNCTION bom_lines_guard();
+CREATE TRIGGER bom_lines_guard_upd BEFORE UPDATE OR DELETE ON "bom_lines" FOR EACH ROW EXECUTE FUNCTION bom_lines_guard();
+
+CREATE FUNCTION bom_versions_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'BOM: không xoá phiên bản (chuyển sang CANCELLED)' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."bomId" IS DISTINCT FROM OLD."bomId" OR NEW."versionNo" IS DISTINCT FROM OLD."versionNo"
+     OR NEW."validFrom" IS DISTINCT FROM OLD."validFrom" OR NEW."note" IS DISTINCT FROM OLD."note"
+     OR NEW."createdBy" IS DISTINCT FROM OLD."createdBy" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt" THEN
+    RAISE EXCEPTION 'BOM: phiên bản bất biến, chỉ được đổi trạng thái' USING ERRCODE = '23514';
+  END IF;
+  IF NOT (NEW."status" = OLD."status"
+          OR (OLD."status" = 'DRAFT' AND NEW."status" IN ('ACTIVE', 'CANCELLED'))
+          OR (OLD."status" = 'ACTIVE' AND NEW."status" = 'CANCELLED')) THEN
+    RAISE EXCEPTION 'BOM: chuyển trạng thái phiên bản không hợp lệ' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER bom_versions_guard_trg BEFORE UPDATE OR DELETE ON "bom_versions" FOR EACH ROW EXECUTE FUNCTION bom_versions_guard();

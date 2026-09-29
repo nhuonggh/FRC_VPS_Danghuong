@@ -86,13 +86,16 @@ model AuditLog {
 
 // Bảng 1 dòng (id = 1) — mục 6
 model CompanySetting {
-  id       Int     @id @default(1)
-  name     String
-  address  String?
-  phone    String?
-  taxCode  String?
-  logo     String?
-  bankInfo Json?
+  id        Int      @id @default(1)
+  name      String
+  address   String?
+  phone     String?
+  taxCode   String?
+  logo      String?
+  bankInfo  Json?
+  /// Chống ghi đè mù khi hai người cùng sửa (Task 18).
+  updatedAt DateTime @default(now()) @updatedAt
+  updatedBy Int?
 
   @@map("company_settings")
 }
