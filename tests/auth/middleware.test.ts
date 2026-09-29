@@ -99,3 +99,30 @@ describe("middleware — đã đăng nhập", () => {
     expect(r?.status ?? 200).toBe(200);
   });
 });
+
+describe("middleware — kiểm Origin cho API ghi", () => {
+  const write = (method: string, headers: Record<string, string>) =>
+    new NextRequest("http://localhost/api/users", { method, headers: { host: "localhost", ...headers } });
+
+  it("POST từ Origin khác host → 403 (kể cả đã đăng nhập)", async () => {
+    const r = await call(write("POST", { origin: "https://evil.example", ...(await authedHeaders()) }));
+    expect(r.status).toBe(403);
+  });
+  it("Origin 'null' hoặc hỏng → 403", async () => {
+    expect((await call(write("DELETE", { origin: "null" }))).status).toBe(403);
+  });
+  it("không Origin nhưng Sec-Fetch-Site cross-site → 403", async () => {
+    expect((await call(write("PATCH", { "sec-fetch-site": "cross-site" }))).status).toBe(403);
+  });
+  it("cùng Origin → đi tiếp tới kiểm phiên (401 khi chưa đăng nhập, không phải 403)", async () => {
+    expect((await call(write("POST", { origin: "http://localhost" }))).status).toBe(401);
+  });
+  it("cùng Origin + đã đăng nhập → cho qua", async () => {
+    const r = await call(write("POST", { origin: "http://localhost", ...(await authedHeaders()) }));
+    expect(r.status).toBe(200);
+  });
+  it("GET từ Origin khác không bị chặn bởi kiểm Origin", async () => {
+    const r = await call(write("GET", { origin: "https://evil.example" }));
+    expect(r.status).toBe(401);
+  });
+});

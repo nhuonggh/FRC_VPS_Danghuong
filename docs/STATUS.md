@@ -101,7 +101,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | Hạng mục | Tình trạng | Bước tiếp |
 |---|---|---|
 | Deploy Task 1–6 và tài liệu kế hoạch | **CI/CD xanh** theo user xác nhận | `main` đã có giao diện KH/NCC cùng addendum quỹ hậu kiểm; đang triển khai Task 7 |
-| **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | CHƯA làm (chỉ mới duyệt) | làm trên nhánh riêng, không push `main` khi chưa hỏi (mục 6 nợ #2) |
+| **Việc #7 đã duyệt** — header bảo mật Caddy + rate limit đăng nhập + kiểm `Origin` | **Code xong trên nhánh `claude/zen-gates-o3m8mq`** (chưa vào `main`, chưa áp VPS): `src/server/auth/rate-limit.ts` (8 lần sai/15 phút theo IP+tài khoản, 40/IP; lỗi `RATE_LIMITED`), `isCrossSiteWrite` trong `src/middleware.ts` (API ghi khác Origin → 403), header trong `docs/infra/caddy/dherp.caddy`. Test auth 177+ xanh, lint/typecheck sạch | chờ user duyệt merge `main`; sau đó áp `dherp.caddy` lên VPS (`caddy validate` → `reload`, chỉ site dherp) |
 | **GĐ1b / Plan 03a Task 3** — Catalog Settings API và giao diện | **CI/CD xanh** | 8 danh mục: API CRUD/toggle/export, mini-sidebar, bảng kebab, search/phân trang, tạo mới/sửa; bố cục full-width và KPI grid đã chỉnh theo góp ý 27/09. |
 | **GĐ1b / Plan 03a Task 4** — Khung Import Excel dùng lại | **CI/CD xanh** (`113364b`) | `parseViNumber`, đọc `.xlsx` ≤ 5.000 dòng/2 MB, preview/ghi idempotent/audit, file mẫu/dòng bị loại, Dialog + menu Nhập/Xuất; test parser/reader xanh. |
 | **GĐ1b / Plan 03a Task 5** — Backend Khách hàng/NCC | **CI/CD xanh** (`ec9fc92`, `4958808`) | Mã KH/NCC tự sinh an toàn khi tạo đồng thời; CRUD theo section/audit/idempotency; thiếu `view_all` tự gán người tạo, có `view_all` giữ chưa phân công; scope “khách của mình”; tìm không dấu, Excel export và ImportSpec D1. |
@@ -137,7 +137,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Nợ vận hành ngay (nhỏ, làm trước khi giao khách):**
 1. ~~Sao lưu `pg_dump` hằng đêm~~ — **user: chưa cần (2026-09-27)**; hoãn, nhắc lại trước khi nhập dữ liệu thật/go-live (task D9 plan 05).
-2. **Đã duyệt, chưa làm:** chống dò mật khẩu đăng nhập (rate limit trong app; Caddy nếu module hỗ trợ), header bảo mật (X-Frame-Options / CSP
+2. **Đã duyệt, code xong trên nhánh, chờ merge + áp VPS (xem mục 5):** chống dò mật khẩu đăng nhập (rate limit trong app; Caddy nếu module hỗ trợ), header bảo mật (X-Frame-Options / CSP
    `frame-ancestors`, nosniff, Referrer-Policy) chỉ trong `dherp.caddy` của dự án này, kiểm `Origin` cho request không phải GET tới `/api/*`.
    Sửa file trong repo `docs/infra/caddy/dherp.caddy` + áp dụng trên VPS (`caddy validate` → `reload`); không đụng site khác.
 3. ~~Sửa tag `lms`~~ và ~~Google client secret~~ — user đã đóng #1, #2, #3 (2026-09-27); không còn việc của AI.

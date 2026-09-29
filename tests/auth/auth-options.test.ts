@@ -2,6 +2,8 @@ import type { Account, NextAuthOptions, Profile, Session, User } from "next-auth
 import { decode, encode, type JWT } from "next-auth/jwt";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildAuthOptions } from "@/lib/auth";
+import { hashPassword } from "@/server/auth/password";
+import { LOGIN_RATE_LIMIT, loginLimiter } from "@/server/auth/rate-limit";
 import { prisma, resetDb } from "../helpers/db";
 import { makeUser } from "../helpers/factories";
 
@@ -161,5 +163,29 @@ describe("callback redirect", () => {
     expect(await r("/system/users")).toBe("https://dherp.example.test/system/users");
     expect(await r("https://evil.example/phish")).toBe("https://dherp.example.test");
     expect(await r("//evil.example")).toBe("https://dherp.example.test");
+  });
+});
+
+describe("authorize (Credentials) — chống dò mật khẩu", () => {
+  const cred = () => opts.providers.find((p) => p.id === "credentials") as unknown as {
+    options: { authorize: (c: Record<string, string>, req: { headers: Record<string, string> }) => Promise<unknown> };
+  };
+  const attempt = (username: string, password: string, ip = "9.9.9.9") =>
+    cred().options.authorize({ username, password }, { headers: { "x-forwarded-for": ip } });
+
+  beforeEach(() => loginLimiter.reset());
+
+  it("sai quá số lần → RATE_LIMITED, kể cả khi lần sau nhập ĐÚNG mật khẩu; IP khác không bị ảnh hưởng", async () => {
+    const u = await makeUser({ username: "dothi", passwordHash: await hashPassword("Dung-Mat-Khau-1") });
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxPerAccount; i++) expect(await attempt("dothi", "sai")).toBeNull();
+    await expect(attempt("dothi", "Dung-Mat-Khau-1")).rejects.toThrow("RATE_LIMITED");
+    expect(await attempt("dothi", "Dung-Mat-Khau-1", "8.8.8.8")).toMatchObject({ id: String(u.id) });
+  });
+
+  it("đăng nhập đúng xoá bộ đếm sai của cặp IP + tài khoản", async () => {
+    await makeUser({ username: "dothi", passwordHash: await hashPassword("Dung-Mat-Khau-1") });
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxPerAccount - 1; i++) await attempt("dothi", "sai");
+    expect(await attempt("dothi", "Dung-Mat-Khau-1")).not.toBeNull();
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxPerAccount - 1; i++) expect(await attempt("dothi", "sai")).toBeNull();
   });
 });
