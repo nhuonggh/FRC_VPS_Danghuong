@@ -25,7 +25,8 @@ export const priceForUnit = (perBase: Prisma.Decimal, factor: Prisma.Decimal.Val
 export interface SalePricingDTO {
   productId: number;
   baseUnit: string;
-  units: { unit: string; factor: string }[];
+  /** `suggestedPrice`: giá gần nhất quy ra đơn vị này (đúng giá server chấp nhận khi thiếu quyền sửa giá). */
+  units: { unit: string; factor: string; suggestedPrice: string | null }[];
   /** Chỉ có khi actor có `stock.view`. */
   onHand?: string;
   /** Giá bán gần nhất theo đơn vị gốc (khách này, hoặc bất kỳ khách nếu khách này chưa mua). */
@@ -44,7 +45,9 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
   const out: SalePricingDTO = {
     productId,
     baseUnit: product.baseUnit,
-    units: [{ unit: product.baseUnit, factor: "1" }, ...product.units.map((u) => ({ unit: u.unit, factor: u.factor.toString() }))],
+    units: [{ unit: product.baseUnit, factor: new Prisma.Decimal(1) }, ...product.units.map((u) => ({ unit: u.unit, factor: u.factor }))].map((u) => ({
+      unit: u.unit, factor: u.factor.toString(), suggestedPrice: last ? priceForUnit(last.perBase, u.factor).toString() : null,
+    })),
     lastSalePrice: last ? last.perBase.toString() : null,
     lastSalePriceForPartner: last?.forPartner ?? false,
   };

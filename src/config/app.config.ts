@@ -47,8 +47,8 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "orders", label: "Đơn hàng",
         functions: [
-          { key: "order-new", label: "Bán hàng", desc: "Lập đơn, chiết khấu, xuất kho FIFO", icon: "shopping-cart", view: "form", path: "/sales/orders/new", codes: ["31"], perm: "order.create", planned: P },
-          { key: "order-list", label: "Danh sách đơn", desc: "Đơn theo 2 trục trạng thái giao hàng & thanh toán", icon: "receipt", view: "table", path: "/sales/orders", codes: ["32", "33"], perm: "order.view", planned: P },
+          { key: "order-new", label: "Bán hàng", desc: "Lập đơn, chiết khấu, xuất kho FIFO", icon: "shopping-cart", view: "form", path: "/sales/orders/new", codes: ["31"], perm: "order.create" },
+          { key: "order-list", label: "Danh sách đơn", desc: "Đơn theo 2 trục trạng thái giao hàng & thanh toán", icon: "receipt", view: "table", path: "/sales/orders", codes: ["32", "33"], perm: "order.view" },
           { key: "order-deleted", label: "Đơn đã xóa", desc: "Xem, khôi phục đơn đã hủy", icon: "trash-2", view: "table", path: "/sales/orders-deleted", codes: ["34", "34a", "34b", "34c"], perm: "order.restore", planned: P },
           { key: "quote-list", label: "Báo giá", desc: "Lập báo giá, chuyển thành đơn", icon: "file-text", view: "table", path: "/sales/quotes", codes: ["35"], perm: "quote.manage", planned: P },
           { key: "deposit-list", label: "Tiền cọc", desc: "Quản lý tiền cọc của đơn", icon: "hand-coins", view: "table", path: "/sales/deposits", codes: ["36"], perm: "deposit.manage", planned: P },
@@ -106,7 +106,7 @@ export const APP_NAV: readonly NavModule[] = [
           { key: "stock-xnt", label: "Báo cáo xuất nhập tồn", desc: "XNT kèm giá", icon: "bar-chart-3", view: "report", path: "/inventory/xnt", codes: ["24"], perm: "stock.view" },
           { key: "stock-min", label: "Định mức tồn", desc: "Cảnh báo dưới định mức", icon: "sliders-horizontal", view: "table", path: "/inventory/min-stock", codes: ["25"], perm: "stock.view" },
           { key: "roll-lookup", label: "Tra cứu cuộn", desc: "Ngày nhập, NCC, loại tôn, khối lượng, ghi chú cuộn", icon: "search", view: "table", path: "/inventory/rolls", codes: ["30"], perm: "stock.view" },
-          { key: "pending-orders", label: "Đơn chưa đủ tồn", desc: "Đơn treo chờ nhập bù", icon: "clipboard-list", view: "table", path: "/inventory/pending-orders", codes: ["29"], perm: "stock.view", planned: P },
+          { key: "pending-orders", label: "Đơn chưa đủ tồn", desc: "Đơn treo chờ nhập bù", icon: "clipboard-list", view: "table", path: "/inventory/pending-orders", codes: ["29"], perm: "stock.view" },
         ],
       },
       {
