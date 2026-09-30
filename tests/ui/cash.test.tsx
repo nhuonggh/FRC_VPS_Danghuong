@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CashBook } from "@/components/cash/CashBook";
+import { ExpenseForm } from "@/components/cash/ExpenseForm";
 import { ReviewQueue } from "@/components/cash/ReviewQueue";
 import { VoucherDetail } from "@/components/cash/VoucherDetail";
 import { VoucherForm } from "@/components/cash/VoucherForm";
@@ -61,7 +62,7 @@ describe("VoucherForm", () => {
 
 const detail = (over: Partial<VoucherDetailDTO> = {}): VoucherDetailDTO => ({
   id: 9, doc: "RECEIPT", code: "PT000009", at: new Date("2026-09-15T03:00:00Z"), type: "THU_NO", typeLabel: "Thu nợ", partnerId: 7, partnerName: "Khách Đạt", orderId: null, orderCode: null, amount: "1000000", cashAccountId: 1, cashAccountName: "Tiền mặt",
-  reviewStatus: "PENDING_REVIEW", isCancelled: false, note: null, createdByName: "Kế toán A", dateYmd: "2026-09-15", reviewedByName: null, reviewedAt: null, events: [], adjustments: [], ...over,
+  reviewStatus: "PENDING_REVIEW", isCancelled: false, note: null, expenseId: null, createdByName: "Kế toán A", dateYmd: "2026-09-15", reviewedByName: null, reviewedAt: null, events: [], adjustments: [], ...over,
 });
 const perms = { canEdit: true, canReview: true, canRequestAdjust: true, canApprove: true };
 
@@ -144,5 +145,32 @@ describe("CashBook", () => {
   it("không có quyền chốt/hủy chốt ⇒ không hiện nút", () => {
     render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose={false} canReopen={false} nowIso="2026-09-15T10:30:00.000Z" />);
     expect(screen.queryByRole("button", { name: "Chốt quỹ" })).not.toBeInTheDocument(); expect(screen.queryByRole("button", { name: "Hủy chốt" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ExpenseForm", () => {
+  const types = [{ id: 3, name: "Điện" }, { id: 4, name: "Lương" }];
+  it("thiếu loại ⇒ báo lỗi; đủ ⇒ POST /api/expenses kèm khoá idempotency rồi về danh sách", async () => {
+    render(<ExpenseForm today="2026-09-15" types={types} accounts={accounts} />);
+    await userEvent.type(screen.getByLabelText(/Số tiền/), "800000");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
+    expect(await screen.findByText("Chọn loại chi phí.")).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalled();
+    await userEvent.selectOptions(screen.getByLabelText(/Loại chi phí/), "3");
+    await userEvent.type(screen.getByLabelText(/Ghi chú/), "Điện tháng 9");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/accounting/expenses"));
+    const [url, init] = apiFetch.mock.calls[0]!;
+    expect(url).toBe("/api/expenses");
+    expect(init.json).toMatchObject({ expenseTypeId: 3, cashAccountId: 1, amount: 800000, date: "2026-09-15", note: "Điện tháng 9" });
+    expect(init.idempotencyKey).toBeTruthy();
+  });
+  it("chưa có loại chi phí ⇒ nhắc tạo ở Cài đặt danh mục; sửa dùng PATCH", async () => {
+    const { unmount } = render(<ExpenseForm today="2026-09-15" types={[]} accounts={accounts} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loại chi phí");
+    unmount();
+    render(<ExpenseForm id={5} code="PC000005" today="2026-09-15" types={types} accounts={accounts} initial={{ expenseTypeId: 4, cashAccountId: 2, amount: "100000", date: "2026-09-14", note: "" }} />);
+    await userEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/expenses/5", expect.objectContaining({ method: "PATCH" })));
   });
 });

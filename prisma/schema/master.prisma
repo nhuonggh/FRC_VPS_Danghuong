@@ -166,6 +166,8 @@ model ExpenseType {
   name     String  @unique
   isActive Boolean @default(true)
 
+  expenses OperatingExpense[]
+
   @@map("expense_types")
 }
 

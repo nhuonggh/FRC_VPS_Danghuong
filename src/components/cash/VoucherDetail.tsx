@@ -26,7 +26,8 @@ export function VoucherDetail({ v, perms, accounts }: { v: VoucherDetailDTO; per
   const [dialog, setDialog] = useState<"cancel" | "return" | "adjust" | null>(null);
   const base = `/api/vouchers/${KIND[v.doc]}/${v.id}`;
   const state = v.isCancelled ? "CANCELLED" : v.reviewStatus;
-  const editable = !v.isCancelled && v.reviewStatus !== "REVIEWED" && v.type !== "COC" && v.type !== "CHI_PHI" && v.type !== "TAT_TOAN_CK";
+  const editable = !v.isCancelled && v.reviewStatus !== "REVIEWED" && v.type !== "COC" && v.type !== "TAT_TOAN_CK" && (v.type !== "CHI_PHI" || v.expenseId !== null);
+  const editHref = v.type === "CHI_PHI" ? `/accounting/expenses/${v.expenseId}/edit` : `/accounting/${KIND[v.doc]}/${v.id}/edit`;
   const pendingAdj = v.adjustments.find((a) => a.status === "REQUESTED");
 
   async function run(fn: () => Promise<unknown>) {
@@ -55,7 +56,7 @@ export function VoucherDetail({ v, perms, accounts }: { v: VoucherDetailDTO; per
               <button type="button" disabled={busy} onClick={() => setDialog("return")} className="h-10 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Trả lại</button>
             </>
           )}
-          {perms.canEdit && editable && <Link href={`/accounting/${KIND[v.doc]}/${v.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">{v.reviewStatus === "RETURNED" ? "Sửa & gửi lại" : "Sửa"}</Link>}
+          {perms.canEdit && editable && <Link href={editHref} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">{v.reviewStatus === "RETURNED" ? "Sửa & gửi lại" : "Sửa"}</Link>}
           {perms.canEdit && editable && <button type="button" disabled={busy} onClick={() => setDialog("cancel")} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft">Hủy phiếu</button>}
           {perms.canRequestAdjust && !v.isCancelled && v.reviewStatus === "REVIEWED" && !pendingAdj && <button type="button" disabled={busy} onClick={() => setDialog("adjust")} className="h-10 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Yêu cầu điều chỉnh</button>}
         </div>

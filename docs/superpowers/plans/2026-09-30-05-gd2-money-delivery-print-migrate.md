@@ -83,8 +83,8 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: số dư = đầu kỳ + phát sinh; **[R]** hai thủ quỹ kiểm cùng phiếu; **[R]** bấm 2 lần tạo phiếu; sửa phiếu `REVIEWED` bị chặn, điều chỉnh sinh dòng đảo; hủy phiếu đảo về 0 cả quỹ lẫn công nợ; thiếu quyền `cash.review` bị chặn ở server.
 
 ### Task D2 — Chi phí hoạt động (mã 66)
-- [ ] `operating_expenses` gắn phiếu chi loại `CHI_PHI` (D-32): loại chi phí, số tiền, ngày, ghi chú; danh sách + tổng theo loại/tháng; xuất Excel.
-- [ ] 🧪: mỗi khoản chi phí ↔ đúng một phiếu chi; hủy chi phí hủy phiếu; không tính vào công nợ.
+- [x] `operating_expenses` gắn phiếu chi loại `CHI_PHI` (D-32): loại chi phí, số tiền, ngày, ghi chú; danh sách + tổng theo loại/tháng; xuất Excel.
+- [x] 🧪: mỗi khoản chi phí ↔ đúng một phiếu chi; hủy chi phí hủy phiếu; không tính vào công nợ.
 
 ### Task D3 — Chiết khấu tích lũy: sổ, tất toán, hậu kiểm (mã 31, 64)
 - [ ] Tab **Sổ chiết khấu tích lũy & tất toán** trong màn 64: số dư từng khách (đầu kỳ + vào − ra), chi tiết theo dòng đơn.

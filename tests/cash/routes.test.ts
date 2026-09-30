@@ -9,6 +9,9 @@ import { GET as partnersRoute } from "@/app/api/cash/partners/route";
 import { POST as createRoute } from "@/app/api/vouchers/[kind]/route";
 import { PATCH as editRoute } from "@/app/api/vouchers/[kind]/[id]/route";
 import { POST as actionRoute } from "@/app/api/vouchers/[kind]/[id]/[action]/route";
+import { POST as expensePOST } from "@/app/api/expenses/route";
+import { PATCH as expensePATCH } from "@/app/api/expenses/[id]/route";
+import { GET as expenseExport } from "@/app/api/expenses/export/route";
 import { hashPassword } from "@/server/auth/password";
 import { seed } from "../../prisma/seed-lib";
 import { prisma, resetDb } from "../helpers/db";
@@ -84,5 +87,23 @@ describe("API phiếu thu/chi theo vai trò mẫu (seed)", () => {
     const c = await closeRoute(req("/x", "POST", closeBody, "c1"), undefined); expect(c.status).toBe(200);
     const cid = (await c.json()).id as number;
     expect((await voidCloseRoute(req("/x", "DELETE", { reason: "nhầm" }, "c2"), { params: Promise.resolve({ id: String(cid) }) })).status).toBe(403);
+  });
+
+  it("chi phí: kế toán lập/sửa/xuất; thủ quỹ (không có expense.manage) bị chặn; hủy qua phiếu chi bằng quyền chi phí", async () => {
+    const type = await prisma.expenseType.create({ data: { name: "Điện" } });
+    const eb = (over = {}) => ({ expenseTypeId: type.id, cashAccountId: cash.id, amount: 800_000, date: today, note: "Điện", ...over });
+    loginAs(tq);
+    expect((await expensePOST(req("/x", "POST", eb(), "e0"), undefined)).status).toBe(403);
+    loginAs(ke);
+    const c = await expensePOST(req("/x", "POST", eb(), "e1"), undefined); expect(c.status).toBe(200);
+    const created = await c.json() as { id: number; paymentId: number };
+    expect((await expensePATCH(req("/x", "PATCH", eb({ amount: 900_000 })), { params: Promise.resolve({ id: String(created.id) }) })).status).toBe(200);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: created.paymentId } })).amount.toString()).toBe("900000");
+    expect((await expenseExport(req("/api/expenses/export", "GET"))).headers.get("content-type")).toContain("spreadsheet");
+    expect((await actionRoute(req("/x", "POST", { reason: "nhầm" }), vctx("payments", created.paymentId, "cancel"))).status).toBe(200);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: created.paymentId } })).isCancelled).toBe(true);
+    expect(await prisma.cashLedger.count()).toBe(0);
+    loginAs(bh);
+    expect((await expenseExport(req("/api/expenses/export", "GET"))).status).toBe(403);
   });
 });

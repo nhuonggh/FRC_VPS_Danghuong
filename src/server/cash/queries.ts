@@ -60,6 +60,8 @@ export async function listVouchers(db: Db, actor: Actor, doc: VoucherDoc, params
 }
 
 export interface VoucherDetailDTO extends VoucherRowDTO {
+  /** Khoản chi phí hoạt động tương ứng (phiếu chi loại CHI_PHI) — sửa ở màn Chi phí. */
+  expenseId: number | null;
   partnerId: number | null; orderId: number | null; cashAccountId: number; dateYmd: string; reviewedByName: string | null; reviewedAt: Date | null;
   events: { id: number; action: string; actionLabel: string; reason: string | null; userName: string | null; at: Date }[];
   adjustments: { id: number; kind: "AMOUNT" | "VOID"; status: "REQUESTED" | "APPROVED" | "REJECTED"; reason: string; newAmount: string | null; newCashAccountName: string | null; oldAmount: string | null; requestedByName: string | null; requestedAt: Date; decidedByName: string | null; decidedAt: Date | null; decisionNote: string | null }[];
@@ -78,9 +80,10 @@ export async function getVoucher(db: Db, actor: Actor, doc: VoucherDoc, id: numb
   const accounts = new Map((await db.cashAccount.findMany({ where: { id: { in: adjustments.flatMap((a) => (a.newCashAccountId ? [a.newCashAccountId] : [])) } }, select: { id: true, name: true } })).map((a) => [a.id, a.name]));
   const names = await fullName(db, [base.createdBy, ...(base.reviewedBy ? [base.reviewedBy] : []), ...events.map((e) => e.userId), ...adjustments.flatMap((a) => [a.requestedBy, ...(a.decidedBy ? [a.decidedBy] : [])])]);
   const type = "type" in base ? base.type : base.kind;
+  const expense = type === "CHI_PHI" ? await db.operatingExpense.findUnique({ where: { paymentId: id }, select: { id: true, expenseType: { select: { name: true } } } }) : null;
   const at = base.at; const t = new Date(at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
   return {
-    id, doc, code: base.code, at, type, typeLabel: (doc === "RECEIPT" ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL)[type] ?? type, partnerId: base.partnerId, partnerName: base.partner?.name ?? null,
+    id, doc, code: base.code, at, type, typeLabel: expense ? `Chi phí — ${expense.expenseType.name}` : (doc === "RECEIPT" ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL)[type] ?? type, expenseId: expense?.id ?? null, partnerId: base.partnerId, partnerName: base.partner?.name ?? null,
     orderId: "orderId" in base ? base.orderId : null, orderCode: "order" in base ? (base.order?.code ?? null) : null, amount: base.amount.toString(), cashAccountId: base.cashAccountId, cashAccountName: base.cashAccount.name,
     reviewStatus: base.reviewStatus, isCancelled: base.isCancelled, note: base.note, createdByName: names.get(base.createdBy) ?? null, dateYmd: t,
     reviewedByName: base.reviewedBy ? (names.get(base.reviewedBy) ?? null) : null, reviewedAt: base.reviewedAt,
@@ -187,4 +190,54 @@ export async function listPartnerOrders(db: Db, actor: Actor, partnerId: number)
 
 export async function listActiveCashAccounts(db: Db): Promise<{ id: number; name: string; type: "CASH" | "BANK" }[]> {
   return db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ type: "asc" }, { name: "asc" }], select: { id: true, name: true, type: true } });
+}
+
+// ───────────────────────────── CHI PHÍ HOẠT ĐỘNG (66) ─────────────────────────────
+export const EXPENSE_FILTER_KEYS = ["type", "status"] as const;
+export interface ExpenseRowDTO { id: number; paymentId: number; code: string; at: Date; expenseTypeId: number; expenseTypeName: string; amount: string; cashAccountName: string; note: string | null; reviewStatus: CashReviewStatus; isCancelled: boolean; createdByName: string | null }
+export interface ExpenseSummaryDTO { total: string; count: number; byType: { expenseTypeId: number; name: string; amount: string }[]; byMonth: { month: string; amount: string }[] }
+
+/** Danh sách chi phí + tổng theo loại và theo tháng (chỉ tính khoản CHƯA hủy, trên toàn bộ tập đã lọc). Lọc: loại chi phí, trạng thái kiểm tra, q (mã phiếu/ghi chú), thời gian. */
+export async function listExpenses(db: Db, actor: Actor, params: ListParams, opts: { all?: boolean } = {}): Promise<{ rows: ExpenseRowDTO[]; total: number; summary: ExpenseSummaryDTO }> {
+  assertCan(actor.perms, "expense.manage");
+  // ghi chú có dấu tiếng Việt: tìm theo chữ người dùng gõ (không bỏ dấu), không phân biệt hoa/thường
+  const terms = (params.q ?? "").trim().split(/\s+/).filter(Boolean);
+  const range = params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
+  const statuses = params.filters.status ?? []; const types = (params.filters.type ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  const cancelled = statuses.includes("CANCELLED"); const live = statuses.filter((s) => s !== "CANCELLED") as CashReviewStatus[];
+  const paymentWhere: Prisma.PaymentWhereInput = {
+    ...(statuses.length === 0 ? {} : { OR: [...(cancelled ? [{ isCancelled: true }] : []), ...(live.length ? [{ isCancelled: false, reviewStatus: { in: live } }] : [])] }),
+    ...(range ? { at: timeRangeWhere(range) } : {}),
+    AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { note: { contains: escapeLike(t), mode: "insensitive" as const } }] })),
+  };
+  const where: Prisma.OperatingExpenseWhereInput = { payment: paymentWhere, ...(types.length ? { expenseTypeId: { in: types } } : {}) };
+  const [list, total, liveRows] = await Promise.all([
+    db.operatingExpense.findMany({ where, orderBy: [{ payment: { at: "desc" } }, { id: "desc" }], ...(opts.all ? {} : { skip: (params.page - 1) * params.pageSize, take: params.pageSize }), include: { expenseType: { select: { name: true } }, payment: { include: { cashAccount: { select: { name: true } } } } } }),
+    db.operatingExpense.count({ where }),
+    db.operatingExpense.findMany({ where: { ...where, payment: { ...paymentWhere, isCancelled: false } }, select: { expenseTypeId: true, expenseType: { select: { name: true } }, payment: { select: { amount: true, at: true } } } }),
+  ]);
+  const names = await fullName(db, list.map((e) => e.payment.createdBy));
+  const byType = new Map<number, { name: string; amount: Prisma.Decimal }>(); const byMonth = new Map<string, Prisma.Decimal>(); let sum = new Prisma.Decimal(0);
+  for (const e of liveRows) {
+    sum = sum.plus(e.payment.amount);
+    const t = byType.get(e.expenseTypeId) ?? { name: e.expenseType.name, amount: new Prisma.Decimal(0) }; t.amount = t.amount.plus(e.payment.amount); byType.set(e.expenseTypeId, t);
+    const m = new Date(e.payment.at.getTime() + 7 * 3600_000).toISOString().slice(0, 7); byMonth.set(m, (byMonth.get(m) ?? new Prisma.Decimal(0)).plus(e.payment.amount));
+  }
+  return {
+    total,
+    rows: list.map((e) => ({ id: e.id, paymentId: e.paymentId, code: e.payment.code, at: e.payment.at, expenseTypeId: e.expenseTypeId, expenseTypeName: e.expenseType.name, amount: e.payment.amount.toString(), cashAccountName: e.payment.cashAccount.name, note: e.payment.note, reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled, createdByName: names.get(e.payment.createdBy) ?? null })),
+    summary: { total: sum.toString(), count: liveRows.length, byType: [...byType.entries()].map(([expenseTypeId, v]) => ({ expenseTypeId, name: v.name, amount: v.amount.toString() })).sort((a, b) => Number(b.amount) - Number(a.amount)), byMonth: [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([month, amount]) => ({ month, amount: amount.toString() })) },
+  };
+}
+
+export async function getExpense(db: Db, actor: Actor, id: number) {
+  assertCan(actor.perms, "expense.manage");
+  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: true, expenseType: { select: { name: true } } } });
+  if (!e) throw new DomainError("Không tìm thấy khoản chi phí.", 404);
+  const at = new Date(e.payment.at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+  return { id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
+}
+
+export async function listExpenseTypes(db: Db): Promise<{ id: number; name: string }[]> {
+  return db.expenseType.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 }

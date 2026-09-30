@@ -179,7 +179,7 @@ export const APP_NAV: readonly NavModule[] = [
           { key: "cash-review", label: "Chờ kiểm tra quỹ", desc: "Thủ quỹ kiểm tra / trả lại phiếu, duyệt điều chỉnh", icon: "list-checks", view: "table", path: "/accounting/cash-review", codes: [], perm: "cash.review" },
           { key: "cashbook", label: "Sổ quỹ tiền mặt", desc: "", icon: "wallet", view: "table", path: "/accounting/cashbook", codes: ["60"], perm: "cashbook.view" },
           { key: "bankbook", label: "Sổ tiền gửi ngân hàng", desc: "", icon: "landmark", view: "table", path: "/accounting/bankbook", codes: ["61"], perm: "cashbook.view" },
-          { key: "expense", label: "Chi phí hoạt động", desc: "Lương, dầu, điện, sửa xe…", icon: "calculator", view: "table", path: "/accounting/expenses", codes: ["66"], perm: "expense.manage", planned: P },
+          { key: "expense", label: "Chi phí hoạt động", desc: "Lương, dầu, điện, sửa xe…", icon: "calculator", view: "table", path: "/accounting/expenses", codes: ["66"], perm: "expense.manage" },
         ],
       },
       {

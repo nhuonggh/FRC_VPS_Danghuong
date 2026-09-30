@@ -65,9 +65,9 @@ export async function addReviewEvent(tx: Tx, doc: VoucherDoc, id: number, action
   await tx.cashReviewEvent.create({ data: { docType: doc, docId: id, action, reason: reason || null, userId } });
 }
 
-const managePerm = (doc: VoucherDoc) => (doc === "RECEIPT" ? "receipt.manage" : "payment.manage");
-function assertVoucherPerm(actor: Actor, doc: VoucherDoc, action: "create" | "edit") {
-  assertCan(actor.perms, managePerm(doc));
+const managePerm = (doc: VoucherDoc, type?: string) => (doc === "RECEIPT" ? "receipt.manage" : type === "CHI_PHI" ? "expense.manage" : "payment.manage");
+function assertVoucherPerm(actor: Actor, doc: VoucherDoc, action: "create" | "edit", type?: string) {
+  assertCan(actor.perms, managePerm(doc, type));
   assertCan(actor.perms, action === "create" ? "cash.transaction.create" : "cash.transaction.edit_pending");
 }
 
@@ -112,8 +112,8 @@ export async function createReceipt(tx: Tx, actor: Actor, input: ReceiptInput, n
   return { id, code };
 }
 
-export async function createPayment(tx: Tx, actor: Actor, input: PaymentInput & { kind: PaymentInput["kind"] | "CHI_PHI" | "TAT_TOAN_CK" }, now: Date = new Date()): Promise<{ id: number; code: string }> {
-  assertVoucherPerm(actor, "PAYMENT", "create");
+export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInput, "kind"> & { kind: PaymentInput["kind"] | "CHI_PHI" | "TAT_TOAN_CK" }, now: Date = new Date()): Promise<{ id: number; code: string }> {
+  assertVoucherPerm(actor, "PAYMENT", "create", input.kind);
   const period = await getOpenPeriod(tx);
   const at = docTimestamp(input.date, now);
   assertDocDateInPeriod(period, at);
@@ -180,8 +180,9 @@ export async function editPayment(tx: Tx, actor: Actor, id: number, input: Payme
 
 /** Hủy phiếu CHƯA kiểm tra: gỡ sổ quỹ + công nợ (về 0). Phiếu đã REVIEWED phải qua điều chỉnh (VOID). */
 export async function cancelVoucher(tx: Tx, actor: Actor, doc: VoucherDoc, id: number, reason: string, now: Date = new Date()): Promise<void> {
-  assertVoucherPerm(actor, doc, "edit");
+  assertCan(actor.perms, "cash.transaction.edit_pending");
   const v = await lockVoucher(tx, doc, id);
+  assertCan(actor.perms, managePerm(doc, v.type));
   await assertEditable(tx, v);
   if (v.orderId !== null) await tx.$queryRaw`SELECT id FROM sale_orders WHERE id = ${v.orderId} FOR UPDATE`;
   await removeVoucherLedgers(tx, doc, id);
