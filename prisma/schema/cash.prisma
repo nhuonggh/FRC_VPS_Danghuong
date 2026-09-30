@@ -52,10 +52,11 @@ model Payment {
   createdBy     Int
   createdAt     DateTime         @default(now())
 
-  period      Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  partner     Partner?          @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  cashAccount CashAccount       @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  period      Period              @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner     Partner?            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
   expense     OperatingExpense?
+  settlement  DiscountSettlement?
 
   @@index([periodId, at])
   @@index([partnerId])
@@ -137,4 +138,33 @@ model OperatingExpense {
 
   @@index([periodId, expenseTypeId])
   @@map("operating_expenses")
+}
+
+/// Tất toán chiết khấu tích lũy (D-37): CASH = phiếu chi TAT_TOAN_CK (sổ quỹ ra) + discount_ledger.amountOut;
+/// OFFSET = trừ vào công nợ khách (partner_ledger credit) + discount_ledger.amountOut. Hậu kiểm (`is_reconciled`) nằm ở dòng
+/// discount_ledger của phiếu. Mã CK######.
+model DiscountSettlement {
+  id           Int                  @id @default(autoincrement())
+  periodId     Int
+  code         String               @unique
+  partnerId    Int
+  method       DiscountSettleMethod
+  amount       Decimal              @db.Decimal(18, 2)
+  at           DateTime
+  note         String?
+  paymentId    Int?                 @unique
+  isCancelled  Boolean              @default(false)
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime             @default(now())
+
+  period  Period   @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner  @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@map("discount_settlements")
 }

@@ -15,7 +15,7 @@ export function DebtTable({ rows, params }: { rows: DebtRowDTO[]; params: ListPa
     { key: "receivable", label: "Phải thu", align: "right", render: (r) => (Number(r.balance) > 0 ? <span className="font-semibold">{formatCurrency(r.balance)}</span> : null) },
     { key: "payable", label: "Phải trả", align: "right", render: (r) => (Number(r.balance) < 0 ? <span className="font-semibold text-warning">{formatCurrency(String(Math.abs(Number(r.balance))))}</span> : null) },
     { key: "balance", label: "Số dư", align: "right", sortable: true, render: (r) => <span className="tabular">{formatCurrency(r.balance)}</span> },
-    { key: "discountBalance", label: "CK tích lũy", align: "right", sortable: true, render: (r) => (Number(r.discountBalance) > 0 ? formatCurrency(r.discountBalance) : null) },
+    { key: "discountBalance", label: "CK tích lũy", align: "right", sortable: true, render: (r) => (Number(r.discountBalance) > 0 ? formatCurrency(r.discountBalance) : Number(r.discountBalance) < 0 ? <span className="text-danger" title="Số dư chiết khấu âm — cần điều chỉnh công nợ">{formatCurrency(r.discountBalance)} ⚠</span> : null) },
     { key: "limit", label: "Hạn mức", render: (r) => (r.overLimit ? <Badge tone="danger">Vượt hạn mức</Badge> : null) },
   ];
   const actions = (r: DebtRowDTO): RowAction[] => [{ key: "view", label: "Xem chi tiết", icon: "eye", href: `${BASE}/${r.partnerId}` }];

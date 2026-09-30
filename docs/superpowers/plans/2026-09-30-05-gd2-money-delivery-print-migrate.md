@@ -87,10 +87,10 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: mỗi khoản chi phí ↔ đúng một phiếu chi; hủy chi phí hủy phiếu; không tính vào công nợ.
 
 ### Task D3 — Chiết khấu tích lũy: sổ, tất toán, hậu kiểm (mã 31, 64)
-- [ ] Tab **Sổ chiết khấu tích lũy & tất toán** trong màn 64: số dư từng khách (đầu kỳ + vào − ra), chi tiết theo dòng đơn.
-- [ ] Tất toán `CASH` (phiếu chi `TAT_TOAN_CK`) và `OFFSET` (D-37); không tất toán quá số dư; hậu kiểm `is_reconciled` (quyền `discount.reconcile`, `discount.settle`).
-- [ ] Đảo khi hủy đơn/trả hàng đã có ở plan 04; bổ sung **cảnh báo số dư âm**.
-- [ ] 🧪: hủy đơn có chiết khấu đảo đúng tỷ lệ; đã tất toán rồi hủy ⇒ số dư âm + cảnh báo; OFFSET giảm công nợ đúng; hậu kiểm khoá sửa.
+- [x] Tab **Sổ chiết khấu tích lũy & tất toán** trong màn 64: số dư từng khách (đầu kỳ + vào − ra), chi tiết theo dòng đơn.
+- [x] Tất toán `CASH` (phiếu chi `TAT_TOAN_CK`) và `OFFSET` (D-37); không tất toán quá số dư; hậu kiểm `is_reconciled` (quyền `discount.reconcile`, `discount.settle`).
+- [x] Đảo khi hủy đơn/trả hàng đã có ở plan 04; bổ sung **cảnh báo số dư âm**.
+- [x] 🧪: hủy đơn có chiết khấu đảo đúng tỷ lệ; đã tất toán rồi hủy ⇒ số dư âm + cảnh báo; OFFSET giảm công nợ đúng; hậu kiểm khoá sửa.
 
 ### Task D4 — Xếp chuyến, phiếu giao, danh sách chuyến (mã 38, 39)
 - [ ] Schema `trips`, `trip_orders`; trạng thái `PLANNED → ON_ROAD → RETURNED → SETTLED → CONFIRMED`.

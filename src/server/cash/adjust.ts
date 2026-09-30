@@ -24,6 +24,7 @@ export async function requestAdjustment(tx: Tx, actor: Actor, doc: VoucherDoc, i
   if (v.reviewStatus !== "REVIEWED") throw new DomainError("Phiếu chưa kiểm tra — sửa/hủy trực tiếp thay vì điều chỉnh.", 409);
   const period = await getOpenPeriod(tx);
   if (v.periodId !== period.id) throw new PeriodClosedError();
+  if (v.type === "TAT_TOAN_CK") throw new DomainError("Phiếu chi tất toán chiết khấu không điều chỉnh trực tiếp — xử lý ở màn Chiết khấu tích lũy hoặc lập điều chỉnh công nợ.", 409);
   if (v.type === "COC" && input.kind === "AMOUNT") throw new DomainError("Phiếu cọc chỉ hủy được (đổi số tiền: hủy và lập lại).", 409);
   if (input.kind === "AMOUNT") {
     if (input.newCashAccountId !== null) {

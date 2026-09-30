@@ -65,7 +65,7 @@ export async function addReviewEvent(tx: Tx, doc: VoucherDoc, id: number, action
   await tx.cashReviewEvent.create({ data: { docType: doc, docId: id, action, reason: reason || null, userId } });
 }
 
-const managePerm = (doc: VoucherDoc, type?: string) => (doc === "RECEIPT" ? "receipt.manage" : type === "CHI_PHI" ? "expense.manage" : "payment.manage");
+const managePerm = (doc: VoucherDoc, type?: string) => (doc === "RECEIPT" ? "receipt.manage" : type === "CHI_PHI" ? "expense.manage" : type === "TAT_TOAN_CK" ? "discount.settle" : "payment.manage");
 function assertVoucherPerm(actor: Actor, doc: VoucherDoc, action: "create" | "edit", type?: string) {
   assertCan(actor.perms, managePerm(doc, type));
   assertCan(actor.perms, action === "create" ? "cash.transaction.create" : "cash.transaction.edit_pending");

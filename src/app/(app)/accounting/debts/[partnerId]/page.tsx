@@ -37,7 +37,7 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
         <StatCard label="Phát sinh nợ" value={Number(d.debit)} tone="info" />
         <StatCard label="Phát sinh có" value={Number(d.credit)} tone="success" />
         <StatCard label={Number(d.balance) < 0 ? "Số dư (phải trả)" : "Số dư (phải thu)"} value={Number(d.balance)} tone={Number(d.balance) < 0 ? "warning" : "danger"} />
-        <StatCard label="CK tích lũy còn" value={Number(d.discountBalance)} tone="success" />
+        <StatCard label="CK tích lũy còn" value={Number(d.discountBalance)} tone={Number(d.discountBalance) < 0 ? "danger" : "success"} href={d.partner.isCustomer ? `/accounting/discounts/${d.partner.id}` : undefined} />
       </div>
       {!d.reconciled && <p role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">Số dư cộng dồn không khớp tổng — báo quản trị hệ thống.</p>}
       {d.total === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh trong kỳ" /> : (
