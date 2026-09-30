@@ -39,6 +39,8 @@ model Period {
   debtAdjustments     DebtAdjustment[]
   debtTransfers       DebtTransfer[]
   stockAdjustments    StockAdjustment[]
+  productionOrders    ProductionOrder[]
+  stocktakes          Stocktake[]
 
   @@map("periods")
 }

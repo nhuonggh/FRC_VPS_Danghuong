@@ -24,7 +24,7 @@ fail() {
   log "LỖI: $msg"
   mkdir -p "$BACKUP_DIR" 2>/dev/null && echo "$(date '+%F %T') $msg" > "$BACKUP_DIR/FAILED"
   if [ -n "$ALERT_URL" ]; then curl -fsS -m 15 -X POST --data-urlencode "text=DHERP backup THẤT BẠI: $msg" "$ALERT_URL" >/dev/null 2>&1 || log "không gửi được cảnh báo"; fi
-  rm -f "${TMP_FILE:-}" 2>/dev/null
+  rm -f "${TMP_FILE:-}" "${ERR_FILE:-}" 2>/dev/null
   exit 1
 }
 
@@ -33,9 +33,12 @@ chmod 700 "$BACKUP_DIR" 2>/dev/null
 STAMP="$(date '+%Y-%m-%d_%H%M')"
 BACKUP_FILE="$BACKUP_DIR/dherp_${STAMP}.dump"
 TMP_FILE="$BACKUP_FILE.part"
+ERR_FILE="$BACKUP_FILE.err"
 
 log "bắt đầu sao lưu → $BACKUP_FILE"
-dump_cmd > "$TMP_FILE" || fail "pg_dump lỗi"
+# stderr của pg_dump giữ lại (cắt 400 ký tự) để biết vì sao lỗi — thông báo của Postgres không chứa mật khẩu
+dump_cmd > "$TMP_FILE" 2> "$ERR_FILE" || fail "pg_dump lỗi: $(head -c 400 "$ERR_FILE" | tr '\n' ' ')"
+rm -f "$ERR_FILE"
 [ -s "$TMP_FILE" ] || fail "file sao lưu rỗng"
 # Kiểm định dạng: pg_restore đọc được mục lục và có bảng dữ liệu
 TOC="$(list_cmd < "$TMP_FILE" 2>/dev/null)" || fail "file sao lưu không đọc được bằng pg_restore"
