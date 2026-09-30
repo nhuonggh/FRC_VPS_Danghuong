@@ -148,7 +148,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ### ⭐ BÀN GIAO PHIÊN KẾ TIẾP — cập nhật 30/09/2026 (ĐỌC TRƯỚC; các mục bàn giao cũ bên dưới là lịch sử)
 
-**Trạng thái `main`/VPS:** plan 03→06 đã vào `main`. Deploy #47 (470c8bc) và #48 (b2352a8) xanh — VPS chạy plan 05 + E5 + E1 + E4 + E2 + báo cáo 72. Run #49 (185e50d, chỉ tài liệu kế hoạch 07/08 + STATUS) chạy lúc ghi — xem kết quả — **việc đầu tiên của phiên sau: xem run Deploy mới nhất của `main` xanh chưa** (đỏ ở job `test` không ảnh hưởng VPS vì `build-and-deploy` bị bỏ qua; đỏ ở migration trên DB thật ⇒ DỪNG, báo user, không sửa DB VPS).
+**Trạng thái `main`/VPS:** plan 03→06 đã vào `main`. Deploy #47 (470c8bc) và #48 (b2352a8) xanh — VPS chạy plan 05 + E5 + E1 + E4 + E2 + báo cáo 72. Run #49 (185e50d, tài liệu kế hoạch 07/08 + STATUS) cũng xanh ⇒ `main` hiện xanh — **việc đầu tiên của phiên sau: xem run Deploy mới nhất của `main` xanh chưa** (đỏ ở job `test` không ảnh hưởng VPS vì `build-and-deploy` bị bỏ qua; đỏ ở migration trên DB thật ⇒ DỪNG, báo user, không sửa DB VPS).
 **Nhánh làm việc bắt buộc:** `claude/zen-gates-o3m8mq`. Merge/push `main` = deploy VPS thật ⇒ chỉ khi user duyệt (user đã cho phép merge để **sửa deploy đỏ**; việc mới khác vẫn hỏi). Xong việc: cập nhật STATUS cùng commit; chạy toàn bộ vitest (≈10 phút, nền) trước khi xin merge.
 
 **HÀNG ĐỢI CÔNG VIỆC (làm đúng thứ tự, mỗi mục có plan chi tiết):**
