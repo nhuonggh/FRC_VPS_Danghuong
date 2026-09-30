@@ -142,6 +142,8 @@ model Vehicle {
   plate    String  @unique
   isActive Boolean @default(true)
 
+  trips Trip[]
+
   @@map("vehicles")
 }
 
@@ -151,6 +153,9 @@ model Driver {
   isAssistant Boolean @default(false)
   isActive    Boolean @default(true)
 
+  driverTrips    Trip[] @relation("TripDriver")
+  assistantTrips Trip[] @relation("TripAssistant")
+
   @@map("drivers")
 }
 
@@ -158,6 +163,8 @@ model Route {
   id       Int     @id @default(autoincrement())
   name     String  @unique
   isActive Boolean @default(true)
+
+  trips Trip[]
 
   @@map("routes")
 }

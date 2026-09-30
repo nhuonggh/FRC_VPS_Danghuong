@@ -57,6 +57,11 @@ export async function syncDeliveryStatus(tx: Tx, orderId: number): Promise<Deliv
 
 export async function createDeliveryNote(tx: Tx, actor: Actor, input: DeliveryNoteInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
   assertCan(actor.perms, "order.edit");
+  return createDeliveryNoteCore(tx, actor, input, now);
+}
+
+/** Lõi tạo phiếu giao KHÔNG kiểm quyền: người gọi (vd nhập kết quả chuyến giao — quyền trip.manage) tự kiểm quyền của mình. */
+export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: DeliveryNoteInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
   const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId);
   if (order.isCancelled) throw new DomainError("Đơn đã hủy, không giao được.", 409);
   if (order.isDraft) throw new DomainError("Đơn nháp chưa xác nhận (chưa xuất kho), chưa giao được.", 409);
@@ -97,6 +102,11 @@ export async function createDeliveryNoteIdempotent(prisma: PrismaClient, actor: 
 /** Hủy phiếu giao: đảo công nợ (xoá dòng sổ của phiếu, như phiếu nhập) và trả trạng thái giao về đúng. */
 export async function cancelDeliveryNote(tx: Tx, actor: Actor, id: number): Promise<void> {
   assertCan(actor.perms, "order.edit");
+  return cancelDeliveryNoteCore(tx, actor, id);
+}
+
+/** Lõi hủy phiếu giao KHÔNG kiểm quyền (xem createDeliveryNoteCore). */
+export async function cancelDeliveryNoteCore(tx: Tx, actor: Actor, id: number): Promise<void> {
   const note = await tx.deliveryNote.findUnique({ where: { id }, select: { orderId: true, isCancelled: true, code: true } });
   if (!note) throw new DomainError("Không tìm thấy phiếu giao.", 404);
   const { order } = await lockOrderForDelivery(tx, actor, note.orderId);

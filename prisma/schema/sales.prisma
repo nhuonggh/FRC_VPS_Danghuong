@@ -55,6 +55,7 @@ model SaleOrder {
   deliveries   DeliveryNote[]
   quote        Quote?          @relation("QuoteConverted")
   receipts     Receipt[]
+  tripStops    TripOrder[]
   goodsReturns GoodsReturn[]
 
   @@index([periodId, orderDate])
@@ -131,9 +132,10 @@ model DeliveryNote {
   createdBy   Int
   createdAt   DateTime  @default(now())
 
-  period Period         @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  order  SaleOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  lines  DeliveryLine[]
+  period   Period         @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  order    SaleOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines    DeliveryLine[]
+  tripStop TripOrder?
 
   @@index([orderId])
   @@index([periodId, at])
@@ -243,6 +245,8 @@ model Receipt {
   partner     Partner?    @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   order       SaleOrder?  @relation(fields: [orderId], references: [id], onDelete: Restrict)
   cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  trip        Trip?       @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  tripId      Int?
 
   @@index([orderId])
   @@index([periodId, at])

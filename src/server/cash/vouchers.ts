@@ -16,6 +16,7 @@ import type { PaymentInput, ReceiptInput, VoucherDoc } from "./schemas";
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const VOUCHER_PREFIX: Record<VoucherDoc, string> = { RECEIPT: "PT", PAYMENT: "PC" };
+export const TRIP_VOUCHER_MSG = "Phiếu thu này sinh từ chuyến giao (thủ quỹ đã xác nhận nhận tiền) nên không sửa/hủy trực tiếp.";
 export const REVIEWED_MSG = "Phiếu đã được thủ quỹ kiểm tra nên không sửa/hủy trực tiếp — hãy yêu cầu điều chỉnh.";
 
 /** Dạng chung của phiếu thu/chi để dùng chung luồng lập/sửa/hủy/kiểm tra/điều chỉnh. */
@@ -23,6 +24,8 @@ export interface Voucher {
   id: number; doc: VoucherDoc; periodId: number; code: string; type: string; partnerId: number | null; orderId: number | null;
   cashAccountId: number; amount: Prisma.Decimal; at: Date; note: string | null;
   reviewStatus: CashReviewStatus; isCancelled: boolean; createdBy: number;
+  /** Phiếu thu sinh từ xác nhận chuyến giao (công nợ đã ghi ở TRIP_COLLECT) — chỉ đổi qua nghiệp vụ chuyến. */
+  tripId: number | null;
 }
 
 /** Khoá dòng phiếu (`FOR UPDATE`) rồi đọc: hai thủ quỹ kiểm cùng phiếu / sửa & kiểm đồng thời chỉ một bên thắng. */
@@ -31,12 +34,12 @@ export async function lockVoucher(tx: Tx, doc: VoucherDoc, id: number): Promise<
     await tx.$queryRaw`SELECT id FROM receipts WHERE id = ${id} FOR UPDATE`;
     const r = await tx.receipt.findUnique({ where: { id } });
     if (!r) throw new DomainError("Không tìm thấy phiếu thu.", 404);
-    return { id, doc, periodId: r.periodId, code: r.code, type: r.type, partnerId: r.partnerId, orderId: r.orderId, cashAccountId: r.cashAccountId, amount: r.amount, at: r.at, note: r.note, reviewStatus: r.reviewStatus, isCancelled: r.isCancelled, createdBy: r.createdBy };
+    return { id, doc, periodId: r.periodId, code: r.code, type: r.type, partnerId: r.partnerId, orderId: r.orderId, cashAccountId: r.cashAccountId, amount: r.amount, at: r.at, note: r.note, reviewStatus: r.reviewStatus, isCancelled: r.isCancelled, createdBy: r.createdBy, tripId: r.tripId };
   }
   await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
   const p = await tx.payment.findUnique({ where: { id } });
   if (!p) throw new DomainError("Không tìm thấy phiếu chi.", 404);
-  return { id, doc, periodId: p.periodId, code: p.code, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy };
+  return { id, doc, periodId: p.periodId, code: p.code, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy, tripId: null };
 }
 
 type VoucherPatch = Partial<{ amount: Prisma.Decimal; cashAccountId: number; at: Date; note: string | null; partnerId: number | null; orderId: number | null; reviewStatus: CashReviewStatus; reviewedBy: number | null; reviewedAt: Date | null; isCancelled: boolean; cancelledAt: Date | null; cancelledBy: number | null }>;
@@ -132,6 +135,7 @@ export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInp
 // ── sửa / hủy khi CHƯA kiểm tra ──────────────────────────────────────────────────────────────────────────────────────
 async function assertEditable(tx: Tx, v: Voucher) {
   if (v.isCancelled) throw new DomainError("Phiếu đã hủy.", 409);
+  if (v.tripId !== null) throw new DomainError(TRIP_VOUCHER_MSG, 409, "TRIP_VOUCHER");
   if (v.reviewStatus === "REVIEWED") throw new DomainError(REVIEWED_MSG, 409, "VOUCHER_REVIEWED");
   const period = await getOpenPeriod(tx);
   if (v.periodId !== period.id) throw new PeriodClosedError();

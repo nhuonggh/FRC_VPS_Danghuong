@@ -70,11 +70,11 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "trips", label: "Chuyến giao",
         functions: [
-          { key: "trip-new", label: "Xếp chuyến", desc: "Gom đơn theo tuyến, gán xe + lái + phụ, in phiếu giao", icon: "truck", view: "form", path: "/delivery/trips/new", codes: ["38"], perm: "trip.manage", planned: P },
-          { key: "trip-list", label: "Danh sách chuyến", desc: "Chuyến theo trạng thái", icon: "clipboard-list", view: "table", path: "/delivery/trips", codes: ["39"], perm: "trip.manage", planned: P },
-          { key: "trip-result", label: "Nhập kết quả giao", desc: "Trạng thái + tiền mặt + chuyển khoản + ghi nợ", icon: "list-checks", view: "form", path: "/delivery/results", codes: ["40"], perm: "trip.manage", planned: P },
-          { key: "trip-settle", label: "Đối soát lái xe", desc: "Đối soát tiền, thủ quỹ xác nhận", icon: "scale", view: "table", path: "/delivery/settlements", codes: ["41"], perm: "trip.settle", planned: P },
-          { key: "undelivered", label: "Hàng không giao được", desc: "Nhập lại kho, giao người bán xử lý", icon: "undo-2", view: "table", path: "/delivery/undelivered", codes: ["42"], perm: "trip.manage", planned: P },
+          { key: "trip-new", label: "Xếp chuyến", desc: "Gom đơn theo tuyến, gán xe + lái + phụ, in phiếu giao", icon: "truck", view: "form", path: "/delivery/trips/new", codes: ["38"], perm: "trip.manage" },
+          { key: "trip-list", label: "Danh sách chuyến", desc: "Chuyến theo trạng thái", icon: "clipboard-list", view: "table", path: "/delivery/trips", codes: ["39"], perm: "trip.manage" },
+          { key: "trip-result", label: "Nhập kết quả giao", desc: "Trạng thái + tiền mặt + chuyển khoản + ghi nợ", icon: "list-checks", view: "form", path: "/delivery/results", codes: ["40"], perm: "trip.manage" },
+          { key: "trip-settle", label: "Đối soát lái xe", desc: "Đối soát tiền, thủ quỹ xác nhận", icon: "scale", view: "table", path: "/delivery/settlements", codes: ["41"], perm: "trip.settle" },
+          { key: "undelivered", label: "Hàng không giao được", desc: "Nhập lại kho, giao người bán xử lý", icon: "undo-2", view: "table", path: "/delivery/undelivered", codes: ["42"], perm: "trip.manage" },
         ],
       },
     ],

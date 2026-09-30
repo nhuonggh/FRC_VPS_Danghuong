@@ -124,7 +124,7 @@ type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly 
 // Phân quyền MẪU (spec 6.6) — khách tự chỉnh được sau. `// TODO: confirm` với khách chi tiết từng vai trò.
 export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   "Giám đốc": "*",
-  "Kế toán": { except: ["period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen"] },
+  "Kế toán": { except: ["period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
   "Thủ kho": {
     allow: ["product.view", "stock.view", "stocktake.manage", "stock_adjust.manage", "order.view", "print.use"],
   },

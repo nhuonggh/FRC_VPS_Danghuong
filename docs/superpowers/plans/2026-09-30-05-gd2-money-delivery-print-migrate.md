@@ -93,15 +93,15 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: hủy đơn có chiết khấu đảo đúng tỷ lệ; đã tất toán rồi hủy ⇒ số dư âm + cảnh báo; OFFSET giảm công nợ đúng; hậu kiểm khoá sửa.
 
 ### Task D4 — Xếp chuyến, phiếu giao, danh sách chuyến (mã 38, 39)
-- [ ] Schema `trips`, `trip_orders`; trạng thái `PLANNED → ON_ROAD → RETURNED → SETTLED → CONFIRMED`.
-- [ ] Xếp chuyến: gom đơn còn hàng phải giao theo tuyến, gán xe + lái + phụ (chống trùng xe/lái cùng thời điểm), in **phiếu giao nhận (M3)**; danh sách chuyến lọc trạng thái/ngày/xe.
-- [ ] 🧪: một đơn nằm nhiều chuyến khi giao nhiều lần nhưng không vượt SL còn lại; huỷ chuyến trả đơn về chưa xếp.
+- [x] Schema `trips`, `trip_orders`; trạng thái `PLANNED → ON_ROAD → RETURNED → SETTLED → CONFIRMED`.
+- [x] Xếp chuyến: gom đơn còn hàng phải giao theo tuyến, gán xe + lái + phụ (chống trùng xe/lái cùng thời điểm), in **phiếu giao nhận (M3)**; danh sách chuyến lọc trạng thái/ngày/xe.
+- [x] 🧪: một đơn nằm nhiều chuyến khi giao nhiều lần nhưng không vượt SL còn lại; huỷ chuyến trả đơn về chưa xếp.
 
 ### Task D5 — Nhập kết quả giao, đối soát lái xe, hàng không giao được (mã 40–42)
-- [ ] Nhập kết quả từng đơn: `GIAO_DU | GHI_NO | HEN_TRA | KHONG_GIAO | GIAO_MOT_PHAN` + tiền mặt + CK + phần ghi nợ + ngày hẹn; giao một phần nhập SL thực giao. Sinh `delivery_notes` (D-36) và công nợ; kiểm hạn mức nợ (`allow_credit`, `debtLimit`).
-- [ ] Đối soát (41): `phải thu − tiền mặt − CK − ghi nợ = chênh lệch`; ≠ 0 bắt buộc lý do; khớp mới chuyển thủ quỹ; thủ quỹ xác nhận ⇒ sinh phiếu thu vào quỹ (D-35).
-- [ ] Hàng không giao được (42): danh sách + giao cho người bán xử lý (giao lại / hủy đơn / trả về kho bằng trả theo đơn).
-- [ ] 🧪: tổng tiền chuyến = Σ đơn; chênh lệch bắt lý do; **gia công thuê không trừ tôn cuộn** (chỉ kiểm cấu hình, làm thật ở plan 06-E3); xác nhận hai lần idempotent.
+- [x] Nhập kết quả từng đơn: `GIAO_DU | GHI_NO | HEN_TRA | KHONG_GIAO | GIAO_MOT_PHAN` + tiền mặt + CK + phần ghi nợ + ngày hẹn; giao một phần nhập SL thực giao. Sinh `delivery_notes` (D-36) và công nợ; kiểm hạn mức nợ (`allow_credit`, `debtLimit`).
+- [x] Đối soát (41): `phải thu − tiền mặt − CK − ghi nợ = chênh lệch`; ≠ 0 bắt buộc lý do; khớp mới chuyển thủ quỹ; thủ quỹ xác nhận ⇒ sinh phiếu thu vào quỹ (D-35).
+- [x] Hàng không giao được (42): danh sách + giao cho người bán xử lý (giao lại / hủy đơn / trả về kho bằng trả theo đơn).
+- [x] 🧪: tổng tiền chuyến = Σ đơn; chênh lệch bắt lý do; **gia công thuê không trừ tôn cuộn** (chỉ kiểm cấu hình, làm thật ở plan 06-E3); xác nhận hai lần idempotent.
 
 ### Task D6 — 9 mẫu in qua Apps Script (M1–M9)
 - [ ] `print_templates` (URL + secret mã hoá + tiêu đề/người ký/SĐT/QR/ghi chú chân phiếu, bật/tắt) — màn Công ty & mẫu in đã có, nối vào.
