@@ -7,7 +7,7 @@ import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/for
 import type { ProductionDetailDTO } from "@/server/production/queries";
 
 export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO }) {
-  const router = useRouter(), nav = useDetailNav(["info"]), [open, setOpen] = useState(false);
+  const router = useRouter(), nav = useDetailNav(["info", "lines"]), [open, setOpen] = useState(false);
   const showCost = order.unitCost !== undefined;
   async function cancel(reason: string) { await apiFetch(`/api/production/orders/${order.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
   return (
@@ -17,9 +17,12 @@ export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO })
         backHref="/production/orders" backLabel="Quay lại lệnh sản xuất"
         headerActions={!order.isCancelled ? <button type="button" onClick={() => setOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy lệnh</button> : undefined}
         summary={{ title: order.code, code: `${order.productCode} — ${order.productName}`, badges: [{ label: order.isCancelled ? "Đã hủy" : "Hiệu lực", tone: order.isCancelled ? "danger" : "success" }], facts: [{ label: "Ngày", value: formatDate(order.at) }, { label: "Số lượng", value: `${formatQty(order.qty)} ${order.baseUnit}` }, ...(showCost ? [{ label: "Giá thành/đv", value: order.unitCost ? formatCurrency(order.unitCost) : "—" }] : []), { label: "Người lập", value: order.createdByName ?? "—" }] }}
-        tabs={[{ key: "info", label: "Chi tiết", render: () => (
+        tabs={[{ key: "info", label: "Thông tin chung", render: () => (
           <div className="space-y-5">
             <dl><DetailField label="Ghi chú">{order.note}</DetailField><DetailField label="Thời điểm ghi sổ">{formatDateTime(order.at)}</DetailField>{showCost && <DetailField label="Tổng vốn nguyên vật liệu">{order.totalCost ? formatCurrency(order.totalCost) : "—"}</DetailField>}</dl>
+          </div>
+        ) }, { key: "lines", label: "Nguyên vật liệu", count: order.materials.length, render: () => (
+          <div className="space-y-5">
             <div className="overflow-x-auto rounded-sm border border-border">
               <table className="w-full min-w-[520px] text-sm">
                 <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Nguyên vật liệu</th><th className="px-3 py-2 text-right">Số lượng</th>{showCost && <th className="px-3 py-2 text-right">Giá vốn</th>}</tr></thead>

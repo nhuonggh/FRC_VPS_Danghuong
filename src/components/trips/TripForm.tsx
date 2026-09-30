@@ -3,7 +3,8 @@
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Field, inputClass, NewPage } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Field, inputClass, NewPage, tabsWithErrors, type FormTab } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -47,9 +48,8 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
       </select>
     </Field>
   );
-  return (
-    <NewPage backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chuyến", icon: FileText, fields: ["date"], render: () => (<div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field id="date" label="Ngày chuyến" required><input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} /></Field>
           {sel("route", "Tuyến", routeId, setRouteId, options.routes, { empty: "Không chọn" })}
@@ -57,6 +57,9 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
           {sel("driver", "Lái xe", driverId, setDriverId, options.drivers, { required: true })}
           {sel("assistant", "Phụ xe", assistantId, setAssistantId, options.assistants, { empty: "Không có" })}
         </div>
+        <Field id="note" label="Ghi chú"><textarea id="note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+    </div>) },
+    { key: "don-hang", label: "Đơn hàng trên chuyến", icon: ListChecks, fields: [], render: () => (<div className="space-y-5">
         {(options.vehicles.length === 0 || options.drivers.length === 0) && <p role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">Chưa có xe hoặc lái xe — tạo ở Hệ thống → Cài đặt danh mục.</p>}
 
         <section className="grid gap-4 lg:grid-cols-2">
@@ -90,8 +93,9 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
             </ol>
           </div>
         </section>
-        <Field id="note" label="Ghi chú"><textarea id="note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit} tabs={tabs} errorTabs={tabsWithErrors({}, tabs)} />
   );
 }

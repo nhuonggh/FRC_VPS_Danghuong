@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { Combobox, Field, NewPage, inputClass } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Combobox, Field, NewPage, inputClass, tabsWithErrors, type FormTab } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
 import { stocktakeSchema, type StocktakeInput } from "@/server/stocktake/schemas";
@@ -30,14 +31,15 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
     router.replace(`/inventory/stocktakes/${r.id}`);
   });
   const err = form.formState.errors;
-  return (
-    <NewPage backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["date","note"], render: () => (<div className="space-y-5">
         <p className="text-sm text-fg-secondary">Nhập tồn thực đếm (đơn vị gốc). Lưu nháp chưa đổi kho; khi bấm “Chốt” hệ thống so với tồn sổ sách và tự nhập/xuất phần chênh lệch.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="date" label="Ngày kiểm kho" required error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} className={inputClass(err.date)} /></Field>
           <Field id="note" label="Ghi chú"><input id="note" {...form.register("note")} className={inputClass()} /></Field>
         </div>
+    </div>) },
+    { key: "san-pham", label: "Danh sách sản phẩm", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[520px] text-sm">
             <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2 text-right">Tồn thực đếm (đv gốc)</th><th /></tr></thead>
@@ -57,7 +59,9 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
         </div>
         {err.lines?.message && <p role="alert" className="text-sm text-danger">{err.lines.message}</p>}
         <button type="button" onClick={() => append(blank)} className="h-11 rounded-sm border border-border px-3 text-sm hover:bg-hover">+ Thêm sản phẩm</button>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(form.formState.errors, tabs)} />
   );
 }

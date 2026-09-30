@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Combobox, Field, inputClass, NewPage, tabsWithErrors, type FormTab, type ComboOption } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { BOM_MAX_LINES, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
@@ -68,12 +69,8 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
     }
   });
 
-  return (
-    <NewPage
-      backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
-      isDirty={() => isDirty} onSubmit={async () => { await submit(); }}
-    >
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["productId","processingTypeId","validFrom","note"], render: () => (<div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
           <Controller control={control} name="productId" render={({ field }) => (
             <Combobox label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
@@ -88,6 +85,11 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
             <input id="validFrom" type="date" {...(defaults.hasVersions ? { min: today } : {})} {...register("validFrom")} className={inputClass(errors.validFrom)} />
           </Field>
         </div>
+        <Field id="note" label="Ghi chú phiên bản" error={errors.note?.message}>
+          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+        </Field>
+    </div>) },
+    { key: "nvl", label: "Nguyên vật liệu", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
 
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[640px] text-sm">
@@ -143,10 +145,11 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
         <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= BOM_MAX_LINES}
           className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
 
-        <Field id="note" label="Ghi chú phiên bản" error={errors.note?.message}>
-          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage
+      backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
+      isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
   );
 }

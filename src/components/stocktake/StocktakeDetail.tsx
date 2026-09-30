@@ -11,7 +11,7 @@ import { STOCKTAKE_LABEL } from "./labels";
 
 const TONE = { DRAFT: "warning", DONE: "success", CANCELLED: "danger" } as const;
 export function StocktakeDetail({ st }: { st: StocktakeDetailDTO }) {
-  const router = useRouter(), nav = useDetailNav(["info"]), idem = useIdempotencyKey();
+  const router = useRouter(), nav = useDetailNav(["info", "lines"]), idem = useIdempotencyKey();
   const [cancelOpen, setCancelOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const showCost = st.lines.some((l) => l.unitCost !== undefined);
   const nonZero = st.lines.filter((l) => l.diff !== null && Number(l.diff) !== 0).length;
@@ -36,9 +36,12 @@ export function StocktakeDetail({ st }: { st: StocktakeDetailDTO }) {
       <DetailPage
         backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" headerActions={actions}
         summary={{ title: st.code, code: "Phiếu kiểm kho", badges: [{ label: STOCKTAKE_LABEL[st.status], tone: TONE[st.status] }], facts: [{ label: "Ngày kiểm", value: formatDate(st.at) }, { label: "Số dòng", value: st.lines.length }, { label: "Dòng lệch", value: nonZero }, { label: "Người lập", value: st.createdByName ?? "—" }] }}
-        tabs={[{ key: "info", label: "Chi tiết", render: () => (
+        tabs={[{ key: "info", label: "Thông tin chung", render: () => (
           <div className="space-y-5">
             <dl><DetailField label="Ghi chú">{st.note}</DetailField></dl>
+          </div>
+        ) }, { key: "lines", label: "Danh sách sản phẩm", count: st.lines.length, render: () => (
+          <div className="space-y-5">
             {st.status === "DRAFT" && <p className="text-sm text-fg-secondary">Tồn sổ sách bên dưới là tồn hiện tại; con số chốt là tồn tại thời điểm bấm “Chốt phiếu”.</p>}
             <div className="overflow-x-auto rounded-sm border border-border">
               <table className="w-full min-w-[620px] text-sm">

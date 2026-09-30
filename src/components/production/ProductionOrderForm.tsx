@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { Combobox, Field, NewPage, inputClass } from "@/components/ui";
+import { FileText, Package } from "lucide-react";
+import { Combobox, Field, NewPage, inputClass, tabsWithErrors, type FormTab } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
@@ -28,9 +29,8 @@ export function ProductionOrderForm({ today }: { today: string }) {
   });
   const err = form.formState.errors;
   const target = meta[form.watch("productId") as number];
-  return (
-    <NewPage backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất phụ kiện" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["date","note","productId","qty"], render: () => (<div className="space-y-5">
         <p className="text-sm text-fg-secondary">Xuất nguyên vật liệu theo FIFO và nhập phụ kiện thành phẩm; giá thành = tổng vốn nguyên vật liệu / số lượng. Chỉ dành cho phụ kiện (nóc, sườn, sối, máng…).</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="date" label="Ngày sản xuất" required error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} className={inputClass(err.date)} /></Field>
@@ -40,6 +40,8 @@ export function ProductionOrderForm({ today }: { today: string }) {
           </Field>
           <Field id="qty" label={`Số lượng thành phẩm${target ? ` (${target.baseUnit})` : ""}`} required error={err.qty?.message}><input id="qty" type="number" min={0} step="any" {...form.register("qty", { valueAsNumber: true })} className={`${inputClass(err.qty)} tabular text-right`} /></Field>
         </div>
+    </div>) },
+    { key: "nvl", label: "Nguyên vật liệu", icon: Package, fields: ["materials"], render: () => (<div className="space-y-5">
         <h2 className="text-sm font-semibold">Nguyên vật liệu đã dùng</h2>
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[520px] text-sm">
@@ -60,7 +62,9 @@ export function ProductionOrderForm({ today }: { today: string }) {
         </div>
         {err.materials?.message && <p role="alert" className="text-sm text-danger">{err.materials.message}</p>}
         <button type="button" onClick={() => append(blank)} className="h-11 rounded-sm border border-border px-3 text-sm hover:bg-hover">+ Thêm nguyên vật liệu</button>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất phụ kiện" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(form.formState.errors, tabs)} />
   );
 }
