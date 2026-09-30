@@ -10,7 +10,7 @@ import { makeProduct } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 let w: World; let actor: Actor; let other: { id: number };
-let n = 0;
+const n = 0;
 const input = (lines: { productId: number; actualQty: number }[], over: Record<string, unknown> = {}) => stocktakeSchema.parse({ date: "2026-09-15", note: "", lines, ...over });
 const onHand = async (id: number) => (await getOnHand(prisma, w.periodId, id)).toString();
 
