@@ -83,18 +83,20 @@ model Product {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  units           ProductUnit[]
-  openingStock    OpeningStock[]
-  layers          CostLayer[]
-  ledger          StockLedger[]
-  purchaseLines   PurchaseLine[]
-  adjustmentLines StockAdjustmentLine[]
-  boms            Bom[]
-  bomLines        BomLine[]
-  saleLines       SaleOrderLine[]
-  saleIssues      SaleLineIssue[]
-  quoteLines      QuoteLine[]
-  returnLines     GoodsReturnLine[]
+  units               ProductUnit[]
+  openingStock        OpeningStock[]
+  layers              CostLayer[]
+  ledger              StockLedger[]
+  purchaseLines       PurchaseLine[]
+  adjustmentLines     StockAdjustmentLine[]
+  productionOrders    ProductionOrder[]
+  productionMaterials ProductionMaterial[]
+  boms                Bom[]
+  bomLines            BomLine[]
+  saleLines           SaleOrderLine[]
+  saleIssues          SaleLineIssue[]
+  quoteLines          QuoteLine[]
+  returnLines         GoodsReturnLine[]
 
   @@index([searchText])
   @@index([kind])
