@@ -17,6 +17,9 @@ export const REPORTS = [
   { key: "by-group", code: "70", title: "Bán hàng theo nhóm khách", perm: "report.view" },
   { key: "issue-by-order", code: "71", title: "Xuất kho theo đơn", perm: "report.view" },
   { key: "debt-reconciliation", code: "73", title: "Đối chiếu công nợ", perm: "report.view" },
+  { key: "production", code: "72", title: "Báo cáo sản xuất", perm: "report.view" },
+  { key: "actual-consumption", code: "52", title: "Tiêu hao thực tế", perm: "bom.manage" },
+  { key: "consumption-compare", code: "53", title: "Đối chiếu định mức", perm: "bom.manage" },
 ] as const;
 export type ReportKey = (typeof REPORTS)[number]["key"];
 export const REPORT_FILTER_KEYS = ["neg"] as const;

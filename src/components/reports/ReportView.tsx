@@ -28,7 +28,7 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
       {report.key !== "debt-reconciliation" && (
         <div className="flex flex-wrap items-center gap-2">
           {showSearch && <SearchBox basePath={base} params={params} placeholder="Tìm…" />}
-          {negFilter && <MultiSelectFilter label="Lãi" paramKey="neg" basePath={base} params={params} options={[{ value: "1", label: "Chỉ đơn lỗ" }]} />}
+          {negFilter && <MultiSelectFilter label={report.key === "consumption-compare" ? "Định mức" : "Lãi"} paramKey="neg" basePath={base} params={params} options={[{ value: "1", label: report.key === "consumption-compare" ? "Chỉ NVL vượt định mức" : "Chỉ đơn lỗ" }]} />}
           <QuickTimeFilter basePath={base} params={params} />
         </div>
       )}

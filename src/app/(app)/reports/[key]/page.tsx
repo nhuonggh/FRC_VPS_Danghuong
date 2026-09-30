@@ -17,5 +17,5 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   const list = parseListParams(await searchParams, REPORT_FILTER_KEYS);
   const view = { ...list, timePreset: list.timePreset ?? ("thisMonth" as const) };
   const report = await runReport(prisma, actor, key, view);
-  return <ReportView report={report} params={view} base={`/reports/${key}`} negFilter={key === "order-profit"} showSearch={key !== "period-pnl"} />;
+  return <ReportView report={report} params={view} base={`/reports/${key}`} negFilter={key === "order-profit" || key === "consumption-compare"} showSearch={!["period-pnl", "production", "actual-consumption", "consumption-compare"].includes(key)} />;
 }

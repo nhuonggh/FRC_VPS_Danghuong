@@ -4,6 +4,7 @@ import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import type { ListParams } from "@/lib/query-params";
 import { resolveTimeRange, timeRangeWhere, type TimeRange } from "@/lib/time-presets";
 import { DomainError } from "@/server/http/errors";
+import { actualConsumption, consumptionCompare, productionReport } from "./consumption";
 import { REPORTS, type ReportKey, type ReportResult } from "./types";
 
 type Db = Prisma.TransactionClient | PrismaClient;
@@ -166,6 +167,9 @@ export async function runReport(db: Db, actor: Actor, key: string, params: ListP
     : k === "by-customer" ? await salesBy(db, actor, range, "customer", params)
     : k === "by-group" ? await salesBy(db, actor, range, "group", params)
     : k === "issue-by-order" ? await issueByOrder(db, actor, params, range)
+    : k === "production" ? await productionReport(db, range, actor.perms.has("cost.view"))
+    : k === "actual-consumption" ? await actualConsumption(db, range)
+    : k === "consumption-compare" ? await consumptionCompare(db, range, params.filters.neg?.[0] === "1")
     : await debtReconciliation(db);
   return { ...res, range };
 }
