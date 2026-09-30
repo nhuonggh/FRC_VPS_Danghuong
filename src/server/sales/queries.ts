@@ -111,7 +111,10 @@ export interface OrderLineDTO {
   isProvisional: boolean; deliveredQty: string;
   salePrice?: string; discountNow?: string; discountAccum?: string; lineAmount?: string;
   unitCostFifo?: string; lineProfit?: string | null;
-  issues: { productCode: string; productName: string; qtyBase: string }[];
+  /** Định mức đã dùng (snapshot): "v2 · từ 01/10/2026". Chỉ dòng gia công. */
+  bomVersionLabel: string | null;
+  /** NVL đã trừ: SL gốc, phần thiếu tồn (đơn treo) và vốn FIFO (chỉ người có cost.view thấy `materialCost`). */
+  issues: { productCode: string; productName: string; baseUnit: string; qtyBase: string; qtyProvisional: string; materialCost?: string }[];
 }
 export interface OrderDeliveryDTO {
   id: number; code: string; at: Date; isCancelled: boolean; note: string | null;
@@ -134,7 +137,8 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
         orderBy: { id: "asc" },
         include: {
           product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true } },
-          issues: { orderBy: { productId: "asc" }, include: { product: { select: { code: true, name: true } } } },
+          bomVersion: { select: { versionNo: true, validFrom: true } },
+          issues: { orderBy: { productId: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } } } },
           deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } },
         },
       },
@@ -155,6 +159,16 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
   ]);
   const auditUsers = new Map((await db.user.findMany({ where: { id: { in: [...new Set(audit.flatMap((a) => (a.userId === null ? [] : [a.userId])))] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
   const hasProvisional = o.lines.some((l) => l.isProvisional);
+  // Vốn + phần thiếu tồn TỪNG NVL của dòng gia công: cộng từ sổ kho (engine là nơi duy nhất ghi giá vốn)
+  const bomLineIds = o.lines.filter((l) => l.processingTypeId !== null).map((l) => l.id);
+  const ledgerRows = bomLineIds.length
+    ? await db.stockLedger.findMany({ where: { docType: "SALE", docLineId: { in: bomLineIds }, qtyOut: { gt: 0 } }, select: { docLineId: true, productId: true, qtyOut: true, unitCostOut: true, qtyProvisional: true } })
+    : [];
+  const perMaterial = new Map<string, { cost: Prisma.Decimal; prov: Prisma.Decimal }>();
+  for (const r of ledgerRows) {
+    const k = `${r.docLineId}:${r.productId}`, cur = perMaterial.get(k) ?? { cost: D(0), prov: D(0) };
+    perMaterial.set(k, { cost: cur.cost.plus(r.qtyOut.times(r.unitCostOut)), prov: cur.prov.plus(r.qtyProvisional) });
+  }
   const lines: OrderLineDTO[] = o.lines.map((l) => {
     const amount = lineAmountOf(l);
     const profit = l.isProvisional ? null : amount.minus(l.discountAccum).minus(l.unitCostFifo.times(l.qtyBase));
@@ -164,7 +178,11 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
       isProvisional: l.isProvisional, deliveredQty: l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)).toString(),
       salePrice: l.salePrice.toString(), discountNow: l.discountNow.toString(), discountAccum: l.discountAccum.toString(), lineAmount: amount.toString(),
       unitCostFifo: l.unitCostFifo.toString(), lineProfit: profit ? round2(profit).toString() : null,
-      issues: l.issues.map((i) => ({ productCode: i.product.code, productName: i.product.name, qtyBase: i.qtyBase.toString() })),
+      bomVersionLabel: l.bomVersion ? `Định mức v${l.bomVersion.versionNo} · từ ${ymdOf(l.bomVersion.validFrom).split("-").reverse().join("/")}` : null,
+      issues: l.issues.map((i) => {
+        const m = perMaterial.get(`${l.id}:${i.productId}`);
+        return { productCode: i.product.code, productName: i.product.name, baseUnit: i.product.baseUnit, qtyBase: i.qtyBase.toString(), qtyProvisional: (m?.prov ?? D(0)).toString(), materialCost: round2(m?.cost ?? D(0)).toString() };
+      }),
     };
   });
   const dto: OrderDetailDTO = {

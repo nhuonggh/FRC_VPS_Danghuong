@@ -27,7 +27,7 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   deliveryStatus: "PARTIAL", paymentStatus: "UNPAID", expectedDeliveryDate: "2026-09-20", originalDeliveryDate: "2026-09-20", delayDays: 0,
   hasProvisional: false, isCancelled: false, isDraft: false, deposits: [], depositTotal: "0", quote: null, note: null, cancelReason: null, createdByName: "An", orderTotal: "300000", history: [],
   lines: [{
-    id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, bomVersionId: null,
+    id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, bomVersionId: null, bomVersionLabel: null,
     isProvisional: false, deliveredQty: "4", salePrice: "30000", discountNow: "0", discountAccum: "0", lineAmount: "300000", issues: [],
   }],
   deliveries: [{ id: 9, code: "PG000009", at: new Date("2026-09-12T03:00:00Z"), isCancelled: false, note: null, lines: [{ orderLineId: 11, productName: "Tôn xốp", unit: "md", qty: "4" }] }],
@@ -124,6 +124,29 @@ describe("DeliveryPanel (tab Giao hàng)", () => {
     expect(screen.queryByRole("region", { name: "Lập phiếu giao" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Hủy phiếu giao/ })).toBeNull();
     expect(screen.getByText("PG000009")).toBeInTheDocument();
+  });
+});
+
+describe("OrderDetail — NVL đã trừ khi bán tôn xốp (mã 15)", () => {
+  const bomLine = (cost: boolean) => ({
+    ...order().lines[0]!, processingType: "Tôn xốp 3 lớp", bomVersionId: 3, bomVersionLabel: "Định mức v2 · từ 01/10/2026", isProvisional: true,
+    issues: [
+      { productCode: "TC01", productName: "Tôn cuộn", baseUnit: "kg", qtyBase: "12", qtyProvisional: "0", ...(cost ? { materialCost: "120000" } : {}) },
+      { productCode: "PU01", productName: "Foam PU", baseUnit: "lít", qtyBase: "5", qtyProvisional: "2", ...(cost ? { materialCost: "10000" } : {}) },
+    ],
+  });
+  it("hiện phiên bản định mức, từng NVL, phần thiếu tồn và vốn (khi có cost.view)", () => {
+    search = "tab=lines";
+    view(order({ lines: [bomLine(true)] }));
+    const list = screen.getByRole("list", { name: /Nguyên vật liệu đã trừ/ });
+    expect(screen.getByText("Định mức v2 · từ 01/10/2026")).toBeInTheDocument();
+    expect(within(list).getByText(/Trừ 12 kg Tôn cuộn/)).toHaveTextContent("vốn");
+    expect(within(list).getByText(/Trừ 5 lít Foam PU/)).toHaveTextContent("thiếu tồn 2");
+  });
+  it("không có vốn NVL khi thiếu cost.view", () => {
+    search = "tab=lines";
+    view(order({ lines: [bomLine(false)] }));
+    expect(within(screen.getByRole("list", { name: /Nguyên vật liệu đã trừ/ })).queryByText(/vốn/)).toBeNull();
   });
 });
 
