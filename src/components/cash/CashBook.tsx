@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, EmptyState, Field, inputClass, ReasonDialog } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -104,13 +104,15 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, onDone }: { open: boolean; onClose: () => void; accountId: number; accountName: string; nowIso: string; idemKey: string; onDone: () => void }) {
   const [at, setAt] = useState(nowIso.slice(0, 16)); const [actual, setActual] = useState(""); const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  // Mỗi lần mở hộp thoại lấy giờ hiện tại (giờ Việt Nam) — không dùng giờ lúc trang được dựng
+  useEffect(() => { if (open) setAt(new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 16)); }, [open]);
   async function submit() {
     if (busy) return;
     if (actual === "" || Number(actual) < 0) { setError("Nhập số tiền kiểm đếm."); return; }
     setBusy(true); setError(null);
     try {
-      // ô datetime-local theo giờ Việt Nam (UTC+7) → ISO có offset
-      await apiFetch("/api/cash/closes", { method: "POST", json: { cashAccountId: accountId, closeAt: `${at}:00+07:00`, actual: Number(actual), reason }, idempotencyKey: idemKey });
+      // ô datetime-local theo giờ Việt Nam (UTC+7); mốc tính ĐẾN HẾT phút đã chọn (phiếu lập trong phút đó vẫn được tính)
+      await apiFetch("/api/cash/closes", { method: "POST", json: { cashAccountId: accountId, closeAt: `${at}:59.999+07:00`, actual: Number(actual), reason }, idempotencyKey: idemKey });
       setActual(""); setReason(""); onDone(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Không chốt được."); } finally { setBusy(false); }
   }
@@ -120,7 +122,7 @@ function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, o
         <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-lg border border-border bg-raised p-5 shadow-lg">
           <Dialog.Title className="text-base font-semibold">Chốt quỹ — {accountName}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Hệ thống tính tồn đầu + thu − chi đến mốc chốt rồi so với tiền kiểm đếm. Có chênh lệch vẫn chốt được nhưng phải ghi lý do.</Dialog.Description>
-          <Field id="close-at" label="Mốc chốt (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={inputClass()} /></Field>
+          <Field id="close-at" label="Mốc chốt — tính đến hết phút này (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={inputClass()} /></Field>
           <Field id="close-actual" label="Tiền kiểm đếm thực tế" required><input id="close-actual" type="number" min={0} step="any" value={actual} onChange={(e) => setActual(e.target.value)} className={`${inputClass()} tabular`} /></Field>
           <Field id="close-reason" label="Lý do chênh lệch (nếu có)"><textarea id="close-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
