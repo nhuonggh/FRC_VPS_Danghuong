@@ -91,6 +91,7 @@ model Product {
   adjustmentLines     StockAdjustmentLine[]
   productionOrders    ProductionOrder[]
   productionMaterials ProductionMaterial[]
+  stocktakeLines      StocktakeLine[]
   boms                Bom[]
   bomLines            BomLine[]
   saleLines           SaleOrderLine[]

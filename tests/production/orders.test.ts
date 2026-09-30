@@ -8,7 +8,7 @@ import { prisma, resetDb } from "../helpers/db";
 import { makeProduct } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
-let w: World; let actor: Actor; let pk: { id: number }; let tonB: { id: number }; let giay: { id: number };
+let w: World; let actor: Actor; let pk: { id: number }; let giay: { id: number };
 let n = 0;
 const make = (over: Record<string, unknown> = {}) => productionOrderSchema.parse({ date: "2026-09-15", productId: pk.id, qty: 10, note: "", materials: [{ productId: w.p.id, qty: 20 }, { productId: giay.id, qty: 5 }], ...over });
 const create = (over: Record<string, unknown> = {}, a = actor) => createProductionOrderIdempotent(prisma, a, `p-${++n}`, make(over));
@@ -20,7 +20,6 @@ beforeEach(async () => {
   actor = { userId: w.userId, perms: new Set(["production.manage", "cost.view"]) };
   pk = await makeProduct({ kind: "PHU_KIEN", code: "PK1" });
   giay = await makeProduct({ kind: "NVL", code: "GB1" });
-  tonB = await makeProduct({ kind: "NVL", code: "TON1" });
   await engine(w)([w.p.id], (ctx) => buy(ctx, w.p.id, 100, 10_000, T(0), 1));
   await engine(w)([giay.id], (ctx) => buy(ctx, giay.id, 50, 4_000, T(0), 1));
 });

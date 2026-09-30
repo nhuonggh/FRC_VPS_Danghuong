@@ -112,8 +112,8 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "control", label: "Kiểm soát",
         functions: [
-          { key: "stocktake-list", label: "Kiểm kho", desc: "Lập phiếu, danh sách kiểm kho", icon: "list-checks", view: "table", path: "/inventory/stocktakes", codes: ["26", "27"], perm: "stocktake.manage", planned: P },
-          { key: "stock-adjust", label: "Điều chỉnh hao hụt / xuất hủy", desc: "Cắt lỗi ~1%/tháng", icon: "scale", view: "table", path: "/inventory/adjustments", codes: ["28"], perm: "stock_adjust.manage", planned: P },
+          { key: "stocktake-list", label: "Kiểm kho", desc: "Lập phiếu, danh sách kiểm kho", icon: "list-checks", view: "table", path: "/inventory/stocktakes", codes: ["26", "27"], perm: "stocktake.manage" },
+          { key: "stock-adjust", label: "Điều chỉnh hao hụt / xuất hủy", desc: "Cắt lỗi ~1%/tháng", icon: "scale", view: "table", path: "/inventory/adjustments", codes: ["28"], perm: "stock_adjust.manage" },
         ],
       },
       {
