@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Combobox, Field, inputClass, NewPage, tabsWithErrors, type ComboOption, type FormTab } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -95,9 +96,8 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     return rows;
   };
 
-  return (
-    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["partnerId","date","expectedDeliveryDate","note"], render: () => (<div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
           <Controller control={control} name="partnerId" render={({ field }) => (
             <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
@@ -110,6 +110,11 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
             <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
           </Field>
         </div>
+        <Field id="note" label="Ghi chú" error={errors.note?.message}>
+          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+        </Field>
+    </div>) },
+    { key: "dong-hang", label: "Dòng hàng", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
         {!canEditPrice && <p className="text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
 
         <div className="overflow-x-auto rounded-sm border border-border">
@@ -139,11 +144,10 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
         {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
         <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
           className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
-        <Field id="note" label="Ghi chú" error={errors.note?.message}>
-          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
   );
 }
 

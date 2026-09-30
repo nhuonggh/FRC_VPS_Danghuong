@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { Combobox, Field, NewPage, inputClass } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Combobox, Field, NewPage, inputClass, tabsWithErrors, type FormTab } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
@@ -25,15 +26,16 @@ export function LossAdjustForm({ today }: { today: string }) {
     router.replace(`/inventory/adjustments/${r.id}`);
   });
   const err = form.formState.errors;
-  return (
-    <NewPage backHref="/inventory/adjustments" backLabel="Quay lại điều chỉnh hao hụt" title="Điều chỉnh hao hụt / xuất hủy" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["type","date","note"], render: () => (<div className="space-y-5">
         <p className="text-sm text-fg-secondary">Trừ kho phần hao hụt (cắt lỗi…) hoặc hàng hủy theo FIFO; không sinh công nợ. Bắt buộc ghi lý do.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="type" label="Loại" required error={err.type?.message}><select id="type" {...form.register("type")} className={inputClass(err.type)}>{Object.entries(LOSS_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
           <Field id="date" label="Ngày" required error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} className={inputClass(err.date)} /></Field>
           <Field id="note" label="Lý do" required error={err.note?.message}><input id="note" {...form.register("note")} className={inputClass(err.note)} /></Field>
         </div>
+    </div>) },
+    { key: "san-pham", label: "Danh sách sản phẩm", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[520px] text-sm">
             <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2 text-right">Số lượng (đv gốc)</th><th /></tr></thead>
@@ -53,7 +55,9 @@ export function LossAdjustForm({ today }: { today: string }) {
         </div>
         {err.lines?.message && <p role="alert" className="text-sm text-danger">{err.lines.message}</p>}
         <button type="button" onClick={() => append(blank)} className="h-11 rounded-sm border border-border px-3 text-sm hover:bg-hover">+ Thêm dòng</button>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref="/inventory/adjustments" backLabel="Quay lại điều chỉnh hao hụt" title="Điều chỉnh hao hụt / xuất hủy" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(form.formState.errors, tabs)} />
   );
 }

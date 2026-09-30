@@ -7,7 +7,7 @@ import { SaleOrderForm } from "@/components/sales/SaleOrderForm";
 
 const replace = vi.fn();
 const apiFetch = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace, refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace, refresh: vi.fn() }), usePathname: () => "/sales/orders/new", useSearchParams: () => new URLSearchParams("") }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
@@ -48,6 +48,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("có quyền sửa giá: gợi ý tồn + giá gần nhất, gửi POST kèm Idempotency-Key rồi mở đơn vừa lập", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
+    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     expect(await screen.findByText(/Tồn: 10 md/)).toBeInTheDocument();
     expect(screen.getByText(/Giá gần nhất \(khách này\)/)).toBeInTheDocument();
@@ -64,6 +65,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("thiếu quyền sửa giá: ô đơn giá chỉ đọc và luôn bằng giá gợi ý", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice={false} />);
     await pick("Khách hàng", "dat");
+    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     const price = screen.getByLabelText("Đơn giá dòng 1");
     expect(price).toHaveAttribute("readonly");
@@ -74,6 +76,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("số lượng vượt tồn → cảnh báo đơn treo nhưng VẪN cho lập", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
+    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     await screen.findByText(/Tồn: 10 md/);
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "25");
@@ -84,6 +87,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
     pricing = { productId: 10, baseUnit: "md", units: [{ unit: "md", factor: "1", suggestedPrice: null }], lastSalePrice: null, lastSalePriceForPartner: false };
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
+    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).startsWith("/api/orders/pricing"))).toBe(true));
     expect(screen.queryByText(/Tồn:/)).toBeNull();
