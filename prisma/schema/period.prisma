@@ -32,6 +32,8 @@ model Period {
   quotes           Quote[]
   receipts         Receipt[]
   goodsReturns     GoodsReturn[]
+  debtAdjustments  DebtAdjustment[]
+  debtTransfers    DebtTransfer[]
   stockAdjustments StockAdjustment[]
 
   @@map("periods")

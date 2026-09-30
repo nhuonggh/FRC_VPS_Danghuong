@@ -10,6 +10,7 @@ import { getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { lineAmountOf } from "@/server/sales/queries";
 import type { DeliveryNoteInput } from "./schemas";
+import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -81,7 +82,7 @@ export async function createDeliveryNote(tx: Tx, actor: Actor, input: DeliveryNo
   });
   // D-26: công nợ ghi khi GIAO. Khách nợ mình → debit.
   if (value.gt(0)) {
-    await tx.partnerLedger.create({ data: { periodId: period.id, partnerId: order.partnerId, debit: value, docType: "DELIVERY", docId: id, at, createdBy: actor.userId } });
+    await postPartnerLedger(tx, { periodId: period.id, partnerId: order.partnerId, side: "debit", amount: value, docType: "DELIVERY", docId: id, at, createdBy: actor.userId });
   }
   await syncDeliveryStatus(tx, order.id);
   await writeAudit(tx, { userId: actor.userId, action: "delivery.create", entity: "DeliveryNote", entityId: id, after: { code, orderCode: order.code, lineCount: rows.length } });
@@ -114,7 +115,7 @@ export async function cancelDeliveryNote(tx: Tx, actor: Actor, id: number): Prom
     }
   }
   await tx.deliveryNote.update({ where: { id }, data: { isCancelled: true, cancelledAt: new Date(), cancelledBy: actor.userId } });
-  await tx.partnerLedger.deleteMany({ where: { docType: "DELIVERY", docId: id } });
+  await removePartnerLedger(tx, "DELIVERY", id);
   await syncDeliveryStatus(tx, order.id);
   await writeAudit(tx, { userId: actor.userId, action: "delivery.cancel", entity: "DeliveryNote", entityId: id, before: { code: note.code }, after: { isCancelled: true } });
 }
@@ -136,9 +137,9 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
       value = value.plus(deliveredValue(lineAmountOf(line), line.qty, before, dl.qty));
       cum.set(line.id, before.plus(dl.qty));
     }
-    await tx.partnerLedger.deleteMany({ where: { docType: "DELIVERY", docId: note.id } });
+    await removePartnerLedger(tx, "DELIVERY", note.id);
     if (value.gt(0)) {
-      await tx.partnerLedger.create({ data: { periodId: note.periodId, partnerId: order.partnerId, debit: value, docType: "DELIVERY", docId: note.id, at: note.at, createdBy: actor.userId } });
+      await postPartnerLedger(tx, { periodId: note.periodId, partnerId: order.partnerId, side: "debit", amount: value, docType: "DELIVERY", docId: note.id, at: note.at, createdBy: actor.userId });
     }
   }
 }

@@ -13,6 +13,7 @@ import { lineAmountOf } from "@/server/sales/queries";
 import { loadCustomer } from "@/server/sales/service";
 import { resolveReturnCostByProduct } from "./pricing";
 import type { ReturnByOrderInput, ReturnByProductInput } from "./schemas";
+import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -110,7 +111,7 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
       await tx.discountLedger.create({ data: { periodId: ctx.period.id, partnerId: order.partnerId, orderLineId: r.line.id, amountOut: r.discount, docType: "RETURN", docId: id, at, createdBy: actor.userId } });
     }
   }
-  if (total.gt(0)) await tx.partnerLedger.create({ data: { periodId: ctx.period.id, partnerId: order.partnerId, credit: total, docType: "RETURN", docId: id, at, createdBy: actor.userId } });
+  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: order.partnerId, side: "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
   await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: "BY_ORDER", orderCode: order.code, lineCount: rows.length } });
   return { id, code };
 }
@@ -161,12 +162,8 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
       : await postReceipt(ctx, { productId: r.productId, qty: r.qtyBase, unitCost: r.cost, docType: "RETURN_IN", docId: id, docLineId: row.id, at });
     await tx.goodsReturnLine.update({ where: { id: row.id }, data: { seq } });
   }
-  if (total.gt(0)) {
-    // Khách trả → khách nợ ít đi (credit). Trả NCC → mình nợ NCC ít đi (debit; mua hàng là credit).
-    await tx.partnerLedger.create({
-      data: { periodId: ctx.period.id, partnerId: partner.id, ...(mode === "SUPPLIER" ? { debit: total } : { credit: total }), docType: "RETURN", docId: id, at, createdBy: actor.userId },
-    });
-  }
+  // Khách trả → khách nợ ít đi (credit). Trả NCC → mình nợ NCC ít đi (debit; mua hàng là credit).
+  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: partner.id, side: mode === "SUPPLIER" ? "debit" : "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
   await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: mode, partnerCode: partner.code, lineCount: rows.length } });
   return { id, code };
 }
@@ -198,7 +195,7 @@ export async function cancelReturn(ctx: EngineCtx, actor: Actor, id: number, rea
   for (const l of ret.lines) if (!ctx.locked.has(l.productId)) throw new DomainError("Dữ liệu vừa thay đổi, hãy tải lại trang rồi thử lại.", 409);
 
   await removeDocument(ctx, stockDocOf(ret.kind), id);
-  await tx.partnerLedger.deleteMany({ where: { docType: "RETURN", docId: id } });
+  await removePartnerLedger(tx, "RETURN", id);
   for (const l of ret.lines) {
     if (l.discountAccumReversed.gt(0) && l.orderLineId !== null) {
       await tx.discountLedger.create({ data: { periodId: ctx.period.id, partnerId: ret.partnerId, orderLineId: l.orderLineId, amountIn: l.discountAccumReversed, docType: "RETURN_CANCEL", docId: id, at: now, createdBy: actor.userId } });

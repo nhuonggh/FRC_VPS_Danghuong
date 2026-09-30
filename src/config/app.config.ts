@@ -184,9 +184,9 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "debt", label: "Công nợ",
         functions: [
-          { key: "debt-summary", label: "Công nợ tổng hợp", desc: "Lọc KH/nhóm, kèm số dư chiết khấu tích lũy", icon: "scale", view: "table", path: "/accounting/debts", codes: ["62", "63"], perm: "debt.view", planned: P },
-          { key: "debt-adjust", label: "Điều chỉnh công nợ", desc: "Hàng lỗi, bẹp, móp; sổ chiết khấu tích lũy", icon: "percent", view: "table", path: "/accounting/debt-adjustments", codes: ["64"], perm: "debt.adjust", planned: P },
-          { key: "debt-transfer", label: "Gộp / chuyển công nợ", desc: "", icon: "arrow-left-right", view: "table", path: "/accounting/debt-transfers", codes: ["65"], perm: "debt.adjust", planned: P },
+          { key: "debt-summary", label: "Công nợ tổng hợp", desc: "Lọc KH/nhóm, kèm số dư chiết khấu tích lũy", icon: "scale", view: "table", path: "/accounting/debts", codes: ["62", "63"], perm: "debt.view" },
+          { key: "debt-adjust", label: "Điều chỉnh công nợ", desc: "Hàng lỗi, bẹp, móp; sổ chiết khấu tích lũy", icon: "percent", view: "table", path: "/accounting/debt-adjustments", codes: ["64"], perm: "debt.adjust" },
+          { key: "debt-transfer", label: "Gộp / chuyển công nợ", desc: "", icon: "arrow-left-right", view: "table", path: "/accounting/debt-transfers", codes: ["65"], perm: "debt.adjust" },
         ],
       },
     ],
