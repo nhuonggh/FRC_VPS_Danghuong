@@ -42,7 +42,8 @@ rm -f "$ERR_FILE"
 [ -s "$TMP_FILE" ] || fail "file sao lưu rỗng"
 # Kiểm định dạng: pg_restore đọc được mục lục và có bảng dữ liệu
 TOC="$(list_cmd < "$TMP_FILE" 2>/dev/null)" || fail "file sao lưu không đọc được bằng pg_restore"
-echo "$TOC" | grep -q "TABLE DATA" || fail "file sao lưu không có dữ liệu bảng"
+# here-string (không pipe): với pipefail, grep -q thoát sớm làm echo bị SIGPIPE khi mục lục > 64KB ⇒ báo lỗi giả
+grep -q "TABLE DATA" <<< "$TOC" || fail "file sao lưu không có dữ liệu bảng"
 mv "$TMP_FILE" "$BACKUP_FILE" || fail "không đổi tên file sao lưu"
 chmod 600 "$BACKUP_FILE"
 ( cd "$BACKUP_DIR" && sha256sum "$(basename "$BACKUP_FILE")" > "$(basename "$BACKUP_FILE").sha256" )

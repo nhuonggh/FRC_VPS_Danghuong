@@ -85,4 +85,10 @@ describe("restore-drill.sh", () => {
     const f = join(dir, dumps()[0]!); writeFileSync(f, readFileSync(f).subarray(0, 100));
     expect(run("restore-drill.sh").status).toBe(3);
   });
+
+  it("mục lục pg_restore rất lớn (> 64KB) vẫn nhận ra có dữ liệu bảng (không SIGPIPE với pipefail)", async () => {
+    // Tạo nhiều bảng để mục lục dump vượt bộ đệm pipe 64KB; TABLE DATA xuất hiện ở cuối mục lục.
+    for (let i = 0; i < 400; i++) await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS zz_big_toc_${i}_padding_padding_padding_padding (id int)`);
+    try { okRun("backup.sh"); } finally { for (let i = 0; i < 400; i++) await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS zz_big_toc_${i}_padding_padding_padding_padding`); }
+  });
 });
