@@ -16,7 +16,7 @@ const resolve = (spec: string, from: string): string | null => {
 };
 const valueImports = (src: string): string[] => {
   const out: string[] = [];
-  for (const m of src.matchAll(/^\s*(?:import|export)\s+([^;]*?)\s+from\s+["']([^"']+)["']/gms)) {
+  for (const m of src.matchAll(/^\s*(?:import|export)\s+([^;]*?)\s+from\s+["']([^"']+)["']/gm)) {
     const clause = m[1]!.trim();
     if (/^type\s/.test(clause)) continue; // import type {...}
     if (/^\{[^}]*\}$/.test(clause) && clause.replace(/[{}]/g, "").split(",").map((s) => s.trim()).filter(Boolean).every((s) => s.startsWith("type "))) continue;
