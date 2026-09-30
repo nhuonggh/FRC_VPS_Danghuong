@@ -50,8 +50,8 @@ export const APP_NAV: readonly NavModule[] = [
           { key: "order-new", label: "Bán hàng", desc: "Lập đơn, chiết khấu, xuất kho FIFO", icon: "shopping-cart", view: "form", path: "/sales/orders/new", codes: ["31"], perm: "order.create" },
           { key: "order-list", label: "Danh sách đơn", desc: "Đơn theo 2 trục trạng thái giao hàng & thanh toán", icon: "receipt", view: "table", path: "/sales/orders", codes: ["32", "33"], perm: "order.view" },
           { key: "order-deleted", label: "Đơn đã xóa", desc: "Xem, khôi phục đơn đã hủy", icon: "trash-2", view: "table", path: "/sales/orders-deleted", codes: ["34", "34a", "34b", "34c"], perm: "order.restore" },
-          { key: "quote-list", label: "Báo giá", desc: "Lập báo giá, chuyển thành đơn", icon: "file-text", view: "table", path: "/sales/quotes", codes: ["35"], perm: "quote.manage", planned: P },
-          { key: "deposit-list", label: "Tiền cọc", desc: "Quản lý tiền cọc của đơn", icon: "hand-coins", view: "table", path: "/sales/deposits", codes: ["36"], perm: "deposit.manage", planned: P },
+          { key: "quote-list", label: "Báo giá", desc: "Lập báo giá, chuyển thành đơn", icon: "file-text", view: "table", path: "/sales/quotes", codes: ["35"], perm: "quote.manage" },
+          { key: "deposit-list", label: "Tiền cọc", desc: "Quản lý tiền cọc của đơn", icon: "hand-coins", view: "table", path: "/sales/deposits", codes: ["36"], perm: "deposit.manage" },
           { key: "delivery-note-list", label: "Phiếu xuất / giao", desc: "Giao hàng nhiều lần cho một đơn", icon: "package", view: "table", path: "/sales/delivery-notes", codes: ["37"], perm: "order.view" },
         ],
       },
@@ -131,17 +131,17 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "customer-returns", label: "Khách trả",
         functions: [
-          { key: "return-order", label: "Trả theo đơn", desc: "Nhập lại kho theo giá vốn dòng bán gốc", icon: "undo-2", view: "form", path: "/returns/by-order/new", codes: ["43"], perm: "return.manage", planned: P },
-          { key: "return-order-list", label: "DS trả theo đơn", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-order", codes: ["44"], perm: "return.manage", planned: P },
-          { key: "return-product", label: "Trả theo sản phẩm", desc: "Khách không nhớ đơn", icon: "undo-2", view: "form", path: "/returns/by-product/new", codes: ["45"], perm: "return.manage", planned: P },
-          { key: "return-product-list", label: "DS trả theo SP", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-product", codes: ["46"], perm: "return.manage", planned: P },
+          { key: "return-order", label: "Trả theo đơn", desc: "Nhập lại kho theo giá vốn dòng bán gốc", icon: "undo-2", view: "form", path: "/returns/by-order/new", codes: ["43"], perm: "return.manage" },
+          { key: "return-order-list", label: "DS trả theo đơn", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-order", codes: ["44"], perm: "return.manage" },
+          { key: "return-product", label: "Trả theo sản phẩm", desc: "Khách không nhớ đơn", icon: "undo-2", view: "form", path: "/returns/by-product/new", codes: ["45"], perm: "return.manage" },
+          { key: "return-product-list", label: "DS trả theo SP", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-product", codes: ["46"], perm: "return.manage" },
         ],
       },
       {
         key: "supplier-returns", label: "Trả nhà cung cấp",
         functions: [
-          { key: "return-supplier", label: "Trả NCC", desc: "Xuất kho FIFO, giảm công nợ phải trả", icon: "undo-2", view: "form", path: "/returns/to-supplier/new", codes: ["47"], perm: "return.manage", planned: P },
-          { key: "return-supplier-list", label: "DS trả NCC", desc: "", icon: "clipboard-list", view: "table", path: "/returns/to-supplier", codes: ["48"], perm: "return.manage", planned: P },
+          { key: "return-supplier", label: "Trả NCC", desc: "Xuất kho FIFO, giảm công nợ phải trả", icon: "undo-2", view: "form", path: "/returns/to-supplier/new", codes: ["47"], perm: "return.manage" },
+          { key: "return-supplier-list", label: "DS trả NCC", desc: "", icon: "clipboard-list", view: "table", path: "/returns/to-supplier", codes: ["48"], perm: "return.manage" },
         ],
       },
     ],
@@ -184,9 +184,9 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "debt", label: "Công nợ",
         functions: [
-          { key: "debt-summary", label: "Công nợ tổng hợp", desc: "Lọc KH/nhóm, kèm số dư chiết khấu tích lũy", icon: "scale", view: "table", path: "/accounting/debts", codes: ["62", "63"], perm: "debt.view", planned: P },
-          { key: "debt-adjust", label: "Điều chỉnh công nợ", desc: "Hàng lỗi, bẹp, móp; sổ chiết khấu tích lũy", icon: "percent", view: "table", path: "/accounting/debt-adjustments", codes: ["64"], perm: "debt.adjust", planned: P },
-          { key: "debt-transfer", label: "Gộp / chuyển công nợ", desc: "", icon: "arrow-left-right", view: "table", path: "/accounting/debt-transfers", codes: ["65"], perm: "debt.adjust", planned: P },
+          { key: "debt-summary", label: "Công nợ tổng hợp", desc: "Lọc KH/nhóm, kèm số dư chiết khấu tích lũy", icon: "scale", view: "table", path: "/accounting/debts", codes: ["62", "63"], perm: "debt.view" },
+          { key: "debt-adjust", label: "Điều chỉnh công nợ", desc: "Hàng lỗi, bẹp, móp; sổ chiết khấu tích lũy", icon: "percent", view: "table", path: "/accounting/debt-adjustments", codes: ["64"], perm: "debt.adjust" },
+          { key: "debt-transfer", label: "Gộp / chuyển công nợ", desc: "", icon: "arrow-left-right", view: "table", path: "/accounting/debt-transfers", codes: ["65"], perm: "debt.adjust" },
         ],
       },
     ],

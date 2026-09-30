@@ -12,9 +12,9 @@ type Db = Prisma.TransactionClient | PrismaClient;
  */
 export async function lastSalePricePerBase(db: Db, productId: number, partnerId: number): Promise<{ perBase: Prisma.Decimal; forPartner: boolean } | null> {
   const pick = { salePrice: true, factorUsed: true } as const;
-  const own = await db.saleOrderLine.findFirst({ where: { productId, order: { partnerId, isCancelled: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
+  const own = await db.saleOrderLine.findFirst({ where: { productId, order: { partnerId, isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
   if (own) return { perBase: own.salePrice.times(own.factorUsed), forPartner: true };
-  const any = await db.saleOrderLine.findFirst({ where: { productId, order: { isCancelled: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
+  const any = await db.saleOrderLine.findFirst({ where: { productId, order: { isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
   return any ? { perBase: any.salePrice.times(any.factorUsed), forPartner: false } : null;
 }
 

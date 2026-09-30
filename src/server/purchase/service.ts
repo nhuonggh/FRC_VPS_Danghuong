@@ -14,6 +14,7 @@ import { convertToBase, resolveFactor } from "@/server/products/units";
 import { formatDocCode, nextDocId } from "./codes";
 import { allocateFreight, FREIGHT_IN_COST } from "./freight";
 import type { PurchaseInput } from "./schemas";
+import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
 
 type Tx = Prisma.TransactionClient;
 const D = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value);
@@ -125,20 +126,8 @@ async function rewritePartnerLedger(
   purchase: { id: number; partnerId: number; at: Date },
   total: Prisma.Decimal,
 ) {
-  await tx.partnerLedger.deleteMany({ where: { docType: "PURCHASE", docId: purchase.id } });
-  if (total.gt(0)) {
-    await tx.partnerLedger.create({
-      data: {
-        periodId: ctx.period.id,
-        partnerId: purchase.partnerId,
-        credit: total,
-        docType: "PURCHASE",
-        docId: purchase.id,
-        at: purchase.at,
-        createdBy: actor.userId,
-      },
-    });
-  }
+  await removePartnerLedger(tx, "PURCHASE", purchase.id);
+  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: purchase.partnerId, side: "credit", amount: total, docType: "PURCHASE", docId: purchase.id, at: purchase.at, createdBy: actor.userId });
 }
 
 const auditSummary = (
@@ -272,7 +261,7 @@ export async function cancelPurchase(ctx: EngineCtx, actor: Actor, id: number, r
   if (current.periodId !== ctx.period.id) throw new PeriodClosedError();
   await assertOldProductsLocked(ctx, id);
   await removeDocument(ctx, "PURCHASE", id);
-  await ctx.tx.partnerLedger.deleteMany({ where: { docType: "PURCHASE", docId: id } });
+  await removePartnerLedger(ctx.tx, "PURCHASE", id);
   await ctx.tx.purchase.update({
     where: { id },
     data: { isCancelled: true, cancelledAt: now, cancelledBy: actor.userId, cancelReason: reason },

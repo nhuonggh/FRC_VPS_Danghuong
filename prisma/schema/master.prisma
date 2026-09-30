@@ -43,16 +43,22 @@ model Partner {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  group          PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  owner          User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  mergedInto     Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedFrom     Partner[]         @relation("PartnerMerge")
-  openingDebts   OpeningDebt[]
-  openingDisc    OpeningDiscount[]
-  partnerLedger  PartnerLedger[]
-  discountLedger DiscountLedger[]
-  purchases      Purchase[]
-  saleOrders     SaleOrder[]
+  group           PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner           User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  mergedInto      Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom      Partner[]         @relation("PartnerMerge")
+  openingDebts    OpeningDebt[]
+  openingDisc     OpeningDiscount[]
+  partnerLedger   PartnerLedger[]
+  discountLedger  DiscountLedger[]
+  purchases       Purchase[]
+  saleOrders      SaleOrder[]
+  quotes          Quote[]
+  receipts        Receipt[]
+  goodsReturns    GoodsReturn[]
+  debtAdjustments DebtAdjustment[]
+  transfersFrom   DebtTransfer[]    @relation("TransferFrom")
+  transfersTo     DebtTransfer[]    @relation("TransferTo")
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -85,6 +91,8 @@ model Product {
   bomLines        BomLine[]
   saleLines       SaleOrderLine[]
   saleIssues      SaleLineIssue[]
+  quoteLines      QuoteLine[]
+  returnLines     GoodsReturnLine[]
 
   @@index([searchText])
   @@index([kind])
@@ -120,6 +128,7 @@ model CashAccount {
 
   openingCash OpeningCash[]
   ledger      CashLedger[]
+  receipts    Receipt[]
 
   @@map("cash_accounts")
 }
