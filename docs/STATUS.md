@@ -145,6 +145,29 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### ⭐ BÀN GIAO PHIÊN KẾ TIẾP — cập nhật 30/09/2026 (ĐỌC TRƯỚC; các mục bàn giao cũ bên dưới là lịch sử)
+
+**Trạng thái `main`/VPS:** plan 03→06 đã vào `main`. Deploy #47 (470c8bc) xanh — VPS chạy plan 05 + E5 + E1 + E4. Merge b2352a8 (E2 + báo cáo 72) và merge kế hoạch 07/08 (xem git log) đang chờ CI/deploy — **việc đầu tiên của phiên sau: xem run Deploy mới nhất của `main` xanh chưa** (đỏ ở job `test` không ảnh hưởng VPS vì `build-and-deploy` bị bỏ qua; đỏ ở migration trên DB thật ⇒ DỪNG, báo user, không sửa DB VPS).
+**Nhánh làm việc bắt buộc:** `claude/zen-gates-o3m8mq`. Merge/push `main` = deploy VPS thật ⇒ chỉ khi user duyệt (user đã cho phép merge để **sửa deploy đỏ**; việc mới khác vẫn hỏi). Xong việc: cập nhật STATUS cùng commit; chạy toàn bộ vitest (≈10 phút, nền) trước khi xin merge.
+
+**HÀNG ĐỢI CÔNG VIỆC (làm đúng thứ tự, mỗi mục có plan chi tiết):**
+
+| # | Việc | Plan | Điều kiện / ghi chú |
+|---|---|---|---|
+| 1 | Xác nhận deploy `main` xanh (mục trên) | — | Bắt buộc trước khi làm tiếp |
+| 2 | **UI: tab dọc thống nhất cho form thêm/sửa + màn chi tiết** (U0–U6, ~13 ngày) | `docs/superpowers/plans/2026-09-30-08-ui-form-tabs.md` | **Chờ user duyệt bảng ánh xạ mục 2 của plan 08 (U0)**, gồm 3 điểm “cần chốt”. Ưu tiên Khách hàng/NCC → Sản phẩm → Lập phiếu nhập. Không động engine/kỳ ⇒ chạy song song được với #3 |
+| 3 | **Plan 07 — kết sổ cuối kỳ** (F0, F1a–d, F2, F3, F4; ~29 ngày) | `docs/superpowers/plans/2026-09-30-07-gd4-closing-handover.md` | F0 + F1a làm được ngay; F1b+ dùng mặc định nếu khách chưa trả lời 5 câu (giữ nguyên từng lô…). Diễn tập trên bản sao DB **do user xác nhận** trước lần kết sổ thật đầu tiên |
+| 4 | E3 gia công thuê (54–55) | `…-06-gd3-production-reports.md` | **Chờ khách:** bảng giá công + quy tắc “không trừ tôn cuộn khách đưa” |
+| 5 | In M6 (lệnh SX) + M9 (kiểm kho) qua Google Apps Script | plan 05 D6 + `docs/infra/print/` | **Chờ khách:** file Google Doc mẫu; `PRODUCTION_ORDER`, `STOCKTAKE` đang “chưa hỗ trợ” |
+| 6 | Nợ nhỏ plan 06: sửa lệnh SX (hiện hủy & lập lại), tự điền NVL từ định mức, cộng nhân công vào giá thành SX (chờ khách chốt công thức), nhập thực đếm bằng Excel, chặn kết sổ khi còn phiếu kiểm kho DRAFT (thuộc F1a) | — | Sau khi xong #2–#3 hoặc khi khách yêu cầu |
+
+**Đã xong (không làm lại):** plan 05 D1–D10 (quỹ hậu kiểm, chiết khấu, chuyến giao, in Google Script, nhập số đầu kỳ, backup); bảng nhập liệu Google Sheet cho khách (`docs/infra/intake/`); plan 06: E1 lệnh SX phụ kiện (SX######), E2 tiêu hao thực tế/đối chiếu (52, 53), E4 kiểm kho (KK######) + điều chỉnh hao hụt/xuất hủy (HH/XH######), E5 báo cáo 67–71, 73, báo cáo 72; sửa `backup.sh` SIGPIPE.
+
+**Việc của user / khách (AI không tự làm):** (a) VPS: cài backup theo RUNBOOK §14; rà quyền vai trò Kế toán/Thủ quỹ trong Nhóm quyền (vai trò đã có trong DB không tự đổi); kiểm header Caddy trên trình duyệt. (b) Khách: điền bảng nhập liệu (Sheet), gửi Google Doc mẫu 9 loại phiếu, bảng giá công gia công thuê, trả lời 5 câu kết sổ, công thức giá thành SX. (c) User duyệt bảng ánh xạ tab (plan 08) và xác nhận mặc định plan 07.
+
+**Quy tắc kỹ thuật cần nhớ khi làm tiếp:** engine FIFO chỉ qua `src/server/inventory/index.ts`; sổ tiền/công nợ chỉ qua `postCashLedger`/`postPartnerLedger`; client component không import runtime từ module reach prisma (test `tests/design/client-imports.test.ts`); migration sinh bằng `prisma migrate diff` (KHÔNG chuyển các migration đã có ra khỏi thư mục khi diff — chỉ chuyển thư mục migration MỚI đang viết); không chạy hai vitest cùng lúc (DB cổng 5434; bật lại bằng `/var/tmp/pgup.sh` nếu PG local tắt); CI test chạy ~9 phút.
+
+
 ### Bàn giao triển khai bắt buộc — đọc trước khi tiếp tục Plan 03b (28/09/2026)
 
 **Đã làm / đã push:**
