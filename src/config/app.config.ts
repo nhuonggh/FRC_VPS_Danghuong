@@ -216,10 +216,11 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "opening", label: "Số đầu kỳ",
         functions: [
-          { key: "open-stock", label: "Tồn kho đầu kỳ", desc: "Kèm giá vốn theo lô", icon: "warehouse", view: "table", path: "/period/opening-stock", codes: ["K1"], perm: "data.import", planned: P },
-          { key: "open-debt", label: "Công nợ đầu kỳ", desc: "Khách & NCC", icon: "scale", view: "table", path: "/period/opening-debt", codes: ["K2"], perm: "data.import", planned: P },
-          { key: "open-cash", label: "Số dư quỹ đầu kỳ", desc: "", icon: "wallet", view: "table", path: "/period/opening-cash", codes: ["K3"], perm: "data.import", planned: P },
-          { key: "open-material", label: "Tồn NVL đầu kỳ", desc: "", icon: "layers", view: "table", path: "/period/opening-materials", codes: ["K4"], perm: "data.import", planned: P },
+          { key: "open-stock", label: "Tồn kho đầu kỳ", desc: "Kèm giá vốn theo lô", icon: "warehouse", view: "table", path: "/period/opening-stock", codes: ["K1"], perm: "data.import" },
+          { key: "open-debt", label: "Công nợ đầu kỳ", desc: "Khách & NCC", icon: "scale", view: "table", path: "/period/opening-debt", codes: ["K2"], perm: "data.import" },
+          { key: "open-cash", label: "Số dư quỹ đầu kỳ", desc: "", icon: "wallet", view: "table", path: "/period/opening-cash", codes: ["K3"], perm: "data.import" },
+          { key: "open-material", label: "Tồn NVL đầu kỳ", desc: "", icon: "layers", view: "table", path: "/period/opening-materials", codes: ["K4"], perm: "data.import" },
+          { key: "open-discount", label: "Chiết khấu tích lũy đầu kỳ", desc: "Còn nợ từng khách", icon: "percent", view: "table", path: "/period/opening-discount", codes: [], perm: "data.import" },
         ],
       },
       {

@@ -111,10 +111,10 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [ ] 🧪: mock webhook — timeout, lỗi, in lại xoá file cũ, secret không xuất hiện trong log/audit/DTO/lỗi.
 
 ### Task D7 — Màn số đầu kỳ (mã K1–K4 + chiết khấu)
-- [ ] `/period/opening-stock` (K1), `/period/opening-materials` (K4): nhập tay hoặc dán Excel (mã, SL, giá vốn) ⇒ lớp `OPENING` qua engine (D-39), mỗi mã một lô; xem trước, xác nhận 2 bước.
-- [ ] `/period/opening-debt` (K2, cả khách lẫn NCC, dấu +/−), `/period/opening-cash` (K3, quỹ + từng TK NH), số dư chiết khấu tích lũy.
-- [ ] Chặn khi đã có chứng từ trong kỳ (trừ cờ khởi tạo của giám đốc); audit từng dòng.
-- [ ] 🧪: tồn sau nhập = Σ lớp `OPENING`; bán ngay sau nhập dùng đúng giá vốn lô; engine ≡ oracle; công nợ/quỹ đầu kỳ vào đúng số dư.
+- [x] `/period/opening-stock` (K1), `/period/opening-materials` (K4): nhập Excel (nhập tay từng dòng: chưa làm) (mã, SL, giá vốn) ⇒ lớp `OPENING` qua engine (D-39), mỗi mã một lô; xem trước, xác nhận 2 bước.
+- [x] `/period/opening-debt` (K2, cả khách lẫn NCC, dấu +/−), `/period/opening-cash` (K3, quỹ + từng TK NH), số dư chiết khấu tích lũy.
+- [x] Chặn khi đã có chứng từ trong kỳ (trừ cờ khởi tạo của giám đốc); audit từng dòng.
+- [x] 🧪: tồn sau nhập = Σ lớp `OPENING`; bán ngay sau nhập dùng đúng giá vốn lô; engine ≡ oracle; công nợ/quỹ đầu kỳ vào đúng số dư.
 
 ### Task D8 — Chuyển dữ liệu D1–D4
 - [ ] Dry-run + màn duyệt cho: khách (D1), NCC, sản phẩm (D2, mã trùng/ngừng bán ra file riêng), công nợ (D3), tồn kho (D4): báo cáo lỗi theo dòng, tải file lỗi, ghi thật chỉ khi user bấm xác nhận (D-40).
