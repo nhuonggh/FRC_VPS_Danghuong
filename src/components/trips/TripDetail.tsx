@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { Badge, Field, inputClass, ReasonDialog } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
@@ -12,7 +13,7 @@ import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { StopDTO, TripDetailDTO } from "@/server/trips/queries";
 import { RESULT_KINDS, RESULT_LABEL } from "@/server/trips/schemas";
 
-export interface TripPerms { canManage: boolean; canSettle: boolean; canConfirm: boolean }
+export interface TripPerms { canManage: boolean; canSettle: boolean; canConfirm: boolean; canPrint?: boolean }
 const TONE = { PLANNED: "info", ON_ROAD: "info", RETURNED: "warning", SETTLED: "warning", CONFIRMED: "success", CANCELLED: "neutral" } as const;
 const RESULT_TONE = { GIAO_DU: "success", GHI_NO: "warning", HEN_TRA: "warning", KHONG_GIAO: "danger", GIAO_MOT_PHAN: "info" } as const;
 
@@ -44,6 +45,7 @@ export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; per
           <div className="mt-1 flex flex-wrap items-center gap-2"><Badge tone={TONE[trip.status]}>{trip.statusLabel}</Badge>{trip.note && <span className="text-sm text-fg-muted">{trip.note}</span>}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {perms.canPrint && trip.status !== "CANCELLED" && <PrintButton docType="TRIP_SHEET" docId={trip.id} label="In phiếu giao nhận" />}
           {perms.canManage && trip.status === "PLANNED" && <button type="button" disabled={busy} onClick={depart} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xuất phát</button>}
           {perms.canSettle && trip.status === "RETURNED" && <button type="button" disabled={busy} onClick={() => setDialog("settle")} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Đối soát lái xe</button>}
           {perms.canConfirm && trip.status === "SETTLED" && <button type="button" disabled={busy} onClick={() => setDialog("confirm")} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xác nhận đã nhận tiền</button>}

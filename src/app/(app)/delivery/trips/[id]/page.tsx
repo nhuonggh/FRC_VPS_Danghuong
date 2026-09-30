@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireActor } from "@/server/auth/session";
 import { listActiveCashAccounts } from "@/server/cash/queries";
 import { DomainError } from "@/server/http/errors";
+import { canPrintDoc } from "@/server/print/types";
 import { getTrip } from "@/server/trips/queries";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +18,5 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   const trip = await getTrip(prisma, actor, id).catch((e: unknown) => { if (e instanceof DomainError && e.status === 404) return null; throw e; });
   if (!trip) notFound();
   const accounts = p.has("trip.confirm_cash") ? await listActiveCashAccounts(prisma) : [];
-  return <TripDetail trip={trip} accounts={accounts} perms={{ canManage: p.has("trip.manage"), canSettle: p.has("trip.settle"), canConfirm: p.has("trip.confirm_cash") }} />;
+  return <TripDetail trip={trip} accounts={accounts} perms={{ canManage: p.has("trip.manage"), canSettle: p.has("trip.settle"), canConfirm: p.has("trip.confirm_cash"), canPrint: canPrintDoc(p, "TRIP_SHEET") }} />;
 }

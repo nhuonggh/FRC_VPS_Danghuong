@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { Badge, DetailField, ReasonDialog, inputClass, Field } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
@@ -13,7 +14,7 @@ import type { VoucherDetailDTO } from "@/server/cash/queries";
 import { REVIEW_LABEL } from "@/server/cash/queries";
 import type { VoucherDoc } from "@/server/cash/schemas";
 
-export interface VoucherPerms { canEdit: boolean; canReview: boolean; canRequestAdjust: boolean; canApprove: boolean }
+export interface VoucherPerms { canEdit: boolean; canReview: boolean; canRequestAdjust: boolean; canApprove: boolean; canPrint?: boolean }
 const KIND: Record<VoucherDoc, string> = { RECEIPT: "receipts", PAYMENT: "payments" };
 const TONE = { PENDING_REVIEW: "warning", REVIEWED: "success", RETURNED: "danger", CANCELLED: "neutral" } as const;
 const ADJ_TONE = { REQUESTED: "warning", APPROVED: "success", REJECTED: "danger" } as const;
@@ -50,6 +51,7 @@ export function VoucherDetail({ v, perms, accounts }: { v: VoucherDetailDTO; per
           <div className="mt-1 flex flex-wrap items-center gap-2"><Badge tone={TONE[state]}>{REVIEW_LABEL[state]}</Badge>{pendingAdj && <Badge tone="warning">Có yêu cầu điều chỉnh</Badge>}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {perms.canPrint && !v.isCancelled && <PrintButton docType={v.doc} docId={v.id} label={v.doc === "RECEIPT" ? "In phiếu thu" : "In phiếu chi"} />}
           {perms.canReview && !v.isCancelled && v.reviewStatus === "PENDING_REVIEW" && (
             <>
               <button type="button" disabled={busy} onClick={review} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Kiểm tra xong</button>

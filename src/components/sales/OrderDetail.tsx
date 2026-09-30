@@ -10,6 +10,7 @@ import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/for
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
 import { DeliveryPanel } from "./DeliveryPanel";
+import { PrintButton } from "@/components/print/PrintButton";
 import { DepositPanel } from "./DepositPanel";
 import { RestoreButton } from "./RestoreButton";
 
@@ -17,7 +18,7 @@ const ACTION_LABEL: Record<string, string> = {
   "sale.create": "Lập đơn", "sale.update": "Sửa đơn", "sale.cancel": "Hủy đơn", "sale.restore": "Khôi phục đơn",
 };
 
-export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean; canConfirm: boolean; canDeleteDraft: boolean; canDeposit: boolean; canReturn: boolean }
+export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean; canConfirm: boolean; canDeleteDraft: boolean; canDeposit: boolean; canReturn: boolean; canPrint?: boolean }
 
 export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; perms: OrderDetailPerms; today: string }) {
   const router = useRouter();
@@ -117,6 +118,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
   const headerActions = (
     <>
       {order.isCancelled && perms.canRestore && <RestoreButton orderId={order.id} code={order.code} />}
+      {live && !order.isDraft && perms.canPrint && <PrintButton docType="SALE_INVOICE" docId={order.id} label="In hóa đơn" />}
       {live && order.isDraft && perms.canConfirm && <button type="button" onClick={confirmDraft} disabled={busy} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xác nhận đơn</button>}
       {live && perms.canEdit && (
         <Link href={`/sales/orders/${order.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">{order.isDraft ? "Sửa nháp" : "Sửa đơn"}</Link>
@@ -153,7 +155,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       tabs={[
         { key: "info", label: "Thông tin", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
-        { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit && !order.isDraft} /> },
+        { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit && !order.isDraft} canPrint={!!perms.canPrint} /> },
         { key: "deposits", label: "Tiền cọc", count: order.deposits.length, render: () => <DepositPanel order={order} today={today} canDeposit={perms.canDeposit} /> },
         { key: "history", label: "Lịch sử", count: order.history.length, render: () => history() },
       ]}

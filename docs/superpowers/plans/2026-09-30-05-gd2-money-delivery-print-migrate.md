@@ -104,11 +104,11 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: tổng tiền chuyến = Σ đơn; chênh lệch bắt lý do; **gia công thuê không trừ tôn cuộn** (chỉ kiểm cấu hình, làm thật ở plan 06-E3); xác nhận hai lần idempotent.
 
 ### Task D6 — 9 mẫu in qua Apps Script (M1–M9)
-- [ ] `print_templates` (URL + secret mã hoá + tiêu đề/người ký/SĐT/QR/ghi chú chân phiếu, bật/tắt) — màn Công ty & mẫu in đã có, nối vào.
-- [ ] 9 data contract JSON (hóa đơn bán hàng, báo giá, phiếu giao nhận, phiếu thu, phiếu chi, lệnh SX, đối chiếu công nợ, phiếu nhập, phiếu kiểm kho): công ty (theo `show_company_info`), khách, dòng hàng, **chiết khấu theo dòng + tổng chiết khấu**, đã thu, còn phải trả. Contract có `version`.
-- [ ] Gọi webhook: secret trong body, timeout 12 s, `print_files` UNIQUE(doc_type, doc_id), in lại xoá file cũ; UI "đang tạo bản in" không khoá màn hình; nút In ở từng chứng từ (đơn, báo giá, phiếu giao, thu, chi, nhập, đối chiếu).
-- [ ] Tài liệu hướng dẫn tạo Apps Script + Google Doc template (`<<placeholder>>`), kèm script mẫu `docs/infra/print/apps-script.gs`.
-- [ ] 🧪: mock webhook — timeout, lỗi, in lại xoá file cũ, secret không xuất hiện trong log/audit/DTO/lỗi.
+- [x] `print_templates` (URL + secret mã hoá + tiêu đề/người ký/SĐT/QR/ghi chú chân phiếu, bật/tắt) — màn Công ty & mẫu in đã có, nối vào.
+- [x] 9 data contract JSON (hóa đơn bán hàng, báo giá, phiếu giao nhận, phiếu thu, phiếu chi, lệnh SX, đối chiếu công nợ, phiếu nhập, phiếu kiểm kho): công ty (theo `show_company_info`), khách, dòng hàng, **chiết khấu theo dòng + tổng chiết khấu**, đã thu, còn phải trả. Contract có `version`.
+- [x] Gọi webhook: secret trong body, timeout 12 s, `print_files` UNIQUE(doc_type, doc_id), in lại xoá file cũ; UI "đang tạo bản in" không khoá màn hình; nút In ở từng chứng từ (đơn, báo giá, phiếu giao, thu, chi, nhập, đối chiếu).
+- [x] Tài liệu hướng dẫn tạo Apps Script + Google Doc template (`<<placeholder>>`), kèm script mẫu `docs/infra/print/apps-script.gs`.
+- [x] 🧪: mock webhook — timeout, lỗi, in lại xoá file cũ, secret không xuất hiện trong log/audit/DTO/lỗi.
 
 ### Task D7 — Màn số đầu kỳ (mã K1–K4 + chiết khấu)
 - [x] `/period/opening-stock` (K1), `/period/opening-materials` (K4): nhập Excel (nhập tay từng dòng: chưa làm) (mã, SL, giá vốn) ⇒ lớp `OPENING` qua engine (D-39), mỗi mã một lô; xem trước, xác nhận 2 bước.

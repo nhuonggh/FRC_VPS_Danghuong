@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { canPrintDoc } from "@/server/print/types";
 import { QuoteDetail } from "@/components/sales/QuoteDetail";
 import { prisma } from "@/lib/prisma";
 import { requireActor } from "@/server/auth/session";
@@ -15,5 +16,5 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
     if (e instanceof DomainError && e.status === 404) notFound();
     throw e;
   });
-  return <QuoteDetail quote={quote} canManage={actor.perms.has("sale_price.view")} canConvert={actor.perms.has("order.create")} />;
+  return <QuoteDetail quote={quote} canManage={actor.perms.has("sale_price.view")} canConvert={actor.perms.has("order.create")} canPrint={canPrintDoc(actor.perms, "QUOTE")} />;
 }

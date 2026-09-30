@@ -1,5 +1,6 @@
 "use client";
 
+import { PrintButton } from "@/components/print/PrintButton";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Field, inputClass } from "@/components/ui";
@@ -13,7 +14,7 @@ import type { OrderDetailDTO } from "@/server/sales/queries";
 const remainingOf = (l: OrderDetailDTO["lines"][number]) => Math.max(0, Number(l.qty) - Number(l.deliveredQty));
 
 /** Tab Giao hàng (mã 37): lập phiếu giao nhiều lần cho một đơn, hủy phiếu. Không xuất kho lần hai (D-25). */
-export function DeliveryPanel({ order, today, canDeliver }: { order: OrderDetailDTO; today: string; canDeliver: boolean }) {
+export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { order: OrderDetailDTO; today: string; canDeliver: boolean; canPrint?: boolean }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const [qty, setQty] = useState<Record<number, string>>({});
@@ -87,6 +88,7 @@ export function DeliveryPanel({ order, today, canDeliver }: { order: OrderDetail
             <li key={d.id} className={`rounded-sm border border-border p-3 ${d.isCancelled ? "opacity-60" : ""}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span><strong className="font-mono text-xs">{d.code}</strong> · {formatDateTime(d.at)}{d.isCancelled && <span className="ml-2 text-xs font-medium text-danger">Đã hủy</span>}</span>
+                {canPrint && !d.isCancelled && <PrintButton docType="DELIVERY_NOTE" docId={d.id} label="In phiếu giao" className="flex h-9 items-center gap-2 rounded-sm border border-border px-3 text-sm hover:bg-hover disabled:opacity-60" />}
                 {canDeliver && !d.isCancelled && (
                   <button type="button" onClick={() => cancel(d.id, d.code)} aria-label={`Hủy phiếu giao ${d.code}`} className="h-9 rounded-sm border border-danger px-3 text-sm text-danger hover:bg-danger-soft">Hủy phiếu</button>
                 )}
