@@ -117,9 +117,9 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: tồn sau nhập = Σ lớp `OPENING`; bán ngay sau nhập dùng đúng giá vốn lô; engine ≡ oracle; công nợ/quỹ đầu kỳ vào đúng số dư.
 
 ### Task D8 — Chuyển dữ liệu D1–D4
-- [ ] Dry-run + màn duyệt cho: khách (D1), NCC, sản phẩm (D2, mã trùng/ngừng bán ra file riêng), công nợ (D3), tồn kho (D4): báo cáo lỗi theo dòng, tải file lỗi, ghi thật chỉ khi user bấm xác nhận (D-40).
-- [ ] Tái dùng bộ import Excel danh mục đã có (KH/NCC/SP); thêm đọc file export mẫu của phần mềm Niềm Tin khi khách gửi (ánh xạ cột theo file thật).
-- [ ] 🧪: chạy lại không nhân đôi; mã trùng bị lọc; số Việt Nam `1.234,5`; 5.000 dòng ≤ 30 s.
+- [x] Dry-run + màn duyệt cho: khách (D1), NCC, sản phẩm (D2, mã trùng/ngừng bán ra file riêng), công nợ (D3), tồn kho (D4): báo cáo lỗi theo dòng, tải file lỗi, ghi thật chỉ khi user bấm xác nhận (D-40).
+- [x] Tái dùng bộ import Excel danh mục đã có (KH/NCC/SP); thêm đọc file export mẫu của phần mềm Niềm Tin khi khách gửi (ánh xạ cột theo file thật) — **chờ khách gửi mẫu**.
+- [x] 🧪: chạy lại không nhân đôi; mã trùng bị lọc; số Việt Nam `1.234,5`; 5.000 dòng ≤ 30 s.
 
 ### Task D9 — Sao lưu hằng đêm (T3)
 - [ ] `scripts/backup.sh` (`pg_dump -Fc`, giữ 14 ngày, bản ngoài máy chủ) + cron VPS + cảnh báo khi thất bại; `scripts/restore-drill.sh` khôi phục ra DB tạm và kiểm số dòng các bảng chính.
