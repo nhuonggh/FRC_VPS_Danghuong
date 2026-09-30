@@ -49,12 +49,13 @@ model SaleOrder {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
-  period     Period          @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  partner    Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  lines      SaleOrderLine[]
-  deliveries DeliveryNote[]
-  quote      Quote?          @relation("QuoteConverted")
-  receipts   Receipt[]
+  period       Period          @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner      Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  lines        SaleOrderLine[]
+  deliveries   DeliveryNote[]
+  quote        Quote?          @relation("QuoteConverted")
+  receipts     Receipt[]
+  goodsReturns GoodsReturn[]
 
   @@index([periodId, orderDate])
   @@index([partnerId, orderDate])
@@ -85,12 +86,13 @@ model SaleOrderLine {
   at               DateTime
   createdAt        DateTime @default(now())
 
-  order          SaleOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product        Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
-  processingType ProcessingType?  @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
-  bomVersion     BomVersion?      @relation(fields: [bomVersionId], references: [id], onDelete: Restrict)
+  order          SaleOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  processingType ProcessingType?   @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+  bomVersion     BomVersion?       @relation(fields: [bomVersionId], references: [id], onDelete: Restrict)
   issues         SaleLineIssue[]
   deliveryLines  DeliveryLine[]
+  returnLines    GoodsReturnLine[]
   discountRows   DiscountLedger[]
 
   @@index([orderId])
@@ -242,4 +244,72 @@ model Receipt {
   @@index([periodId, at])
   @@index([partnerId])
   @@map("receipts")
+}
+
+enum ReturnKind {
+  BY_ORDER
+  BY_PRODUCT
+  SUPPLIER
+
+  @@map("return_kind")
+}
+
+/// Phiếu trả hàng (mã 43–48). BY_ORDER/BY_PRODUCT: khách trả → nhập kho (RETURN_IN), giảm nợ khách (partner_ledger credit).
+/// SUPPLIER: trả NCC → xuất kho FIFO (RETURN_SUPPLIER), giảm nợ phải trả (partner_ledger debit). Không sửa — hủy rồi lập lại.
+model GoodsReturn {
+  id           Int        @id @default(autoincrement())
+  periodId     Int
+  code         String     @unique
+  kind         ReturnKind
+  partnerId    Int
+  /// Chỉ BY_ORDER.
+  orderId      Int?
+  at           DateTime
+  note         String?
+  totalAmount  Decimal    @db.Decimal(18, 2)
+  isCancelled  Boolean    @default(false)
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime   @default(now())
+
+  period  Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner           @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  order   SaleOrder?        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines   GoodsReturnLine[]
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@index([orderId])
+  @@map("goods_returns")
+}
+
+model GoodsReturnLine {
+  id                    Int      @id @default(autoincrement())
+  returnId              Int
+  productId             Int
+  /// Chỉ BY_ORDER: dòng bán gốc (giá vốn nhập lại theo dòng này).
+  orderLineId           Int?
+  qty                   Decimal  @db.Decimal(18, 3)
+  unit                  String
+  factorUsed            Decimal  @db.Decimal(18, 6)
+  qtyBase               Decimal  @db.Decimal(18, 3)
+  /// Đơn giá theo `unit`: giá trừ công nợ (khách) / giá thỏa thuận (NCC).
+  unitPrice             Decimal  @db.Decimal(18, 2)
+  /// Thành tiền ghi công nợ của dòng (BY_ORDER: theo tỷ lệ thành tiền dòng bán, làm tròn luỹ kế).
+  amount                Decimal  @db.Decimal(18, 2)
+  /// Chiết khấu tích lũy được đảo theo tỷ lệ (BY_ORDER).
+  discountAccumReversed Decimal  @default(0) @db.Decimal(18, 2)
+  at                    DateTime
+  seq                   BigInt?
+
+  goodsReturn GoodsReturn    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product     Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  orderLine   SaleOrderLine? @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  @@index([returnId])
+  @@index([productId])
+  @@index([orderLineId])
+  @@map("goods_return_lines")
 }

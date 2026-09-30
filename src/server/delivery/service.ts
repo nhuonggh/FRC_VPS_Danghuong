@@ -101,6 +101,18 @@ export async function cancelDeliveryNote(tx: Tx, actor: Actor, id: number): Prom
   const { order } = await lockOrderForDelivery(tx, actor, note.orderId);
   const fresh = await tx.deliveryNote.findUniqueOrThrow({ where: { id }, select: { isCancelled: true, periodId: true } });
   if (fresh.isCancelled) throw new DomainError("Phiếu giao đã hủy trước đó.", 409);
+  // Không để tổng đã giao thấp hơn tổng đã trả: hủy phiếu trả hàng trước
+  const returned = await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false } }, _sum: { qty: true } });
+  if (returned.length) {
+    const noteLines = await tx.deliveryLine.findMany({ where: { deliveryNoteId: id }, select: { orderLineId: true, qty: true } });
+    for (const r of returned) {
+      const line = order.lines.find((l) => l.id === r.orderLineId);
+      const removing = noteLines.filter((n) => n.orderLineId === r.orderLineId).reduce((s, n) => s.plus(n.qty), D(0));
+      if (line && removing.gt(0) && deliveredOf(line).minus(removing).lt(r._sum.qty ?? 0)) {
+        throw new DomainError("Hàng của phiếu giao này đã được khách trả lại. Hãy hủy phiếu trả hàng trước khi hủy phiếu giao.", 409, "HAS_RETURN");
+      }
+    }
+  }
   await tx.deliveryNote.update({ where: { id }, data: { isCancelled: true, cancelledAt: new Date(), cancelledBy: actor.userId } });
   await tx.partnerLedger.deleteMany({ where: { docType: "DELIVERY", docId: id } });
   await syncDeliveryStatus(tx, order.id);

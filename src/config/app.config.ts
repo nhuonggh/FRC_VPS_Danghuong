@@ -131,17 +131,17 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "customer-returns", label: "Khách trả",
         functions: [
-          { key: "return-order", label: "Trả theo đơn", desc: "Nhập lại kho theo giá vốn dòng bán gốc", icon: "undo-2", view: "form", path: "/returns/by-order/new", codes: ["43"], perm: "return.manage", planned: P },
-          { key: "return-order-list", label: "DS trả theo đơn", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-order", codes: ["44"], perm: "return.manage", planned: P },
-          { key: "return-product", label: "Trả theo sản phẩm", desc: "Khách không nhớ đơn", icon: "undo-2", view: "form", path: "/returns/by-product/new", codes: ["45"], perm: "return.manage", planned: P },
-          { key: "return-product-list", label: "DS trả theo SP", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-product", codes: ["46"], perm: "return.manage", planned: P },
+          { key: "return-order", label: "Trả theo đơn", desc: "Nhập lại kho theo giá vốn dòng bán gốc", icon: "undo-2", view: "form", path: "/returns/by-order/new", codes: ["43"], perm: "return.manage" },
+          { key: "return-order-list", label: "DS trả theo đơn", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-order", codes: ["44"], perm: "return.manage" },
+          { key: "return-product", label: "Trả theo sản phẩm", desc: "Khách không nhớ đơn", icon: "undo-2", view: "form", path: "/returns/by-product/new", codes: ["45"], perm: "return.manage" },
+          { key: "return-product-list", label: "DS trả theo SP", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-product", codes: ["46"], perm: "return.manage" },
         ],
       },
       {
         key: "supplier-returns", label: "Trả nhà cung cấp",
         functions: [
-          { key: "return-supplier", label: "Trả NCC", desc: "Xuất kho FIFO, giảm công nợ phải trả", icon: "undo-2", view: "form", path: "/returns/to-supplier/new", codes: ["47"], perm: "return.manage", planned: P },
-          { key: "return-supplier-list", label: "DS trả NCC", desc: "", icon: "clipboard-list", view: "table", path: "/returns/to-supplier", codes: ["48"], perm: "return.manage", planned: P },
+          { key: "return-supplier", label: "Trả NCC", desc: "Xuất kho FIFO, giảm công nợ phải trả", icon: "undo-2", view: "form", path: "/returns/to-supplier/new", codes: ["47"], perm: "return.manage" },
+          { key: "return-supplier-list", label: "DS trả NCC", desc: "", icon: "clipboard-list", view: "table", path: "/returns/to-supplier", codes: ["48"], perm: "return.manage" },
         ],
       },
     ],

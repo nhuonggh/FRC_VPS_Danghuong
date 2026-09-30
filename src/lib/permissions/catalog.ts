@@ -107,6 +107,7 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   lineAmount: "sale_price.view",
   orderTotal: "sale_price.view",
   quoteTotal: "sale_price.view",
+  returnTotal: "sale_price.view",
 };
 
 type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly PermissionCode[] };

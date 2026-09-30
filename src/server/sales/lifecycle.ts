@@ -59,6 +59,9 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   if (order.isCancelled) throw new DomainError("Đơn đã hủy, không sửa được. Hãy khôi phục đơn trước.", 409);
   if (order.isDraft) throw new DomainError("Đơn nháp chưa xuất kho — sửa qua luồng đơn nháp.", 409);
   if (order.periodId !== ctx.period.id) throw new PeriodClosedError();
+  if ((await ctx.tx.goodsReturn.count({ where: { orderId: id, isCancelled: false } })) > 0) {
+    throw new DomainError("Đơn đã có phiếu trả hàng. Hãy hủy phiếu trả hàng trước.", 409, "HAS_RETURN");
+  }
   await assertOldProductsLocked(ctx, id);
 
   const existing = new Map(order.lines.map((l) => [l.id, l]));
@@ -172,6 +175,9 @@ export async function cancelSaleOrder(ctx: EngineCtx, actor: Actor, id: number, 
   }
   if ((await tx.receipt.count({ where: { orderId: id, isCancelled: false } })) > 0) {
     throw new DomainError("Đơn còn tiền cọc. Hãy chuyển cọc thành số dư của khách hoặc hủy phiếu cọc trước khi hủy đơn.", 409, "HAS_DEPOSIT");
+  }
+  if ((await tx.goodsReturn.count({ where: { orderId: id, isCancelled: false } })) > 0) {
+    throw new DomainError("Đơn đã có phiếu trả hàng. Hãy hủy phiếu trả hàng trước.", 409, "HAS_RETURN");
   }
   await assertOldProductsLocked(ctx, id);
 

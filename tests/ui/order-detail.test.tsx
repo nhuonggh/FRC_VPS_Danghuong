@@ -33,7 +33,7 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   deliveries: [{ id: 9, code: "PG000009", at: new Date("2026-09-12T03:00:00Z"), isCancelled: false, note: null, lines: [{ orderLineId: 11, productName: "Tôn xốp", unit: "md", qty: "4" }] }],
   ...over,
 });
-const ALL = { canEdit: true, canCancel: true, canRestore: true, canConfirm: true, canDeleteDraft: true, canDeposit: true };
+const ALL = { canEdit: true, canCancel: true, canRestore: true, canConfirm: true, canDeleteDraft: true, canDeposit: true, canReturn: true };
 const view = (o = order(), perms = ALL) => render(<OrderDetail order={o} perms={perms} today="2026-09-15" />);
 
 describe("OrderDetail — hành động theo quyền", () => {
@@ -45,7 +45,7 @@ describe("OrderDetail — hành động theo quyền", () => {
   });
 
   it("chỉ xem: không có nút nào", () => {
-    view(order(), { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false });
+    view(order(), { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false, canReturn: false });
     expect(screen.queryByRole("link", { name: "Sửa đơn" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hủy đơn" })).toBeNull();
   });
@@ -120,10 +120,23 @@ describe("DeliveryPanel (tab Giao hàng)", () => {
   it("đã giao đủ ⇒ không còn form lập phiếu; chỉ xem không có nút hủy phiếu", () => {
     const full = order();
     full.lines[0]!.deliveredQty = "10";
-    view(full, { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false });
+    view(full, { canEdit: false, canCancel: false, canRestore: false, canConfirm: false, canDeleteDraft: false, canDeposit: false, canReturn: false });
     expect(screen.queryByRole("region", { name: "Lập phiếu giao" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Hủy phiếu giao/ })).toBeNull();
     expect(screen.getByText("PG000009")).toBeInTheDocument();
+  });
+});
+
+describe("OrderDetail — trả hàng", () => {
+  it("đơn đã giao một phần + có quyền: link Trả hàng tới màn 43; không quyền / đơn chưa giao: ẩn", () => {
+    view();
+    expect(screen.getByRole("link", { name: "Trả hàng" })).toHaveAttribute("href", "/returns/by-order/new?orderId=1");
+    cleanup();
+    view(order(), { ...ALL, canReturn: false });
+    expect(screen.queryByRole("link", { name: "Trả hàng" })).toBeNull();
+    cleanup();
+    view(order({ deliveryStatus: "NEW" }));
+    expect(screen.queryByRole("link", { name: "Trả hàng" })).toBeNull();
   });
 });
 

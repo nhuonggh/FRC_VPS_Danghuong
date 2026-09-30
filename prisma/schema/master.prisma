@@ -55,6 +55,7 @@ model Partner {
   saleOrders     SaleOrder[]
   quotes         Quote[]
   receipts       Receipt[]
+  goodsReturns   GoodsReturn[]
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -88,6 +89,7 @@ model Product {
   saleLines       SaleOrderLine[]
   saleIssues      SaleLineIssue[]
   quoteLines      QuoteLine[]
+  returnLines     GoodsReturnLine[]
 
   @@index([searchText])
   @@index([kind])

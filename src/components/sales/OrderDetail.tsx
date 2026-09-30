@@ -17,7 +17,7 @@ const ACTION_LABEL: Record<string, string> = {
   "sale.create": "Lập đơn", "sale.update": "Sửa đơn", "sale.cancel": "Hủy đơn", "sale.restore": "Khôi phục đơn",
 };
 
-export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean; canConfirm: boolean; canDeleteDraft: boolean; canDeposit: boolean }
+export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRestore: boolean; canConfirm: boolean; canDeleteDraft: boolean; canDeposit: boolean; canReturn: boolean }
 
 export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; perms: OrderDetailPerms; today: string }) {
   const router = useRouter();
@@ -109,6 +109,9 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       {live && order.isDraft && perms.canConfirm && <button type="button" onClick={confirmDraft} disabled={busy} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xác nhận đơn</button>}
       {live && perms.canEdit && (
         <Link href={`/sales/orders/${order.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">{order.isDraft ? "Sửa nháp" : "Sửa đơn"}</Link>
+      )}
+      {live && !order.isDraft && perms.canReturn && (order.deliveryStatus === "PARTIAL" || order.deliveryStatus === "DELIVERED") && (
+        <Link href={`/returns/by-order/new?orderId=${order.id}`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Trả hàng</Link>
       )}
       {live && order.isDraft && perms.canDeleteDraft && <button type="button" onClick={deleteDraft} disabled={busy} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft disabled:opacity-50">Xóa nháp</button>}
       {live && !order.isDraft && perms.canCancel && (
