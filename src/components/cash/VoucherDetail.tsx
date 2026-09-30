@@ -11,7 +11,7 @@ import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { VoucherDetailDTO } from "@/server/cash/queries";
-import { REVIEW_LABEL } from "@/server/cash/queries";
+import { REVIEW_LABEL } from "@/server/cash/labels";
 import type { VoucherDoc } from "@/server/cash/schemas";
 
 export interface VoucherPerms { canEdit: boolean; canReview: boolean; canRequestAdjust: boolean; canApprove: boolean; canPrint?: boolean }

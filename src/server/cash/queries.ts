@@ -13,8 +13,8 @@ type Db = Prisma.TransactionClient | PrismaClient;
 export const VOUCHER_FILTER_KEYS = ["status", "type"] as const;
 export const QUEUE_FILTER_KEYS = ["kind", "status"] as const;
 
-export const REVIEW_LABEL: Record<CashReviewStatus | "CANCELLED", string> = { PENDING_REVIEW: "Chờ kiểm tra", REVIEWED: "Đã kiểm tra", RETURNED: "Bị trả lại", CANCELLED: "Đã hủy" };
-export const EVENT_LABEL: Record<string, string> = { SUBMIT: "Lập phiếu", EDIT: "Sửa phiếu", RESUBMIT: "Sửa & gửi lại", REVIEW: "Thủ quỹ kiểm tra", RETURN: "Thủ quỹ trả lại", CANCEL: "Hủy phiếu" };
+import { EVENT_LABEL, REVIEW_LABEL } from "./labels";
+export { EVENT_LABEL, REVIEW_LABEL };
 
 export interface VoucherRowDTO {
   id: number; doc: VoucherDoc; code: string; at: Date; type: string; typeLabel: string; partnerName: string | null; orderCode: string | null;

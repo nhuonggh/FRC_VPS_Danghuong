@@ -6,8 +6,7 @@ import { ImportDialog } from "@/components/import/ImportDialog";
 import { EmptyState, StatCard } from "@/components/ui";
 import { formatCurrency, formatQty } from "@/lib/format";
 import type { OpeningListDTO } from "@/server/opening/queries";
-import type { OpeningKind } from "@/server/opening/registry";
-import { OPENING_TITLE } from "@/server/opening/registry";
+import { OPENING_TITLE, type OpeningKind } from "@/server/opening/kinds";
 
 const HINT: Record<OpeningKind, string> = {
   stock: "Mỗi mã một lô đầu kỳ: số lượng theo đơn vị gốc và giá vốn trên đơn vị gốc. Bán hàng sau đó xuất theo đúng giá vốn lô này.",

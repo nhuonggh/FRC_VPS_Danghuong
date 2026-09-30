@@ -126,9 +126,9 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] Tài liệu vào `docs/infra/RUNBOOK.md`. Việc trên VPS **user làm** theo hướng dẫn từng bước (không cấp SSH cho AI).
 
 ### Task D10 — Chạy thử, đào tạo đợt 1, chạy song song (T6, T7)
-- [ ] Kịch bản chạy thử theo vai trò (bán hàng, kế toán, thủ kho, thủ quỹ, giám đốc); tài liệu hướng dẫn ngắn có ảnh chụp.
-- [ ] **Cổng vào chạy song song:** đủ D1–D4 thật, có trả hàng + tự trừ NVL, sao lưu hằng đêm đang chạy, quyền từng vai trò đã kiểm, 9 mẫu in chạy được với Google của xưởng.
-- [ ] Dữ liệu thật 1.300 SP + 1.000 đơn: danh sách/trang chính ≤ 3 s; rà chéo 04↔05; cập nhật STATUS/master/`db_schema.sql`; **merge `main` chờ user duyệt**.
+- [x] Kịch bản chạy thử theo vai trò (bán hàng, kế toán, thủ kho, thủ quỹ, giám đốc); tài liệu hướng dẫn ngắn có ảnh chụp.
+- [x] **Cổng vào chạy song song:** đủ D1–D4 thật, có trả hàng + tự trừ NVL, sao lưu hằng đêm đang chạy, quyền từng vai trò đã kiểm, 9 mẫu in chạy được với Google của xưởng.
+- [x] Dữ liệu thật 1.300 SP + 1.000 đơn: danh sách/trang chính ≤ 3 s; rà chéo 04↔05; cập nhật STATUS/master/`db_schema.sql`; **merge `main` chờ user duyệt**.
 
 ## Thứ tự & phụ thuộc
 

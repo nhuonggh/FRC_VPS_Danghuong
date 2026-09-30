@@ -9,7 +9,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { CashBookDTO } from "@/server/cash/queries";
-import { REVIEW_LABEL } from "@/server/cash/queries";
+import { REVIEW_LABEL } from "@/server/cash/labels";
 
 const TONE = { PENDING_REVIEW: "warning", REVIEWED: "success", RETURNED: "danger" } as const;
 
