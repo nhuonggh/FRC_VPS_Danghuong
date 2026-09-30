@@ -80,6 +80,7 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 // đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   unitCostFifo: "cost.view",
+  materialCost: "cost.view",
   unitCostOut: "cost.view",
   costAmount: "cost.view",
   lineProfit: "profit.view",

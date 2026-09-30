@@ -70,8 +70,19 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
               <td className="px-3 py-2">
                 <strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>
                 {l.processingType && <span className="block text-xs text-fg-secondary">Gia công: {l.processingType}</span>}
-                {l.issues.length > 0 && l.processingType && (
-                  <ul className="mt-1 text-xs text-fg-secondary">{l.issues.map((i) => <li key={i.productCode}>Trừ {formatQty(i.qtyBase)} {i.productName}</li>)}</ul>
+                {l.processingType && l.issues.length > 0 && (
+                  <div className="mt-1 text-xs text-fg-secondary">
+                    {l.bomVersionLabel && <span className="block">{l.bomVersionLabel}</span>}
+                    <ul aria-label={`Nguyên vật liệu đã trừ cho ${l.productCode}`}>
+                      {l.issues.map((i) => (
+                        <li key={i.productCode}>
+                          Trừ {formatQty(i.qtyBase)} {i.baseUnit} {i.productName}
+                          {Number(i.qtyProvisional) > 0 && <span className="text-warning"> · thiếu tồn {formatQty(i.qtyProvisional)}</span>}
+                          {i.materialCost !== undefined && <span> · vốn {formatCurrency(i.materialCost)}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 {l.isProvisional && <Badge tone="warning">Chưa đủ tồn</Badge>}
               </td>

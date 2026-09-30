@@ -2,12 +2,12 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan, can } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
-import { resolveBom } from "@/server/bom";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
 import { docTimestamp, postIssue, type EngineCtx } from "@/server/inventory";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { convertToBase, resolveFactor } from "@/server/products/units";
+import { planBomIssues } from "./issue-by-bom";
 import { lastSalePricePerBase, priceForUnit } from "./pricing";
 import type { SaleOrderInput } from "./schemas";
 
@@ -66,19 +66,9 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: P
       continue;
     }
     const pin = line.id === undefined ? undefined : opts.pinned?.get(line.id);
-    if (pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId && pin.bomVersionId !== null) {
-      const version = await db.bomVersion.findUniqueOrThrow({ where: { id: pin.bomVersionId }, include: { lines: { orderBy: { id: "asc" } } } });
-      const pinnedIssues = version.lines.map((l) => ({ productId: l.materialProductId, qtyBase: l.qtyPerUnit.times(qtyBase).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP) }));
-      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: pinnedIssues, bomVersionId: pin.bomVersionId });
-      continue;
-    }
-    const bom = await resolveBom(db, product.id, line.processingTypeId, at).catch((e: unknown) => {
-      if (e instanceof DomainError && e.status === 404) throw new DomainError(`Dòng ${n}: ${product.code} chưa có định mức hiệu lực cho kiểu gia công đã chọn.`, 400);
-      throw e;
-    });
-    const issues = bom.lines.map((l) => ({ productId: l.materialProductId, qtyBase: D(l.qtyPerUnit).times(qtyBase).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP) }));
-    if (issues.some((i) => !i.qtyBase.gt(0))) throw new DomainError(`Dòng ${n}: số lượng quá nhỏ so với định mức nguyên vật liệu.`, 400);
-    out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues, bomVersionId: bom.versionId });
+    const pinnedVersionId = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId ? pin.bomVersionId : null;
+    const plan = await planBomIssues(db, { n, product, processingTypeId: line.processingTypeId, qtyBase, at, pinnedVersionId });
+    out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: plan.issues, bomVersionId: plan.bomVersionId });
   }
   return out;
 }
