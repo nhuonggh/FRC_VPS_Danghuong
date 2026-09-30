@@ -26,7 +26,7 @@ let w: World; let actor: Actor; let a: { id: number }; let b: { id: number }; le
 let n = 0;
 const P = (sp: Record<string, string> = {}) => parseListParams({ timePreset: "custom", timeStart: "2026-09-01", timeEnd: "2026-09-30", ...sp }, REPORT_FILTER_KEYS);
 const run = (key: string, sp: Record<string, string> = {}, who = actor) => runReport(prisma, who, key, P(sp), NOW);
-const order = (partnerId: number, over: { qty?: number; price?: number; dn?: number; da?: number } = {}) => createSaleOrderIdempotent(prisma, actor, `r-${++n}`, saleOrderSchema.parse({ partnerId, date: "2026-09-15", expectedDeliveryDate: "2026-09-15", note: "", lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: over.qty ?? 4, salePrice: over.price ?? 50_000, discountNow: over.dn ?? 10_000, discountAccum: over.da ?? 20_000, processingTypeId: null, note: "" }] }), NOW);
+const order = (partnerId: number, over: { qty?: number; price?: number; dn?: number; da?: number; date?: string } = {}) => createSaleOrderIdempotent(prisma, actor, `r-${++n}`, saleOrderSchema.parse({ partnerId, date: over.date ?? "2026-09-15", expectedDeliveryDate: over.date ?? "2026-09-15", note: "", lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: over.qty ?? 4, salePrice: over.price ?? 50_000, discountNow: over.dn ?? 10_000, discountAccum: over.da ?? 20_000, processingTypeId: null, note: "" }] }), NOW);
 const row = (r: { rows: Record<string, unknown>[] }, key: string, val: unknown) => r.rows.find((x) => x[key] === val)!;
 
 beforeEach(async () => {
@@ -126,5 +126,48 @@ describe("xuất Excel", () => {
   it("mọi báo cáo xuất được (kể cả dòng tổng)", async () => {
     await order(a.id);
     for (const k of ["order-profit", "period-pnl", "by-customer", "by-group", "issue-by-order", "debt-reconciliation"]) expect((await exportReportXlsx(prisma, actor, k, P())).byteLength, k).toBeGreaterThan(1000);
+  });
+});
+
+describe("52/53 — tiêu hao thực tế và đối chiếu định mức", () => {
+  const BOM = ["bom.manage", "report.view", "stocktake.manage", "order.create", "sale_price.view", "partner.view_all", "cost.view", "order.edit_price"];
+  it("thực tế = định mức (xuất bán) + thiếu khi kiểm; đối chiếu gộp theo NVL, âm = vượt định mức; lọc + quyền", async () => {
+    const { createStocktake, confirmStocktakeIdempotent } = await import("@/server/stocktake/service");
+    const { stocktakeSchema } = await import("@/server/stocktake/schemas");
+    await prisma.product.update({ where: { id: w.p.id }, data: { kind: "NVL" } });
+    const actor2: Actor = { userId: w.userId, perms: new Set([...ALL, ...BOM]) };
+    await order(a.id, { qty: 4, date: "2026-09-10" }); // xuất 4 theo sổ sách; tồn còn 96
+    const day = new Date("2026-09-12T03:00:00Z");
+    const st = await createStocktake(prisma, actor2, stocktakeSchema.parse({ date: "2026-09-12", note: "", lines: [{ productId: w.p.id, actualQty: 93 }] }), day); // thiếu 3
+    await confirmStocktakeIdempotent(prisma, actor2, "st1", st.id);
+    const r = await runReport(prisma, actor2, "actual-consumption", P(), NOW);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ stocktake: st.code, code: w.p.code, norm: "4", shortage: "3", actual: "7" });
+    const c = await runReport(prisma, actor2, "consumption-compare", P(), NOW);
+    expect(c.rows[0]).toMatchObject({ norm: "4", actual: "7", diff: "-3", count: 1 }); expect(c.rows[0]!.pct).toBe(-75); expect(c.negativeKey).toBe("diff");
+    expect((await runReport(prisma, actor2, "consumption-compare", P({ neg: "1" }), NOW)).rows).toHaveLength(1);
+    // lần kiểm sau: mốc trước là lần kiểm này ⇒ chỉ tính xuất sau đó
+    await order(a.id, { qty: 2, date: "2026-09-14" });
+    const st2 = await createStocktake(prisma, actor2, stocktakeSchema.parse({ date: "2026-09-15", note: "", lines: [{ productId: w.p.id, actualQty: 91 }] }), NOW);
+    await confirmStocktakeIdempotent(prisma, actor2, "st2", st2.id);
+    const r2 = await runReport(prisma, actor2, "actual-consumption", P(), NOW);
+    expect(r2.rows.map((x) => [x.norm, x.shortage, x.actual])).toEqual([["4", "3", "7"], ["2", "0", "2"]]);
+    await expect(runReport(prisma, { userId: 1, perms: new Set(["report.view"]) }, "actual-consumption", P(), NOW)).rejects.toMatchObject({ status: 403 });
+    expect((await exportReportXlsx(prisma, actor2, "consumption-compare", P())).byteLength).toBeGreaterThan(1000);
+  });
+});
+
+describe("72 — báo cáo sản xuất", () => {
+  it("liệt kê lệnh còn hiệu lực trong kỳ; giá thành chỉ với cost.view; lệnh hủy không tính", async () => {
+    const { createProductionOrderIdempotent, cancelProductionOrderTx } = await import("@/server/production/service");
+    const pk = await prisma.product.create({ data: { code: "PK-R", name: "Nóc R", kind: "PHU_KIEN", baseUnit: "cái" } });
+    const a2: Actor = { userId: w.userId, perms: new Set([...ALL, "production.manage"]) };
+    const mk = (qty: number, k: string) => createProductionOrderIdempotent(prisma, a2, k, { date: "2026-09-15", productId: pk.id, qty, note: "", materials: [{ productId: w.p.id, qty: 10 }] });
+    const o1 = await mk(5, "p1"), o2 = await mk(2, "p2");
+    await cancelProductionOrderTx(prisma, a2, o2.id, "nhầm");
+    const r = await runReport(prisma, a2, "production", P(), NOW);
+    expect(r.rows).toHaveLength(1); expect(r.rows[0]).toMatchObject({ code: o1.code, qty: "5", unitCost: "20000", totalCost: "100000" }); expect(r.totals).toMatchObject({ totalCost: "100000" });
+    const nc = await runReport(prisma, { userId: w.userId, perms: new Set(["report.view"]) }, "production", P(), NOW);
+    expect(nc.columns.some((c) => c.key === "unitCost")).toBe(false); expect(nc.rows[0]).not.toHaveProperty("unitCost");
   });
 });
