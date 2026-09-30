@@ -122,8 +122,8 @@ Kế thừa master + D-11…D-30. Bổ sung:
 - [x] 🧪: chạy lại không nhân đôi; mã trùng bị lọc; số Việt Nam `1.234,5`; 5.000 dòng ≤ 30 s.
 
 ### Task D9 — Sao lưu hằng đêm (T3)
-- [ ] `scripts/backup.sh` (`pg_dump -Fc`, giữ 14 ngày, bản ngoài máy chủ) + cron VPS + cảnh báo khi thất bại; `scripts/restore-drill.sh` khôi phục ra DB tạm và kiểm số dòng các bảng chính.
-- [ ] Tài liệu vào `docs/infra/RUNBOOK.md`. Việc trên VPS **user làm** theo hướng dẫn từng bước (không cấp SSH cho AI).
+- [x] `scripts/backup.sh` (`pg_dump -Fc`, giữ 14 ngày, bản ngoài máy chủ) + cron VPS + cảnh báo khi thất bại; `scripts/restore-drill.sh` khôi phục ra DB tạm và kiểm số dòng các bảng chính.
+- [x] Tài liệu vào `docs/infra/RUNBOOK.md`. Việc trên VPS **user làm** theo hướng dẫn từng bước (không cấp SSH cho AI).
 
 ### Task D10 — Chạy thử, đào tạo đợt 1, chạy song song (T6, T7)
 - [ ] Kịch bản chạy thử theo vai trò (bán hàng, kế toán, thủ kho, thủ quỹ, giám đốc); tài liệu hướng dẫn ngắn có ảnh chụp.

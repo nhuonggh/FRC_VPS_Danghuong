@@ -294,3 +294,42 @@ Phiên đang đăng nhập không bị ảnh hưởng (JWT chỉ giữ id user).
 **Lỗi thường gặp**: `redirect_uri_mismatch` → URI ở bước 2 sai (http/https, `www`, `/` cuối). Về `/login` với "sự cố cấu
 hình" → thiếu/sai `NEXTAUTH_URL` hoặc `AUTH_SECRET`. "Chưa được cấp quyền" dù đã nhập email → kiểm email đúng tài khoản Google
 (chữ hoa/thường không quan trọng), tài khoản không bị khoá, và consent screen đã Publish (External).
+
+## 14. Sao lưu hằng đêm + diễn tập khôi phục (plan 05 · D9)
+
+**Làm TRƯỚC khi nhập dữ liệu thật.** Hai script nằm trong repo: `scripts/backup.sh` (pg_dump -Fc, giữ 14 ngày, kiểm file, đẩy
+bản ngoài máy chủ, cảnh báo khi lỗi) và `scripts/restore-drill.sh` (nạp bản mới nhất vào DB tạm, so số dòng, xoá DB tạm; **không
+đụng `dherp_db`**). Chỉ dùng `docker exec` vào `postgres_dherp` nên không cần mật khẩu; AI không cần SSH — bạn tự làm bằng Termius.
+
+**1. Đưa script lên VPS** (đăng nhập `deploy_dherp`; nếu `docker ps` báo thiếu quyền thì cần thêm user vào nhóm `docker` — báo lại):
+
+    mkdir -p ~/bin ~/backups && chmod 700 ~/backups
+    # từ máy dev có repo:  scp scripts/backup.sh scripts/restore-drill.sh deploy_dherp@<VPS>:~/bin/
+    chmod +x ~/bin/backup.sh ~/bin/restore-drill.sh
+    ~/bin/backup.sh          # chạy thử: phải in "xong: …" và tạo ~/backups/dherp_<ngày>.dump
+
+**2. Bản ngoài máy chủ (bắt buộc)** — sao lưu chỉ nằm trên cùng VPS thì mất máy là mất hết. Chọn một, đặt vào file cấu hình
+(mode 600, không commit):
+
+    cat > ~/.backup.env <<'X'
+    export OFFSITE_CMD='rclone copy "$BACKUP_FILE" gdrive:dherp-backup'   # hoặc: scp "$BACKUP_FILE" user@may-khac:/duong/dan/
+    export ALERT_URL='https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>'   # tuỳ chọn: nhận tin khi lỗi
+    X
+    chmod 600 ~/.backup.env
+
+(`rclone` cấu hình một lần bằng `rclone config` với Google Drive của xưởng; file dump chứa dữ liệu khách nên đặt thư mục Drive
+riêng tư.) Không có `ALERT_URL` thì lỗi vẫn ghi vào `~/backups/FAILED` — xem mục 4.
+
+**3. Cron hằng đêm 01:30** (`crontab -e`):
+
+    30 1 * * * set -a; . $HOME/.backup.env; set +a; $HOME/bin/backup.sh >> $HOME/backups/backup.log 2>&1
+
+**4. Kiểm tra hằng tuần** (30 giây): `ls -lt ~/backups | head -3` (phải có file trong 24 giờ qua), `ls ~/backups/FAILED` (không được tồn tại), `tail -5 ~/backups/backup.log`.
+
+**5. Diễn tập khôi phục — mỗi tháng một lần và ngay trước go-live:**
+
+    ~/bin/restore-drill.sh        # cuối cùng phải in "ĐẠT"; bảng nào "THIẾU/RỖNG/NHIỀU hơn" là có vấn đề
+
+Bản sao lưu cũ hơn DB thật nên số dòng sao lưu ≤ số dòng thật là bình thường. Khôi phục THẬT (chỉ khi mất dữ liệu): dừng app,
+`pg_restore --clean --if-exists -d dherp_db` từ file `.dump` bằng `dherp_user`, chạy lại `migrate deploy`, bật app — làm cùng
+người có kinh nghiệm, đừng làm một mình lần đầu.
