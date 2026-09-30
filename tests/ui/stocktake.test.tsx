@@ -8,10 +8,10 @@ import { StocktakeDetail } from "@/components/stocktake/StocktakeDetail";
 import { StocktakeForm } from "@/components/stocktake/StocktakeForm";
 import type { StocktakeDetailDTO } from "@/server/stocktake/queries";
 
-const refresh = vi.fn(), replace = vi.fn(); const apiFetch = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace, refresh }), usePathname: () => "/inventory/stocktakes/1", useSearchParams: () => new URLSearchParams("") }));
+const refresh = vi.fn(), replace = vi.fn(); const apiFetch = vi.fn(); let search = "";
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace, refresh }), usePathname: () => "/inventory/stocktakes/1", useSearchParams: () => new URLSearchParams(search) }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
-beforeEach(() => { refresh.mockReset(); replace.mockReset(); apiFetch.mockReset(); apiFetch.mockResolvedValue({ id: 1 }); });
+beforeEach(() => { search = ""; refresh.mockReset(); replace.mockReset(); apiFetch.mockReset(); apiFetch.mockResolvedValue({ id: 1 }); });
 afterEach(cleanup);
 
 const st = (over: Partial<StocktakeDetailDTO> = {}): StocktakeDetailDTO => ({
@@ -21,6 +21,7 @@ const st = (over: Partial<StocktakeDetailDTO> = {}): StocktakeDetailDTO => ({
 
 describe("StocktakeDetail", () => {
   it("nháp: có Sửa/Chốt/Hủy; chốt gọi API với khoá idempotency; chênh lệch âm hiển thị", async () => {
+    search = "tab=lines";
     render(<StocktakeDetail st={st()} />);
     expect(screen.getByRole("link", { name: "Sửa nháp" })).toBeInTheDocument();
     expect(screen.getByText("-3")).toBeInTheDocument();

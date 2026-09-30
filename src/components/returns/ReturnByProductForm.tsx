@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { FileText, ListChecks } from "lucide-react";
+import { Combobox, Field, inputClass, NewPage, tabsWithErrors, type FormTab, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -74,9 +75,8 @@ export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUP
   const amountOf = (l: (typeof lines)[number] | undefined) => Math.round(num(l?.qty) * num(l?.unitPrice) * 100) / 100;
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
 
-  return (
-    <NewPage backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-5">
+  const tabs: FormTab[] = [
+    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["partnerId","date","note"], render: () => (<div className="space-y-5">
         <p className="text-sm text-fg-secondary">{c.hint}</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Controller control={control} name="partnerId" render={({ field }) => (
@@ -87,6 +87,11 @@ export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUP
             <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
           </Field>
         </div>
+        <Field id="note" label="Ghi chú" error={errors.note?.message}>
+          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+        </Field>
+    </div>) },
+    { key: "dong-hang", label: "Dòng hàng trả", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[760px] text-sm">
             <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -123,10 +128,9 @@ export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUP
         </div>
         {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
         <button type="button" onClick={() => append(emptyLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
-        <Field id="note" label="Ghi chú" error={errors.note?.message}>
-          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
-    </NewPage>
+    </div>) },
+  ];
+  return (
+    <NewPage backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
   );
 }
