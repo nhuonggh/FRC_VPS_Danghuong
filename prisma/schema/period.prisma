@@ -31,6 +31,7 @@ model Period {
   deliveryNotes    DeliveryNote[]
   quotes           Quote[]
   receipts         Receipt[]
+  payments         Payment[]
   goodsReturns     GoodsReturn[]
   debtAdjustments  DebtAdjustment[]
   debtTransfers    DebtTransfer[]

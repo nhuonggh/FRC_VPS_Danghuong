@@ -218,31 +218,36 @@ enum ReceiptType {
 /// Phiếu thu. C5 chỉ dùng loại COC (tiền cọc); phiếu thu/sổ quỹ đầy đủ ở plan 05-D1 (khi đó dựng `cash_ledger` từ bảng này).
 /// Tiền vào là `credit` của khách trong partner_ledger ngay khi lập → khi giao (debit) số dư tự bù trừ.
 model Receipt {
-  id            Int         @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   periodId      Int
-  code          String      @unique
-  partnerId     Int
+  code          String           @unique
+  /// null chỉ với thu khác (KHAC) không gắn đối tác.
+  partnerId     Int?
   type          ReceiptType
   /// null = cọc đã chuyển thành số dư của khách (không gắn đơn nào).
   orderId       Int?
-  amount        Decimal     @db.Decimal(18, 2)
+  amount        Decimal          @db.Decimal(18, 2)
   cashAccountId Int
   at            DateTime
   note          String?
-  isCancelled   Boolean     @default(false)
+  isCancelled   Boolean          @default(false)
   cancelledAt   DateTime?
   cancelledBy   Int?
+  reviewStatus  CashReviewStatus @default(PENDING_REVIEW)
+  reviewedBy    Int?
+  reviewedAt    DateTime?
   createdBy     Int
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime         @default(now())
 
   period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  partner     Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  partner     Partner?    @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   order       SaleOrder?  @relation(fields: [orderId], references: [id], onDelete: Restrict)
   cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([periodId, at])
   @@index([partnerId])
+  @@index([reviewStatus])
   @@map("receipts")
 }
 

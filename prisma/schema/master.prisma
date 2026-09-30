@@ -55,6 +55,7 @@ model Partner {
   saleOrders      SaleOrder[]
   quotes          Quote[]
   receipts        Receipt[]
+  payments        Payment[]
   goodsReturns    GoodsReturn[]
   debtAdjustments DebtAdjustment[]
   transfersFrom   DebtTransfer[]    @relation("TransferFrom")
@@ -129,6 +130,7 @@ model CashAccount {
   openingCash OpeningCash[]
   ledger      CashLedger[]
   receipts    Receipt[]
+  payments    Payment[]
 
   @@map("cash_accounts")
 }

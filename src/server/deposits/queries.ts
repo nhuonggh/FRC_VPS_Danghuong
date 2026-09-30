@@ -32,7 +32,7 @@ export async function listDeposits(db: Db, actor: Actor, params: ListParams) {
     db.receipt.count({ where }),
   ]);
   const out: DepositRowDTO[] = rows.map((r) => ({
-    id: r.id, code: r.code, at: r.at, partnerName: r.partner.name, orderId: r.order?.id ?? null, orderCode: r.order?.code ?? null,
+    id: r.id, code: r.code, at: r.at, partnerName: r.partner?.name ?? "", orderId: r.order?.id ?? null, orderCode: r.order?.code ?? null,
     amount: r.amount.toString(), cashAccountName: r.cashAccount.name, isCancelled: r.isCancelled, note: r.note,
   }));
   return { rows: out, total };
