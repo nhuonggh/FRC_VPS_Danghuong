@@ -20,7 +20,6 @@ cat /opt/caddy/sites/dherp.caddy
 ls /opt/caddy/sites/
 grep -rl "dherp.sheetapp.store" /opt/caddy/ 2>/dev/null          # chỉ được ra 1 file (dherp.caddy)
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile   # phải "Valid configuration" TRƯỚC khi sửa
-for h in dherp crm lms; do :; done                               # (tuỳ) ghi lại mã HTTP các site khác để so sau
 curl -sI https://dherp.sheetapp.store | head -5
 ```
 Nếu `validate` đã lỗi từ trước → dừng, không sửa gì, báo lại.
