@@ -160,7 +160,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 |---|---|---|---|
 | 1 | **03 — GĐ1b**, tách 3 file: **03a** (Task 1–8), **03b** (Task 9–15), **03c** (Task 16–19) — ĐÃ VIẾT ĐỦ | Task 1–11 deploy xanh; Task 12 đã push chờ CI/deploy; Task 13–15 chưa hoàn tất; còn Task 16–19 | Xác nhận CI/deploy Task 12, rồi hoàn tất Task 13–15 và kiểm cuối 03b |
 | 2 | 04 — GĐ1c (**đã viết 29/09**, chưa thực thi) | Bán hàng (`registerCostOwner('SALE', …)` bắt buộc — hiện mọi SALE bị chặn), đơn 2 trục trạng thái, phiếu giao, sửa/hủy/khôi phục, báo giá/cọc, trả hàng, công nợ, tự trừ NVL tôn xốp | plan 03 xong |
-| 3 | 05 — GĐ2 (chưa viết) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong |
+| 3 | 05 — GĐ2 (**đã viết 30/09**: `docs/superpowers/plans/2026-09-30-05-gd2-money-delivery-print-migrate.md`, task D1–D10; chưa thực thi) | Thu/chi, quỹ, chiết khấu tích lũy, chuyến giao + đối soát, 9 mẫu in (Apps Script), số đầu kỳ, chuyển dữ liệu D1–D4, backup, chạy thử/đào tạo | plan 04 xong (**đạt 30/09**, run 43 xanh) |
 | 4 | 06 — GĐ3 (chưa viết) | Sản xuất phụ kiện, gia công thuê, kiểm kho, báo cáo 67–73 | song song được |
 | 5 | 07 — GĐ4 (chưa viết) | Kết sổ (khoá `FOR UPDATE` dòng `periods` ĐẦU TIÊN; chặn khi còn cờ/job tính lại; chặn khi còn dòng treo), tra cứu kỳ cũ, kiểm thử toàn bộ, diễn tập khôi phục, bàn giao | plan 05/06 xong |
 
