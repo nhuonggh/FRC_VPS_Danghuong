@@ -70,7 +70,7 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
         await new Promise((r) => setTimeout(r, 0));
         const first = errorRef.current[0];
         if (first) {
-          if (!errorRef.current.includes(activeRef.current)) setActive(first);
+          if (first !== activeRef.current) setActive(first);
           requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLElement>('[role=tabpanel]:not([hidden]) [aria-invalid="true"]')?.focus()));
         }
       }
