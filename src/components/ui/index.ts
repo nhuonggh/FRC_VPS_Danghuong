@@ -7,6 +7,7 @@ export { EmptyState } from "./EmptyState";
 export { ListPageLayout } from "./ListPageLayout";
 export { MultiSelectFilter } from "./MultiSelectFilter";
 export { NewPage } from "./NewPage";
+export { FormTabsBar, FormTabsNav, tabsWithErrors, type FormTab } from "./FormTabs";
 export { PaginationFooter } from "./PaginationFooter";
 export { StatCard } from "./StatCard";
 export { TempPasswordDialog } from "./TempPasswordDialog";
