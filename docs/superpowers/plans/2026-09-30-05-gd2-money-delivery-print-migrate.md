@@ -74,13 +74,13 @@ Kế thừa master + D-11…D-30. Bổ sung:
 ---
 
 ### Task D1 — Phiếu thu/chi, quỹ chung hậu kiểm, sổ quỹ, chốt quỹ (mã 56–61)
-- [ ] Schema + migration `cash_vouchers`: `payments`, mở rộng `receipts` (loại `THU_NO|COC|KHAC`, `reviewStatus`), `cash_review_events` (mọi lần gửi/kiểm/trả lại: ai, khi nào, lý do), `cash_adjustments`, `cash_closes`; CHECK (`amount > 0`, trạng thái hợp lệ). Backfill `cash_ledger` cho các phiếu cọc đã có.
-- [ ] `postCashLedger` / `removeCashLedger` (D-31) + test kiến trúc; `receipts`/`payments` qua `withIdempotency` + `postPartnerLedger` (thu: khách credit; chi trả NCC: NCC debit; chi phí/khác: không đối tác).
-- [ ] Lập/sửa (khi `PENDING_REVIEW`/`RETURNED`)/hủy phiếu thu (56,57) và phiếu chi (58,59): số phiếu `PT`/`PC`, đối tác tuỳ chọn, gắn đơn (thu nợ theo đơn), quỹ/tài khoản, ngày, ghi chú.
-- [ ] Hậu kiểm: `review` / `return` (lý do bắt buộc) có khoá đồng thời (`SELECT … FOR UPDATE` trên phiếu) + audit; danh sách chờ kiểm tra riêng (đơn hàng, thu, chi, cộng/trừ nợ, chiết khấu, điều chỉnh) lọc ngày/người/loại/khách/trạng thái.
-- [ ] Điều chỉnh sau `REVIEWED`: yêu cầu (`cash.adjust.request`) → duyệt (`cash.adjust.approve`) → dòng sổ đảo + dòng mới, liên kết phiếu gốc.
-- [ ] Sổ quỹ tiền mặt (60) và sổ tiền gửi NH (61): đầu kỳ + phát sinh, 3 chỉ số vận hành/đã kiểm/chờ kiểm, xuất Excel. Chốt quỹ: tiền đầu + thu − chi tại mốc, nhập tiền thực, chênh lệch + lý do, lưu snapshot (không thay `period.close`).
-- [ ] 🧪: số dư = đầu kỳ + phát sinh; **[R]** hai thủ quỹ kiểm cùng phiếu; **[R]** bấm 2 lần tạo phiếu; sửa phiếu `REVIEWED` bị chặn, điều chỉnh sinh dòng đảo; hủy phiếu đảo về 0 cả quỹ lẫn công nợ; thiếu quyền `cash.review` bị chặn ở server.
+- [x] Schema + migration `cash_vouchers`: `payments`, mở rộng `receipts` (loại `THU_NO|COC|KHAC`, `reviewStatus`), `cash_review_events` (mọi lần gửi/kiểm/trả lại: ai, khi nào, lý do), `cash_adjustments`, `cash_closes`; CHECK (`amount > 0`, trạng thái hợp lệ). Backfill `cash_ledger` cho các phiếu cọc đã có.
+- [x] `postCashLedger` / `removeCashLedger` (D-31) + test kiến trúc; `receipts`/`payments` qua `withIdempotency` + `postPartnerLedger` (thu: khách credit; chi trả NCC: NCC debit; chi phí/khác: không đối tác).
+- [x] Lập/sửa (khi `PENDING_REVIEW`/`RETURNED`)/hủy phiếu thu (56,57) và phiếu chi (58,59): số phiếu `PT`/`PC`, đối tác tuỳ chọn, gắn đơn (thu nợ theo đơn), quỹ/tài khoản, ngày, ghi chú.
+- [x] Hậu kiểm: `review` / `return` (lý do bắt buộc) có khoá đồng thời (`SELECT … FOR UPDATE` trên phiếu) + audit; danh sách chờ kiểm tra riêng (đơn hàng, thu, chi, cộng/trừ nợ, chiết khấu, điều chỉnh) lọc ngày/người/loại/khách/trạng thái.
+- [x] Điều chỉnh sau `REVIEWED`: yêu cầu (`cash.adjust.request`) → duyệt (`cash.adjust.approve`) → dòng sổ đảo + dòng mới, liên kết phiếu gốc.
+- [x] Sổ quỹ tiền mặt (60) và sổ tiền gửi NH (61): đầu kỳ + phát sinh, 3 chỉ số vận hành/đã kiểm/chờ kiểm, xuất Excel. Chốt quỹ: tiền đầu + thu − chi tại mốc, nhập tiền thực, chênh lệch + lý do, lưu snapshot (không thay `period.close`).
+- [x] 🧪: số dư = đầu kỳ + phát sinh; **[R]** hai thủ quỹ kiểm cùng phiếu; **[R]** bấm 2 lần tạo phiếu; sửa phiếu `REVIEWED` bị chặn, điều chỉnh sinh dòng đảo; hủy phiếu đảo về 0 cả quỹ lẫn công nợ; thiếu quyền `cash.review` bị chặn ở server.
 
 ### Task D2 — Chi phí hoạt động (mã 66)
 - [ ] `operating_expenses` gắn phiếu chi loại `CHI_PHI` (D-32): loại chi phí, số tiền, ngày, ghi chú; danh sách + tổng theo loại/tháng; xuất Excel.
