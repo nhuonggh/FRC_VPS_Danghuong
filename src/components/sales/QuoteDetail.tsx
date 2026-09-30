@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { DetailField, DetailPage, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
@@ -16,7 +17,7 @@ export const QUOTE_STATUS = {
   CANCELLED: { label: "Đã hủy", tone: "danger" as const },
 };
 
-export function QuoteDetail({ quote, canManage, canConvert }: { quote: QuoteDetailDTO; canManage: boolean; canConvert: boolean }) {
+export function QuoteDetail({ quote, canManage, canConvert, canPrint = false }: { quote: QuoteDetailDTO; canManage: boolean; canConvert: boolean; canPrint?: boolean }) {
   const router = useRouter();
   const nav = useDetailNav(["info", "lines"]);
   const [busy, setBusy] = useState(false);
@@ -46,6 +47,7 @@ export function QuoteDetail({ quote, canManage, canConvert }: { quote: QuoteDeta
   const st = QUOTE_STATUS[quote.status];
   const actions = (
     <>
+      {canPrint && quote.status !== "CANCELLED" && <PrintButton docType="QUOTE" docId={quote.id} label="In báo giá" />}
       {open && canManage && quote.status === "DRAFT" && <button type="button" onClick={send} disabled={busy} className="h-10 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">Đánh dấu đã gửi</button>}
       {open && canManage && <Link href={`/sales/quotes/${quote.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Sửa</Link>}
       {open && canManage && <button type="button" onClick={cancel} disabled={busy} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft disabled:opacity-50">Hủy báo giá</button>}

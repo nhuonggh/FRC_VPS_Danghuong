@@ -83,3 +83,19 @@ model PrintTemplate {
   @@unique([docType, name])
   @@map("print_templates")
 }
+
+/// Bản in đã tạo qua Apps Script: MỖI chứng từ một dòng (in lại ⇒ xoá file cũ trên Drive rồi ghi đè dòng này). Không lưu nội dung in.
+model PrintFile {
+  id         Int      @id @default(autoincrement())
+  docType    String
+  docId      Int
+  templateId Int?
+  fileId     String
+  url        String
+  name       String
+  printedBy  Int
+  printedAt  DateTime @default(now())
+
+  @@unique([docType, docId])
+  @@map("print_files")
+}

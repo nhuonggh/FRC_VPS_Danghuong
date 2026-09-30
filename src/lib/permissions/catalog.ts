@@ -58,6 +58,14 @@ export const PERMISSIONS = [
   { code: "receipt.manage", label: "Phiếu thu", group: "Kế toán" },
   { code: "payment.manage", label: "Phiếu chi", group: "Kế toán" },
   { code: "cashbook.view", label: "Sổ quỹ, sổ tiền gửi", group: "Kế toán" },
+  // Quỹ chung hậu kiểm (plan 05 D-34): kế toán lập trước, thủ quỹ kiểm sau
+  { code: "cash.transaction.create", label: "Lập phiếu thu/chi", group: "Quỹ" },
+  { code: "cash.transaction.edit_pending", label: "Sửa/hủy phiếu thu/chi chưa kiểm tra", group: "Quỹ" },
+  { code: "cash.review", label: "Kiểm tra / trả lại phiếu thu-chi", group: "Quỹ", sensitive: true },
+  { code: "cash.adjust.request", label: "Yêu cầu điều chỉnh phiếu đã kiểm tra", group: "Quỹ" },
+  { code: "cash.adjust.approve", label: "Duyệt điều chỉnh phiếu đã kiểm tra", group: "Quỹ", sensitive: true },
+  { code: "cash.close", label: "Chốt quỹ", group: "Quỹ", sensitive: true },
+  { code: "cash.close.reopen", label: "Hủy chốt quỹ", group: "Quỹ", sensitive: true },
   { code: "debt.view", label: "Xem công nợ", group: "Kế toán" },
   { code: "debt.adjust", label: "Điều chỉnh/gộp công nợ", group: "Kế toán" },
   { code: "discount.settle", label: "Tất toán chiết khấu tích lũy", group: "Kế toán" },
@@ -116,13 +124,14 @@ type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly 
 // Phân quyền MẪU (spec 6.6) — khách tự chỉnh được sau. `// TODO: confirm` với khách chi tiết từng vai trò.
 export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   "Giám đốc": "*",
-  "Kế toán": { except: ["period.close", "user.manage", "role.manage"] },
+  "Kế toán": { except: ["period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
   "Thủ kho": {
     allow: ["product.view", "stock.view", "stocktake.manage", "stock_adjust.manage", "order.view", "print.use"],
   },
   "Thủ quỹ": {
     allow: [
       "partner.view", "partner.view_all", "cashbook.view", "receipt.manage", "payment.manage", "trip.confirm_cash",
+      "cash.transaction.create", "cash.transaction.edit_pending", "cash.review", "cash.adjust.request", "cash.adjust.approve", "cash.close",
       "debt.view", "order.view", "sale_price.view", "print.use",
     ],
   },

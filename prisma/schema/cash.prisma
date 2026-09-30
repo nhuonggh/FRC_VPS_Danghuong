@@ -1,0 +1,170 @@
+enum CashReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  RETURNED
+
+  @@map("cash_review_status")
+}
+
+enum PaymentKind {
+  TRA_NCC
+  HOAN_KHACH
+  CHI_PHI
+  TAT_TOAN_CK
+  KHAC
+
+  @@map("payment_kind")
+}
+
+enum CashAdjustmentKind {
+  AMOUNT
+  VOID
+
+  @@map("cash_adjustment_kind")
+}
+
+enum CashAdjustmentStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+
+  @@map("cash_adjustment_status")
+}
+
+/// Phiếu chi (PC######). Ghi `cash_ledger` (ra) + `partner_ledger` (debit đối tác với TRA_NCC/HOAN_KHACH) ngay khi lập;
+/// thủ quỹ hậu kiểm sau (D-33). CHI_PHI/TAT_TOAN_CK do D2/D3 tạo.
+model Payment {
+  id            Int              @id @default(autoincrement())
+  periodId      Int
+  code          String           @unique
+  kind          PaymentKind
+  partnerId     Int?
+  amount        Decimal          @db.Decimal(18, 2)
+  cashAccountId Int
+  at            DateTime
+  note          String?
+  reviewStatus  CashReviewStatus @default(PENDING_REVIEW)
+  reviewedBy    Int?
+  reviewedAt    DateTime?
+  isCancelled   Boolean          @default(false)
+  cancelledAt   DateTime?
+  cancelledBy   Int?
+  createdBy     Int
+  createdAt     DateTime         @default(now())
+
+  period      Period              @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner     Partner?            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  expense     OperatingExpense?
+  settlement  DiscountSettlement?
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@index([reviewStatus])
+  @@map("payments")
+}
+
+/// Mọi lần gửi/sửa/kiểm/trả lại/hủy của phiếu thu-chi: ai, khi nào, lý do (không xoá).
+model CashReviewEvent {
+  id      Int      @id @default(autoincrement())
+  docType String // RECEIPT | PAYMENT
+  docId   Int
+  action  String // SUBMIT | EDIT | RESUBMIT | REVIEW | RETURN | CANCEL
+  reason  String?
+  userId  Int
+  at      DateTime @default(now())
+
+  @@index([docType, docId])
+  @@map("cash_review_events")
+}
+
+/// Điều chỉnh phiếu đã REVIEWED: yêu cầu → thủ quỹ duyệt/từ chối; duyệt sinh dòng sổ đảo + dòng mới (docType CASH_ADJ).
+model CashAdjustment {
+  id               Int                  @id @default(autoincrement())
+  periodId         Int
+  docType          String // RECEIPT | PAYMENT
+  docId            Int
+  kind             CashAdjustmentKind
+  status           CashAdjustmentStatus @default(REQUESTED)
+  reason           String
+  newAmount        Decimal?             @db.Decimal(18, 2)
+  newCashAccountId Int?
+  oldAmount        Decimal?             @db.Decimal(18, 2)
+  oldCashAccountId Int?
+  requestedBy      Int
+  requestedAt      DateTime             @default(now())
+  decidedBy        Int?
+  decidedAt        DateTime?
+  decisionNote     String?
+
+  @@index([docType, docId])
+  @@index([status])
+  @@map("cash_adjustments")
+}
+
+/// Chốt quỹ: snapshot tiền đầu + thu − chi tại mốc, tiền kiểm đếm thực tế, chênh lệch + lý do. Không thay `period.close`.
+model CashClose {
+  id            Int       @id @default(autoincrement())
+  periodId      Int
+  cashAccountId Int
+  closeAt       DateTime
+  expected      Decimal   @db.Decimal(18, 2)
+  actual        Decimal   @db.Decimal(18, 2)
+  diff          Decimal   @db.Decimal(18, 2)
+  reason        String?
+  createdBy     Int
+  createdAt     DateTime  @default(now())
+  voidedAt      DateTime?
+  voidedBy      Int?
+  voidReason    String?
+
+  @@index([cashAccountId, closeAt])
+  @@map("cash_closes")
+}
+
+/// Chi phí hoạt động (66): mỗi khoản = MỘT phiếu chi loại CHI_PHI (D-32). Số tiền, ngày, ghi chú, hủy, hậu kiểm nằm ở phiếu chi;
+/// bảng này chỉ thêm loại chi phí. Không đụng công nợ.
+model OperatingExpense {
+  id            Int      @id @default(autoincrement())
+  periodId      Int
+  expenseTypeId Int
+  paymentId     Int      @unique
+  createdBy     Int
+  createdAt     DateTime @default(now())
+
+  period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  expenseType ExpenseType @relation(fields: [expenseTypeId], references: [id], onDelete: Restrict)
+  payment     Payment     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, expenseTypeId])
+  @@map("operating_expenses")
+}
+
+/// Tất toán chiết khấu tích lũy (D-37): CASH = phiếu chi TAT_TOAN_CK (sổ quỹ ra) + discount_ledger.amountOut;
+/// OFFSET = trừ vào công nợ khách (partner_ledger credit) + discount_ledger.amountOut. Hậu kiểm (`is_reconciled`) nằm ở dòng
+/// discount_ledger của phiếu. Mã CK######.
+model DiscountSettlement {
+  id           Int                  @id @default(autoincrement())
+  periodId     Int
+  code         String               @unique
+  partnerId    Int
+  method       DiscountSettleMethod
+  amount       Decimal              @db.Decimal(18, 2)
+  at           DateTime
+  note         String?
+  paymentId    Int?                 @unique
+  isCancelled  Boolean              @default(false)
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime             @default(now())
+
+  period  Period   @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner  @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@map("discount_settlements")
+}

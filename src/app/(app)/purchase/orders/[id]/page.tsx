@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { canPrintDoc } from "@/server/print/types";
 import { PurchaseDetail } from "@/components/purchase/PurchaseDetail";
 import { prisma } from "@/lib/prisma";
 import { ictYmd } from "@/lib/time";
@@ -13,5 +14,5 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
   const purchase = await getPurchase(prisma, actor, Number(raw)).catch((error) => { if (error instanceof DomainError && error.status === 404) notFound(); throw error; });
   const products = await productOptionsByIds(prisma, purchase.lines.map((line) => line.productId));
   const canEdit = actor.perms.has("purchase.edit") && actor.perms.has("purchase_price.view");
-  return <PurchaseDetail purchase={purchase} products={products} date={ictYmd(purchase.at)} canEdit={canEdit} canCancel={actor.perms.has("purchase.cancel")} />;
+  return <PurchaseDetail purchase={purchase} products={products} date={ictYmd(purchase.at)} canEdit={canEdit} canCancel={actor.perms.has("purchase.cancel")} canPrint={canPrintDoc(actor.perms, "PURCHASE_RECEIPT")} />;
 }

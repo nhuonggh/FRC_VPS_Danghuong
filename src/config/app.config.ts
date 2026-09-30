@@ -70,11 +70,11 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "trips", label: "Chuyến giao",
         functions: [
-          { key: "trip-new", label: "Xếp chuyến", desc: "Gom đơn theo tuyến, gán xe + lái + phụ, in phiếu giao", icon: "truck", view: "form", path: "/delivery/trips/new", codes: ["38"], perm: "trip.manage", planned: P },
-          { key: "trip-list", label: "Danh sách chuyến", desc: "Chuyến theo trạng thái", icon: "clipboard-list", view: "table", path: "/delivery/trips", codes: ["39"], perm: "trip.manage", planned: P },
-          { key: "trip-result", label: "Nhập kết quả giao", desc: "Trạng thái + tiền mặt + chuyển khoản + ghi nợ", icon: "list-checks", view: "form", path: "/delivery/results", codes: ["40"], perm: "trip.manage", planned: P },
-          { key: "trip-settle", label: "Đối soát lái xe", desc: "Đối soát tiền, thủ quỹ xác nhận", icon: "scale", view: "table", path: "/delivery/settlements", codes: ["41"], perm: "trip.settle", planned: P },
-          { key: "undelivered", label: "Hàng không giao được", desc: "Nhập lại kho, giao người bán xử lý", icon: "undo-2", view: "table", path: "/delivery/undelivered", codes: ["42"], perm: "trip.manage", planned: P },
+          { key: "trip-new", label: "Xếp chuyến", desc: "Gom đơn theo tuyến, gán xe + lái + phụ, in phiếu giao", icon: "truck", view: "form", path: "/delivery/trips/new", codes: ["38"], perm: "trip.manage" },
+          { key: "trip-list", label: "Danh sách chuyến", desc: "Chuyến theo trạng thái", icon: "clipboard-list", view: "table", path: "/delivery/trips", codes: ["39"], perm: "trip.manage" },
+          { key: "trip-result", label: "Nhập kết quả giao", desc: "Trạng thái + tiền mặt + chuyển khoản + ghi nợ", icon: "list-checks", view: "form", path: "/delivery/results", codes: ["40"], perm: "trip.manage" },
+          { key: "trip-settle", label: "Đối soát lái xe", desc: "Đối soát tiền, thủ quỹ xác nhận", icon: "scale", view: "table", path: "/delivery/settlements", codes: ["41"], perm: "trip.settle" },
+          { key: "undelivered", label: "Hàng không giao được", desc: "Nhập lại kho, giao người bán xử lý", icon: "undo-2", view: "table", path: "/delivery/undelivered", codes: ["42"], perm: "trip.manage" },
         ],
       },
     ],
@@ -174,17 +174,19 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "cash", label: "Thu chi & quỹ",
         functions: [
-          { key: "receipt-list", label: "Phiếu thu", desc: "Lập & danh sách phiếu thu", icon: "banknote", view: "table", path: "/accounting/receipts", codes: ["56", "57"], perm: "receipt.manage", planned: P },
-          { key: "payment-list", label: "Phiếu chi", desc: "Lập & danh sách phiếu chi", icon: "coins", view: "table", path: "/accounting/payments", codes: ["58", "59"], perm: "payment.manage", planned: P },
-          { key: "cashbook", label: "Sổ quỹ tiền mặt", desc: "", icon: "wallet", view: "table", path: "/accounting/cashbook", codes: ["60"], perm: "cashbook.view", planned: P },
-          { key: "bankbook", label: "Sổ tiền gửi ngân hàng", desc: "", icon: "landmark", view: "table", path: "/accounting/bankbook", codes: ["61"], perm: "cashbook.view", planned: P },
-          { key: "expense", label: "Chi phí hoạt động", desc: "Lương, dầu, điện, sửa xe…", icon: "calculator", view: "table", path: "/accounting/expenses", codes: ["66"], perm: "expense.manage", planned: P },
+          { key: "receipt-list", label: "Phiếu thu", desc: "Lập & danh sách phiếu thu", icon: "banknote", view: "table", path: "/accounting/receipts", codes: ["56", "57"], perm: "receipt.manage" },
+          { key: "payment-list", label: "Phiếu chi", desc: "Lập & danh sách phiếu chi", icon: "coins", view: "table", path: "/accounting/payments", codes: ["58", "59"], perm: "payment.manage" },
+          { key: "cash-review", label: "Chờ kiểm tra quỹ", desc: "Thủ quỹ kiểm tra / trả lại phiếu, duyệt điều chỉnh", icon: "list-checks", view: "table", path: "/accounting/cash-review", codes: [], perm: "cash.review" },
+          { key: "cashbook", label: "Sổ quỹ tiền mặt", desc: "", icon: "wallet", view: "table", path: "/accounting/cashbook", codes: ["60"], perm: "cashbook.view" },
+          { key: "bankbook", label: "Sổ tiền gửi ngân hàng", desc: "", icon: "landmark", view: "table", path: "/accounting/bankbook", codes: ["61"], perm: "cashbook.view" },
+          { key: "expense", label: "Chi phí hoạt động", desc: "Lương, dầu, điện, sửa xe…", icon: "calculator", view: "table", path: "/accounting/expenses", codes: ["66"], perm: "expense.manage" },
         ],
       },
       {
         key: "debt", label: "Công nợ",
         functions: [
           { key: "debt-summary", label: "Công nợ tổng hợp", desc: "Lọc KH/nhóm, kèm số dư chiết khấu tích lũy", icon: "scale", view: "table", path: "/accounting/debts", codes: ["62", "63"], perm: "debt.view" },
+          { key: "discount-ledger", label: "Chiết khấu tích lũy", desc: "Sổ, tất toán (chi tiền / trừ nợ), hậu kiểm", icon: "percent", view: "table", path: "/accounting/discounts", codes: ["31"], perm: "debt.view" },
           { key: "debt-adjust", label: "Điều chỉnh công nợ", desc: "Hàng lỗi, bẹp, móp; sổ chiết khấu tích lũy", icon: "percent", view: "table", path: "/accounting/debt-adjustments", codes: ["64"], perm: "debt.adjust" },
           { key: "debt-transfer", label: "Gộp / chuyển công nợ", desc: "", icon: "arrow-left-right", view: "table", path: "/accounting/debt-transfers", codes: ["65"], perm: "debt.adjust" },
         ],
@@ -216,10 +218,11 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "opening", label: "Số đầu kỳ",
         functions: [
-          { key: "open-stock", label: "Tồn kho đầu kỳ", desc: "Kèm giá vốn theo lô", icon: "warehouse", view: "table", path: "/period/opening-stock", codes: ["K1"], perm: "data.import", planned: P },
-          { key: "open-debt", label: "Công nợ đầu kỳ", desc: "Khách & NCC", icon: "scale", view: "table", path: "/period/opening-debt", codes: ["K2"], perm: "data.import", planned: P },
-          { key: "open-cash", label: "Số dư quỹ đầu kỳ", desc: "", icon: "wallet", view: "table", path: "/period/opening-cash", codes: ["K3"], perm: "data.import", planned: P },
-          { key: "open-material", label: "Tồn NVL đầu kỳ", desc: "", icon: "layers", view: "table", path: "/period/opening-materials", codes: ["K4"], perm: "data.import", planned: P },
+          { key: "open-stock", label: "Tồn kho đầu kỳ", desc: "Kèm giá vốn theo lô", icon: "warehouse", view: "table", path: "/period/opening-stock", codes: ["K1"], perm: "data.import" },
+          { key: "open-debt", label: "Công nợ đầu kỳ", desc: "Khách & NCC", icon: "scale", view: "table", path: "/period/opening-debt", codes: ["K2"], perm: "data.import" },
+          { key: "open-cash", label: "Số dư quỹ đầu kỳ", desc: "", icon: "wallet", view: "table", path: "/period/opening-cash", codes: ["K3"], perm: "data.import" },
+          { key: "open-material", label: "Tồn NVL đầu kỳ", desc: "", icon: "layers", view: "table", path: "/period/opening-materials", codes: ["K4"], perm: "data.import" },
+          { key: "open-discount", label: "Chiết khấu tích lũy đầu kỳ", desc: "Còn nợ từng khách", icon: "percent", view: "table", path: "/period/opening-discount", codes: [], perm: "data.import" },
         ],
       },
       {
@@ -245,6 +248,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "config", label: "Cấu hình",
         functions: [
+          { key: "data-migration", label: "Chuyển dữ liệu", desc: "Thứ tự nhập khách, NCC, sản phẩm, số đầu kỳ từ phần mềm cũ", icon: "database", view: "table", path: "/system/data-migration", codes: [], perm: "data.import" },
           { key: "company", label: "Công ty & mẫu in", desc: "Thông tin công ty, bật/tắt mẫu in", icon: "building-2", view: "form", path: "/system/company", codes: ["6"], perm: "company.manage" },
           // 1 Function duy nhất cho mọi danh mục nhỏ; các loại nằm ở mini-sidebar trong trang (?section=) — catalog-settings.md
           { key: "catalog-settings", label: "Cài đặt danh mục", desc: "Nhóm khách, kho, xe & lái xe, tuyến, loại thu chi, ngân hàng, kiểu gia công", icon: "sliders-horizontal", view: "catalog", path: "/system/catalog-settings", codes: ["8", "13", "14", "15", "16", "17", "18"], perm: "catalog.manage" },

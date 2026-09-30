@@ -85,7 +85,7 @@ export async function listDebts(db: Db, actor: Actor, params: ListParams, opts: 
 
 // ───────────────────────────── CHI TIẾT MỘT ĐỐI TÁC (63) ─────────────────────────────
 export const DOC_LABEL: Record<string, string> = {
-  DELIVERY: "Phiếu giao", RECEIPT: "Phiếu thu/cọc", RETURN: "Phiếu trả hàng", PURCHASE: "Phiếu nhập", DEBT_ADJ: "Điều chỉnh công nợ", DEBT_TRANSFER: "Gộp/chuyển công nợ",
+  DELIVERY: "Phiếu giao", RECEIPT: "Phiếu thu/cọc", RETURN: "Phiếu trả hàng", PURCHASE: "Phiếu nhập", DEBT_ADJ: "Điều chỉnh công nợ", DEBT_TRANSFER: "Gộp/chuyển công nợ", PAYMENT: "Phiếu chi", DISCOUNT_SETTLE: "Tất toán chiết khấu", TRIP_COLLECT: "Tiền lái xe thu (chuyến)", CASH_ADJ: "Điều chỉnh phiếu thu/chi",
 };
 export interface DebtEntryDTO { id: number; at: Date; docType: string; docLabel: string; docCode: string | null; docHref: string | null; debit: string; credit: string; running: string }
 export interface DebtDetailDTO {
@@ -113,21 +113,27 @@ export async function getDebtDetail(db: Db, actor: Actor, partnerId: number, par
   const page = withRun.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
 
   const idsOf = (t: string) => page.filter((x) => x.r.docType === t).map((x) => x.r.docId);
-  const [notes, receipts, returns, purchases, adjs, transfers] = await Promise.all([
+  const [notes, receipts, returns, purchases, adjs, transfers, payments, settles, stops] = await Promise.all([
     db.deliveryNote.findMany({ where: { id: { in: idsOf("DELIVERY") } }, select: { id: true, code: true, orderId: true } }),
     db.receipt.findMany({ where: { id: { in: idsOf("RECEIPT") } }, select: { id: true, code: true, orderId: true } }),
     db.goodsReturn.findMany({ where: { id: { in: idsOf("RETURN") } }, select: { id: true, code: true } }),
     db.purchase.findMany({ where: { id: { in: idsOf("PURCHASE") } }, select: { id: true, code: true } }),
     db.debtAdjustment.findMany({ where: { id: { in: idsOf("DEBT_ADJ") } }, select: { id: true, code: true } }),
     db.debtTransfer.findMany({ where: { id: { in: idsOf("DEBT_TRANSFER") } }, select: { id: true, code: true } }),
+    db.payment.findMany({ where: { id: { in: idsOf("PAYMENT") } }, select: { id: true, code: true } }),
+    db.discountSettlement.findMany({ where: { id: { in: idsOf("DISCOUNT_SETTLE") } }, select: { id: true, code: true, partnerId: true } }),
+    db.tripOrder.findMany({ where: { id: { in: idsOf("TRIP_COLLECT") } }, select: { id: true, tripId: true, trip: { select: { code: true } } } }),
   ]);
   const code = new Map<string, { code: string; href: string | null }>();
   notes.forEach((n) => code.set(`DELIVERY:${n.id}`, { code: n.code, href: `/sales/orders/${n.orderId}?tab=delivery` }));
-  receipts.forEach((n) => code.set(`RECEIPT:${n.id}`, { code: n.code, href: n.orderId ? `/sales/orders/${n.orderId}?tab=deposits` : "/sales/deposits" }));
+  receipts.forEach((n) => code.set(`RECEIPT:${n.id}`, { code: n.code, href: `/accounting/receipts/${n.id}` }));
   returns.forEach((n) => code.set(`RETURN:${n.id}`, { code: n.code, href: `/returns/${n.id}` }));
   purchases.forEach((n) => code.set(`PURCHASE:${n.id}`, { code: n.code, href: `/purchase/orders/${n.id}` }));
   adjs.forEach((n) => code.set(`DEBT_ADJ:${n.id}`, { code: n.code, href: "/accounting/debt-adjustments" }));
   transfers.forEach((n) => code.set(`DEBT_TRANSFER:${n.id}`, { code: n.code, href: "/accounting/debt-transfers" }));
+  settles.forEach((n) => code.set(`DISCOUNT_SETTLE:${n.id}`, { code: n.code, href: `/accounting/discounts/${n.partnerId}` }));
+  stops.forEach((n) => code.set(`TRIP_COLLECT:${n.id}`, { code: n.trip.code, href: `/delivery/trips/${n.tripId}` }));
+  payments.forEach((n) => code.set(`PAYMENT:${n.id}`, { code: n.code, href: `/accounting/payments/${n.id}` }));
 
   return {
     partner: { id: p.id, code: p.code, name: p.name, isCustomer: p.isCustomer, isSupplier: p.isSupplier, groupName: p.group.name, debtLimit: p.debtLimit.toString() },

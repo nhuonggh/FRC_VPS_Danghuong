@@ -1,3 +1,5 @@
+import { PrintButton } from "@/components/print/PrintButton";
+import { canPrintDoc } from "@/server/print/types";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmptyState, PaginationFooter, StatCard } from "@/components/ui";
@@ -30,14 +32,17 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
           <h1 className="text-xl font-semibold">{d.partner.name}</h1>
           <p className="text-sm text-fg-secondary"><span className="font-mono">{d.partner.code}</span> · {d.partner.groupName} · {[d.partner.isCustomer ? "Khách" : null, d.partner.isSupplier ? "NCC" : null].filter(Boolean).join(" / ")}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {canPrintDoc(actor.perms, "DEBT_STATEMENT") && <PrintButton docType="DEBT_STATEMENT" docId={d.partner.id} label="In đối chiếu công nợ" />}
         {canAdjust && <Link href={`/accounting/debt-adjustments/new?partnerId=${d.partner.id}`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Điều chỉnh công nợ</Link>}
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         <StatCard label="Đầu kỳ" value={Number(d.opening)} />
         <StatCard label="Phát sinh nợ" value={Number(d.debit)} tone="info" />
         <StatCard label="Phát sinh có" value={Number(d.credit)} tone="success" />
         <StatCard label={Number(d.balance) < 0 ? "Số dư (phải trả)" : "Số dư (phải thu)"} value={Number(d.balance)} tone={Number(d.balance) < 0 ? "warning" : "danger"} />
-        <StatCard label="CK tích lũy còn" value={Number(d.discountBalance)} tone="success" />
+        <StatCard label="CK tích lũy còn" value={Number(d.discountBalance)} tone={Number(d.discountBalance) < 0 ? "danger" : "success"} href={d.partner.isCustomer ? `/accounting/discounts/${d.partner.id}` : undefined} />
       </div>
       {!d.reconciled && <p role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">Số dư cộng dồn không khớp tổng — báo quản trị hệ thống.</p>}
       {d.total === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh trong kỳ" /> : (

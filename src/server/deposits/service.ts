@@ -11,6 +11,8 @@ import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import type { DepositInput } from "./schemas";
 import { syncPaymentStatus } from "./status";
 import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
+import { postCashLedger, removeCashLedger } from "@/server/cash/ledger";
+import { addReviewEvent, REVIEWED_MSG } from "@/server/cash/vouchers";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -34,6 +36,8 @@ export async function createDeposit(tx: Tx, actor: Actor, input: DepositInput, n
     data: { id, code, periodId: period.id, partnerId: order.partnerId, type: "COC", orderId: order.id, amount: D(input.amount), cashAccountId: input.cashAccountId, at, note: input.note || null, createdBy: actor.userId },
   });
   await postPartnerLedger(tx, { periodId: period.id, partnerId: order.partnerId, side: "credit", amount: input.amount, docType: "RECEIPT", docId: id, at, createdBy: actor.userId });
+  await postCashLedger(tx, { periodId: period.id, cashAccountId: input.cashAccountId, side: "in", amount: input.amount, docType: "RECEIPT", docId: id, at, createdBy: actor.userId });
+  await addReviewEvent(tx, "RECEIPT", id, "SUBMIT", actor.userId);
   await syncPaymentStatus(tx, order.id);
   await writeAudit(tx, { userId: actor.userId, action: "deposit.create", entity: "Receipt", entityId: id, after: { code, orderCode: order.code, type: "COC" } });
   return { id, code };
@@ -72,11 +76,14 @@ export async function cancelDeposit(tx: Tx, actor: Actor, id: number, now: Date 
   assertCan(actor.perms, "deposit.manage");
   const r = await loadDeposit(tx, actor, id);
   if (r.isCancelled) throw new DomainError("Phiếu cọc đã hủy trước đó.", 409);
+  if (r.reviewStatus === "REVIEWED") throw new DomainError(REVIEWED_MSG, 409, "VOUCHER_REVIEWED");
   const period = await getOpenPeriod(tx);
   if (r.periodId !== period.id) throw new PeriodClosedError();
   if (r.orderId !== null) await tx.$queryRaw`SELECT id FROM sale_orders WHERE id = ${r.orderId} FOR UPDATE`;
   await tx.receipt.update({ where: { id }, data: { isCancelled: true, cancelledAt: now, cancelledBy: actor.userId } });
   await removePartnerLedger(tx, "RECEIPT", id);
+  await removeCashLedger(tx, "RECEIPT", id);
+  await addReviewEvent(tx, "RECEIPT", id, "CANCEL", actor.userId);
   if (r.orderId !== null) await syncPaymentStatus(tx, r.orderId);
   await writeAudit(tx, { userId: actor.userId, action: "deposit.cancel", entity: "Receipt", entityId: id, before: { code: r.code }, after: { isCancelled: true } });
 }

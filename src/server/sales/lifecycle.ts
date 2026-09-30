@@ -179,6 +179,8 @@ export async function cancelSaleOrder(ctx: EngineCtx, actor: Actor, id: number, 
   if ((await tx.goodsReturn.count({ where: { orderId: id, isCancelled: false } })) > 0) {
     throw new DomainError("Đơn đã có phiếu trả hàng. Hãy hủy phiếu trả hàng trước.", 409, "HAS_RETURN");
   }
+  const inTrip = await tx.tripOrder.findFirst({ where: { orderId: id, trip: { status: { in: ["PLANNED", "ON_ROAD"] } } }, select: { trip: { select: { code: true } } } });
+  if (inTrip) throw new DomainError(`Đơn đang nằm trong chuyến giao ${inTrip.trip.code}. Hãy hủy chuyến hoặc gỡ đơn khỏi chuyến trước.`, 409, "IN_TRIP");
   await assertOldProductsLocked(ctx, id);
 
   await removeDocument(ctx, "SALE", id); // hoàn kho + tính lại chuỗi; `at`/`seq` đã lưu ở dòng đơn để khôi phục

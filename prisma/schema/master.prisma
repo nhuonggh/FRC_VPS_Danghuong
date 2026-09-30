@@ -43,22 +43,24 @@ model Partner {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  group           PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  owner           User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  mergedInto      Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedFrom      Partner[]         @relation("PartnerMerge")
-  openingDebts    OpeningDebt[]
-  openingDisc     OpeningDiscount[]
-  partnerLedger   PartnerLedger[]
-  discountLedger  DiscountLedger[]
-  purchases       Purchase[]
-  saleOrders      SaleOrder[]
-  quotes          Quote[]
-  receipts        Receipt[]
-  goodsReturns    GoodsReturn[]
-  debtAdjustments DebtAdjustment[]
-  transfersFrom   DebtTransfer[]    @relation("TransferFrom")
-  transfersTo     DebtTransfer[]    @relation("TransferTo")
+  group               PartnerGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner               User?                @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  mergedInto          Partner?             @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom          Partner[]            @relation("PartnerMerge")
+  openingDebts        OpeningDebt[]
+  openingDisc         OpeningDiscount[]
+  partnerLedger       PartnerLedger[]
+  discountLedger      DiscountLedger[]
+  purchases           Purchase[]
+  saleOrders          SaleOrder[]
+  quotes              Quote[]
+  receipts            Receipt[]
+  payments            Payment[]
+  discountSettlements DiscountSettlement[]
+  goodsReturns        GoodsReturn[]
+  debtAdjustments     DebtAdjustment[]
+  transfersFrom       DebtTransfer[]       @relation("TransferFrom")
+  transfersTo         DebtTransfer[]       @relation("TransferTo")
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -129,6 +131,7 @@ model CashAccount {
   openingCash OpeningCash[]
   ledger      CashLedger[]
   receipts    Receipt[]
+  payments    Payment[]
 
   @@map("cash_accounts")
 }
@@ -139,6 +142,8 @@ model Vehicle {
   plate    String  @unique
   isActive Boolean @default(true)
 
+  trips Trip[]
+
   @@map("vehicles")
 }
 
@@ -148,6 +153,9 @@ model Driver {
   isAssistant Boolean @default(false)
   isActive    Boolean @default(true)
 
+  driverTrips    Trip[] @relation("TripDriver")
+  assistantTrips Trip[] @relation("TripAssistant")
+
   @@map("drivers")
 }
 
@@ -156,6 +164,8 @@ model Route {
   name     String  @unique
   isActive Boolean @default(true)
 
+  trips Trip[]
+
   @@map("routes")
 }
 
@@ -163,6 +173,8 @@ model ExpenseType {
   id       Int     @id @default(autoincrement())
   name     String  @unique
   isActive Boolean @default(true)
+
+  expenses OperatingExpense[]
 
   @@map("expense_types")
 }
