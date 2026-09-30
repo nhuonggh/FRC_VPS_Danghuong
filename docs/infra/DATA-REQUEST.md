@@ -2,6 +2,8 @@
 
 Cập nhật 30/09/2026. Cột **Nhập bằng** cho biết hệ thống đã sẵn sàng nhận dữ liệu chưa. "Import Excel" = đã có màn hình (Danh mục → nút Import, tải file mẫu). "Màn số đầu kỳ" = làm ở Plan 05 (D7) — khách cứ chuẩn bị file, nhập sau.
 
+> Bảng Google Sheet để khách điền sẵn: `docs/infra/intake/` (script tạo bảng khớp cấu trúc dự án).
+
 ## A. Danh mục nền (cần trước tiên)
 | # | Dữ liệu | Cột cần có | Nhập bằng |
 |---|---|---|---|
