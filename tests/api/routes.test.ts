@@ -231,7 +231,7 @@ describe("/api/users/[id]/*", () => {
 });
 
 describe("POST /api/account/change-password", () => {
-  const body = (over = {}) => ({ current: "Admin12345", next: "Xuong2026", confirm: "Xuong2026", ...over });
+  const body = (over = {}) => ({ current: "Admin12345", next: "Xuong2026", ...over });
 
   it("chỉ cần đăng nhập (không cần quyền): đổi thành công", async () => {
     loginAs(staffId);
@@ -239,14 +239,13 @@ describe("POST /api/account/change-password", () => {
     expect((await prisma.user.findUniqueOrThrow({ where: { id: staffId } })).mustChangePassword).toBe(false);
   });
 
-  it("nhập lại không khớp → 400 kèm field confirm; sai mật khẩu hiện tại → 409", async () => {
+  it("sai mật khẩu hiện tại → 409; thiếu field bắt buộc → 400", async () => {
     loginAs(staffId);
-    const a = await changePassword(req("/x", "POST", body({ confirm: "khac" })), undefined);
-    expect(a.status).toBe(400);
-    expect((await a.json()).fields).toEqual({ confirm: "Mật khẩu nhập lại không khớp." });
-    const b = await changePassword(req("/x", "POST", body({ current: "sai-mat-khau" })), undefined);
-    expect(b.status).toBe(409);
-    expect((await b.json()).error).toBe("Mật khẩu hiện tại không đúng.");
+    const wrongPassword = await changePassword(req("/x", "POST", body({ current: "sai-mat-khau" })), undefined);
+    expect(wrongPassword.status).toBe(409);
+    expect((await wrongPassword.json()).error).toBe("Mật khẩu hiện tại không đúng.");
+    const missingNext = await changePassword(req("/x", "POST", { current: "Admin12345" }), undefined);
+    expect(missingNext.status).toBe(400);
   });
 
   it("mật khẩu mới quá 72 byte → 400 tiếng Việt", async () => {

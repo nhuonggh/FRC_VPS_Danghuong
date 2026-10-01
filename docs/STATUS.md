@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-09-28** (Task 1–12 đã deploy CI xanh; Task 13 có backend + UI, còn test/QA; Task 14 có Tồn hiện tại, thẻ kho backend, XNT, tra cứu cuộn; Task 15 có 4 màn kho. Commit mới nhất `a2ce59f` đã push; còn export, tab tồn kho SP, test/QA và đóng 03b). Người cập nhật: Codex. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-10-01**. `main` hiện ở `54ec71b`; Deploy run `36699835950` thành công. Plan 03b Task 9–15 đã hoàn tất code/test/CI; Plan 04–06 và UI Plan 08 U1–U5 đã có trên `main`. Còn U6, Plan 07, E3 gia công thuê, in M6/M9, việc vận hành VPS và đầu vào khách hàng. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -19,8 +19,7 @@ tính. Stack: Next.js 15.5 (App Router) · React 19 · TypeScript · Tailwind 3.
 file `prisma/schema/`) · PostgreSQL 15 · next-auth v4 (Credentials + Google) · Vitest 5 · Docker · Caddy · GitHub Actions.
 UI theo skill `crm-design` (trang chi tiết full-page, không split panel). Hạ tầng theo skill `setup-project`.
 
-**Trạng thái một dòng:** GĐ0 (nền tảng) + GĐ1a (engine FIFO) xong và **đã deploy chạy thật** tại https://dherp.sheetapp.store;
-chưa có màn nghiệp vụ nào trong code. Plan 03 (GĐ1b) đã viết đủ 03a/03b/03c — CHƯA thực thi; plan 04–07 chưa viết.
+**Trạng thái một dòng:** GĐ0, GĐ1a và phần lớn chức năng GĐ1b–GĐ3 đã có trên `main`; Deploy `54ec71b` xanh. Plan 07 (kết sổ/bàn giao) đã viết nhưng chưa triển khai; Plan 08 U1–U5 đã merge, còn U6.
 
 ## 2. Quy tắc bất di bất dịch (đọc kỹ)
 
@@ -111,9 +110,9 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 | **GĐ1b / Plan 03b Task 9** — Schema nhập hàng / nhập kho không NCC | **CI/CD xanh** (user xác nhận) | Migration `purchasing`: Purchase/PurchaseLine/StockAdjustment, CHECK DB, FK RESTRICT/CASCADE và SENSITIVE_FIELDS D-16; 21 test schema/quyền xanh. |
 | **GĐ1b / Plan 03b Task 10** — Idempotency + transaction kho | **CI/CD xanh** (user xác nhận) | `withIdempotentInventoryTx` đặt khoá idempotency trong chính transaction FIFO; không tạo trùng sổ/lớp khi retry hoặc request đồng thời. 17 test idempotency/kho xanh. |
 | **GĐ1b / Plan 03b Task 12** — API và giao diện phiếu nhập | **CI/CD xanh** (`291085c`, user xác nhận) | Route tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do; quyền giá được lọc ở server. |
-| **GĐ1b / Plan 03b Task 13** — Nhập kho không NCC | Đang triển khai | Đã có schema, giá nhập gần nhất, service FIFO idempotent, route tạo/hủy, form, danh sách và chi tiết/hủy; còn test chuyên biệt, kiểm tay quyền giá và QA đóng task. |
-| **GĐ1b / Plan 03b Task 14** — Báo cáo kho backend | Đang triển khai | Đã có truy vấn tồn hiện tại, thẻ kho cộng dồn theo `(at, seq)`, XNT đầu tháng–hiện tại; còn tra cứu cuộn hoàn thiện, tồn theo sản phẩm, export, đối chiếu/cân sổ và hiệu năng. |
-| **GĐ1b / Plan 03b Task 15** — Giao diện kho | Đang triển khai | Đã có trang Tồn hiện tại và XNT; còn Thẻ kho, Định mức tồn/Tra cứu cuộn hoàn thiện, export, tab Tồn kho sản phẩm và QA mobile/quyền giá. |
+| **GĐ1b / Plan 03b Task 13** — Nhập kho không NCC | **Hoàn tất code/test/CI** | Còn nghiệm thu thao tác thực tế sau deploy: PC/mobile/dark mode và vai trò thiếu `cost.view`. |
+| **GĐ1b / Plan 03b Task 14** — Báo cáo kho backend | **Hoàn tất code/test/CI** | Báo cáo, export, redaction và kiểm tra hiệu năng đã được xác nhận trong CI run `36431979177`; còn nghiệm thu thao tác thực tế sau deploy. |
+| **GĐ1b / Plan 03b Task 15** — Giao diện kho | **Hoàn tất code/test/CI** | Đã có Tồn hiện tại, Định mức, Tra cứu cuộn, Thẻ kho, XNT, tab tồn kho sản phẩm và export; còn nghiệm thu thao tác thực tế sau deploy trên PC/mobile/dark mode và quyền `cost.view`. |
 | **GĐ1b / Plan 03c Task 16** — Schema BOM/mẫu in/công ty | Code xong trên nhánh `claude/zen-gates-o3m8mq` (CHƯA vào `main`) | Migration `20260929130000_bom_company_home`: `Bom/BomVersion/BomLine/PrintTemplate`, `company_settings` thêm `updatedAt/updatedBy` + CHECK id=1; trigger DB chặn UPDATE/DELETE dòng BOM và sửa nội dung phiên bản (D-19); partial unique `(bomId, validFrom)` bản chưa huỷ; NVL≠thành phẩm; webhook chỉ https. 7 test schema + invariants xanh, lint/typecheck sạch. Merge `main` = chạy migration trên DB thật → hỏi user |
 | **GĐ1b / Plan 03c Task 17** — BOM backend, API, UI phiên bản | Code xong trên nhánh `claude/zen-gates-o3m8mq` (CHƯA vào `main`) | `src/server/bom/` (barrel `index.ts`: `resolveBom`, `createBomVersion[Idempotent]`, `cancelBomVersion`, `listBoms`, `getBom`); khoá hàng `boms` → 2 người lưu cùng ngày: 1 thành công, 1 bị 409; ngày hiệu lực không ở quá khứ (trừ bản đầu); huỷ chỉ bản chưa hiệu lực. API `/api/bom`, `/api/bom/versions/[id]/cancel`, options sản phẩm/kiểu gia công (chỉ cần `bom.manage`). Trang `/production/bom`, `/new` (`?from=<bomId>` nạp bản hiện hành), `/[id]?tab=versions`; menu `bom-list` đã mở. Policy loại SP (`BOM_TARGET_KINDS`/`BOM_MATERIAL_KINDS` trong `schemas.ts`) là mặc định tạm — TODO: confirm với khách. 15 test service + 10 test UI xanh; smoke trình duyệt thật (đăng nhập → tạo BOM → chi tiết → danh sách) đạt. Chưa có export Excel cho BOM |
 | **GĐ1b / Plan 03c Task 18** — Cấu hình công ty & mẫu in | Code xong trên nhánh `claude/zen-gates-o3m8mq` (CHƯA vào `main`) | `src/server/company/`, API `/api/company`, `/api/company/templates[/id]` (no-store), trang `/system/company` (mã 6, đã mở menu). Singleton `company_settings` id=1 tự hồi phục, chống ghi đè mù bằng `version` (updatedAt) + khoá hàng. Mẫu in: DTO chỉ `hasSecret`, URL webhook bỏ query, secret mã hoá AES-256-GCM (khoá dẫn xuất từ `PRINT_TEMPLATE_KEY`, không có thì `AUTH_SECRET` — đổi khoá gốc ⇒ phải nhập lại secret), đổi/xoá secret phải nêu rõ (`secretAction`) và audit riêng không chứa giá trị. Webhook chỉ https công khai; logo/QR chỉ `/uploads/…` hoặc https thuộc `COMPANY_IMAGE_HOSTS` (biến tuỳ chọn). 11 test service + 5 test UI xanh; smoke trình duyệt đạt |
@@ -146,7 +145,21 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
-### ⭐ BÀN GIAO PHIÊN KẾ TIẾP — cập nhật 30/09/2026 (ĐỌC TRƯỚC; các mục bàn giao cũ bên dưới là lịch sử)
+### BÀN GIAO HIỆN TẠI — cập nhật 01/10/2026 (ưu tiên hơn các ghi chú lịch sử bên dưới)
+
+**Trạng thái đã xác minh:** `main` ở `54ec71b2c312a000935df69ed14e625974863455`; Deploy run `36699835950` thành công. Plan 03b Task 9–15 đã hoàn tất code/test/CI; Plan 04–06 đã có trên `main`; UI Plan 08 U1–U5 đã merge. Không có thay đổi nào được push trong phiên này.
+
+**Thứ tự đề nghị tiếp theo:**
+1. **U6 Plan 08 đang làm:** tab đầu đơn bán, báo giá, trả hàng đã thống nhất tên “Thông tin cơ bản” (giữ nguyên key `info`). DetailPage test 40/40; form responsive đã kiểm ở 375/768/1024/1440 px, không tràn ngang, dark mode hiển thị. Còn chụp/kiểm tra ba màn detail bằng dữ liệu local và hoàn tất nghiệm thu; DB local hiện không có sản phẩm/đơn/báo giá/trả hàng.
+2. Sửa lỗi contract API đổi mật khẩu phát hiện khi đăng nhập local: form chỉ gửi `current`/`next`, API trước đó bắt `confirm`. Đã tách request schema và test API 57/57.
+3. Bắt đầu Plan 07 với F0 và F1a; chốt 5 quyết định kết sổ với khách hoặc áp dụng mặc định trong plan. Các giai đoạn tiếp theo cần diễn tập trên bản sao DB; user xác nhận trước lần kết sổ thật đầu tiên. Ước tính toàn plan khoảng 29 ngày công.
+4. Làm các phần phụ thuộc đầu vào song song khi khách cung cấp: E3 cần bảng giá/quy tắc gia công; in M6/M9 cần mẫu Google Docs; import cần file xuất dữ liệu thật.
+
+**Local QA:** đã tạo và đổi mật khẩu user `test` quyền Giám đốc chỉ trong DB dev `dh_dev_b`; không có mật khẩu cố định trong code. Có thể tạo lại bằng `npm run seed:local-test-admin`; script từ chối mọi DB không phải `localhost:5432/dh_dev_b`, từ chối production và không sửa user đã tồn tại.
+
+**Việc vận hành trước khi nhập dữ liệu thật:** user cài backup ngoài máy chủ + cron theo RUNBOOK §14 và xác nhận `restore-drill.sh` đạt; rà quyền Kế toán/Thủ quỹ; kiểm tra header Caddy trên trình duyệt. Không tự thực hiện trên VPS trong phiên này.
+
+### BÀN GIAO LỊCH SỬ — cập nhật 30/09/2026
 
 **Trạng thái `main`/VPS:** plan 03→06 đã vào `main`. Deploy #47 (470c8bc) và #48 (b2352a8) xanh — VPS chạy plan 05 + E5 + E1 + E4 + E2 + báo cáo 72. Run #49 (185e50d, tài liệu kế hoạch 07/08 + STATUS) cũng xanh. Run #50 (54ec71b, UI tab dọc U1–U5, không migration) cũng xanh ⇒ VPS đã có tab dọc. **Việc đầu phiên sau:** xem run mới nhất của `main` (nếu có commit mới hơn) trước khi làm tiếp — **việc đầu tiên của phiên sau: xem run Deploy mới nhất của `main` xanh chưa** (đỏ ở job `test` không ảnh hưởng VPS vì `build-and-deploy` bị bỏ qua; đỏ ở migration trên DB thật ⇒ DỪNG, báo user, không sửa DB VPS).
 **Nhánh làm việc bắt buộc:** `claude/zen-gates-o3m8mq`. Merge/push `main` = deploy VPS thật ⇒ chỉ khi user duyệt (user đã cho phép merge để **sửa deploy đỏ**; việc mới khác vẫn hỏi). Xong việc: cập nhật STATUS cùng commit; chạy toàn bộ vitest (≈10 phút, nền) trước khi xin merge.

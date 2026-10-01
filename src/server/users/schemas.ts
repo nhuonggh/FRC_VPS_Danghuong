@@ -33,10 +33,13 @@ export const profileSectionSchema = z.object({ fullName: fullNameSchema });
 export const emailSectionSchema = z.object({ email: emailSchema });
 export const rolesSectionSchema = z.object({ roleIds: z.array(z.number().int()).min(1, "Chọn ít nhất 1 nhóm quyền.") });
 
-export const changePasswordSchema = z
-  .object({
+export const changePasswordRequestSchema = z.object({
     current: z.string().min(1, "Nhập mật khẩu hiện tại."),
     next: z.string().min(1, "Nhập mật khẩu mới."),
+  });
+
+export const changePasswordSchema = changePasswordRequestSchema
+  .extend({
     confirm: z.string().min(1, "Nhập lại mật khẩu mới."),
   })
   .superRefine((v, ctx) => {
