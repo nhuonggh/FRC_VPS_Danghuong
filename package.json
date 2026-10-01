@@ -15,7 +15,8 @@
     "db:seed": "prisma db seed",
     "db:schema": "bash scripts/gen-db-schema.sh",
     "admin:reset": "tsx scripts/admin-reset.ts",
-    "seed:local-test-admin": "tsx scripts/seed-local-test-admin.ts"
+    "seed:local-test-admin": "tsx scripts/seed-local-test-admin.ts",
+    "seed:local-ui-fixtures": "tsx scripts/seed-local-ui-fixtures.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

@@ -13,7 +13,7 @@ import { cancelSaleOrderTx, editSaleOrderTx } from "@/server/sales/lifecycle";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { prisma, resetDb } from "../helpers/db";
-import { makePartner } from "../helpers/factories";
+import { makePartner, makePeriod } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 const NOW = new Date("2026-09-15T03:00:00Z");
@@ -50,6 +50,26 @@ beforeEach(async () => {
 });
 
 describe("trả theo đơn (43)", () => {
+  it("trả đơn kỳ cũ vào kỳ mở mới, giữ costRef và giá vốn của dòng bán gốc", async () => {
+    const order = await deliveredOrder();
+    await prisma.period.update({
+      where: { id: w.periodId },
+      data: { status: "CLOSED", isOpen: null, closedAt: new Date("2026-10-01T00:00:00Z") },
+    });
+    const nextPeriod = await makePeriod({ openedAt: new Date("2026-09-01T00:00:00Z") });
+
+    const returned = await retOrder(order.id, order.lineId, 1);
+    const header = await prisma.goodsReturn.findUniqueOrThrow({ where: { id: returned.id } });
+    const layer = await prisma.costLayer.findFirstOrThrow({ where: { sourceDocType: "RETURN_IN", sourceDocId: returned.id } });
+    const saleLine = await prisma.saleOrderLine.findUniqueOrThrow({ where: { id: order.lineId } });
+
+    expect(header).toMatchObject({ periodId: nextPeriod.id, orderId: order.id });
+    expect(layer).toMatchObject({ periodId: nextPeriod.id, costRefType: "SALE", costRefId: order.lineId });
+    expect(layer.unitCost.toString()).toBe("10000");
+    expect(saleLine.unitCostFifo.toString()).toBe("10000");
+    expect((await getOnHand(prisma, nextPeriod.id, w.p.id)).toString()).toBe("1");
+  });
+
   it("nhập lại kho theo GIÁ VỐN dòng bán gốc; công nợ giảm theo tỷ lệ thành tiền dòng; đảo chiết khấu tích lũy theo tỷ lệ", async () => {
     const o = await deliveredOrder();
     expect(await onHand()).toBe("96");

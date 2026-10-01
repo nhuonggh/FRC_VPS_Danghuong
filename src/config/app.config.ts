@@ -228,7 +228,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "closing", label: "Kết sổ",
         functions: [
-          { key: "period-close", label: "Kết sổ cuối kỳ", desc: "Checklist điều kiện, chỉ giám đốc; tra cứu kỳ cũ", icon: "calendar-check", view: "form", path: "/period/close", codes: ["K5"], perm: "period.close", planned: P },
+          { key: "period-close", label: "Kết sổ cuối kỳ", desc: "Checklist điều kiện kết sổ", icon: "calendar-check", view: "form", path: "/period/close", codes: ["K5"], perm: "period.close" },
         ],
       },
     ],
