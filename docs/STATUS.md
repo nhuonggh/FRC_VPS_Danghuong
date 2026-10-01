@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-10-01**. `main` hiện ở `54ec71b`; Deploy run `36699835950` thành công. Plan 03b Task 9–15 đã hoàn tất code/test/CI; Plan 04–06 và UI Plan 08 U1–U5 đã có trên `main`. U6 QA xong trên feature; Plan 07 F0 đã rà/test, F1a checklist đang trên feature. Còn F1b–F4, E3, in M6/M9, việc vận hành VPS và đầu vào khách hàng. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-10-01**. `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` ở `a0c877f`. U6 QA xong trên feature; F0 đang rà, F1a checklist bản đầu đã có trên feature. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -19,7 +19,7 @@ tính. Stack: Next.js 15.5 (App Router) · React 19 · TypeScript · Tailwind 3.
 file `prisma/schema/`) · PostgreSQL 15 · next-auth v4 (Credentials + Google) · Vitest 5 · Docker · Caddy · GitHub Actions.
 UI theo skill `crm-design` (trang chi tiết full-page, không split panel). Hạ tầng theo skill `setup-project`.
 
-**Trạng thái một dòng:** GĐ0, GĐ1a và phần lớn chức năng GĐ1b–GĐ3 đã có trên `main`; Deploy `54ec71b` xanh. U6 QA xong trên feature. Plan 07 F0 hoàn tất audit/test nền; F1a checklist điều kiện kết sổ đang triển khai trên feature.
+**Trạng thái một dòng:** GĐ0, GĐ1a và phần lớn chức năng GĐ1b–GĐ3 đã có trên `main`; Deploy `54ec71b` xanh. U6 QA xong trên feature. Plan 07 F0 đang rà, F1a checklist có bản đầu trên feature; chưa có engine kết sổ.
 
 ## 2. Quy tắc bất di bất dịch (đọc kỹ)
 
@@ -147,14 +147,31 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ### BÀN GIAO HIỆN TẠI — cập nhật 01/10/2026 (ưu tiên hơn các ghi chú lịch sử bên dưới)
 
-**Trạng thái đã xác minh:** `main` ở `54ec71b2c312a000935df69ed14e625974863455`; Deploy run `36699835950` thành công. Plan 03b Task 9–15 đã hoàn tất code/test/CI; Plan 04–06 và UI Plan 08 U1–U5 đã có trên `main`. Công việc tiếp diễn trên nhánh `claude/zen-gates-o3m8mq`; không thay đổi production.
+**Trạng thái đã xác minh:** `main` ở `54ec71b2c312a000935df69ed14e625974863455`; Deploy run `36699835950` thành công. Nhánh làm việc `claude/zen-gates-o3m8mq` ở `a0c877f`, đã push; working tree sạch tại lần kiểm tra gần nhất. Không có thay đổi production.
 
-**Thứ tự đề nghị tiếp theo:**
-1. **U6 Plan 08 — QA hoàn tất trên feature:** tab đầu đơn bán, báo giá, trả hàng thống nhất “Thông tin cơ bản”, giữ nguyên key `info`. Order/quote/return detail đã kiểm 375/768/1024/1440 px và dark mode, không tràn ngang. Chưa merge/push `main`.
-2. **F0 Plan 07 — audit/test nền:** guard kỳ dùng `getOpenPeriod`, engine khóa kỳ `FOR SHARE`; sửa/hủy đơn và giao khác kỳ bị chặn. Test mới xác nhận trả đơn kỳ cũ được ghi vào kỳ mở mới, giữ `costRef`/giá vốn gốc. Returns suite 16/16 pass.
-3. **F1a Plan 07 — checklist điều kiện kết sổ — đang làm trên feature:** route `/period/close` có permission `period.close`, menu đã mở; blockers: đơn treo, chuyến chưa xác nhận, stocktake DRAFT; warnings: đơn nháp, cọc trên đơn nháp, tất toán chiết khấu chưa hậu kiểm. Read-only, lọc đúng kỳ mở. Test F1a 4/4; bộ guard + checklist + returns + UI 26/26; typecheck và lint targeted pass. Chưa có engine/nút kết sổ; bước tiếp là review checklist và bắt đầu F1b sau khi F1a chốt.
-4. Chốt 5 quyết định nghiệp vụ với khách hoặc áp dụng mặc định trong plan. Diễn tập kết sổ trên bản sao DB; user xác nhận trước lần kết sổ thật. Toàn Plan 07 khoảng 29 ngày công.
-5. Làm các phần phụ thuộc đầu vào song song khi khách cung cấp: E3 cần bảng giá/quy tắc gia công; in M6/M9 cần mẫu Google Docs; import cần file xuất dữ liệu thật.
+**Khối lượng đã làm**
+- **U6 Plan 08:** chuẩn hóa tab đầu đơn bán/báo giá/trả hàng; QA order/quote/return detail ở 375/768/1024/1440 px + dark mode, không tràn ngang.
+- **F0 Plan 07 (một phần):** rà guard kỳ, một số ranh giới `periodId`; thêm test trả đơn kỳ cũ vào kỳ mới, giữ `costRef`/giá vốn gốc. Returns suite 16/16 pass.
+- **F1a Plan 07 (bản đầu):** trang read-only `/period/close`, guard quyền `period.close`, menu đã mở; ba blocker + ba cảnh báo theo kỳ đang mở.
+- **Fix phụ phát hiện lúc QA:** API đổi mật khẩu giờ nhận đúng `{current, next}`; 68 test liên quan password pass.
+- **Test F0/F1a:** bộ guard + checklist + returns + UI 26/26; typecheck pass; lint pass (còn hai warning cũ ở `src/server/reports/consumption.ts`).
+
+**Chưa làm / đang làm**
+- Hoàn tất F0: lập ma trận đầy đủ chứng từ ở kỳ cũ, chứng từ chuyển kỳ và ca xuyên kỳ; test hiện mới bao phủ guard cơ bản và trả đơn kỳ cũ.
+- Hoàn thiện/review F1a: kiểm tra tiêu chí với nghiệp vụ, quyền và link đến chứng từ; hiện chưa có hành động kết sổ.
+- **F1b–F4 chưa làm:** engine chuyển số dư/lô, xác nhận 2 bước + backup, quy tắc xuyên kỳ đầy đủ, tra cứu kỳ cũ, kiểm thử/diễn tập và tài liệu bàn giao.
+- Các đầu việc ngoài Plan 07: E3 gia công thuê, in M6/M9, import theo file dữ liệu thật; backup VPS/restore drill và rà quyền vai trò chưa được xác nhận.
+
+**Tiếp theo**
+1. Hoàn tất F0 và review F1a; sau đó triển khai F1b theo plan. Plan 07 ước tính tổng khoảng 29 ngày công; chưa chốt phần còn lại chính xác cho đến khi đóng F0/F1a.
+2. F1c–F4: xác nhận hai bước/backup, xử lý xuyên kỳ, tra cứu chỉ đọc, kiểm thử bất biến và diễn tập trên bản sao DB.
+3. Chạy full quality gate rồi xin duyệt merge/push `main`; push `main` sẽ deploy VPS thật.
+
+**Cần bạn duyệt / đầu vào**
+- Chốt 5 quyết định với khách hoặc xác nhận dùng mặc định Plan 07: giữ từng lô/gộp, tháng/quý, mốc giờ chốt, xử lý đơn nháp/chuyến mở, ai được kết sổ.
+- Duyệt merge/push `main` riêng khi feature sẵn sàng. Đồng ý kế hoạch trước đây không thay cho duyệt deploy.
+- Xác nhận diễn tập trên bản sao DB trước lần kết sổ thật; user/VPS owner cài backup ngoài máy chủ + cron và xác nhận restore drill đạt.
+- Chờ khách: bảng giá/quy tắc E3, mẫu Google Docs M6/M9, file export để ánh xạ import.
 
 **Local QA:** đã tạo và đổi mật khẩu user `test` quyền Giám đốc chỉ trong DB dev `dh_dev_b`; không có mật khẩu cố định trong code. Có thể tạo lại bằng `npm run seed:local-test-admin`; script từ chối mọi DB không phải `localhost:5432/dh_dev_b`, từ chối production và không sửa user đã tồn tại.
 Fixture U6 được tạo qua `npm run seed:local-ui-fixtures`: 1 khách, 1 NCC, 1 sản phẩm, 1 phiếu nhập, 1 báo giá, 1 đơn giao đủ, 1 phiếu trả một phần; tồn cuối 11 md. Tất cả giao dịch đi qua service FIFO/idempotency, timeline trong ngày ICT; chỉ DB local. Chạy lại cùng mã chứng từ không nhân đôi. Đã áp 13 migration còn thiếu vào `dh_dev_b` local; VPS không bị tác động.
