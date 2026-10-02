@@ -9,6 +9,28 @@ import { getCloseChecklist } from "./close-checklist";
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = D(0);
 
+/** Số liệu "sẽ thành đầu kỳ mới" để người kết sổ xem trước (chỉ đọc — cùng hàm tính với lần kết thật). */
+export interface ClosePreview {
+  stock: { lots: number; products: number; qty: string; value: string };
+  receivable: { partners: number; total: string };
+  payable: { partners: number; total: string };
+  cash: { accountId: number; balance: string }[];
+  discount: { partners: number; total: string };
+}
+
+export async function previewClosing(db: PrismaClient, periodId: number): Promise<ClosePreview> {
+  const c = await computeClosing(db, periodId);
+  const sum = (vals: Prisma.Decimal[]) => vals.reduce((a, v) => a.plus(v), ZERO);
+  const debts = [...c.debt.values()];
+  return {
+    stock: { lots: c.lots.length, products: new Set(c.lots.map((l) => l.productId)).size, qty: sum(c.lots.map((l) => l.qty)).toString(), value: sum(c.lots.map((l) => l.qty.times(l.unitCost))).toFixed(2) },
+    receivable: { partners: debts.filter((v) => v.gt(0)).length, total: sum(debts.filter((v) => v.gt(0))).toFixed(2) },
+    payable: { partners: debts.filter((v) => v.lt(0)).length, total: sum(debts.filter((v) => v.lt(0))).abs().toFixed(2) },
+    cash: [...c.cash].map(([accountId, balance]) => ({ accountId, balance: balance.toFixed(2) })),
+    discount: { partners: c.discount.size, total: sum([...c.discount.values()]).toFixed(2) },
+  };
+}
+
 export interface CloseInfo { closed: { id: number; name: string }; newPeriod: { id: number; name: string }; carried: ClosePeriodResult["carried"]; warningCount: number }
 
 export interface ClosePeriodInput {
@@ -33,7 +55,7 @@ export const defaultPeriodName = (now: Date): string => {
 type Lot = { id: number; productId: number; qty: Prisma.Decimal; unitCost: Prisma.Decimal };
 
 /** Số dư ĐẦU KỲ MỚI sẽ có, tính từ sổ kỳ cũ — cùng công thức báo cáo: đầu kỳ + Σ(phát sinh). */
-interface Closing {
+export interface Closing {
   lots: Lot[];
   debt: Map<number, Prisma.Decimal>;
   cash: Map<number, Prisma.Decimal>;
@@ -43,7 +65,7 @@ interface Closing {
 const nonZero = (m: Map<number, Prisma.Decimal>) => new Map([...m].filter(([, v]) => !v.isZero()));
 const add = (m: Map<number, Prisma.Decimal>, k: number, v: Prisma.Decimal.Value) => m.set(k, (m.get(k) ?? ZERO).plus(v));
 
-async function computeClosing(tx: Prisma.TransactionClient, periodId: number): Promise<Closing> {
+export async function computeClosing(tx: Prisma.TransactionClient, periodId: number): Promise<Closing> {
   const [lots, openDebt, debtSums, openCash, cashSums, openDisc, discSums, provisional] = await Promise.all([
     tx.$queryRaw<{ id: number; productId: number; qty: Prisma.Decimal; unitCost: Prisma.Decimal }[]>`
       SELECT id, "productId", "qtyRemaining" AS qty, "unitCost" FROM cost_layers
