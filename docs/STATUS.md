@@ -172,7 +172,7 @@ Trạng thái `main`: đã gồm Plan 07 F0–F4 (kết sổ + tra cứu kỳ + 
 *Cần user duyệt / làm*
 - Xác nhận deploy `main` xanh sau merge này.
 - KHÔNG kết sổ thật trên VPS trước khi: backup + restore drill đạt, diễn tập trên bản sao DB (RUNBOOK §4) được user xác nhận ĐẠT.
-- Chốt 5 câu kết sổ với khách hoặc xác nhận mặc định (giữ từng lô, kết theo tháng, kết khi bấm nút, đơn nháp mang sang, chỉ Giám đốc kết).
+- Chốt 5 câu kết sổ với khách. ĐÃ CHỐT (user 03/10): kết sổ khi người dùng bấm nút (không tự động theo lịch) — đúng cách đã làm. Còn xác nhận: giữ từng lô, kết theo tháng, đơn nháp mang sang, chỉ Giám đốc kết.
 - Gửi khách file bổ sung (ngày chốt, số đầu kỳ, BOM, phân loại SP, mẫu in).
 - Chấp nhận/không 7 lỗ hổng `npm audit`; xác nhận policy loại SP của BOM (mặc định: thành phẩm/phụ kiện có BOM; NVL/hàng/phụ kiện là nguyên liệu).
 
