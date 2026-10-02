@@ -18,12 +18,20 @@ export function parseYesNo(value: unknown): boolean | null {
   if (["co", "c", "x", "1", "yes", "true", "y"].includes(normalized)) return true;
   return null;
 }
+/** Khớp người phụ trách theo tên đăng nhập, không phân biệt hoa/thường và dấu ("Nhâm" ⇒ "nham"); tên đăng nhập luôn thắng họ tên, họ tên trùng nhau thì bỏ qua vì mơ hồ. */
+export function ownerMap(users: { id: number; username: string; fullName: string }[]): Map<string, number> {
+  const map = new Map<string, number>(); const ambiguous = new Set<string>();
+  for (const u of users) map.set(normalizeSearch(u.username), u.id);
+  for (const u of users) { const k = normalizeSearch(u.fullName); if (map.has(k) && map.get(k) !== u.id) ambiguous.add(k); else map.set(k, u.id); }
+  for (const k of ambiguous) if (!users.some((u) => normalizeSearch(u.username) === k)) map.delete(k);
+  return map;
+}
 export function partnerImportSpec(kind: PartnerKind): ImportSpec<PartnerImportRow, PartnerImportCtx> {
   return {
     entity: "Partner", label: kind === "customer" ? "khách hàng" : "nhà cung cấp", columns: COLUMNS,
     async loadContext(db) {
-      const [groups, users] = await Promise.all([db.partnerGroup.findMany({ where: { isActive: true }, select: { id: true, name: true } }), db.user.findMany({ where: { isLocked: false }, select: { id: true, username: true } })]);
-      return { groups: new Map(groups.map((g) => [normalizeSearch(g.name), g.id])), owners: new Map(users.map((u) => [u.username.toLowerCase(), u.id])) };
+      const [groups, users] = await Promise.all([db.partnerGroup.findMany({ where: { isActive: true }, select: { id: true, name: true } }), db.user.findMany({ where: { isLocked: false }, select: { id: true, username: true, fullName: true } })]);
+      return { groups: new Map(groups.map((g) => [normalizeSearch(g.name), g.id])), owners: ownerMap(users) };
     },
     parseRow(cells, ctx) {
       const errors: string[] = []; const code = str(cells.code).toUpperCase();
@@ -32,7 +40,7 @@ export function partnerImportSpec(kind: PartnerKind): ImportSpec<PartnerImportRo
       const groupName = str(cells.group); const groupId = ctx.groups.get(normalizeSearch(groupName)); if (!groupName) errors.push("Thiếu nhóm."); else if (groupId === undefined) errors.push(`Nhóm "${groupName}" chưa có — tạo ở Hệ thống → Cài đặt danh mục trước.`);
       const limit = parseViNumber(cells.debtLimit); if (!limit.ok) errors.push(`Hạn mức nợ: ${limit.message}`);
       const allowCredit = parseYesNo(cells.allowCredit); if (allowCredit === null) errors.push(`Cho ghi nợ: "${str(cells.allowCredit)}" — nhập Có hoặc Không.`);
-      const ownerName = str(cells.owner); const ownerUserId = ownerName ? ctx.owners.get(ownerName.toLowerCase()) : null; if (ownerName && ownerUserId === undefined) errors.push(`Người phụ trách "${ownerName}" không có (hoặc đã khoá) — nhập tên đăng nhập.`);
+      const ownerName = str(cells.owner); const ownerUserId = ownerName ? ctx.owners.get(normalizeSearch(ownerName)) : null; if (ownerName && ownerUserId === undefined) errors.push(`Người phụ trách "${ownerName}" không có (hoặc đã khoá) — nhập tên đăng nhập hoặc họ tên.`);
       if (errors.length) return { ok: false, errors };
       return { ok: true, data: { code, name, groupId: groupId!, phone: str(cells.phone), address: str(cells.address), note: str(cells.note), debtLimit: (limit as { value: string | null }).value ?? "0", allowCredit: allowCredit!, ownerUserId: ownerUserId ?? null } };
     },

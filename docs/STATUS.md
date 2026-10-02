@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-10-01**. `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` đang có F0/F1a. U6 QA xong; F0 đã test trả hàng/thu nợ xuyên kỳ; F1a checklist đã mở rộng cảnh báo cọc. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-10-02** (thêm nhập Excel danh mục + nạp dữ liệu khách trên DB dev, xem mục 6 "Dữ liệu khách"). Trước đó (2026-10-01): `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` đang có F0/F1a. U6 QA xong; F0 đã test trả hàng/thu nợ xuyên kỳ; F1a checklist đã mở rộng cảnh báo cọc. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -156,7 +156,12 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 - **Fix phụ phát hiện lúc QA:** API đổi mật khẩu giờ nhận đúng `{current, next}`; 68 test liên quan password pass.
 - **Test F0/F1a:** bộ guard + checklist + returns + UI 26/26 trước bổ sung gần nhất; checklist service 2/2, UI 2/2, cash regression `-t=thu` 5 pass; typecheck và lint pass (hai warning cũ ở `src/server/reports/consumption.ts`). Chạy nguyên `tests/cash/cash.test.ts` trên Windows còn fail test kiến trúc đường dẫn do `/` vs `\\` (không liên quan F0).
 
+- **Dữ liệu khách (02/10/2026):** khách gửi `data/DHERP – Bảng nhập dữ liệu đầu vào.xlsx` (8 danh mục, công ty, 5 người dùng, 19 KH, 6 NCC, 133 SP, kiểu gia công kèm tỷ lệ) và `DSSanPham (3).xls` (thực chất là bảng HTML xuất từ phần mềm cũ: 1.073 SP + 159 dòng "Kiểu gia công" theo từng SP, có giá nhập/xuất). **Nhập Excel cho cả 8 mục Cài đặt danh mục** (`src/server/catalog/import-spec.ts`, API `/api/catalog/[section]/import[-template]`, menu Nhập/Xuất ở màn Cài đặt danh mục; cột phụ Tỷ lệ/Tỷ lệ trừ kho/ĐVT của Kiểu gia công gộp vào Ghi chú). Nhập khách khớp người phụ trách theo tên đăng nhập/họ tên không dấu ("Nhâm" ⇒ `nham`). **`scripts/seed-customer-data.ts`** nạp toàn bộ dữ liệu trên qua đúng các bộ nhập Excel (mặc định chỉ xem trước; ghi thật cần `--commit --confirm-db <tên DB>`; doc: `docs/infra/SEED-CUSTOMER-DATA.md`). Đã chạy thật trên DB dev `dh_dev_b`: 8 danh mục, công ty, 3 người dùng, 19 KH, 6 NCC, **1.186 SP** (133 khách điền + 1.053 từ PM cũ, 20 trùng tên giữ bản khách điền, 37 mã cũ đổi cho hợp lệ), chạy lại không nhân đôi. **Chưa nạp lên VPS** (chờ user duyệt + backup). `scripts/build-customer-supplement.ts` sinh `data/DHERP – Bảng bổ sung dữ liệu (gửi khách).xlsx` (13 trang: câu hỏi xác nhận, phân loại SP, KH/NCC, số đầu kỳ, BOM 159 cặp, giá công, người dùng, mẫu in).
+- **Vấn đề dữ liệu khách cần xác nhận:** SĐT KH là số mẫu (0000, 1111…); số dư quỹ 100.000.000 ×3 và chiết khấu 19 KH trông như số thử; "Ngày chốt số đầu kỳ" để trống ⇒ KHÔNG nạp số đầu kỳ; số TK MB ở trang Công ty (2318189999) khác trang Ngân hàng & quỹ (12345); Agribank 6789 giống số mẫu; Bùi Thị Lan thiếu vị trí ⇒ chưa tạo tài khoản; SP PM cũ không phân loại được thành phẩm/NVL ⇒ nhập hết "Hàng hóa"; định mức tồn 133 SP đều = 5; tôn cuộn chưa biết; tên công ty khách viết thường chữ "công".
+- **Lỗi test có sẵn (không do thay đổi này):** `tests/import/migration.test.ts` mục 1.300 mã tồn đầu kỳ bị timeout giao dịch trên máy dev Windows (fail cả trên bản trước thay đổi).
+
 **Chưa làm / đang làm**
+- Nạp dữ liệu khách lên VPS (xem mục Cần duyệt); nhập BOM bằng Excel (hiện chỉ nhập tay); công thức kiểu gia công ⇒ BOM chờ khách.
 - Hoàn tất F0: lập ma trận đầy đủ chứng từ ở kỳ cũ, chứng từ chuyển kỳ và ca xuyên kỳ; hiện có test trả hàng/thu nợ vào kỳ mới và test chặn sửa/hủy/giao khác kỳ; còn ma trận chuyến/đơn nháp/cọc và test các ca chuyển kỳ khác.
 - Hoàn thiện/review F1a: kiểm tra tiêu chí với nghiệp vụ, quyền và link đến chứng từ; cảnh báo cọc đã mở rộng cho đơn chưa giao đủ. Hiện chưa có hành động kết sổ.
 - **F1b–F4 chưa làm:** engine chuyển số dư/lô, xác nhận 2 bước + backup, quy tắc xuyên kỳ đầy đủ, tra cứu kỳ cũ, kiểm thử/diễn tập và tài liệu bàn giao.
@@ -168,6 +173,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 3. Chạy full quality gate rồi xin duyệt merge/push `main`; push `main` sẽ deploy VPS thật.
 
 **Cần bạn duyệt / đầu vào**
+- **Nạp dữ liệu khách lên VPS (chưa làm):** cần (a) duyệt merge `main` để có bộ nhập danh mục (deploy), (b) backup + restore drill xong, (c) quyết định nạp luôn dữ liệu có dấu hiệu là số mẫu hay chờ khách xác nhận, (d) cách chạy: qua UI Nhập Excel hoặc `seed-customer-data.ts` qua tunnel SSH tới DB VPS. Gửi khách file bổ sung trong `data/`.
 - Chốt 5 quyết định với khách hoặc xác nhận dùng mặc định Plan 07: giữ từng lô/gộp, tháng/quý, mốc giờ chốt, xử lý đơn nháp/chuyến mở, ai được kết sổ.
 - Duyệt merge/push `main` riêng khi feature sẵn sàng. Đồng ý kế hoạch trước đây không thay cho duyệt deploy.
 - Xác nhận diễn tập trên bản sao DB trước lần kết sổ thật; user/VPS owner cài backup ngoài máy chủ + cron và xác nhận restore drill đạt.
