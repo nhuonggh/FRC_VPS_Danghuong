@@ -7,11 +7,16 @@ import { findActiveFunction } from "@/lib/nav";
  * Logic THUẦN (không React/DB) để client và server dùng chung. KHÔNG lưu dữ liệu nghiệp vụ/bí mật.
  */
 export const MAX_PINS = 40;
+export const MAX_QUICK = 24;
+/** Truy cập nhanh mặc định (chức năng hay dùng theo thứ tự); chỉ hiện nếu còn trong menu đã lọc quyền. */
+export const DEFAULT_QUICK_KEYS = ["purchase-new", "purchase-list", "stock-onhand", "stock-min", "product-list", "bom-list", "company"] as const;
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const keySchema = z.string().max(60).regex(KEY);
 export const prefsSchema = z.object({
   v: z.literal(1),
   sidebarCollapsed: z.boolean().optional(),
+  /** Truy cập nhanh (nút trên header): khoá chức năng theo thứ tự. Chưa tuỳ chỉnh (undefined) ⇒ dùng mặc định DEFAULT_QUICK_KEYS. */
+  quickAccess: z.array(keySchema).max(24).optional(),
   modules: z.record(keySchema, z.object({ pinned: z.array(keySchema).max(MAX_PINS), active: keySchema.optional() })).refine((m) => Object.keys(m).length <= 40, "Quá nhiều module."),
 });
 export type Prefs = z.infer<typeof prefsSchema>;
@@ -74,3 +79,31 @@ export function allPinned(nav: readonly NavModule[], prefs: Prefs): { module: Na
   return nav.filter((m) => m.type === "accordion").flatMap((m) => { const byKey = new Map(fnsOf(m).map((f) => [f.key, f])); return pinsOf(prefs, m.key).flatMap((k) => (byKey.has(k) ? [{ module: m, fn: byKey.get(k)! }] : [])); });
 }
 export const isPinned = (p: Prefs, moduleKey: string, fnKey: string) => pinsOf(p, moduleKey).includes(fnKey);
+
+// ---- Truy cập nhanh (yêu thích toàn hệ thống, mở từ nút trên header) ----
+export const quickKeys = (p: Prefs): readonly string[] => p.quickAccess ?? DEFAULT_QUICK_KEYS;
+export const isQuick = (p: Prefs, fnKey: string) => quickKeys(p).includes(fnKey);
+/** Mọi chức năng đang có trong menu (đã lọc quyền, không planned) — dùng cho danh sách "Thêm chức năng". */
+export function allFunctions(nav: readonly NavModule[]): { module: NavModule; fn: NavFunction }[] {
+  return nav.flatMap((m) => fnsOf(m).map((fn) => ({ module: m, fn })));
+}
+/** Danh sách truy cập nhanh đã giải: đúng thứ tự, chỉ chức năng còn tồn tại VÀ đủ quyền (không bao giờ trỏ tới màn chưa giao). */
+export function resolveQuick(nav: readonly NavModule[], p: Prefs): { module: NavModule; fn: NavFunction }[] {
+  const byKey = new Map(allFunctions(nav).map((x) => [x.fn.key, x]));
+  return quickKeys(p).flatMap((k) => (byKey.has(k) ? [byKey.get(k)!] : []));
+}
+/** Thêm/bỏ một chức năng khỏi truy cập nhanh. Lần sửa đầu tiên "chốt" danh sách mặc định rồi mới sửa trên đó. */
+export function toggleQuick(p: Prefs, fnKey: string): Prefs {
+  const cur = [...quickKeys(p)];
+  if (cur.includes(fnKey)) return { ...p, quickAccess: cur.filter((k) => k !== fnKey) };
+  return cur.length >= MAX_QUICK ? p : { ...p, quickAccess: [...cur, fnKey] };
+}
+/** Đổi vị trí một mục (delta -1 = lên, +1 = xuống) trong danh sách nhìn thấy; khoá không còn hợp lệ không bị đụng tới. */
+export function moveQuick(p: Prefs, fnKey: string, delta: -1 | 1): Prefs {
+  const cur = [...quickKeys(p)]; const at = cur.indexOf(fnKey); const to = at + delta;
+  if (at < 0 || to < 0 || to >= cur.length) return p;
+  [cur[at], cur[to]] = [cur[to]!, cur[at]!];
+  return { ...p, quickAccess: cur };
+}
+/** Khôi phục danh sách mặc định. */
+export function resetQuick(p: Prefs): Prefs { const { quickAccess: _drop, ...rest } = p; return rest; } // eslint-disable-line @typescript-eslint/no-unused-vars

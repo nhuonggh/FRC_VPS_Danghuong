@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
 import type { Actor } from "@/lib/permissions/scope";
-import { homeWidgets, ictDayRange, loadWidget, lowStockCount, quickLinks, stockValueTotal, todayPurchaseCount, withTimeout } from "@/server/home/queries";
+import { homeWidgets, ictDayRange, loadWidget, lowStockCount, stockValueTotal, todayPurchaseCount, withTimeout } from "@/server/home/queries";
 import type { WidgetSpec } from "@/server/home/types";
 import { prisma, resetDb } from "../helpers/db";
 import { makePartner, makePeriod, makeUser } from "../helpers/factories";
@@ -48,13 +48,10 @@ describe("homeWidgets — quyền kiểm ở server", () => {
     expect(keys(["stock.view", "cost.view", "purchase.view"])).toEqual(["purchase-today", "low-stock", "stock-value"]);
   });
 
-  it("href widget lấy từ menu đã lọc; lối tắt không bao giờ chứa chức năng planned", () => {
+  it("href widget lấy từ menu đã lọc", () => {
     const all = ["stock.view", "cost.view", "purchase.view", "purchase.create", "product.view", "bom.manage", "company.manage", "order.view", "stocktake.manage"];
     const w = homeWidgets(nav(all), actor(all), NOW);
     expect(w.find((x) => x.key === "low-stock")!.href).toBe("/inventory/min-stock");
-    const links = quickLinks(nav(all)).map((l) => l.href);
-    expect(links).toEqual(expect.arrayContaining(["/purchase/orders/new", "/production/bom", "/system/company"]));
-    expect(links).not.toContain("/inventory/stocktakes");
   });
 });
 

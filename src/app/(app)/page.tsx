@@ -3,7 +3,7 @@ import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
 import { prisma } from "@/lib/prisma";
 import { requireActor } from "@/server/auth/session";
-import { homeWidgets, loadWidget, quickLinks } from "@/server/home/queries";
+import { homeWidgets, loadWidget } from "@/server/home/queries";
 
 export const dynamic = "force-dynamic"; // lời chào và số liệu phụ thuộc thời điểm hiện tại
 
@@ -20,7 +20,7 @@ export default async function HomePage() {
   return (
     <HomeView
       fullName={actor.fullName} now={now} modules={nav.filter((m) => m.type === "accordion")}
-      quickLinks={quickLinks(nav)} widgets={widgets}
+      widgets={widgets}
     />
   );
 }
