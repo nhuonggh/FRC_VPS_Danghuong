@@ -230,6 +230,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "closing", label: "Kết sổ",
         functions: [
+          { key: "period-history", label: "Tra cứu kỳ", desc: "Xem lại số liệu các kỳ đã kết sổ (chỉ đọc)", icon: "scroll-text", view: "table", path: "/period/history", codes: ["K6"], perm: "period.view_closed" },
           { key: "period-close", label: "Kết sổ cuối kỳ", desc: "Checklist điều kiện kết sổ", icon: "calendar-check", view: "form", path: "/period/close", codes: ["K5"], perm: "period.close" },
         ],
       },

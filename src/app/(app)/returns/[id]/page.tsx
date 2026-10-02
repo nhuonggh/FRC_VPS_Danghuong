@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { ReturnDetail } from "@/components/returns/ReturnDetail";
 import { prisma } from "@/lib/prisma";
+import { ClosedPeriodBanner } from "@/components/period/PeriodHistoryViews";
 import { requireActor } from "@/server/auth/session";
+import { closedPeriodOf } from "@/server/period/doc-period";
 import { DomainError } from "@/server/http/errors";
 import { getReturn } from "@/server/returns/queries";
 
@@ -15,5 +17,11 @@ export default async function ReturnDetailPage({ params }: { params: Promise<{ i
     if (e instanceof DomainError && e.status === 404) notFound();
     throw e;
   });
-  return <ReturnDetail ret={ret} canManage />;
+  const closed = await closedPeriodOf(prisma, "goodsReturn", Number(raw));
+  return (
+    <>
+      {closed && <div className="mb-4"><ClosedPeriodBanner periodName={closed.name} closedAt={closed.closedAt} /></div>}
+      <ReturnDetail ret={ret} canManage={!closed} />
+    </>
+  );
 }
