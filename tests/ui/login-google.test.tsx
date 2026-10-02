@@ -30,7 +30,7 @@ describe("LoginForm — nút Google", () => {
     render(<LoginForm googleEnabled />);
     const btn = screen.getByRole("button", { name: GOOGLE });
     expect(btn).toHaveAttribute("type", "button");
-    expect(btn).toHaveClass("h-11", "border", "border-border", "bg-surface");
+    expect(btn).toHaveClass("h-12", "border", "border-border", "bg-surface"); // cao 48px (≥ 44px)
     expect(screen.getByText("hoặc")).toBeInTheDocument();
     // nằm SAU nút Đăng nhập chính
     const primary = screen.getByRole("button", { name: "Đăng nhập" });

@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LoaderCircle, Lock, User } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -77,7 +77,10 @@ export function LoginForm({
   }
 
   const locked = pending || googlePending;
-  const field = "h-11 w-full rounded-sm border bg-canvas px-3 text-sm hover:border-border-strong";
+  const [forgot, setForgot] = useState(false);
+  // Ô nhập có icon dẫn đầu (mẫu đăng nhập Thập Thảo); nhãn thật vẫn có cho trình đọc màn hình (sr-only).
+  const field = "h-12 w-full rounded-md border bg-canvas pl-11 pr-3 text-sm placeholder:text-fg-muted hover:border-border-strong";
+  const icon = "pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-fg-secondary";
   return (
     <div className="space-y-4">
       <form onSubmit={onSubmit} noValidate className="space-y-4">
@@ -85,40 +88,49 @@ export function LoginForm({
           <div role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">{errors.form}</div>
         )}
         <div>
-          <label htmlFor="username" className="mb-1 block text-sm font-medium">Tên đăng nhập</label>
-          <input id="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)}
-            aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
-            className={`${field} ${errors.username ? "border-danger" : "border-border"}`} />
+          <label htmlFor="username" className="sr-only">Tên đăng nhập</label>
+          <div className="relative">
+            <User size={18} aria-hidden className={icon} />
+            <input id="username" placeholder="Tên đăng nhập" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)}
+              aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
+              className={`${field} ${errors.username ? "border-danger" : "border-border"}`} />
+          </div>
           {errors.username && <p id="username-error" className="mt-1 text-xs text-danger">{errors.username}</p>}
         </div>
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium">Mật khẩu</label>
+          <label htmlFor="password" className="sr-only">Mật khẩu</label>
           <div className="relative">
-            <input id="password" type={show ? "text" : "password"} autoComplete="current-password" value={password}
+            <Lock size={18} aria-hidden className={icon} />
+            <input id="password" placeholder="Mật khẩu" type={show ? "text" : "password"} autoComplete="current-password" value={password}
               onChange={(e) => setPassword(e.target.value)}
               aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : undefined}
-              className={`${field} pr-11 ${errors.password ? "border-danger" : "border-border"}`} />
-            <button type="button" aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShow((s) => !s)}
-              className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-fg-muted hover:text-fg">
+              className={`${field} pr-12 ${errors.password ? "border-danger" : "border-border"}`} />
+            <button type="button" aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShow((v) => !v)}
+              className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-fg-secondary hover:text-fg">
               {show ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
             </button>
           </div>
           {errors.password && <p id="password-error" className="mt-1 text-xs text-danger">{errors.password}</p>}
         </div>
-        <button type="submit" disabled={locked} className="h-11 w-full rounded-sm bg-accent text-sm font-medium text-fg-on-accent disabled:opacity-60">
-          {pending ? "Đang đăng nhập" : "Đăng nhập"}
+        {/* Hệ thống không có tự đặt lại mật khẩu: quản trị cấp mật khẩu tạm (Người dùng → Cấp lại mật khẩu). */}
+        <div className="flex justify-end">
+          <button type="button" aria-expanded={forgot} onClick={() => setForgot((v) => !v)} className="text-sm font-medium text-accent hover:underline">Quên mật khẩu?</button>
+        </div>
+        {forgot && <p role="status" className="rounded-sm bg-accent-soft p-3 text-sm text-fg-secondary">Hãy liên hệ quản trị viên để được cấp lại mật khẩu tạm. Nếu tài khoản có email Google, bạn có thể đăng nhập bằng Google bên dưới.</p>}
+        <button type="submit" disabled={locked} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent text-sm font-semibold text-fg-on-accent hover:bg-accent-600 disabled:opacity-60">
+          {pending ? "Đang đăng nhập" : <>Đăng nhập<ArrowRight size={18} aria-hidden /></>}
         </button>
       </form>
       {googleEnabled && (
         <>
-          <div className="flex items-center gap-3 text-xs text-fg-muted">
+          <div className="flex items-center gap-3 text-sm text-fg-secondary">
             <span className="h-px flex-1 bg-border" aria-hidden />
             <span>hoặc</span>
             <span className="h-px flex-1 bg-border" aria-hidden />
           </div>
           {/* Nút phụ (outline), không dùng logo thương hiệu (giữ kỷ luật token màu), cao ≥ 44px */}
           <button type="button" onClick={() => void onGoogle()} disabled={locked} aria-busy={googlePending}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-sm border border-border bg-surface text-sm font-medium text-fg hover:bg-hover disabled:opacity-60">
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-border bg-surface text-sm font-medium text-fg hover:bg-hover disabled:opacity-60">
             {googlePending && <LoaderCircle size={16} aria-hidden className="animate-spin motion-reduce:animate-none" />}
             {googlePending ? "Đang chuyển tới Google" : "Đăng nhập bằng Google"}
           </button>
