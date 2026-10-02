@@ -14,7 +14,7 @@ import { cancelDeposit, createDeposit } from "@/server/deposits/service";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { prisma, resetDb } from "../helpers/db";
-import { makeCashAccount, makePartner } from "../helpers/factories";
+import { makeCashAccount, makePartner, makePeriod } from "../helpers/factories";
 import { buy, engine, newWorld, T, useNoopCostOwners, type World } from "../inventory/helpers";
 
 useNoopCostOwners();
@@ -103,6 +103,23 @@ describe("lập phiếu (D-32)", () => {
     expect(await st()).toBe("DEPOSITED");
     const other = await makePartner({ isCustomer: true });
     expect((await errOf(tx((t) => createReceipt(t, acc, rBody({ partnerId: other.id, orderId: o.id }), NOW))))?.status).toBe(400);
+  });
+
+  it("thu nợ đơn kỳ cũ: phiếu thu và sổ phát sinh thuộc kỳ đang mở", async () => {
+    await engine(w)([w.p.id], (ctx) => buy(ctx, w.p.id, 100, 10_000, T(0), 1));
+    const order = await createSaleOrderIdempotent(prisma, acc, "old-period-order", saleOrderSchema.parse({
+      partnerId: customer.id, date: "2026-09-15", expectedDeliveryDate: "2026-09-15", note: "",
+      lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: 4, salePrice: 50_000, discountNow: 0, discountAccum: 0, processingTypeId: null }],
+    }), NOW);
+    await prisma.period.update({ where: { id: w.periodId }, data: { status: "CLOSED", isOpen: null, closedAt: NOW } });
+    const nextPeriod = await makePeriod({ openedAt: new Date("2026-09-15T17:00:00Z") });
+    const at = new Date("2026-09-16T03:00:00Z");
+    const receipt = await tx((t) => createReceipt(t, acc, rBody({ orderId: order.id, amount: 100_000, date: "2026-09-16" }), at));
+
+    expect((await prisma.receipt.findUniqueOrThrow({ where: { id: receipt.id } })).periodId).toBe(nextPeriod.id);
+    expect((await prisma.partnerLedger.findFirstOrThrow({ where: { docType: "RECEIPT", docId: receipt.id } })).periodId).toBe(nextPeriod.id);
+    expect((await prisma.cashLedger.findFirstOrThrow({ where: { docType: "RECEIPT", docId: receipt.id } })).periodId).toBe(nextPeriod.id);
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: order.id } })).periodId).toBe(w.periodId);
   });
 });
 

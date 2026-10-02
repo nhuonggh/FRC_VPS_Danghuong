@@ -64,7 +64,7 @@ export function QuoteDetail({ quote, canManage, canConvert, canPrint = false }: 
       }}
       tabs={[
         {
-          key: "info", label: "Thông tin",
+          key: "info", label: "Thông tin cơ bản",
           render: () => (
             <dl className="space-y-2">
               <DetailField label="Khách hàng">{quote.partnerCode} — {quote.partnerName}</DetailField>

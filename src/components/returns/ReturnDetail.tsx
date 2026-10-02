@@ -38,7 +38,7 @@ export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canMana
         }}
         tabs={[
           {
-            key: "info", label: "Thông tin",
+            key: "info", label: "Thông tin cơ bản",
             render: () => (
               <dl className="space-y-2">
                 <DetailField label={supplier ? "Nhà cung cấp" : "Khách hàng"}>{ret.partnerCode} — {ret.partnerName}</DetailField>

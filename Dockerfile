@@ -51,9 +51,10 @@ COPY prisma ./prisma
 # Đúng các file seed import (đường dẫn tương đối, KHÔNG alias "@/"; kiểm lại khi seed-lib.ts đổi import):
 #   prisma/seed-lib.ts → src/lib/permissions/catalog.ts, src/lib/time.ts, src/server/auth/password.ts
 #   src/server/auth/password.ts → src/server/auth/normalize.ts (+ bcryptjs, node:crypto)
+#   prisma/seed-customer.ts → src/lib/search.ts, src/server/auth/password.ts (+ prisma/data/customer-seed.json, đã nằm trong COPY prisma)
 #   (seed-lib còn dùng normalizeEmail/looksLikeEmail/isPrintableAscii/tempPasswordExpiry — cùng 2 file trên)
 COPY src/lib/permissions/catalog.ts ./src/lib/permissions/catalog.ts
-COPY src/lib/time.ts ./src/lib/time.ts
+COPY src/lib/time.ts src/lib/search.ts ./src/lib/
 COPY src/server/auth/password.ts src/server/auth/normalize.ts ./src/server/auth/
 # Cứu hộ admin (RUNBOOK mục 13): npx tsx scripts/admin-reset.ts → prisma/admin-reset-lib.ts (cùng các file auth ở trên)
 COPY scripts/admin-reset.ts ./scripts/admin-reset.ts
