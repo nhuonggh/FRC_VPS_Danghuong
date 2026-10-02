@@ -19,6 +19,8 @@ export interface NavFunction {
 export interface NavCategory {
   key: string;
   label: string;
+  /** Ẩn tiêu đề nhóm ở sidebar (module chỉ cần danh sách chức năng); vẫn dùng nhãn ở trang tổng quan module. */
+  hideTitle?: boolean;
   functions: readonly NavFunction[];
 }
 
@@ -45,7 +47,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "sales", label: "Bán hàng", icon: "shopping-cart", type: "accordion",
     categories: [
       {
-        key: "orders", label: "Đơn hàng",
+        key: "orders", label: "Đơn hàng", hideTitle: true,
         functions: [
           { key: "order-new", label: "Bán hàng", desc: "Lập đơn, chiết khấu, xuất kho FIFO", icon: "shopping-cart", view: "form", path: "/sales/orders/new", codes: ["31"], perm: "order.create" },
           { key: "order-list", label: "Danh sách đơn", desc: "Đơn theo 2 trục trạng thái giao hàng & thanh toán", icon: "receipt", view: "table", path: "/sales/orders", codes: ["32", "33"], perm: "order.view" },
@@ -56,7 +58,7 @@ export const APP_NAV: readonly NavModule[] = [
         ],
       },
       {
-        key: "customers", label: "Khách hàng",
+        key: "customers", label: "Khách hàng", hideTitle: true,
         functions: [
           { key: "customer-list", label: "Khách hàng", desc: "Hồ sơ, hạn mức nợ, người phụ trách", icon: "users", view: "table", path: "/sales/customers", codes: ["9"], perm: "partner.view" },
         ],
@@ -68,7 +70,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "delivery", label: "Giao hàng", icon: "truck", type: "accordion",
     categories: [
       {
-        key: "trips", label: "Chuyến giao",
+        key: "trips", label: "Chuyến giao", hideTitle: true,
         functions: [
           { key: "trip-new", label: "Xếp chuyến", desc: "Gom đơn theo tuyến, gán xe + lái + phụ, in phiếu giao", icon: "truck", view: "form", path: "/delivery/trips/new", codes: ["38"], perm: "trip.manage" },
           { key: "trip-list", label: "Danh sách chuyến", desc: "Chuyến theo trạng thái", icon: "clipboard-list", view: "table", path: "/delivery/trips", codes: ["39"], perm: "trip.manage" },
@@ -84,7 +86,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "purchase", label: "Nhập hàng", icon: "package-plus", type: "accordion",
     categories: [
       {
-        key: "receiving", label: "Nhập hàng",
+        key: "receiving", label: "Nhập hàng", hideTitle: true,
         functions: [
           { key: "purchase-new", label: "Lập phiếu nhập", desc: "Quy đổi đơn vị, sinh lô FIFO, phân bổ cước", icon: "package-plus", view: "form", path: "/purchase/orders/new", codes: ["19"], perm: "purchase.create" },
           { key: "purchase-list", label: "Danh sách phiếu nhập", desc: "Xem, tìm, sửa phiếu nhập", icon: "clipboard-list", view: "table", path: "/purchase/orders", codes: ["20"], perm: "purchase.view" },
@@ -99,7 +101,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "inventory", label: "Kho", icon: "warehouse", type: "accordion",
     categories: [
       {
-        key: "stock", label: "Tồn kho",
+        key: "stock", label: "Tồn kho", hideTitle: true,
         functions: [
           { key: "stock-onhand", label: "Tồn kho hiện tại", desc: "Tồn theo mã hàng", icon: "warehouse", view: "table", path: "/inventory/stock", codes: ["23"], perm: "stock.view" },
           { key: "stock-ledger", label: "Sổ kho / thẻ kho", desc: "Chi tiết nhập xuất từng mã", icon: "scroll-text", view: "table", path: "/inventory/ledger", codes: ["22"], perm: "stock.view" },
@@ -129,7 +131,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "returns", label: "Trả hàng", icon: "undo-2", type: "accordion",
     categories: [
       {
-        key: "customer-returns", label: "Khách trả",
+        key: "customer-returns", label: "Khách trả", hideTitle: true,
         functions: [
           { key: "return-order", label: "Trả theo đơn", desc: "Nhập lại kho theo giá vốn dòng bán gốc", icon: "undo-2", view: "form", path: "/returns/by-order/new", codes: ["43"], perm: "return.manage" },
           { key: "return-order-list", label: "DS trả theo đơn", desc: "", icon: "clipboard-list", view: "table", path: "/returns/by-order", codes: ["44"], perm: "return.manage" },
@@ -151,7 +153,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "production", label: "Sản xuất", icon: "factory", type: "accordion",
     categories: [
       {
-        key: "bom", label: "Định mức",
+        key: "bom", label: "Định mức", hideTitle: true,
         functions: [
           { key: "bom-list", label: "Định mức NVL", desc: "Khai báo có phiên bản", icon: "sliders-horizontal", view: "table", path: "/production/bom", codes: ["51"], perm: "bom.manage" },
           { key: "consumption-actual", label: "Tiêu hao thực tế", desc: "Từ kiểm kho", icon: "scale", view: "table", path: "/reports/actual-consumption", codes: ["52"], perm: "bom.manage" },
@@ -159,7 +161,7 @@ export const APP_NAV: readonly NavModule[] = [
         ],
       },
       {
-        key: "orders", label: "Lệnh & gia công",
+        key: "orders", label: "Lệnh & gia công", hideTitle: true,
         functions: [
           { key: "production-order", label: "Lệnh sản xuất", desc: "Chỉ phụ kiện", icon: "factory", view: "table", path: "/production/orders", codes: ["49", "50"], perm: "production.manage" },
           { key: "processing-job", label: "Gia công thuê", desc: "Tôn của khách, tính tiền công + NVL xưởng", icon: "hammer", view: "table", path: "/production/processing", codes: ["54", "55"], perm: "processing.manage", planned: P },
@@ -198,7 +200,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "reports", label: "Báo cáo", icon: "bar-chart-3", type: "accordion",
     categories: [
       {
-        key: "management", label: "Báo cáo quản trị",
+        key: "management", label: "Báo cáo quản trị", hideTitle: true,
         functions: [
           { key: "rp-order-profit", label: "Lãi từng đơn", desc: "Lãi âm bôi đỏ", icon: "bar-chart-3", view: "report", path: "/reports/order-profit", codes: ["67"], perm: "profit.view" },
           { key: "rp-period-pnl", label: "Lãi lỗ toàn xưởng", desc: "DT − giá vốn − chiết khấu tích lũy − chi phí", icon: "bar-chart-3", view: "report", path: "/reports/period-pnl", codes: ["68"], perm: "profit.view" },
@@ -216,7 +218,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "period", label: "Kỳ & số đầu kỳ", icon: "calendar-check", type: "accordion",
     categories: [
       {
-        key: "opening", label: "Số đầu kỳ",
+        key: "opening", label: "Số đầu kỳ", hideTitle: true,
         functions: [
           { key: "open-stock", label: "Tồn kho đầu kỳ", desc: "Kèm giá vốn theo lô", icon: "warehouse", view: "table", path: "/period/opening-stock", codes: ["K1"], perm: "data.import" },
           { key: "open-debt", label: "Công nợ đầu kỳ", desc: "Khách & NCC", icon: "scale", view: "table", path: "/period/opening-debt", codes: ["K2"], perm: "data.import" },
@@ -238,7 +240,7 @@ export const APP_NAV: readonly NavModule[] = [
     key: "system", label: "Hệ thống", icon: "settings", type: "accordion",
     categories: [
       {
-        key: "access", label: "Người dùng & phân quyền",
+        key: "access", label: "Người dùng & phân quyền", hideTitle: true,
         functions: [
           { key: "user-list", label: "Người dùng", desc: "Tài khoản, khoá/mở khoá, cấp lại mật khẩu", icon: "users", view: "table", path: "/system/users", codes: ["1", "2", "4"], perm: "user.view" },
           { key: "role-list", label: "Nhóm quyền", desc: "Cấu hình quyền động tới từng chức năng + phạm vi dữ liệu", icon: "shield", view: "table", path: "/system/roles", codes: ["3"], perm: "role.manage" },

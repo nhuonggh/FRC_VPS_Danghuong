@@ -13,6 +13,8 @@ export interface CustomerSeed {
   routes: { name: string }[]; expenseTypes: { name: string }[]; cashAccounts: { name: string; type: "CASH" | "BANK"; bankNo: string | null }[];
   processingTypes: { name: string; note: string | null }[];
   company: { name: string; address: string; phone: string; taxCode: string; bank: { bankName: string; accountNo: string; accountHolder: string; branch: string } };
+  /** Mẫu in mặc định (người ký + chân phiếu), tắt sẵn đến khi cấu hình webhook. Thêm nếu CHƯA có (docType + tên), không bao giờ ghi đè. */
+  printTemplates?: { docType: string; name: string; title: string; signerName: string; footerNote: string }[];
   users: { fullName: string; username: string; email: string; role: string }[];
   partners: { code: string; name: string; kind: "customer" | "supplier"; group: string; phone: string; address: string; note: string; debtLimit: string; allowCredit: boolean; owner: string | null }[];
   products: { code: string; name: string; kind: "HANG" | "NVL" | "THANH_PHAM" | "PHU_KIEN"; baseUnit: string; minStock: string; unit: string; factor: string | null; isCoil: boolean; isActive: boolean; note: string }[];
@@ -32,6 +34,9 @@ export async function seedCustomerData(prisma: PrismaClient, opts: { file?: stri
   if (!existsSync(file)) { log("Dữ liệu khách: không có file — bỏ qua"); return false; }
   const seed = JSON.parse(readFileSync(file, "utf8")) as CustomerSeed;
   if (seed.version !== 1) throw new Error(`customer-seed.json: phiên bản ${String(seed.version)} không hỗ trợ`);
+  // Chạy MỖI lần deploy (idempotent) để DB đã có dữ liệu vẫn nhận mẫu in mặc định mới.
+  const templates = seed.printTemplates?.length ? (await prisma.printTemplate.createMany({ data: seed.printTemplates.map((t) => ({ docType: t.docType, name: t.name, title: t.title, signerName: t.signerName, footerNote: t.footerNote })), skipDuplicates: true })).count : 0;
+  if (templates) log(`Dữ liệu khách: thêm ${templates} mẫu in mặc định`);
   if ((await prisma.partner.count()) + (await prisma.product.count()) > 0) { log("Dữ liệu khách: DB đã có khách/sản phẩm — bỏ qua"); return false; }
 
   const roles = new Map((await prisma.role.findMany({ select: { id: true, name: true } })).map((r) => [normalizeSearch(r.name), r.id]));

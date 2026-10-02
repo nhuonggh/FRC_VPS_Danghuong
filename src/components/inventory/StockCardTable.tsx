@@ -1,3 +1,5 @@
+"use client";
+
 import { DataTable, type Column } from "@/components/ui";
 import { formatDate, formatQty } from "@/lib/format";
 import type { StockCardRow } from "@/server/inventory-reports/stock-card";

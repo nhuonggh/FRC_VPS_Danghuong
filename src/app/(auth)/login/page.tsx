@@ -16,6 +16,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="grid min-h-dvh bg-canvas lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" width={56} height={56} className="mb-4 size-14" />
           <h1 className="mb-1 text-2xl font-semibold">{APP_NAME}</h1>
           <p className="mb-6 text-sm text-fg-secondary">Đăng nhập để tiếp tục.</p>
           {/* googleEnabled chỉ là boolean suy ra ở server — client id/secret không bao giờ rời server */}
