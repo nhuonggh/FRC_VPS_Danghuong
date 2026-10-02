@@ -3,14 +3,13 @@ import { Icon } from "@/components/shell/icons";
 import type { NavModule } from "@/config/app.config";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { greeting } from "@/lib/greeting";
-import type { HomeQuickLink, WidgetSpec, WidgetState } from "@/server/home/types";
+import type { WidgetSpec, WidgetState } from "@/server/home/types";
 import { RetryButton } from "./RetryButton";
 
 export interface HomeViewProps {
   fullName: string;
   now: Date;
   modules: readonly NavModule[];
-  quickLinks: readonly HomeQuickLink[];
   widgets: readonly { spec: Pick<WidgetSpec, "key" | "label" | "href" | "format" | "tone">; state: WidgetState }[];
 }
 
@@ -20,7 +19,7 @@ const CARD = "flex min-h-11 items-center gap-3 rounded-md border border-border b
  * Trang chủ. Chỉ hiển thị thứ actor được phép (đã lọc ở server): widget số liệu THẬT theo quyền, lối tắt, module.
  * Widget lỗi → "Chưa tải được — Thử lại" cục bộ, lời chào và điều hướng vẫn dùng được.
  */
-export function HomeView({ fullName, now, modules, quickLinks, widgets }: HomeViewProps) {
+export function HomeView({ fullName, now, modules, widgets }: HomeViewProps) {
   return (
     <div className="space-y-8">
       <h1 className="text-xl font-semibold">{greeting(now)}, {fullName}</h1>
@@ -44,20 +43,6 @@ export function HomeView({ fullName, now, modules, quickLinks, widgets }: HomeVi
               )}
             </div>
           ))}
-        </section>
-      )}
-
-      {quickLinks.length > 0 && (
-        <section aria-label="Truy cập nhanh" className="space-y-3">
-          <h2 className="text-sm font-semibold text-fg-secondary">Truy cập nhanh</h2>
-          <div className="flex flex-wrap gap-3">
-            {quickLinks.map((l) => (
-              <Link key={l.key} href={l.href} className={`${CARD} px-4 text-sm font-medium`}>
-                <Icon name={l.icon} size={18} />
-                {l.label}
-              </Link>
-            ))}
-          </div>
         </section>
       )}
 

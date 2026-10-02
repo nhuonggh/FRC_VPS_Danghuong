@@ -1,12 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 
-export interface HomeQuickLink {
-  key: string;
-  label: string;
-  href: string;
-  icon: string;
-}
-
 /** Mô tả một widget số liệu; `run` chỉ được gọi sau khi quyền đã được kiểm (xem `homeWidgets`). */
 export interface WidgetSpec {
   key: string;

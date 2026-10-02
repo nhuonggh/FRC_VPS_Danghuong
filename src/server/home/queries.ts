@@ -6,7 +6,7 @@ import { ICT_OFFSET_MS, toIct } from "@/lib/time";
 import { parseListParams } from "@/lib/query-params";
 import { onHandList } from "@/server/inventory-reports/on-hand";
 import { getOpenPeriod } from "@/server/period/guard";
-import type { HomeQuickLink, WidgetSpec, WidgetState } from "./types";
+import type { WidgetSpec, WidgetState } from "./types";
 
 /** Mỗi widget có tối đa từng này ms; quá hạn thì báo lỗi cục bộ (không kéo cả trang). */
 export const WIDGET_TIMEOUT_MS = 5000;
@@ -58,17 +58,6 @@ export async function stockValueTotal(db: PrismaClient): Promise<string> {
 }
 
 const flattenNav = (nav: readonly NavModule[]): NavFunction[] => nav.flatMap((m) => m.categories.flatMap((c) => c.functions));
-
-/** Chức năng hay dùng, theo thứ tự hiển thị. Chỉ hiện khi CÒN trong menu đã lọc quyền (không planned, đủ quyền). */
-const QUICK_KEYS = ["purchase-new", "purchase-list", "stock-onhand", "stock-min", "product-list", "bom-list", "company"] as const;
-
-export function quickLinks(nav: readonly NavModule[]): HomeQuickLink[] {
-  const byKey = new Map(flattenNav(nav).map((f) => [f.key, f]));
-  return QUICK_KEYS.flatMap((k) => {
-    const f = byKey.get(k);
-    return f ? [{ key: f.key, label: f.label, href: f.path, icon: f.icon }] : [];
-  });
-}
 
 /**
  * Widget số liệu cho actor: quyền kiểm ở SERVER trước khi có query nào chạy, và chỉ khi màn đích đã mở

@@ -104,12 +104,10 @@ describe("Trang chủ — Level 0 (module selector)", () => {
     expect(moduleLinks().length).toBeGreaterThan(0);
   });
 
-  it("lối tắt chỉ trỏ chức năng đã mở và đủ quyền (không planned)", async () => {
+  it("lối tắt đã chuyển lên nút 'Truy cập nhanh' ở header — trang chủ không còn khối chip", async () => {
     requireActor.mockResolvedValue(actor(["bom.manage", "company.manage", "order.view"]));
     await renderHome();
-    const quick = within(screen.getByRole("region", { name: "Truy cập nhanh" }));
-    expect(quick.getByRole("link", { name: /Định mức NVL/ })).toHaveAttribute("href", "/production/bom");
-    expect(quick.getByRole("link", { name: /Công ty/ })).toHaveAttribute("href", "/system/company");
-    expect(quick.queryByRole("link", { name: /Lập phiếu nhập/ })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Truy cập nhanh" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Định mức NVL/ })).toBeNull();
   });
 });

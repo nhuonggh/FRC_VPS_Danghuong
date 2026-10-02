@@ -1,6 +1,7 @@
 import type { NavModule } from "@/config/app.config";
 import { APP_NAME } from "@/lib/version";
 import { Breadcrumb } from "./Breadcrumb";
+import { QuickAccess } from "./QuickAccess";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { UserMenu } from "./UserMenu";
 
@@ -15,7 +16,8 @@ export function Header({ nav, user }: { nav: NavModule[]; user: { fullName: stri
         </span>
         <div className="hidden md:block"><Breadcrumb nav={nav} /></div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <QuickAccess nav={nav} />
         <ThemeSwitch />
         <UserMenu fullName={user.fullName} username={user.username} />
       </div>
