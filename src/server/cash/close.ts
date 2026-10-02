@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
-import { getOpenPeriod } from "@/server/period/guard";
+import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { cashBalance } from "./balance";
 import type { CashCloseInput } from "./schemas";
 
@@ -42,8 +42,9 @@ export async function createCashClose(tx: Tx, actor: Actor, input: CashCloseInpu
 export async function voidCashClose(tx: Tx, actor: Actor, id: number, reason: string, now: Date = new Date()): Promise<void> {
   assertCan(actor.perms, "cash.close.reopen");
   await tx.$queryRaw`SELECT id FROM cash_closes WHERE id = ${id} FOR UPDATE`;
-  const c = await tx.cashClose.findUnique({ where: { id }, select: { voidedAt: true } });
+  const c = await tx.cashClose.findUnique({ where: { id }, select: { voidedAt: true, periodId: true } });
   if (!c) throw new DomainError("Không tìm thấy lần chốt quỹ.", 404);
+  await assertPeriodOpen(tx, c.periodId); // lần chốt của kỳ đã kết sổ là bất biến (spec 4.4)
   if (c.voidedAt) throw new DomainError("Lần chốt này đã hủy trước đó.", 409);
   await tx.cashClose.update({ where: { id }, data: { voidedAt: now, voidedBy: actor.userId, voidReason: reason } });
   await writeAudit(tx, { userId: actor.userId, action: "cash.close.void", entity: "CashClose", entityId: id, after: { reason } });
