@@ -8,7 +8,7 @@ import { syncPaymentStatus } from "@/server/deposits/status";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp, PeriodClosedError } from "@/server/inventory";
-import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
+import { assertDocDateInPeriod, assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { postCashLedger, removeCashLedger } from "./ledger";
 import type { PaymentInput, ReceiptInput, VoucherDoc } from "./schemas";
@@ -214,6 +214,8 @@ export async function returnVoucher(tx: Tx, actor: Actor, doc: VoucherDoc, id: n
   if (v.isCancelled) throw new DomainError("Phiếu đã hủy.", 409);
   if (v.reviewStatus === "REVIEWED") throw new DomainError("Phiếu đã được kiểm tra — dùng điều chỉnh thay vì trả lại.", 409, "ALREADY_REVIEWED");
   if (v.reviewStatus === "RETURNED") throw new DomainError("Phiếu đã bị trả lại trước đó.", 409);
+  // Phiếu kỳ đã kết sổ không sửa lại được → trả lại sẽ khiến phiếu kẹt vĩnh viễn; hậu kiểm (REVIEW) thì vẫn cho phép.
+  await assertPeriodOpen(tx, v.periodId);
   await updateVoucher(tx, doc, id, { reviewStatus: "RETURNED", reviewedBy: null, reviewedAt: null });
   await addReviewEvent(tx, doc, id, "RETURN", actor.userId, reason);
   await writeAudit(tx, { userId: actor.userId, action: doc === "RECEIPT" ? "receipt.return" : "payment.return", entity: doc === "RECEIPT" ? "Receipt" : "Payment", entityId: id, before: { reviewStatus: v.reviewStatus }, after: { reviewStatus: "RETURNED", reason } });

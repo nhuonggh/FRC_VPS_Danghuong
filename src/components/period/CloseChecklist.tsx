@@ -22,15 +22,21 @@ function FindingGroup({ title, severity, findings }: { title: string; severity: 
         {findings.map((finding) => (
           <article key={finding.key} className="border-b border-border py-4 last:border-b-0">
             <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-semibold">{finding.title}</h3>
-              <span className={`shrink-0 text-sm font-semibold tabular ${finding.count > 0 ? tone : "text-fg-secondary"}`}>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                {finding.count === 0
+                  ? <CircleCheck size={16} aria-hidden className="shrink-0 text-success" />
+                  : <Icon size={16} aria-hidden className={`shrink-0 ${tone}`} />}
+                {finding.title}
+              </h3>
+              <span className={`shrink-0 text-sm font-semibold tabular ${finding.count > 0 ? tone : "text-success"}`}>
                 {finding.count}
               </span>
             </div>
+            {finding.count > 0 && <p className="mt-1 text-xs text-fg-secondary">{finding.hint}</p>}
             {finding.items.length > 0 ? (
               <ul className="mt-2 divide-y divide-border">
-                {finding.items.map((item) => (
-                  <li key={`${finding.key}-${item.id}`}>
+                {finding.items.map((item, index) => (
+                  <li key={`${finding.key}-${item.id}-${index}`}>
                     <Link href={item.href} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm hover:bg-hover">
                       <span className="min-w-0">
                         <span className="font-medium text-fg">{item.code}</span>
@@ -44,9 +50,9 @@ function FindingGroup({ title, severity, findings }: { title: string; severity: 
                   <li className="py-2 text-xs text-fg-secondary">Đang hiển thị {finding.items.length} trên {finding.count} mục.</li>
                 )}
               </ul>
-            ) : (
-              <p className="mt-1 text-sm text-fg-secondary">Không có mục cần xử lý.</p>
-            )}
+            ) : finding.count === 0 ? (
+              <p className="mt-1 text-sm text-success">Đạt — không có mục cần xử lý.</p>
+            ) : null}
           </article>
         ))}
       </div>

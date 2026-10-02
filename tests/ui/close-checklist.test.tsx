@@ -11,11 +11,11 @@ afterEach(cleanup);
 const base: Checklist = {
   period: { id: 2, name: "Kỳ 09/2026", openedAt: new Date("2026-09-01T00:00:00Z") },
   blockers: [
-    { key: "provisional-sales", severity: "BLOCK", title: "Đơn bán còn thiếu tồn", count: 1, items: [{ id: 3, code: "DH000003", description: "U6-TON-001 · thiếu giá vốn", href: "/sales/orders/3" }] },
-    { key: "open-trips", severity: "BLOCK", title: "Chuyến chưa xác nhận hoàn tất", count: 0, items: [] },
-    { key: "draft-stocktakes", severity: "BLOCK", title: "Phiếu kiểm kho còn nháp", count: 0, items: [] },
+    { key: "provisional-sales", severity: "BLOCK", title: "Đơn bán còn thiếu tồn", hint: "Nhập bù hàng.", count: 1, items: [{ id: 3, code: "DH000003", description: "U6-TON-001 · thiếu giá vốn", href: "/sales/orders/3" }] },
+    { key: "open-trips", severity: "BLOCK", title: "Chuyến chưa xác nhận hoàn tất", hint: "h", count: 0, items: [] },
+    { key: "draft-stocktakes", severity: "BLOCK", title: "Phiếu kiểm kho còn nháp", hint: "h", count: 0, items: [] },
   ],
-  warnings: [{ key: "draft-orders", severity: "WARN", title: "Đơn nháp sẽ cần mang sang kỳ mới", count: 0, items: [] }],
+  warnings: [{ key: "draft-orders", severity: "WARN", title: "Đơn nháp sẽ cần mang sang kỳ mới", hint: "h", count: 0, items: [] }],
   blockerCount: 1,
   warningCount: 0,
 };
@@ -27,6 +27,8 @@ describe("CloseChecklist", () => {
     expect(screen.getByText("Kỳ 09/2026")).toBeInTheDocument();
     expect(screen.getByText("1 mục chặn")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /DH000003/ })).toHaveAttribute("href", "/sales/orders/3");
+    expect(screen.getByText("Nhập bù hàng.")).toBeInTheDocument(); // gợi ý xử lý chỉ hiện khi mục còn vướng
+    expect(screen.getAllByText(/Đạt — không có mục cần xử lý/)).toHaveLength(3); // 2 chặn + 1 cảnh báo đạt
     expect(screen.getByText("Đơn nháp sẽ cần mang sang kỳ mới")).toBeInTheDocument();
   });
 
