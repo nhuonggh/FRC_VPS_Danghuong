@@ -17,8 +17,8 @@ const moduleLinks = () => screen.queryAllByRole("link").filter((l) => l.getAttri
 const actor = (perms: string[], fullName = "Trần Văn An"): SessionActor =>
   ({ userId: 1, username: "an", fullName, perms: new Set(perms), mustChangePassword: false, authMethod: "password" });
 
-async function renderHome() {
-  render(await HomePage());
+async function renderHome(search: Record<string, string> = {}) {
+  render(await HomePage({ searchParams: Promise.resolve(search) }));
 }
 
 beforeEach(() => {
@@ -50,7 +50,7 @@ describe("Trang chủ — Level 0 (module selector)", () => {
     requireActor.mockResolvedValue(actor(["report.view", "stock.view", "user.view"]));
     await renderHome();
     expect(screen.getByText("Báo cáo")).toBeInTheDocument();
-    expect(screen.getByText("Kho")).toBeInTheDocument();
+    expect(moduleLinks().some((l) => within(l).queryByText("Kho"))).toBe(true); // "Kho" còn xuất hiện ở tab tổng quan nên chỉ xét thẻ module
     expect(moduleLinks().length).toBeGreaterThanOrEqual(2);
   });
 

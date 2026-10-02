@@ -23,7 +23,7 @@ export const DATE_FILTER_DEBOUNCE_MS = 500;
  * Cặp đảo ngược (bắt đầu > kết thúc) vẫn đẩy: `listTimeRange` trả null = không lọc, UI báo rõ. Khi URL đổi từ bên ngoài
  * (Back/Forward, xoá bộ lọc, chọn mốc khác) ô được đồng bộ lại theo URL.
  */
-export function QuickTimeFilter({ basePath, params, now }: { basePath: string; params: ListParams; now?: Date }) {
+export function QuickTimeFilter({ basePath, params, now, allowAll = true }: { basePath: string; params: ListParams; now?: Date; /** false: bỏ mục "Mọi thời gian" (dashboard luôn có khoảng thời gian, mặc định Tháng này). */ allowAll?: boolean }) {
   const router = useRouter();
   const range = useMemo(() => listTimeRange(params, now), [params, now]);
   const isCustom = params.timePreset === "custom";
@@ -76,7 +76,7 @@ export function QuickTimeFilter({ basePath, params, now }: { basePath: string; p
           }}
           className="bg-transparent outline-none"
         >
-          <option value="">Mọi thời gian</option>
+          {allowAll && <option value="">Mọi thời gian</option>}
           {TIME_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
       </label>
