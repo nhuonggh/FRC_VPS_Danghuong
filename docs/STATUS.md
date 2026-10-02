@@ -1,6 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
-> Cập nhật lần cuối: **2026-10-01**. `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` ở `a0c877f`. U6 QA xong trên feature; F0 đang rà, F1a checklist bản đầu đã có trên feature. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
+> Cập nhật lần cuối: **2026-10-01**. `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` đang có F0/F1a. U6 QA xong; F0 đã test trả hàng/thu nợ xuyên kỳ; F1a checklist đã mở rộng cảnh báo cọc. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.
 
@@ -19,7 +19,7 @@ tính. Stack: Next.js 15.5 (App Router) · React 19 · TypeScript · Tailwind 3.
 file `prisma/schema/`) · PostgreSQL 15 · next-auth v4 (Credentials + Google) · Vitest 5 · Docker · Caddy · GitHub Actions.
 UI theo skill `crm-design` (trang chi tiết full-page, không split panel). Hạ tầng theo skill `setup-project`.
 
-**Trạng thái một dòng:** GĐ0, GĐ1a và phần lớn chức năng GĐ1b–GĐ3 đã có trên `main`; Deploy `54ec71b` xanh. U6 QA xong trên feature. Plan 07 F0 đang rà, F1a checklist có bản đầu trên feature; chưa có engine kết sổ.
+**Trạng thái một dòng:** GĐ0, GĐ1a và phần lớn chức năng GĐ1b–GĐ3 đã có trên `main`; Deploy `54ec71b` xanh. U6 QA xong trên feature. Plan 07 F0 đang rà ma trận xuyên kỳ, F1a checklist trên feature; chưa có engine kết sổ.
 
 ## 2. Quy tắc bất di bất dịch (đọc kỹ)
 
@@ -151,14 +151,14 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 **Khối lượng đã làm**
 - **U6 Plan 08:** chuẩn hóa tab đầu đơn bán/báo giá/trả hàng; QA order/quote/return detail ở 375/768/1024/1440 px + dark mode, không tràn ngang.
-- **F0 Plan 07 (một phần):** rà guard kỳ, một số ranh giới `periodId`; thêm test trả đơn kỳ cũ vào kỳ mới, giữ `costRef`/giá vốn gốc. Returns suite 16/16 pass.
-- **F1a Plan 07 (bản đầu):** trang read-only `/period/close`, guard quyền `period.close`, menu đã mở; ba blocker + ba cảnh báo theo kỳ đang mở.
+- **F0 Plan 07 (một phần):** rà guard kỳ và một số ranh giới `periodId`; test trả đơn kỳ cũ vào kỳ mới giữ `costRef`/giá vốn gốc; test thu nợ đơn cũ ghi receipt/cash ledger/partner ledger ở kỳ mới, đơn vẫn thuộc kỳ cũ. Returns suite 16/16; test cash mục thu nợ xuyên kỳ pass.
+- **F1a Plan 07 (bản đầu):** trang read-only `/period/close`, guard `period.close`, menu đã mở; blockers: đơn provisional, chuyến chưa xác nhận, stocktake DRAFT. Warnings: đơn nháp, cọc gắn đơn chưa giao đủ, tất toán chiết khấu chưa hậu kiểm. Chỉ đọc kỳ mở; service/UI tests 4/4.
 - **Fix phụ phát hiện lúc QA:** API đổi mật khẩu giờ nhận đúng `{current, next}`; 68 test liên quan password pass.
-- **Test F0/F1a:** bộ guard + checklist + returns + UI 26/26; typecheck pass; lint pass (còn hai warning cũ ở `src/server/reports/consumption.ts`).
+- **Test F0/F1a:** bộ guard + checklist + returns + UI 26/26 trước bổ sung gần nhất; checklist service 2/2, UI 2/2, cash regression `-t=thu` 5 pass; typecheck và lint pass (hai warning cũ ở `src/server/reports/consumption.ts`). Chạy nguyên `tests/cash/cash.test.ts` trên Windows còn fail test kiến trúc đường dẫn do `/` vs `\\` (không liên quan F0).
 
 **Chưa làm / đang làm**
-- Hoàn tất F0: lập ma trận đầy đủ chứng từ ở kỳ cũ, chứng từ chuyển kỳ và ca xuyên kỳ; test hiện mới bao phủ guard cơ bản và trả đơn kỳ cũ.
-- Hoàn thiện/review F1a: kiểm tra tiêu chí với nghiệp vụ, quyền và link đến chứng từ; hiện chưa có hành động kết sổ.
+- Hoàn tất F0: lập ma trận đầy đủ chứng từ ở kỳ cũ, chứng từ chuyển kỳ và ca xuyên kỳ; hiện có test trả hàng/thu nợ vào kỳ mới và test chặn sửa/hủy/giao khác kỳ; còn ma trận chuyến/đơn nháp/cọc và test các ca chuyển kỳ khác.
+- Hoàn thiện/review F1a: kiểm tra tiêu chí với nghiệp vụ, quyền và link đến chứng từ; cảnh báo cọc đã mở rộng cho đơn chưa giao đủ. Hiện chưa có hành động kết sổ.
 - **F1b–F4 chưa làm:** engine chuyển số dư/lô, xác nhận 2 bước + backup, quy tắc xuyên kỳ đầy đủ, tra cứu kỳ cũ, kiểm thử/diễn tập và tài liệu bàn giao.
 - Các đầu việc ngoài Plan 07: E3 gia công thuê, in M6/M9, import theo file dữ liệu thật; backup VPS/restore drill và rà quyền vai trò chưa được xác nhận.
 

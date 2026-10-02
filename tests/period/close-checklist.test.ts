@@ -36,8 +36,10 @@ describe("getCloseChecklist", () => {
       },
     });
     const draft = await prisma.saleOrder.create({ data: { ...baseOrder, periodId: period.id, code: "DH-CLOSE-002", isDraft: true } });
+    const openOrder = await prisma.saleOrder.create({ data: { ...baseOrder, periodId: period.id, code: "DH-CLOSE-003" } });
     const oldDraft = await prisma.saleOrder.create({ data: { ...baseOrder, periodId: closed.id, code: "DH-CLOSE-OLD", isDraft: true } });
     await prisma.receipt.create({ data: { periodId: period.id, code: "PT-CLOSE-001", partnerId: partner.id, orderId: draft.id, type: "COC", amount: 50_000, cashAccountId: cash.id, at: NOW, createdBy: actor.id } });
+    await prisma.receipt.create({ data: { periodId: period.id, code: "PT-CLOSE-002", partnerId: partner.id, orderId: openOrder.id, type: "COC", amount: 25_000, cashAccountId: cash.id, at: NOW, createdBy: actor.id } });
     await prisma.receipt.create({ data: { periodId: closed.id, code: "PT-CLOSE-OLD", partnerId: partner.id, orderId: oldDraft.id, type: "COC", amount: 10_000, cashAccountId: cash.id, at: NOW, createdBy: actor.id } });
     await prisma.trip.create({ data: { periodId: period.id, code: "CH-CLOSE-001", tripDate: NOW, vehicleId: vehicle.id, driverId: driver.id, createdBy: actor.id, status: "RETURNED" } });
     await prisma.trip.create({ data: { periodId: closed.id, code: "CH-CLOSE-OLD", tripDate: NOW, vehicleId: vehicle.id, driverId: driver.id, createdBy: actor.id, status: "PLANNED" } });
@@ -50,12 +52,13 @@ describe("getCloseChecklist", () => {
     const counts = Object.fromEntries([...result.blockers, ...result.warnings].map((item) => [item.key, item.count]));
     expect(result.period.id).toBe(period.id);
     expect(result.blockerCount).toBe(3);
-    expect(result.warningCount).toBe(3);
+    expect(result.warningCount).toBe(4);
     expect(counts).toMatchObject({
       "provisional-sales": 1, "open-trips": 1, "draft-stocktakes": 1,
-      "draft-orders": 1, "unused-deposits": 1, "unreconciled-discounts": 1,
+      "draft-orders": 1, "unused-deposits": 2, "unreconciled-discounts": 1,
     });
     expect(result.blockers[0]!.items[0]).toMatchObject({ id: provisional.id, href: `/sales/orders/${provisional.id}` });
-    expect(result.warnings[0]!.items.map((item) => item.code)).not.toContain("DH-CLOSE-OLD");
+    expect(result.warnings.find((item) => item.key === "draft-orders")!.items.map((item) => item.code)).not.toContain("DH-CLOSE-OLD");
+    expect(result.warnings.find((item) => item.key === "unused-deposits")!.items.map((item) => item.code)).toEqual(["PT-CLOSE-001", "PT-CLOSE-002"]);
   });
 });

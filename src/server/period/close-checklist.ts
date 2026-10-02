@@ -38,9 +38,9 @@ export async function getCloseChecklist(db: PrismaClient) {
       where: { periodId: period.id, isDraft: true, isCancelled: false }, orderBy: [{ orderDate: "asc" }, { id: "asc" }], take: 20,
       select: { id: true, code: true, partner: { select: { name: true } } },
     }),
-    db.receipt.count({ where: { periodId: period.id, type: "COC", isCancelled: false, order: { isDraft: true, isCancelled: false } } }),
+    db.receipt.count({ where: { periodId: period.id, type: "COC", isCancelled: false, order: { isCancelled: false, deliveryStatus: { not: "DELIVERED" } } } }),
     db.receipt.findMany({
-      where: { periodId: period.id, type: "COC", isCancelled: false, order: { isDraft: true, isCancelled: false } },
+      where: { periodId: period.id, type: "COC", isCancelled: false, order: { isCancelled: false, deliveryStatus: { not: "DELIVERED" } } },
       orderBy: [{ at: "asc" }, { id: "asc" }], take: 20,
       select: { id: true, code: true, amount: true, order: { select: { id: true, code: true } } },
     }),
@@ -83,7 +83,7 @@ export async function getCloseChecklist(db: PrismaClient) {
       items: drafts.map((order) => ({ id: order.id, code: order.code, description: order.partner.name, href: `/sales/orders/${order.id}` })),
     },
     {
-      key: "unused-deposits", severity: "WARN", title: "Tiền cọc còn gắn đơn nháp", count: depositCount,
+      key: "unused-deposits", severity: "WARN", title: "Tiền cọc còn gắn đơn chưa giao đủ", count: depositCount,
       items: deposits.map((receipt) => ({ id: receipt.id, code: receipt.code, description: `${receipt.order!.code} · ${formatCurrency(receipt.amount)}`, href: `/accounting/receipts/${receipt.id}` })),
     },
     {
