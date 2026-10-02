@@ -28,13 +28,13 @@ Hai lỗ hổng tìm thấy khi lập ma trận và đã vá trong cùng đợt:
 | Báo giá kỳ cũ → chuyển thành đơn | Đơn nháp MỚI thuộc kỳ mở |
 | Trả hàng theo đơn kỳ cũ | Có test ở `tests/returns` (giá vốn dòng bán gốc, phiếu mang kỳ mới) |
 
-## 3. Quyết định F1b/F1d còn mở (cần user/khách chốt trước khi viết engine)
+## 3. Quyết định F1b/F1d (user chốt 02/10: làm theo đề xuất)
 
 | # | Vấn đề | Hiện tại | Đề xuất |
 |---|---|---|---|
 | X1 | **Giao nốt đơn kỳ cũ** (đơn chưa giao đủ khi kết sổ): tạo phiếu giao / xếp chuyến cho đơn kỳ cũ | Bị chặn (`lockOrderForDelivery`, `createTrip`) ⇒ đơn kẹt | Checklist đang CẢNH BÁO (`undelivered-orders`). Đề xuất F1d **mở** giao nốt: phiếu giao + công nợ ghi ở kỳ mới, kho đã xuất lúc xác nhận nên không đụng FIFO. Nếu không mở ⇒ đổi cảnh báo thành chặn cứng |
-| X2 | Báo giá DRAFT/SENT lúc kết sổ | Sửa được, không bị chặn kỳ (không giữ kho/tiền) | F1b **mang sang kỳ mới** (đổi `periodId`) cùng đơn nháp; báo giá đã chốt thì bất biến. Checklist cảnh báo `open-quotes` |
-| X3 | Đơn nháp lúc kết sổ | Chặn sửa ở kỳ cũ | F1b mang sang kỳ mới (mặc định #4 của plan) |
+| X2 | Báo giá DRAFT/SENT lúc kết sổ | Sửa được, không bị chặn kỳ (không giữ kho/tiền) | F1b **mang sang kỳ mới** (đổi `periodId`) cùng đơn nháp — **đã làm**; báo giá đã chốt thì bất biến. Checklist cảnh báo `open-quotes` |
+| X3 | Đơn nháp lúc kết sổ | Chặn sửa ở kỳ cũ | F1b mang sang kỳ mới (mặc định #4 của plan) — **đã làm trong `closeOpenPeriod`** |
 | X4 | Phiếu chờ hậu kiểm lúc kết sổ | Hậu kiểm vẫn làm được ở kỳ cũ | Cảnh báo `pending-review`; phiếu BỊ TRẢ LẠI / yêu cầu điều chỉnh đang chờ ⇒ **chặn cứng** (không xử lý được sau kết sổ) |
 | X5 | Chuyến PLANNED lúc kết sổ | Chặn kết sổ (mọi chuyến chưa CONFIRMED/CANCELLED) | Giữ — an toàn hơn "mang chuyến sang kỳ mới" (plan F1b ghi mang chuyến mở; ta chặn nên không cần) |
 

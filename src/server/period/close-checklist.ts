@@ -2,6 +2,9 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { getOpenPeriod } from "./guard";
 
+type Db = PrismaClient | Prisma.TransactionClient;
+
+
 export type CloseSeverity = "BLOCK" | "WARN";
 
 export interface CloseFinding {
@@ -30,7 +33,7 @@ const finding = (f: Omit<CloseFinding, "items"> & { items: CloseFinding["items"]
  * WARN = cho kết nhưng người kết phải biết. Mọi mục chỉ nhìn chứng từ của kỳ mở và có link tới từng chứng từ vướng.
  * Thêm điều kiện mới (vd gia công thuê E3): thêm một `finding` vào `blockers`/`warnings` — UI và bộ đếm tự theo.
  */
-export async function getCloseChecklist(db: PrismaClient) {
+export async function getCloseChecklist(db: Db) {
   const period = await getOpenPeriod(db);
   const periodId = period.id;
   const take = CLOSE_ITEM_LIMIT;
