@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { FormTabsBar, FormTabsNav, FormTabUrlSync, type FormTab } from "./FormTabs";
 import { BOTTOM_NAV_OFFSET } from "@/components/shell/layout-constants";
 import { confirm } from "@/lib/confirm-store";
+import { registerDirtyGuard } from "@/lib/dirty-guard";
 
 interface Props {
   backHref: string;
@@ -44,6 +45,9 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
   const activeRef = useRef(active);
   activeRef.current = active;
   const select = (key: string) => { setActive(key); };
+
+  // Điều hướng trong app (tab module, sidebar…) hỏi sổ dirty trước khi rời trang
+  useEffect(() => registerDirtyGuard(() => dirtyRef.current()), []);
 
   // Rời trang khi form còn thay đổi chưa lưu → cảnh báo của trình duyệt (đọc trạng thái mới nhất mỗi lần)
   useEffect(() => {

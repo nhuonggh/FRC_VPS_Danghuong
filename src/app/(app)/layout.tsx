@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
+import { prisma } from "@/lib/prisma";
+import { emptyPrefs } from "@/lib/workspace";
+import { getPreferences } from "@/server/preferences/service";
 import { requireActor } from "@/server/auth/session";
 
 /**
@@ -19,8 +22,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const actor = await requireActor();
   if (actor.mustChangePassword) redirect("/change-password"); // bị bắt đổi mật khẩu trước khi dùng
   const nav = buildNav(APP_NAV, actor.perms);
+  const prefs = await getPreferences(prisma, actor.userId).catch(() => emptyPrefs()); // lỗi đọc cấu hình giao diện không được làm hỏng cả trang
   return (
-    <AppShell nav={nav} user={{ fullName: actor.fullName, username: actor.username }}>
+    <AppShell nav={nav} user={{ fullName: actor.fullName, username: actor.username }} prefs={prefs}>
       {children}
     </AppShell>
   );

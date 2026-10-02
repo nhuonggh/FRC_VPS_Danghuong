@@ -3,11 +3,11 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import clsx from "clsx";
 import { Menu } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { findActiveFunction } from "@/lib/nav";
+import { GuardedLink as Link } from "./GuardedLink";
 import { Icon } from "./icons";
 import { BOTTOM_NAV_HEIGHT } from "./layout-constants";
 
