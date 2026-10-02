@@ -6,7 +6,7 @@ import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp, PeriodClosedError } from "@/server/inventory";
-import { getOpenPeriod } from "@/server/period/guard";
+import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { lineAmountOf } from "@/server/sales/queries";
 import type { DeliveryNoteInput } from "./schemas";
@@ -26,8 +26,13 @@ export function deliveredValue(net: Prisma.Decimal, lineQty: Prisma.Decimal, cum
   return at(cumBefore.plus(qtyNow)).minus(at(cumBefore));
 }
 
-/** Khoá đơn (tuần tự hoá giao/sửa/hủy cùng đơn) và nạp kèm lượng đã giao còn hiệu lực theo từng dòng. */
-export async function lockOrderForDelivery(tx: Tx, actor: Actor, orderId: number) {
+/**
+ * Khoá đơn (tuần tự hoá giao/sửa/hủy cùng đơn) và nạp kèm lượng đã giao còn hiệu lực theo từng dòng.
+ * Mặc định đơn phải thuộc KỲ ĐANG MỞ (sửa/hủy/xác nhận đơn là thao tác lên chứng từ gốc). `allowClosedPeriod`: cho đơn của kỳ đã
+ * kết sổ — dùng cho chứng từ MỚI sinh ở kỳ mở liên quan đơn cũ (giao nốt, thu cọc; spec 4.4, Plan 07 F1d). Chứng từ mới tự mang
+ * kỳ đang mở nên không đụng sổ kỳ cũ; kho đã xuất lúc xác nhận đơn (D-25) nên không đụng FIFO.
+ */
+export async function lockOrderForDelivery(tx: Tx, actor: Actor, orderId: number, opts: { allowClosedPeriod?: boolean } = {}) {
   await tx.$queryRaw`SELECT id FROM sale_orders WHERE id = ${orderId} FOR UPDATE`;
   const order = await tx.saleOrder.findFirst({
     where: { id: orderId, partner: partnerScopeWhere(actor) },
@@ -35,7 +40,7 @@ export async function lockOrderForDelivery(tx: Tx, actor: Actor, orderId: number
   });
   if (!order) throw new DomainError("Không tìm thấy đơn hàng.", 404);
   const period = await getOpenPeriod(tx);
-  if (order.periodId !== period.id) throw new PeriodClosedError();
+  if (!opts.allowClosedPeriod && order.periodId !== period.id) throw new PeriodClosedError();
   return { order, period };
 }
 
@@ -62,10 +67,11 @@ export async function createDeliveryNote(tx: Tx, actor: Actor, input: DeliveryNo
 
 /** Lõi tạo phiếu giao KHÔNG kiểm quyền: người gọi (vd nhập kết quả chuyến giao — quyền trip.manage) tự kiểm quyền của mình. */
 export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: DeliveryNoteInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
-  const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId);
+  const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId, { allowClosedPeriod: true });
   if (order.isCancelled) throw new DomainError("Đơn đã hủy, không giao được.", 409);
   if (order.isDraft) throw new DomainError("Đơn nháp chưa xác nhận (chưa xuất kho), chưa giao được.", 409);
   const at = docTimestamp(input.date, now);
+  assertDocDateInPeriod(period, at); // phiếu giao mới không được lùi ngày vào kỳ đã đóng
   if (ictYmd(at) < ictYmd(order.orderDate)) throw new DomainError("Ngày giao không được trước ngày đơn.", 400);
 
   const byId = new Map(order.lines.map((l) => [l.id, l]));
@@ -109,8 +115,10 @@ export async function cancelDeliveryNote(tx: Tx, actor: Actor, id: number): Prom
 export async function cancelDeliveryNoteCore(tx: Tx, actor: Actor, id: number): Promise<void> {
   const note = await tx.deliveryNote.findUnique({ where: { id }, select: { orderId: true, isCancelled: true, code: true } });
   if (!note) throw new DomainError("Không tìm thấy phiếu giao.", 404);
-  const { order } = await lockOrderForDelivery(tx, actor, note.orderId);
+  const { order, period } = await lockOrderForDelivery(tx, actor, note.orderId, { allowClosedPeriod: true });
   const fresh = await tx.deliveryNote.findUniqueOrThrow({ where: { id }, select: { isCancelled: true, periodId: true } });
+  // Quy tắc theo kỳ của PHIẾU giao (không phải kỳ của đơn): phiếu giao nốt ở kỳ mở hủy được, phiếu của kỳ đã đóng thì không
+  if (fresh.periodId !== period.id) throw new PeriodClosedError();
   if (fresh.isCancelled) throw new DomainError("Phiếu giao đã hủy trước đó.", 409);
   // Không để tổng đã giao thấp hơn tổng đã trả: hủy phiếu trả hàng trước
   const returned = await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false } }, _sum: { qty: true } });

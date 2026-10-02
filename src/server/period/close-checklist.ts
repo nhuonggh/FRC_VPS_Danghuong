@@ -160,7 +160,7 @@ export async function getCloseChecklist(db: Db) {
     }),
     finding({
       key: "undelivered-orders", severity: "WARN", title: "Đơn còn hàng chưa giao đủ", count: undeliveredCount,
-      hint: "Đơn vẫn thuộc kỳ cũ sau khi kết sổ. Giao nốt đơn kỳ cũ cần cơ chế xuyên kỳ (F1d) — nên giao xong trước khi kết sổ.",
+      hint: "Đơn vẫn thuộc kỳ cũ sau khi kết sổ nhưng giao nốt được ở kỳ mới (phiếu giao + công nợ ghi ở kỳ mới). Muốn số kỳ này tròn thì giao xong trước khi kết sổ.",
       items: undelivered.map((o) => ({ id: o.id, code: o.code, description: `${o.partner.name} · hẹn ${formatDate(o.expectedDeliveryDate)}`, href: `/sales/orders/${o.id}` })),
     }),
     finding({

@@ -93,14 +93,15 @@ describe("createDeliveryNote", () => {
     await expect(deliver(o2.id, o2.lineId, 1)).rejects.toThrow(/đã hủy/);
   });
 
-  it("thiếu order.edit → 403; khách ngoài phạm vi → 404; đơn thuộc kỳ khác kỳ đang mở → PeriodClosed", async () => {
+  it("thiếu order.edit → 403; khách ngoài phạm vi → 404; đơn thuộc kỳ ĐÃ ĐÓNG vẫn giao nốt được, phiếu mang kỳ đang mở (F1d)", async () => {
     const o = await makeOrder();
     await expect(deliver(o.id, o.lineId, 1, "2026-09-15", { userId: w.userId, perms: new Set(["order.view", "partner.view_all"]) })).rejects.toThrow();
     await expect(deliver(o.id, o.lineId, 1, "2026-09-15", { userId: w.userId, perms: new Set(["order.edit"]) })).rejects.toMatchObject({ status: 404 });
     const other = await prisma.period.create({ data: { name: "Kỳ đã đóng", status: "CLOSED", isOpen: null, closedAt: new Date("2026-08-31T00:00:00Z") } });
     await prisma.saleOrder.update({ where: { id: o.id }, data: { periodId: other.id } });
-    await expect(deliver(o.id, o.lineId, 1)).rejects.toMatchObject({ name: "PeriodClosedError" });
-    expect(await prisma.deliveryNote.count()).toBe(0);
+    const out = await deliver(o.id, o.lineId, 1);
+    expect((await prisma.deliveryNote.findUniqueOrThrow({ where: { id: out.id } })).periodId).toBe(w.periodId);
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).periodId).toBe(other.id); // đơn vẫn thuộc kỳ cũ
   });
 
   it("idempotent: cùng key chỉ tạo một phiếu và một dòng công nợ; audit không chứa số tiền", async () => {

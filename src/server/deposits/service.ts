@@ -24,7 +24,7 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
  */
 export async function createDeposit(tx: Tx, actor: Actor, input: DepositInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
   assertCan(actor.perms, "deposit.manage");
-  const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId);
+  const { order, period } = await lockOrderForDelivery(tx, actor, input.orderId, { allowClosedPeriod: true });
   if (order.isCancelled) throw new DomainError("Đơn đã hủy, không thu cọc được.", 409);
   const account = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId }, select: { isActive: true } });
   if (!account || !account.isActive) throw new DomainError("Quỹ/tài khoản nhận tiền không hợp lệ.", 400);

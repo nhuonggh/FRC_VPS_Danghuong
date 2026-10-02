@@ -128,8 +128,6 @@ const blocked: Case[] = [
   { label: "Chuyến giao: xuất phát", run: () => tx((t) => departTrip(t, actor, ids.trip!, NOW)) },
   { label: "Chuyến giao: hủy", run: () => tx((t) => cancelTrip(t, actor, ids.trip!, "x", NOW)) },
   { label: "Lần chốt quỹ: hủy chốt (lỗ hổng F0 đã vá)", run: () => tx((t) => voidCashClose(t, actor, ids.cashClose!, "x", NOW)) },
-  { label: "Đơn bán kỳ cũ: tạo phiếu giao MỚI (hiện chặn — F1d quyết định có mở không)", run: () => tx((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: ids.orderUndelivered, date: "2026-10-01", note: "", lines: [{ orderLineId: ids.lineUndelivered!, qty: 1 }] }), NOW)) },
-  { label: "Đơn bán kỳ cũ: xếp lên chuyến MỚI (hiện chặn — F1d)", run: () => tx((t) => createTrip(t, actor, tripSchema.parse({ date: "2026-10-02", routeId: null, vehicleId: 1, driverId: 1, assistantId: null, note: "", orderIds: [ids.orderUndelivered!] }), NOW)) },
 ];
 
 describe("ma trận xuyên kỳ — chứng từ kỳ đã kết sổ KHÔNG sửa/hủy được", () => {
@@ -152,6 +150,15 @@ describe("ma trận xuyên kỳ — được phép (có chủ đích)", () => {
   it("hậu kiểm phiếu thu kỳ cũ vẫn làm được (không đổi số liệu)", async () => {
     await tx((t) => reviewVoucher(t, actor, "RECEIPT", ids.receiptToReview!, NOW));
     expect((await prisma.receipt.findUniqueOrThrow({ where: { id: ids.receiptToReview! } })).reviewStatus).toBe("REVIEWED");
+  });
+
+  it("giao nốt đơn kỳ cũ (F1d, X1): phiếu giao MỚI mang kỳ mở; xếp đơn kỳ cũ lên chuyến MỚI cũng được", async () => {
+    const period = await prisma.period.findFirstOrThrow({ where: { isOpen: true } });
+    const out = await tx((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: ids.orderUndelivered, date: "2026-10-01", note: "", lines: [{ orderLineId: ids.lineUndelivered!, qty: 1 }] }), new Date("2026-10-01T03:00:00Z")));
+    expect((await prisma.deliveryNote.findUniqueOrThrow({ where: { id: out.id } })).periodId).toBe(period.id);
+    const vehicle = await prisma.vehicle.create({ data: { plate: "51C-2" } }), driver = await prisma.driver.create({ data: { name: "Lái 2" } });
+    const trip = await tx((t) => createTrip(t, actor, tripSchema.parse({ date: "2026-10-02", routeId: null, vehicleId: vehicle.id, driverId: driver.id, assistantId: null, note: "", orderIds: [ids.orderForNote!] }), new Date("2026-10-01T03:00:00Z")));
+    expect((await prisma.trip.findUniqueOrThrow({ where: { id: trip.id } })).periodId).toBe(period.id);
   });
 
   it("hậu kiểm tất toán chiết khấu kỳ cũ vẫn làm được", async () => {

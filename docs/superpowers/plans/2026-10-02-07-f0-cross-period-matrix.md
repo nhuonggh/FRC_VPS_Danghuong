@@ -12,7 +12,7 @@ Kịch bản kiểm: chứng từ sinh ở kỳ A → kỳ A `CLOSED`, kỳ B `O
 | Công nợ | hủy điều chỉnh công nợ; hủy chuyển/gộp công nợ; hủy tất toán chiết khấu |
 | Bán hàng | hủy đơn; xác nhận đơn nháp kỳ cũ; hủy phiếu giao |
 | Kho | hủy phiếu nhập; hủy phiếu trả hàng; hủy lệnh sản xuất (đi qua engine, khoá `FOR SHARE` dòng kỳ) |
-| Giao hàng | xuất phát / hủy chuyến của kỳ cũ |
+| Giao hàng | xuất phát / hủy chuyến của kỳ cũ (chuyến chưa xong còn chặn kết sổ nên hiếm) |
 
 Hai lỗ hổng tìm thấy khi lập ma trận và đã vá trong cùng đợt:
 - `returnVoucher`: thủ quỹ trả lại phiếu của kỳ đã đóng ⇒ kế toán không sửa được nữa ⇒ phiếu kẹt vĩnh viễn. Nay chặn; hậu kiểm (REVIEW) vẫn cho.
@@ -26,13 +26,16 @@ Hai lỗ hổng tìm thấy khi lập ma trận và đã vá trong cùng đợt:
 | Hậu kiểm tất toán chiết khấu kỳ cũ | Cho — như trên |
 | Thu nợ theo đơn kỳ cũ | Phiếu thu MỚI mang `periodId` kỳ mới; đơn giữ kỳ cũ |
 | Báo giá kỳ cũ → chuyển thành đơn | Đơn nháp MỚI thuộc kỳ mở |
-| Trả hàng theo đơn kỳ cũ | Có test ở `tests/returns` (giá vốn dòng bán gốc, phiếu mang kỳ mới) |
+| Trả hàng theo đơn kỳ cũ | Có test ở `tests/returns` (giá vốn dòng bán gốc, phiếu mang kỳ mới); chiết khấu tích lũy hoàn ở kỳ mới (`cross-period-flows.test.ts`) |
+| **Giao nốt đơn kỳ cũ (F1d, X1)** | Phiếu giao MỚI + công nợ ghi ở kỳ mở; đơn giữ kỳ cũ; hủy phiếu giao nốt được (theo kỳ của PHIẾU); không lùi ngày vào kỳ đã đóng |
+| **Xếp chuyến cho đơn kỳ cũ (F1d, X1)** | Chuyến, phiếu giao, tiền lái xe thu đều mang kỳ mở |
+| Thu cọc cho đơn kỳ cũ | Phiếu thu mang kỳ mở |
 
 ## 3. Quyết định F1b/F1d (user chốt 02/10: làm theo đề xuất)
 
 | # | Vấn đề | Hiện tại | Đề xuất |
 |---|---|---|---|
-| X1 | **Giao nốt đơn kỳ cũ** (đơn chưa giao đủ khi kết sổ): tạo phiếu giao / xếp chuyến cho đơn kỳ cũ | Bị chặn (`lockOrderForDelivery`, `createTrip`) ⇒ đơn kẹt | Checklist đang CẢNH BÁO (`undelivered-orders`). Đề xuất F1d **mở** giao nốt: phiếu giao + công nợ ghi ở kỳ mới, kho đã xuất lúc xác nhận nên không đụng FIFO. Nếu không mở ⇒ đổi cảnh báo thành chặn cứng |
+| X1 | **Giao nốt đơn kỳ cũ** (đơn chưa giao đủ khi kết sổ): tạo phiếu giao / xếp chuyến cho đơn kỳ cũ | **ĐÃ MỞ (F1d)** — trước đó bị chặn (`lockOrderForDelivery`, `createTrip`) ⇒ đơn kẹt | Checklist đang CẢNH BÁO (`undelivered-orders`). Đề xuất F1d **mở** giao nốt: phiếu giao + công nợ ghi ở kỳ mới, kho đã xuất lúc xác nhận nên không đụng FIFO. Nếu không mở ⇒ đổi cảnh báo thành chặn cứng |
 | X2 | Báo giá DRAFT/SENT lúc kết sổ | Sửa được, không bị chặn kỳ (không giữ kho/tiền) | F1b **mang sang kỳ mới** (đổi `periodId`) cùng đơn nháp — **đã làm**; báo giá đã chốt thì bất biến. Checklist cảnh báo `open-quotes` |
 | X3 | Đơn nháp lúc kết sổ | Chặn sửa ở kỳ cũ | F1b mang sang kỳ mới (mặc định #4 của plan) — **đã làm trong `closeOpenPeriod`** |
 | X4 | Phiếu chờ hậu kiểm lúc kết sổ | Hậu kiểm vẫn làm được ở kỳ cũ | Cảnh báo `pending-review`; phiếu BỊ TRẢ LẠI / yêu cầu điều chỉnh đang chờ ⇒ **chặn cứng** (không xử lý được sau kết sổ) |

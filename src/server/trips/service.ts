@@ -86,7 +86,7 @@ export async function createTrip(tx: Tx, actor: Actor, input: TripInput, now: Da
     if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
     if (o.isCancelled) throw new DomainError(`Đơn ${o.code} đã hủy.`, 409);
     if (o.isDraft) throw new DomainError(`Đơn ${o.code} còn là nháp (chưa xác nhận).`, 409);
-    if (o.periodId !== period.id) throw new PeriodClosedError();
+    // Đơn của kỳ đã kết sổ vẫn xếp chuyến giao nốt được (chuyến mang kỳ đang mở) — Plan 07 F1d, spec 4.4
     if (!o.lines.some((l) => remainingOf(l).gt(0))) throw new DomainError(`Đơn ${o.code} đã giao hết.`, 409);
     if (busyBy.has(orderId)) throw new DomainError(`Đơn ${o.code} đang nằm trong chuyến ${busyBy.get(orderId)} chưa có kết quả.`, 409, "ORDER_IN_TRIP");
   }
