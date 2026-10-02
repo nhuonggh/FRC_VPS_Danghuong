@@ -147,6 +147,35 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ### BÀN GIAO HIỆN TẠI — cập nhật 01/10/2026 (ưu tiên hơn các ghi chú lịch sử bên dưới)
 
+**BÁO CÁO TRẠNG THÁI — 03/10/2026 (mới nhất, ưu tiên hơn mọi ghi chú bên dưới)**
+
+Trạng thái `main`: đã gồm Plan 07 F0–F4 (kết sổ + tra cứu kỳ + diễn tập + sổ tay) và nhập/xuất BOM Excel. User duyệt merge 03/10; deploy chạy theo push `main` (chờ user xác nhận xanh).
+
+*Đã làm (phiên 02–03/10)*
+- Trang chủ tab ngang 8 tab (`64331ef`) · Plan 07 F0+F1a (`532be40`) · F1b engine kết sổ (`41f1822`).
+- F1c UI + API kết sổ 2 bước (backup ≤24h, gõ lại tên kỳ) · F1d giao nốt đơn kỳ cũ, đơn nháp/báo giá mang sang kỳ mới, chuyến chưa xác nhận chặn kết · F2 Tra cứu kỳ chỉ đọc (`period.view_closed`) · F3 test ngẫu nhiên 8 seed + script diễn tập `scripts/close-rehearsal.ts` · F4 `docs/infra/CLOSING-RUNBOOK.md` (`cc2d15e`).
+- Nhập/xuất BOM Excel (`471cac7`): cột khớp file khách, nhóm lỗi loại cả nhóm, ghi đè = phiên bản mới; khung nhập thêm `group`.
+- Kiểm chứng: bất biến kết sổ (tồn từng lô, công nợ, quỹ, chiết khấu) trước = sau trên dữ liệu ngẫu nhiên và 1.300 SP (~2,7 s). 3 test lỗi có sẵn do Windows/timeout (không do thay đổi): 2 test kiến trúc đường dẫn cash/debt, migration timeout 1.300 SP.
+
+*Chưa làm*
+- Diễn tập kết sổ trên BẢN SAO DB thật (cổng #5 Plan 07) — chưa có DB thật để diễn tập.
+- Backup đêm + `restore-drill.sh` đạt (RUNBOOK §14).
+- E3 gia công thuê, in M6/M9 (chờ khách); 7 cảnh báo `npm audit`; chốt policy loại SP của BOM với khách.
+- Nhập BOM thật: khách chưa điền trang "Định mức (BOM)" (159 cặp trống).
+
+*Sẽ làm (đề xuất, theo thứ tự)*
+1. Kiểm tay trên VPS sau deploy: `/production/bom` (menu Nhập/Xuất), `/period/close`, `/period/history`.
+2. Nhận file BOM khách điền → nhập thử bằng Excel (xem trước → nhập).
+3. E3 gia công thuê + M6/M9 khi khách trả lời; nhập số đầu kỳ khi có ngày chốt.
+4. Dọn nợ: 3 test Windows, npm audit.
+
+*Cần user duyệt / làm*
+- Xác nhận deploy `main` xanh sau merge này.
+- KHÔNG kết sổ thật trên VPS trước khi: backup + restore drill đạt, diễn tập trên bản sao DB (RUNBOOK §4) được user xác nhận ĐẠT.
+- Chốt 5 câu kết sổ với khách hoặc xác nhận mặc định (giữ từng lô, kết theo tháng, kết khi bấm nút, đơn nháp mang sang, chỉ Giám đốc kết).
+- Gửi khách file bổ sung (ngày chốt, số đầu kỳ, BOM, phân loại SP, mẫu in).
+- Chấp nhận/không 7 lỗ hổng `npm audit`; xác nhận policy loại SP của BOM (mặc định: thành phẩm/phụ kiện có BOM; NVL/hàng/phụ kiện là nguyên liệu).
+
 **Trạng thái đã xác minh:** `main` ở `54ec71b2c312a000935df69ed14e625974863455`; Deploy run `36699835950` thành công. Nhánh làm việc `claude/zen-gates-o3m8mq` ở `a0c877f`, đã push; working tree sạch tại lần kiểm tra gần nhất. Không có thay đổi production.
 
 **Khối lượng đã làm**
@@ -157,7 +186,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 - **Test F0/F1a:** bộ guard + checklist + returns + UI 26/26 trước bổ sung gần nhất; checklist service 2/2, UI 2/2, cash regression `-t=thu` 5 pass; typecheck và lint pass (hai warning cũ ở `src/server/reports/consumption.ts`). Chạy nguyên `tests/cash/cash.test.ts` trên Windows còn fail test kiến trúc đường dẫn do `/` vs `\\` (không liên quan F0).
 
 - **Dữ liệu khách (02/10/2026):** khách gửi `data/DHERP – Bảng nhập dữ liệu đầu vào.xlsx` (8 danh mục, công ty, 5 người dùng, 19 KH, 6 NCC, 133 SP, kiểu gia công kèm tỷ lệ) và `DSSanPham (3).xls` (thực chất là bảng HTML xuất từ phần mềm cũ: 1.073 SP + 159 dòng "Kiểu gia công" theo từng SP, có giá nhập/xuất). **Nhập Excel cho cả 8 mục Cài đặt danh mục** (`src/server/catalog/import-spec.ts`, API `/api/catalog/[section]/import[-template]`, menu Nhập/Xuất ở màn Cài đặt danh mục; cột phụ Tỷ lệ/Tỷ lệ trừ kho/ĐVT của Kiểu gia công gộp vào Ghi chú). Nhập khách khớp người phụ trách theo tên đăng nhập/họ tên không dấu ("Nhâm" ⇒ `nham`). **`scripts/seed-customer-data.ts`** nạp toàn bộ dữ liệu trên qua đúng các bộ nhập Excel (mặc định chỉ xem trước; ghi thật cần `--commit --confirm-db <tên DB>`; doc: `docs/infra/SEED-CUSTOMER-DATA.md`). Đã chạy thật trên DB dev `dh_dev_b`: 8 danh mục, công ty, 3 người dùng, 19 KH, 6 NCC, **1.186 SP** (133 khách điền + 1.053 từ PM cũ, 20 trùng tên giữ bản khách điền, 37 mã cũ đổi cho hợp lệ), chạy lại không nhân đôi. **Nạp lên VPS tự động khi deploy (user duyệt 02/10, cách 1: commit dữ liệu vào repo private):** `scripts/build-customer-seed-json.ts` đóng gói thành `prisma/data/customer-seed.json` (mỗi dòng qua parseRow của bộ nhập Excel); `prisma/seed-customer.ts` (gọi từ `prisma/seed.ts`, bước seed của deploy.yml) chỉ nạp khi DB CHƯA có khách/NCC/sản phẩm nào (xoá/sửa tay sau đó không bị ghi đè), người dùng tạo với mật khẩu ngẫu nhiên + email Google (không in mật khẩu ra log CI; admin dùng "Cấp lại mật khẩu"), công ty chỉ ghi nếu còn tên mặc định. Dockerfile migrator thêm `COPY src/lib/search.ts`. Muốn đổi dữ liệu: sửa Excel → chạy lại build script → commit JSON (chỉ có tác dụng với DB trống). User duyệt: không cần backup ở giai đoạn xây dựng (VPS chưa có dữ liệu thật). `scripts/build-customer-supplement.ts` sinh `data/DHERP – Bảng bổ sung dữ liệu (gửi khách).xlsx` (13 trang: câu hỏi xác nhận, phân loại SP, KH/NCC, số đầu kỳ, BOM 159 cặp, giá công, người dùng, mẫu in).
-- **Nhập BOM từ Excel (03/10/2026, nhánh `claude/bom-import`, CHƯA merge `main`):** `src/server/bom/import-spec.ts` + API `/api/bom/import`, `/import-template`, `/export` (quyền `bom.manage` + `data.import`), menu Nhập/Xuất ở `/production/bom`. Cột = trang "Định mức (BOM)" của file gửi khách (Mã thành phẩm · Tên · Kiểu gia công · Ngày hiệu lực dd/mm/yyyy · Mã NVL · Định mức · Ghi chú). Mỗi dòng 1 NVL; nhiều dòng cùng cặp thành phẩm × kiểu gia công = 1 phiên bản. Khung nhập thêm `group` (nhóm có dòng lỗi ⇒ loại CẢ nhóm, không nhập dở; nhóm phải cùng ngày hiệu lực, ≤100 dòng). Dòng cặp chưa điền NVL/định mức (159 cặp lấy từ PM cũ) bị bỏ qua, không lỗi. Cặp đã có định mức: bỏ qua; "Ghi đè" ⇒ phiên bản MỚI (D-19), ngày không được trước hôm nay (cặp mới thì được). Đi qua `createBomVersion` nên giữ mọi kiểm tra cũ (loại SP, NVL ≠ thành phẩm, khoá `boms`). Không đụng engine/kỳ/migration. 9 test mới `tests/bom/import.test.ts`.
+- **Nhập BOM từ Excel (03/10/2026, nhánh `claude/bom-import`, ĐÃ vào `main`):** `src/server/bom/import-spec.ts` + API `/api/bom/import`, `/import-template`, `/export` (quyền `bom.manage` + `data.import`), menu Nhập/Xuất ở `/production/bom`. Cột = trang "Định mức (BOM)" của file gửi khách (Mã thành phẩm · Tên · Kiểu gia công · Ngày hiệu lực dd/mm/yyyy · Mã NVL · Định mức · Ghi chú). Mỗi dòng 1 NVL; nhiều dòng cùng cặp thành phẩm × kiểu gia công = 1 phiên bản. Khung nhập thêm `group` (nhóm có dòng lỗi ⇒ loại CẢ nhóm, không nhập dở; nhóm phải cùng ngày hiệu lực, ≤100 dòng). Dòng cặp chưa điền NVL/định mức (159 cặp lấy từ PM cũ) bị bỏ qua, không lỗi. Cặp đã có định mức: bỏ qua; "Ghi đè" ⇒ phiên bản MỚI (D-19), ngày không được trước hôm nay (cặp mới thì được). Đi qua `createBomVersion` nên giữ mọi kiểm tra cũ (loại SP, NVL ≠ thành phẩm, khoá `boms`). Không đụng engine/kỳ/migration. 9 test mới `tests/bom/import.test.ts`.
 - **Vấn đề dữ liệu khách cần xác nhận:** SĐT KH là số mẫu (0000, 1111…); số dư quỹ 100.000.000 ×3 và chiết khấu 19 KH trông như số thử; "Ngày chốt số đầu kỳ" để trống ⇒ KHÔNG nạp số đầu kỳ; số TK MB ở trang Công ty (2318189999) khác trang Ngân hàng & quỹ (12345); Agribank 6789 giống số mẫu; Bùi Thị Lan thiếu vị trí ⇒ chưa tạo tài khoản; SP PM cũ không phân loại được thành phẩm/NVL ⇒ nhập hết "Hàng hóa"; định mức tồn 133 SP đều = 5; tôn cuộn chưa biết; tên công ty khách viết thường chữ "công".
 - **Lỗi test có sẵn (không do thay đổi này):** `tests/import/migration.test.ts` mục 1.300 mã tồn đầu kỳ bị timeout giao dịch trên máy dev Windows (fail cả trên bản trước thay đổi).
 
@@ -185,11 +214,11 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
    **F4 tài liệu (02/10):** `docs/infra/CLOSING-RUNBOOK.md` (kết sổ là gì, quy trình cuối tháng, sao lưu trước khi kết, diễn tập, sự cố/khôi phục, nhật ký, checklist bàn giao + bí mật cần xoay).
 2. Chốt 5 câu kết sổ với khách hoặc dùng mặc định Plan 07 (giữ từng lô, tháng/quý, mốc giờ chốt, đơn nháp/chuyến mở, ai kết sổ).
 3. Plan 07 F1b–F4 (~25 ngày công), mỗi lát một nhánh, merge khi user duyệt: F1b engine chuyển số dư/lô → F1c xác nhận 2 bước + backup + xuyên kỳ → F1d/F2 tra cứu kỳ cũ → F3 test bất biến → F4 bàn giao + diễn tập trên bản sao DB (user xác nhận trước lần kết sổ thật đầu).
-4. Nhập BOM bằng Excel: XONG trên nhánh `claude/bom-import` (chờ merge). E3/M6/M9 chờ khách. Việc user: backup VPS + restore drill trước khi nhập dữ liệu thật.
+4. Nhập BOM bằng Excel: XONG, đã vào `main` 03/10 (`471cac7`). E3/M6/M9 chờ khách. Việc user: backup VPS + restore drill trước khi nhập dữ liệu thật.
 
 
 **Chưa làm / đang làm**
-- **Dữ liệu khách ĐÃ nạp lên VPS tự động khi deploy** (`prisma/seed-customer.ts` + `prisma/data/customer-seed.json`: 1186 SP, 25 đối tác, 38 kiểu gia công, 3 user, công ty + 2 mẫu in; chỉ nạp khi chưa có đối tác/SP; xem `docs/infra/SEED-CUSTOMER-DATA.md`). Sidebar đã bỏ tiêu đề nhóm (`hideTitle`), logo/favicon từ thư mục `logo`, lỗi trang Cài đặt danh mục đã sửa (đã vào `main`). BOM: nhập Excel đã có (nhánh `claude/bom-import`); công thức kiểu gia công ⇒ BOM chờ khách.
+- **Dữ liệu khách ĐÃ nạp lên VPS tự động khi deploy** (`prisma/seed-customer.ts` + `prisma/data/customer-seed.json`: 1186 SP, 25 đối tác, 38 kiểu gia công, 3 user, công ty + 2 mẫu in; chỉ nạp khi chưa có đối tác/SP; xem `docs/infra/SEED-CUSTOMER-DATA.md`). Sidebar đã bỏ tiêu đề nhóm (`hideTitle`), logo/favicon từ thư mục `logo`, lỗi trang Cài đặt danh mục đã sửa (đã vào `main`). BOM: nhập Excel đã có (đã vào `main`); công thức kiểu gia công ⇒ BOM chờ khách.
 - Hoàn tất F0: lập ma trận đầy đủ chứng từ ở kỳ cũ, chứng từ chuyển kỳ và ca xuyên kỳ; hiện có test trả hàng/thu nợ vào kỳ mới và test chặn sửa/hủy/giao khác kỳ; còn ma trận chuyến/đơn nháp/cọc và test các ca chuyển kỳ khác.
 - Hoàn thiện/review F1a: kiểm tra tiêu chí với nghiệp vụ, quyền và link đến chứng từ; cảnh báo cọc đã mở rộng cho đơn chưa giao đủ. Hiện chưa có hành động kết sổ.
 - **F1b–F4 chưa làm:** engine chuyển số dư/lô, xác nhận 2 bước + backup, quy tắc xuyên kỳ đầy đủ, tra cứu kỳ cũ, kiểm thử/diễn tập và tài liệu bàn giao.
