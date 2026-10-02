@@ -90,6 +90,10 @@
     {"name":"Tôn Xốp","note":"Tỷ lệ 1,08 · Trừ kho 1 · ĐVT m2"}
   ],
   "company": {"name":"công ty TNHH TM và SX THẬP THẢO","address":"quyết tiến, thượng cốc, phú thọ","phone":"0976442950","taxCode":"5400543313","bank":{"bankName":"MB","accountNo":"2318189999","accountHolder":"công ty TNHH TM và SX THẬP THẢO","branch":""}},
+  "printTemplates": [
+    {"docType":"SALE_INVOICE","name":"Mẫu chuẩn","title":"Hóa đơn bán hàng","signerName":"Khách hàng, lái xe, kế toán bán hàng (tên tài khoản đăng nhập)","footerNote":"Lưu ý:\n- Hóa đơn bán hàng có giá trị như giấy nhận nợ đối với khách hàng thanh toán chậm.\n- Kiểm tra đối chiếu khi giao nhận hàng, Tôn đã cắt không được trả lại.\n- Mọi thắc mắc xin quý khách liên hệ ngay, quá hai ngày sau khi nhận hàng công ty không chịu trách nhiệm."},
+    {"docType":"DELIVERY_NOTE","name":"Mẫu chuẩn","title":"Phiếu giao hàng","signerName":"Khách hàng, lái xe, kế toán bán hàng (tên tài khoản đăng nhập)","footerNote":"Lưu ý:\n- Hóa đơn bán hàng có giá trị như giấy nhận nợ đối với khách hàng thanh toán chậm.\n- Kiểm tra đối chiếu khi giao nhận hàng, Tôn đã cắt không được trả lại.\n- Mọi thắc mắc xin quý khách liên hệ ngay, quá hai ngày sau khi nhận hàng công ty không chịu trách nhiệm."}
+  ],
   "users": [
     {"fullName":"Bùi Thị Phượng","username":"Phuong","email":"phuong1ketoan@gmail.com","role":"Kế toán"},
     {"fullName":"Bùi Thị Nhâm","username":"Nham","email":"nhambui666@gmail.com","role":"Kế toán"},

@@ -57,7 +57,11 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
       )}
     >
       <div className="flex h-14 items-center justify-between gap-2 border-b border-border px-3">
-        <span className={clsx("truncate text-sm font-semibold", collapsed ? "hidden" : "hidden lg:block")}>{APP_NAME}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" width={28} height={28} className="size-7 shrink-0" />
+          <span className={clsx("truncate text-sm font-semibold", collapsed ? "hidden" : "hidden lg:block")}>{APP_NAME}</span>
+        </span>
         <button
           type="button"
           onClick={toggleCollapsed}
@@ -110,9 +114,11 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
                 <div className="hidden pb-1 lg:block">
                   {m.categories.map((c) => (
                     <div key={c.key} className="mt-1">
-                      <div className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary">
-                        {c.label}
-                      </div>
+                      {!c.hideTitle && (
+                        <div className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary">
+                          {c.label}
+                        </div>
+                      )}
                       {c.functions.map((f) => {
                         const on = active?.fn.key === f.key;
                         return (

@@ -12,7 +12,10 @@ const font = Be_Vietnam_Pro({
   display: "swap",
 });
 
-export const metadata: Metadata = { title: APP_NAME };
+export const metadata: Metadata = {
+  title: APP_NAME,
+  icons: { icon: [{ url: "/icon-32.png", sizes: "32x32", type: "image/png" }, { url: "/logo.svg", type: "image/svg+xml" }], apple: "/apple-touch-icon.png" },
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

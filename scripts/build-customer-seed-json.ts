@@ -45,6 +45,13 @@ async function main() {
   const kv = new Map(data(sheets["Công ty"]).map((r) => [text(r[0]), r[1]]).filter(([k]) => k) as [string, unknown][]);
   const company = { name: text(kv.get("Tên công ty")), address: text(kv.get("Địa chỉ")), phone: fixPhone((kv.get("Điện thoại") as string | number | null) ?? null), taxCode: text(kv.get("Mã số thuế")), bank: { bankName: text(kv.get("Ngân hàng")), accountNo: text(kv.get("Số tài khoản")), accountHolder: text(kv.get("Chủ tài khoản")), branch: text(kv.get("Chi nhánh")) === "không có" ? "" : text(kv.get("Chi nhánh")) } };
 
+  // Mẫu in: người ký + chân phiếu (các dòng "Lưu ý" nằm ở cột B của các dòng liền sau, cột A trống). Chỉ hóa đơn bán hàng và phiếu giao (mặc định đề xuất, khách chưa xác nhận).
+  const co = sheets["Công ty"] ?? []; const footAt = co.findIndex((r) => text(r[0]).startsWith("Ghi chú chân phiếu"));
+  const footer = footAt < 0 ? "" : [text(co[footAt]![1]), ...co.slice(footAt + 1).filter((r) => !text(r[0])).map((r) => text(r[1]))].filter(Boolean).join("\n");
+  const signer = text(kv.get("Người ký (in trên phiếu)")).replace(/\s+/g, " ").replace(/\(\s*tên tài kho[àa]n đăng nhập\s*\)/i, "(tên tài khoản đăng nhập)").replace(/^./, (c) => c.toUpperCase());
+  const printTemplates = footer || signer ? [["SALE_INVOICE", "Hóa đơn bán hàng"], ["DELIVERY_NOTE", "Phiếu giao hàng"]].map(([docType, title]) => ({ docType, name: "Mẫu chuẩn", title, signerName: signer, footerNote: footer })) : [];
+  if (footer.length > 300) throw new Error(`Chân phiếu dài ${footer.length} ký tự (> 300, form sửa mẫu in sẽ từ chối).`);
+
   // Người dùng: chỉ người có đủ họ tên + tên đăng nhập + vị trí
   const users = data(sheets["Người dùng"]).map((r) => ({ fullName: text(r[0]), username: text(r[1]), email: text(r[2]).toLowerCase(), role: text(r[3]) })).filter((u) => u.fullName && u.username && u.role);
   const owners = ownerMap(users.map((u, i) => ({ id: i + 1, username: u.username, fullName: u.fullName })));
@@ -68,7 +75,7 @@ async function main() {
     const d = p.data; products.push({ code: d.code, name: d.name, kind: d.kind, baseUnit: d.baseUnit, minStock: d.minStock, unit: d.unit, factor: d.factor, isCoil: d.isCoil, isActive: d.isActive, note: d.note });
   });
 
-  const sections: Record<string, unknown[] | unknown> = { groups, warehouses, vehicles, drivers, routes, expenseTypes, cashAccounts, processingTypes, company, users, partners, products };
+  const sections: Record<string, unknown[] | unknown> = { groups, warehouses, vehicles, drivers, routes, expenseTypes, cashAccounts, processingTypes, company, printTemplates, users, partners, products };
   const body = Object.entries(sections).map(([k, v]) => (Array.isArray(v) ? `  ${JSON.stringify(k)}: [\n${v.map((x) => `    ${JSON.stringify(x)}`).join(",\n")}\n  ]` : `  ${JSON.stringify(k)}: ${JSON.stringify(v)}`)).join(",\n");
   writeFileSync(outPath, `{\n  "version": 1,\n${body}\n}\n`, "utf8");
   console.log(`Đã ghi ${outPath}: ${Object.entries(sections).map(([k, v]) => `${k} ${Array.isArray(v) ? v.length : 1}`).join(", ")}`);

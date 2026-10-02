@@ -53,3 +53,15 @@ describe("nạp dữ liệu khách khi deploy", () => {
     for (const f of rel) expect(docker, `Dockerfile thiếu COPY ${f}`).toContain(f.split("/").pop()!);
   });
 });
+
+describe("mẫu in mặc định", () => {
+  it("thêm mẫu hóa đơn/phiếu giao (tắt sẵn), chạy lại không nhân đôi, kể cả khi DB đã có dữ liệu; không ghi đè bản đã sửa", async () => {
+    const d = bundle(); expect(d.printTemplates?.length).toBeGreaterThan(0);
+    await seedCustomerData(prisma); expect(await prisma.printTemplate.count()).toBe(d.printTemplates!.length);
+    await prisma.printTemplate.updateMany({ where: { docType: "SALE_INVOICE" }, data: { footerNote: "đã sửa tay" } });
+    await prisma.printTemplate.deleteMany({ where: { docType: "DELIVERY_NOTE" } });
+    expect(await seedCustomerData(prisma)).toBe(false); // DB đã có khách/sản phẩm
+    expect(await prisma.printTemplate.count()).toBe(d.printTemplates!.length);
+    expect(await prisma.printTemplate.findFirstOrThrow({ where: { docType: "SALE_INVOICE" } })).toMatchObject({ footerNote: "đã sửa tay", isActive: false });
+  });
+});
