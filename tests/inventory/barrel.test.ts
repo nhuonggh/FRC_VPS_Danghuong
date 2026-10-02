@@ -12,7 +12,7 @@ const PUBLIC_API = [
   // thời điểm / đọc
   "docTimestamp", "estimateCost", "getOnHand",
   // giao dịch + cổng ghi
-  "withInventoryTx", "postIssue", "postReceipt", "productsOfDocument", "removeDocument", "updateLayerCost",
+  "withInventoryTx", "postIssue", "postReceipt", "postOpeningLots", "productsOfDocument", "removeDocument", "updateLayerCost",
   // chủ dòng
   "registerCostOwner", "unitCostOf",
   // tính lại nền
