@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useForm, type DefaultValues, type FieldValues, type UseFormReturn } from "react-hook-form";
 import type { ZodType } from "zod";
 import { confirm } from "@/lib/confirm-store";
+import { registerDirtyGuard } from "@/lib/dirty-guard";
 import { NULL_TEXT } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { Badge, type BadgeTone } from "./Badge";
@@ -206,6 +207,9 @@ export function DetailPage({
   const dirty = useRef(false);
 
   const setDirty = (d: boolean) => { dirty.current = d; setDirtyState(d); };
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  useEffect(() => registerDirtyGuard(() => !!editingRef.current && dirty.current), []); // điều hướng trong app hỏi trước khi bỏ section đang sửa dở
 
   // Rời trang (đóng tab, F5, gõ URL khác) khi còn thay đổi chưa lưu → cảnh báo của trình duyệt
   useEffect(() => {
