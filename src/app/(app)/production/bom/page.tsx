@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { BomTable } from "@/components/bom/BomTable";
+import { ImportExportMenu } from "@/components/import/ImportExportMenu";
 import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, SearchBox, StatCard } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
@@ -17,15 +18,21 @@ export default async function BomListPage({ searchParams }: { searchParams: Prom
   const href = (patch: Parameters<typeof buildListHref>[2]) => buildListHref(BASE, params, patch);
   const filtered = !!(params.q || params.filters.processingType);
   const canManage = actor.perms.has("bom.manage");
+  const canImport = canManage && actor.perms.has("data.import");
 
   return (
     <ListPageLayout
       title="Định mức nguyên vật liệu"
-      actions={canManage ? (
-        <Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">
-          <Plus size={16} aria-hidden />Thêm định mức
-        </Link>
-      ) : undefined}
+      actions={(
+        <>
+          <ImportExportMenu exportHref="/api/bom/export" importTitle="Nhập định mức từ Excel" {...(canImport ? { importEndpoint: "/api/bom/import", templateHref: "/api/bom/import-template" } : {})} />
+          {canManage && (
+            <Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">
+              <Plus size={16} aria-hidden />Thêm định mức
+            </Link>
+          )}
+        </>
+      )}
       stats={<StatCard label="Số định mức" value={total} href={href({ filters: { processingType: [] } })} active={!filtered} />}
       filters={
         <div className="flex flex-wrap items-center gap-2">
