@@ -4,8 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { FileText, ListChecks } from "lucide-react";
-import { Combobox, Field, inputClass, NewPage, tabsWithErrors, type FormTab, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { BOM_MAX_LINES, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
@@ -28,6 +27,7 @@ const loadProcessingTypes = async (q: string) => {
   return needle ? all.filter((o) => o.label.toLowerCase().includes(needle)) : all;
 };
 
+const searchMaterialsForPicker = (q: string) => searchProducts("material")(q) as Promise<(MaterialOption & { value: number })[]>;
 const emptyLine = { materialProductId: undefined, qtyPerUnit: undefined, note: "" } as unknown as CreateBomVersionInput["lines"][number];
 
 /** Form tạo phiên bản định mức (D-19: không sửa bản cũ — mọi lưu = phiên bản mới). */
@@ -51,9 +51,14 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
         : [emptyLine],
     },
   });
-  const { control, register, handleSubmit, setError, watch, formState: { errors, isDirty } } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const { control, register, handleSubmit, setError, getValues, watch, formState: { errors, isDirty } } = form;
+  const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
+  const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyLine, isFilled: (l) => !!(l?.materialProductId || Number(l?.qtyPerUnit)), qtyLabel: (i) => `Định mức dòng ${i + 1}`, max: BOM_MAX_LINES });
+  const addMaterials = (picked: (MaterialOption & { value: number })[]) => {
+    setMaterials((cur) => new Map([...cur, ...picked.map((m) => [Number(m.value), m as MaterialOption] as const)]));
+    addPickedLines(picked, getValues("lines").map((l) => ({ productId: l?.materialProductId })), (m) => ({ ...emptyLine, materialProductId: Number(m.value) }), { update, append: (vs) => append(vs) }, BOM_MAX_LINES);
+  };
 
   const submit = handleSubmit(async (value) => {
     try {
@@ -69,87 +74,90 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
     }
   });
 
-  const tabs: FormTab[] = [
-    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["productId","processingTypeId","validFrom","note"], render: () => (<div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Controller control={control} name="productId" render={({ field }) => (
-            <Combobox label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
-              error={errors.productId?.message} onChange={(o) => { setProduct(o); field.onChange(o ? Number(o.value) : undefined); }} />
-          )} />
-          <Controller control={control} name="processingTypeId" render={({ field }) => (
-            <Combobox label="Kiểu gia công" value={field.value ? processingType : null} loadOptions={loadProcessingTypes} placeholder="Chọn kiểu gia công…"
-              error={errors.processingTypeId?.message} onChange={(o) => { setProcessingType(o); field.onChange(o ? Number(o.value) : undefined); }} />
-          )} />
-          <Field id="validFrom" label="Hiệu lực từ ngày" required error={errors.validFrom?.message}
-            hint={defaults.hasVersions ? "Không được trước hôm nay" : "Phiên bản đầu tiên có thể chọn ngày quá khứ"}>
-            <input id="validFrom" type="date" {...(defaults.hasVersions ? { min: today } : {})} {...register("validFrom")} className={inputClass(errors.validFrom)} />
-          </Field>
-        </div>
-        <Field id="note" label="Ghi chú phiên bản" error={errors.note?.message}>
-          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-    </div>) },
-    { key: "nvl", label: "Nguyên vật liệu", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
-
-        <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-                <th className="px-2 py-2">Nguyên vật liệu</th>
-                <th className="px-2 py-2 text-right">Định mức / 1 đơn vị thành phẩm</th>
-                <th className="px-2 py-2">ĐVT</th>
-                <th className="px-2 py-2">Ghi chú</th>
-                <th aria-label="Thao tác" />
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((field, index) => {
-                const err = errors.lines?.[index];
-                const id = lines[index]?.materialProductId;
-                const selected = id ? materials.get(id) ?? null : null;
-                return (
-                  <tr key={field.id} className="border-b border-border align-top last:border-b-0">
-                    <td className="min-w-64 px-2 py-2">
-                      <Controller control={control} name={`lines.${index}.materialProductId`} render={({ field: f }) => (
-                        <Combobox label={`Nguyên vật liệu dòng ${index + 1}`} value={selected} loadOptions={searchProducts("material")}
-                          placeholder="Tìm mã, tên…" error={err?.materialProductId?.message}
-                          onChange={(o) => {
-                            f.onChange(o ? Number(o.value) : undefined);
-                            if (o) setMaterials((cur) => new Map(cur).set(Number(o.value), o as MaterialOption));
-                          }} />
-                      )} />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input aria-label={`Định mức dòng ${index + 1}`} type="number" min={0} step="0.001"
-                        {...register(`lines.${index}.qtyPerUnit`, { valueAsNumber: true })} className={`${inputClass(err?.qtyPerUnit)} tabular text-right`} />
-                      {err?.qtyPerUnit?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.qtyPerUnit.message}</p>}
-                    </td>
-                    <td className="px-2 py-2 text-fg-secondary">{selected?.baseUnit ?? "—"}</td>
-                    <td className="px-2 py-2"><input aria-label={`Ghi chú dòng ${index + 1}`} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
-                    <td className="px-2 py-2">
-                      <button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} disabled={fields.length === 1}
-                        className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-hover font-semibold">
-                <td className="px-2 py-3" colSpan={5}>Tổng: {lines.filter((l) => l?.materialProductId).length} nguyên vật liệu</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
-        <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= BOM_MAX_LINES}
-          className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
-
-    </div>) },
-  ];
   return (
     <NewPage
       backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
-      isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
+      isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+      <div className="space-y-6">
+        <div className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Controller control={control} name="productId" render={({ field }) => (
+              <Combobox label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
+                error={errors.productId?.message} onChange={(o) => { setProduct(o); field.onChange(o ? Number(o.value) : undefined); }} />
+            )} />
+            <Controller control={control} name="processingTypeId" render={({ field }) => (
+              <Combobox label="Kiểu gia công" value={field.value ? processingType : null} loadOptions={loadProcessingTypes} placeholder="Chọn kiểu gia công…"
+                error={errors.processingTypeId?.message} onChange={(o) => { setProcessingType(o); field.onChange(o ? Number(o.value) : undefined); }} />
+            )} />
+            <Field id="validFrom" label="Hiệu lực từ ngày" required error={errors.validFrom?.message}
+              hint={defaults.hasVersions ? "Không được trước hôm nay" : "Phiên bản đầu tiên có thể chọn ngày quá khứ"}>
+              <input id="validFrom" type="date" {...(defaults.hasVersions ? { min: today } : {})} {...register("validFrom")} className={inputClass(errors.validFrom)} />
+            </Field>
+          </div>
+          <Field id="note" label="Ghi chú phiên bản" error={errors.note?.message}>
+            <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+          </Field>
+        </div>
+        <div className="space-y-3 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Nguyên vật liệu</h2>
+          <div className="overflow-x-auto rounded-sm border border-border">
+            <table className="line-table w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
+                  <th className="px-2 py-2">Nguyên vật liệu</th>
+                  <th className="px-2 py-2 text-right">Định mức / 1 đơn vị thành phẩm</th>
+                  <th className="px-2 py-2">ĐVT</th>
+                  <th className="px-2 py-2">Ghi chú</th>
+                  <th aria-label="Thao tác" />
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((field, index) => {
+                  const err = errors.lines?.[index];
+                  const id = lines[index]?.materialProductId;
+                  const selected = id ? materials.get(id) ?? null : null;
+                  return (
+                    <tr key={field.id} className="border-b border-border align-top last:border-b-0">
+                      <td className="min-w-64 px-2 py-2" data-line-product={index} data-label="Nguyên vật liệu" data-wide>
+                        <Controller control={control} name={`lines.${index}.materialProductId`} render={({ field: f }) => (
+                          <Combobox label={`Nguyên vật liệu dòng ${index + 1}`} value={selected} loadOptions={searchProducts("material")}
+                            placeholder="Tìm mã, tên…" error={err?.materialProductId?.message}
+                            onChange={(o) => {
+                              f.onChange(o ? Number(o.value) : undefined);
+                              if (o) { setMaterials((cur) => new Map(cur).set(Number(o.value), o as MaterialOption)); entry.onProductPicked(index); }
+                            }} />
+                        )} />
+                      </td>
+                      <td className="px-2 py-2" data-label="Định mức / 1 đv thành phẩm">
+                        <input aria-label={`Định mức dòng ${index + 1}`} type="number" min={0} step="0.001"
+                          {...register(`lines.${index}.qtyPerUnit`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qtyPerUnit)} tabular text-right`} />
+                        {err?.qtyPerUnit?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.qtyPerUnit.message}</p>}
+                      </td>
+                      <td className="px-2 py-2 text-fg-secondary" data-label="ĐVT">{selected?.baseUnit ?? "—"}</td>
+                      <td className="px-2 py-2" data-label="Ghi chú" data-wide><input aria-label={`Ghi chú dòng ${index + 1}`} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
+                      <td className="px-2 py-2" data-action>
+                        <button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} disabled={fields.length === 1}
+                          className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border bg-hover font-semibold">
+                  <td className="px-2 py-3" colSpan={5}>Tổng: {lines.filter((l) => l?.materialProductId).length} nguyên vật liệu</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= BOM_MAX_LINES}
+              className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
+            <ProductMultiPicker load={searchMaterialsForPicker} disabled={fields.length >= BOM_MAX_LINES} existingIds={lines.flatMap((l) => (l?.materialProductId ? [l.materialProductId] : []))} onPicked={addMaterials} />
+          </div>
+        </div>
+      </div>
+    </NewPage>
   );
 }

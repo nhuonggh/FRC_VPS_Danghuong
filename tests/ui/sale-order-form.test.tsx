@@ -109,6 +109,25 @@ describe("SaleOrderForm — nhập nhanh", () => {
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 2" })).toHaveFocus());
   });
 
+  it("Chọn nhiều sản phẩm: tick trong dialog → điền vào dòng trống, ĐVT gốc, lấy giá gợi ý", async () => {
+    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await userEvent.click(screen.getByRole("button", { name: "Chọn nhiều sản phẩm" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(await within(dialog).findByRole("checkbox", { name: /TX01/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Thêm 1 sản phẩm" }));
+    expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 1" })).toHaveValue("TX01 — Tôn xốp");
+    expect(screen.getByLabelText("Đơn vị dòng 1")).toHaveValue("md");
+    await waitFor(() => expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(30000));
+  });
+
+  it("bảng dòng hàng có lớp line-table + nhãn cột để hiện thẻ trên mobile", () => {
+    const { container } = render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    expect(container.querySelector("table.line-table")).not.toBeNull();
+    const labels = Array.from(container.querySelectorAll("tbody td[data-label]")).map((td) => td.getAttribute("data-label"));
+    expect(labels).toEqual(expect.arrayContaining(["Sản phẩm", "ĐVT", "Số lượng", "Đơn giá", "Thành tiền"]));
+  });
+
   it("chọn trùng SP + ĐVT → cảnh báo dòng đã có", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Sản phẩm dòng 1", "ton");

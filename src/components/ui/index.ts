@@ -18,3 +18,5 @@ export { Field, inputClass } from "./Field";
 export { EditableSection } from "./EditableSection";
 export { ReasonDialog } from "./ReasonDialog";
 export { ToastHost } from "./Toast";
+export { ProductMultiPicker, addPickedLines } from "./ProductMultiPicker";
+export { useLineEntry } from "./use-line-entry";
