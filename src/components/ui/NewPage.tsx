@@ -104,8 +104,8 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError(null)}><X size={16} aria-hidden /></button>
         </div>
       )}
-      <div className="grid flex-1 gap-4 lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className={clsx("h-fit rounded-sm border border-border bg-surface lg:sticky lg:top-20", !tabs && "p-4")}>
+      <div className="grid flex-1 gap-4 lg:min-h-[calc(100dvh-16rem)] lg:grid-cols-[248px_minmax(0,1fr)]">
+        <aside className={clsx("rounded-sm border border-border bg-surface", !tabs && "p-4")}>
           <h1 className={clsx("text-lg font-semibold", tabs && "p-4")}>{title}</h1>
           {tabs && <FormTabsNav tabs={tabs} active={active} errorTabs={errorTabs} onSelect={select} />}
         </aside>

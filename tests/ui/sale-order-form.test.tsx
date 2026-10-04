@@ -48,7 +48,6 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("có quyền sửa giá: gợi ý tồn + giá gần nhất, gửi POST kèm Idempotency-Key rồi mở đơn vừa lập", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
-    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     expect(await screen.findByText(/Tồn: 10 md/)).toBeInTheDocument();
     expect(screen.getByText(/Giá gần nhất \(khách này\)/)).toBeInTheDocument();
@@ -65,7 +64,6 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("thiếu quyền sửa giá: ô đơn giá chỉ đọc và luôn bằng giá gợi ý", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice={false} />);
     await pick("Khách hàng", "dat");
-    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     const price = screen.getByLabelText("Đơn giá dòng 1");
     expect(price).toHaveAttribute("readonly");
@@ -76,7 +74,6 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   it("số lượng vượt tồn → cảnh báo đơn treo nhưng VẪN cho lập", async () => {
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
-    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     await screen.findByText(/Tồn: 10 md/);
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "25");
@@ -87,11 +84,36 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
     pricing = { productId: 10, baseUnit: "md", units: [{ unit: "md", factor: "1", suggestedPrice: null }], lastSalePrice: null, lastSalePriceForPartner: false };
     render(<SaleOrderForm today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
-    await userEvent.click(screen.getAllByRole("tab", { name: "Dòng hàng" })[0]!); // form chia tab: dòng hàng ở tab riêng
     await pick("Sản phẩm dòng 1", "ton");
     await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).startsWith("/api/orders/pricing"))).toBe(true));
     expect(screen.queryByText(/Tồn:/)).toBeNull();
     expect(screen.queryByText(/Giá nhập gần nhất/)).toBeNull();
+  });
+});
+
+describe("SaleOrderForm — nhập nhanh", () => {
+  it("chọn SP ở dòng cuối → tự mở dòng trống mới; dòng trống cuối bị bỏ khi lập đơn", async () => {
+    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    expect(await screen.findByLabelText("Số lượng dòng 2")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(posts()[0]![1].json.lines).toHaveLength(1);
+  });
+
+  it("Enter ở ô SL của dòng cuối → mở dòng mới và focus ô tìm sản phẩm", async () => {
+    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4{Enter}");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 2" })).toHaveFocus());
+  });
+
+  it("chọn trùng SP + ĐVT → cảnh báo dòng đã có", async () => {
+    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    await pick("Sản phẩm dòng 1", "ton");
+    await pick("Sản phẩm dòng 2", "ton");
+    expect(await screen.findByText(/đã có ở dòng 1/)).toBeInTheDocument();
   });
 });
 

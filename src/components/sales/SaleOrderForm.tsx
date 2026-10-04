@@ -4,8 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
-import { FileText, ListChecks } from "lucide-react";
-import { Combobox, Field, inputClass, NewPage, tabsWithErrors, type ComboOption, type FormTab } from "@/components/ui";
+import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -78,6 +77,25 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     });
   }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Dòng trống (chưa chọn SP, chưa nhập SL) chỉ là chỗ nhập tiếp: bỏ trước khi kiểm tra, trừ khi toàn bộ đều trống (để hiện lỗi). */
+  const dropEmptyLines = () => {
+    const cur = getValues("lines");
+    const empty = cur.map((l, i) => (!l?.productId && !num(l?.qty) ? i : -1)).filter((i) => i >= 0);
+    if (empty.length > 0 && empty.length < cur.length) remove(empty);
+  };
+  const focusProduct = (i: number) => requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-line-product="${i}"] input`)?.focus()));
+  const focusQty = (i: number) => requestAnimationFrame(() => document.querySelector<HTMLElement>(`input[aria-label="Số lượng dòng ${i + 1}"]`)?.focus());
+  /** Chọn xong SP ở dòng cuối → tự mở dòng trống kế tiếp; focus nhảy sang ô SL. */
+  const onProductPicked = (i: number) => {
+    if (i === fields.length - 1 && fields.length < SALE_MAX_LINES) append(emptyLine, { shouldFocus: false });
+    focusQty(i);
+  };
+  /** Enter ở ô SL → sang ô tìm SP của dòng kế (tạo dòng mới nếu đang ở dòng cuối). */
+  const nextLine = (i: number) => {
+    if (i === fields.length - 1) { if (fields.length >= SALE_MAX_LINES) return; append(emptyLine, { shouldFocus: false }); }
+    focusProduct(i + 1);
+  };
+
   const submit = handleSubmit(async (value) => {
     if (edit) {
       await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
@@ -96,8 +114,11 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     return rows;
   };
 
-  const tabs: FormTab[] = [
-    { key: "chung", label: "Thông tin chung", icon: FileText, fields: ["partnerId","date","expectedDeliveryDate","note"], render: () => (<div className="space-y-5">
+  // Một trang: thông tin chung ở trên, dòng hàng ở dưới — lập đơn không phải chuyển qua lại giữa các tab.
+  return (
+    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { dropEmptyLines(); await submit(); }}>
+    <div className="space-y-6">
+      <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
           <Controller control={control} name="partnerId" render={({ field }) => (
             <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
@@ -113,8 +134,9 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
         <Field id="note" label="Ghi chú" error={errors.note?.message}>
           <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
         </Field>
-    </div>) },
-    { key: "dong-hang", label: "Dòng hàng", icon: ListChecks, fields: ["lines"], render: () => (<div className="space-y-5">
+      </div>
+      <div className="space-y-3 border-t border-border pt-5">
+        <h2 className="text-sm font-semibold">Dòng hàng</h2>
         {!canEditPrice && <p className="text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
 
         <div className="overflow-x-auto rounded-sm border border-border">
@@ -129,6 +151,7 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
             <tbody>
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
+                  onProductPicked={() => onProductPicked(index)} onQtyEnter={() => nextLine(index)}
                   dto={lines[index]?.productId && partnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
                   processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
@@ -144,14 +167,15 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
         {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
         <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
           className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
-    </div>) },
-  ];
-  return (
-    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
+        <p className="text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
+      </div>
+    </div>
+    </NewPage>
   );
 }
 
-function LineRow({ index, form, products, setProducts, loadProducts, dto, processingTypes, canEditPrice, canRemove, onRemove }: {
+function LineRow({ index, form, products, setProducts, loadProducts, dto, processingTypes, canEditPrice, canRemove, onRemove, onProductPicked, onQtyEnter }: {
+  onProductPicked: () => void; onQtyEnter: () => void;
   index: number; form: UseFormReturn<SaleOrderInput>; products: Map<number, ProductOption>;
   setProducts: React.Dispatch<React.SetStateAction<Map<number, ProductOption>>>; loadProducts: (q: string) => Promise<ProductOption[]>;
   dto: SalePricingDTO | null; processingTypes: ComboOption[]; canEditPrice: boolean; canRemove: boolean; onRemove: () => void;
@@ -164,10 +188,13 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
   const qtyBase = num(line?.qty) / factor;
   const short = dto?.onHand !== undefined && qtyBase > num(dto.onHand);
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
+  const allLines = watch("lines");
+  const dupIndex = line?.productId ? allLines.findIndex((l, i) => i < index && l?.productId === line.productId && l?.unit === line.unit) : -1;
+  const duplicateOf = dupIndex + 1; // 0 = không trùng; số dòng (1-based) của dòng trước đã có cùng SP + ĐVT
 
   return (
     <tr className="border-b border-border align-top last:border-b-0">
-      <td className="min-w-64 px-2 py-2">
+      <td className="min-w-64 px-2 py-2" data-line-product={index}>
         <Controller control={control} name={`lines.${index}.productId`} render={({ field }) => (
           <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={err?.productId?.message}
             onChange={(o) => {
@@ -176,8 +203,10 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
               if (p) setProducts((m) => new Map(m).set(p.value, p));
               setValue(`lines.${index}.unit`, p?.baseUnit ?? "", { shouldValidate: true });
               setValue(`lines.${index}.salePrice`, undefined as never);
+              if (p) onProductPicked();
             }} />
         )} />
+        {duplicateOf > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {duplicateOf}</p>}
         <div className="mt-1 space-y-0.5 text-xs text-fg-secondary">
           {dto?.onHand !== undefined && <p>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</p>}
           {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
@@ -193,7 +222,8 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
           {(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
         </select>
       </td>
-      <td className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
+      <td className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onQtyEnter(); } }} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
       <td className="px-2 py-2">
         <input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} {...register(`lines.${index}.salePrice`, { valueAsNumber: true })}
           className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />

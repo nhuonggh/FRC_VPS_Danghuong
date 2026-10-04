@@ -266,9 +266,9 @@ export function DetailPage({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[248px_minmax(0,1fr)]">
-        {/* < 1024: thẻ tóm tắt trên cùng, KHÔNG sticky; ≥ 1024: sticky bên trái */}
-        <aside className="h-fit rounded-sm border border-border bg-surface lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
+      {/* ≥ 1024: 2 panel stretch cùng chiều cao hàng grid + min-height chung → không lệch/nhảy khi đổi tab */}
+      <div className="grid gap-4 lg:min-h-[calc(100dvh-11rem)] lg:grid-cols-[248px_minmax(0,1fr)]">
+        <aside className="rounded-sm border border-border bg-surface">
           {summary.imageUrl && (
             <div className="aspect-video overflow-hidden rounded-t-sm bg-hover">
               {/* eslint-disable-next-line @next/next/no-img-element */}
