@@ -1,5 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
+> **2026-10-04 — UI:** `DetailPage`/`NewPage` 2 panel cùng chiều cao (aside bỏ `h-fit`/sticky, grid có min-height chung); `Combobox` vẽ danh sách bằng portal `position: fixed` (hết bị bảng `overflow-x-auto` cắt, tự lật lên khi sát đáy); form lập đơn bán gộp 1 trang, dòng trống tự mở, Enter nhảy SL → dòng kế, cảnh báo trùng SP+ĐVT. Chưa làm: gộp tab cho QuoteForm/form dòng hàng khác (dropdown đã hết lỗi nhờ portal), card dòng hàng cho mobile, dialog chọn nhiều SP.
 > Cập nhật lần cuối: **2026-10-02** (7 dashboard tab ngang ở Trang chủ + Plan 07 F0/F1a đã vào `main` `532be40`; F1b engine kết sổ đã merge `main`; F1c đang làm) (thêm nhập Excel danh mục + nạp dữ liệu khách trên DB dev, xem mục 6 "Dữ liệu khách"). Trước đó (2026-10-01): `main` ở `54ec71b` (Deploy #50 xanh); feature `claude/zen-gates-o3m8mq` đang có F0/F1a. U6 QA xong; F0 đã test trả hàng/thu nợ xuyên kỳ; F1a checklist đã mở rộng cảnh báo cọc. F1b–F4 chưa làm. Còn đầu vào E3/M6/M9, vận hành VPS và duyệt trước merge/deploy. Người cập nhật: Copilot. Khi làm xong việc gì → sửa file này
 > (chuyển mục giữa các phần 4/5/6/7), commit cùng thay đổi.
 > Không có secret trong file này. Secret thật chỉ nằm ở VPS (`/home/deploy_dherp/app/.env*`) và GitHub Secrets.

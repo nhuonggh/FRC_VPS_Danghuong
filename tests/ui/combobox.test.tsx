@@ -119,6 +119,14 @@ describe("Combobox", () => {
     expect(screen.getByRole("option", { name: "MỚI" })).toBeInTheDocument();
   });
 
+  it("danh sách vẽ ra <body> (portal) nên không bị cắt bởi overflow của cha", async () => {
+    render(<div style={{ overflow: "auto", height: 10 }}><Harness load={async () => ALL} /></div>);
+    await userEvent.click(screen.getByRole("combobox"));
+    const list = await screen.findByRole("listbox");
+    expect(list.parentElement).toBe(document.body);
+    expect(list.style.position).toBe("fixed");
+  });
+
   it("không có kết quả → thông báo", async () => {
     render(<Harness load={async () => []} />);
     await userEvent.type(screen.getByRole("combobox"), "xyz");
