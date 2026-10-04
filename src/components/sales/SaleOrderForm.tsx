@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -37,7 +37,7 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
   });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
   // keyName riêng: khoá `id` của dòng đơn (khi sửa) không được bị useFieldArray ghi đè
-  const { fields, append, remove } = useFieldArray({ control, name: "lines", keyName: "_key" });
+  const { fields, append, remove, update } = useFieldArray({ control, name: "lines", keyName: "_key" });
   const lines = watch("lines");
   const partnerId = watch("partnerId");
 
@@ -77,25 +77,6 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     });
   }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Dòng trống (chưa chọn SP, chưa nhập SL) chỉ là chỗ nhập tiếp: bỏ trước khi kiểm tra, trừ khi toàn bộ đều trống (để hiện lỗi). */
-  const dropEmptyLines = () => {
-    const cur = getValues("lines");
-    const empty = cur.map((l, i) => (!l?.productId && !num(l?.qty) ? i : -1)).filter((i) => i >= 0);
-    if (empty.length > 0 && empty.length < cur.length) remove(empty);
-  };
-  const focusProduct = (i: number) => requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-line-product="${i}"] input`)?.focus()));
-  const focusQty = (i: number) => requestAnimationFrame(() => document.querySelector<HTMLElement>(`input[aria-label="Số lượng dòng ${i + 1}"]`)?.focus());
-  /** Chọn xong SP ở dòng cuối → tự mở dòng trống kế tiếp; focus nhảy sang ô SL. */
-  const onProductPicked = (i: number) => {
-    if (i === fields.length - 1 && fields.length < SALE_MAX_LINES) append(emptyLine, { shouldFocus: false });
-    focusQty(i);
-  };
-  /** Enter ở ô SL → sang ô tìm SP của dòng kế (tạo dòng mới nếu đang ở dòng cuối). */
-  const nextLine = (i: number) => {
-    if (i === fields.length - 1) { if (fields.length >= SALE_MAX_LINES) return; append(emptyLine, { shouldFocus: false }); }
-    focusProduct(i + 1);
-  };
-
   const submit = handleSubmit(async (value) => {
     if (edit) {
       await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
@@ -106,6 +87,11 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     router.replace(`/sales/orders/${r.id}`);
   });
 
+  const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyLine, qtyLabel: (i) => `Số lượng dòng ${i + 1}`, max: SALE_MAX_LINES });
+  const addProducts = (picked: ProductOption[]) => {
+    setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
+    addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
+  };
   const total = lines.reduce((sum, l) => sum + round2(num(l?.qty) * num(l?.salePrice)) - num(l?.discountNow), 0);
   const loadCustomers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/customers/search?q=${encodeURIComponent(q)}`);
   const loadProducts = async (q: string) => {
@@ -116,7 +102,7 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
 
   // Một trang: thông tin chung ở trên, dòng hàng ở dưới — lập đơn không phải chuyển qua lại giữa các tab.
   return (
-    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { dropEmptyLines(); await submit(); }}>
+    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
     <div className="space-y-6">
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -140,7 +126,7 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
         {!canEditPrice && <p className="text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
 
         <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="w-full min-w-[1050px] text-sm">
+          <table className="line-table w-full min-w-[1050px] text-sm">
             <thead>
               <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
                 <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL</th>
@@ -151,7 +137,7 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
             <tbody>
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
-                  onProductPicked={() => onProductPicked(index)} onQtyEnter={() => nextLine(index)}
+                  onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
                   dto={lines[index]?.productId && partnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
                   processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
@@ -165,8 +151,11 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
           </table>
         </div>
         {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
-        <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
-          className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
+            className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
+          <ProductMultiPicker load={loadProducts} disabled={fields.length >= SALE_MAX_LINES} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
+        </div>
         <p className="text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
       </div>
     </div>
@@ -174,8 +163,8 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
   );
 }
 
-function LineRow({ index, form, products, setProducts, loadProducts, dto, processingTypes, canEditPrice, canRemove, onRemove, onProductPicked, onQtyEnter }: {
-  onProductPicked: () => void; onQtyEnter: () => void;
+function LineRow({ index, form, products, setProducts, loadProducts, dto, processingTypes, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown }: {
+  onProductPicked: () => void; onQtyKeyDown: (e: React.KeyboardEvent) => void;
   index: number; form: UseFormReturn<SaleOrderInput>; products: Map<number, ProductOption>;
   setProducts: React.Dispatch<React.SetStateAction<Map<number, ProductOption>>>; loadProducts: (q: string) => Promise<ProductOption[]>;
   dto: SalePricingDTO | null; processingTypes: ComboOption[]; canEditPrice: boolean; canRemove: boolean; onRemove: () => void;
@@ -194,7 +183,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
 
   return (
     <tr className="border-b border-border align-top last:border-b-0">
-      <td className="min-w-64 px-2 py-2" data-line-product={index}>
+      <td className="min-w-64 px-2 py-2" data-line-product={index} data-label="Sản phẩm" data-wide>
         <Controller control={control} name={`lines.${index}.productId`} render={({ field }) => (
           <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={err?.productId?.message}
             onChange={(o) => {
@@ -214,7 +203,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
           {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</p>}
         </div>
       </td>
-      <td className="px-2 py-2">
+      <td data-label="ĐVT" className="px-2 py-2">
         {/* Điều khiển bằng state: select không điều khiển bị đặt giá trị trước khi <option> kịp render nên hiện trống */}
         <select aria-label={`Đơn vị dòng ${index + 1}`} value={line?.unit ?? ""} className={`${inputClass(err?.unit)} min-w-20`}
           onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}>
@@ -222,25 +211,25 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
           {(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
         </select>
       </td>
-      <td className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onQtyEnter(); } }} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
-      <td className="px-2 py-2">
+      <td data-label="Số lượng" className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
+        onKeyDown={onQtyKeyDown} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
+      <td data-label="Đơn giá" className="px-2 py-2">
         <input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} {...register(`lines.${index}.salePrice`, { valueAsNumber: true })}
           className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
       </td>
-      <td className="px-2 py-2">
+      <td data-label="CK trừ ngay" className="px-2 py-2">
         <input aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountNow`, { valueAsNumber: true })} className={`${inputClass(err?.discountNow)} min-w-24 tabular text-right`} />
         {err?.discountNow?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.discountNow.message}</p>}
       </td>
-      <td className="px-2 py-2"><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} min-w-24 tabular text-right`} /></td>
-      <td className="px-2 py-2">
+      <td data-label="CK tích lũy" className="px-2 py-2"><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} min-w-24 tabular text-right`} /></td>
+      <td data-label="Gia công" className="px-2 py-2">
         <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
           <option value="">Không</option>
           {processingTypes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </td>
-      <td className="px-2 py-2 text-right tabular">{formatCurrency(amount)}</td>
-      <td className="px-2 py-2"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button></td>
+      <td data-label="Thành tiền" className="px-2 py-2 text-right tabular">{formatCurrency(amount)}</td>
+      <td data-action className="px-2 py-2"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button></td>
     </tr>
   );
 }

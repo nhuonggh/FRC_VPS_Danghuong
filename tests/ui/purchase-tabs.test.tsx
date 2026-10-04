@@ -14,19 +14,19 @@ vi.mock("@/lib/confirm-store", () => ({ confirm: async () => true }));
 beforeEach(() => { apiFetch.mockReset(); apiFetch.mockResolvedValue([]); search = ""; });
 afterEach(cleanup);
 
-describe("PurchaseNewForm — tab dọc", () => {
-  it("2 tab: Thông tin chung (NCC, ngày, cước, ghi chú) · Danh sách sản phẩm; chỉ tab đang chọn hiện", () => {
+describe("PurchaseNewForm — một trang", () => {
+  it("không chia tab: NCC, ngày, cước, ghi chú và danh sách sản phẩm cùng hiện", () => {
     render(<PurchaseNewForm today="2026-09-30" />);
-    expect(screen.getAllByRole("tab").slice(0, 2).map((t) => t.textContent)).toEqual(["Thông tin chung", "Danh sách sản phẩm"]);
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.getByLabelText(/Ngày nhập/)).toBeVisible(); expect(screen.getByLabelText("Ghi chú")).toBeVisible();
-    expect(screen.getByRole("button", { name: "+ Thêm dòng", hidden: true })).not.toBeVisible();
+    expect(screen.getByRole("heading", { name: "Danh sách sản phẩm" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "+ Thêm dòng" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Chọn nhiều sản phẩm" })).toBeVisible();
   });
-  it("bấm Lập phiếu khi thiếu NCC và dòng hàng: đánh dấu cả hai tab, dừng ở tab lỗi đầu tiên, không gọi API", async () => {
+  it("bấm Lập phiếu khi thiếu NCC và dòng hàng: báo lỗi tại ô, không gọi API", async () => {
     render(<PurchaseNewForm today="2026-09-30" />);
-    await userEvent.click(screen.getAllByRole("tab", { name: /Danh sách sản phẩm/ })[0]!);
     await userEvent.click(screen.getByRole("button", { name: "Lập phiếu" }));
-    await waitFor(() => expect(screen.getByLabelText(/Ngày nhập/)).toBeVisible());
-    expect(screen.getAllByRole("img", { name: /có lỗi/ }).length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.querySelectorAll('[aria-invalid="true"]').length).toBeGreaterThan(0));
     expect(apiFetch).not.toHaveBeenCalled();
   });
 });
