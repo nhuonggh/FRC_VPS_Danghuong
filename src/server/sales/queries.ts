@@ -121,7 +121,7 @@ export interface OrderDeliveryDTO {
   lines: { orderLineId: number; productName: string; unit: string; qty: string }[];
 }
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
-  note: string | null; createdByName: string | null; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
+  note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null }[]; depositTotal: string;
   quote: { id: number; code: string } | null;
@@ -191,7 +191,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
     hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
-    salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
+    walkInName: o.walkInName, walkInPhone: o.walkInPhone, salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
     orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).toString(), lines,
     deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note })),
     depositTotal: receipts.reduce((s, r) => s.plus(r.amount), D(0)).toString(),

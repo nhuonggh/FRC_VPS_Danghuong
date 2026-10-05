@@ -42,6 +42,9 @@ model SaleOrder {
   warehouseId          Int?
   /// Hình thức thanh toán dự kiến — KHÔNG sinh phiếu thu; trạng thái thanh toán vẫn theo phiếu thu/công nợ.
   paymentMethod        SalePaymentMethod @default(NONE)
+  /// Khách lẻ (đơn gắn khách chung KHL): tên/SĐT khách ghi trên đơn.
+  walkInName           String?
+  walkInPhone          String?
   /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.
   orderDate            DateTime
   expectedDeliveryDate DateTime       @db.Date

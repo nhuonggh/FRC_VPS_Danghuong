@@ -15,6 +15,8 @@ export const partnerBase = z.object({
   allowCredit: z.boolean(),
   phone: text(30, "Số điện thoại").refine((v) => v === "" || /^[0-9+().\-\s]{6,30}$/.test(v), "Số điện thoại không hợp lệ."),
   address: text(250, "Địa chỉ"),
+  taxCode: text(20, "Mã số thuế").refine((v) => v === "" || /^[0-9][0-9-]{8,18}[0-9]$/.test(v), "Mã số thuế gồm 10–13 chữ số (có thể có dấu -).").optional(),
+  deliveryAddress: text(250, "Địa chỉ giao hàng").optional(),
   note: text(500, "Ghi chú"),
   isActive: z.boolean(),
 });
@@ -26,7 +28,7 @@ const kindRule = (v: Kind, ctx: z.RefinementCtx) => {
 
 export const createPartnerSchema = partnerBase.superRefine(kindRule);
 export type CreatePartnerInput = z.infer<typeof createPartnerSchema>;
-export const profileSectionSchema = partnerBase.pick({ name: true, groupId: true, isCustomer: true, isSupplier: true, phone: true, address: true, note: true }).superRefine(kindRule);
+export const profileSectionSchema = partnerBase.pick({ name: true, groupId: true, isCustomer: true, isSupplier: true, phone: true, address: true, taxCode: true, deliveryAddress: true, note: true }).superRefine(kindRule);
 export const creditSectionSchema = partnerBase.pick({ debtLimit: true, allowCredit: true });
 export const ownerSectionSchema = partnerBase.pick({ ownerUserId: true });
 export const statusSectionSchema = partnerBase.pick({ isActive: true });

@@ -9,11 +9,11 @@ import type { PartnerKind } from "./codes";
 type Db = Prisma.TransactionClient | PrismaClient;
 export type { PartnerKind };
 export const PARTNER_FILTER_KEYS = ["status", "group", "owner"] as const;
-export interface PartnerDTO { id: number; code: string; name: string; groupId: number; groupName: string; isCustomer: boolean; isSupplier: boolean; ownerUserId: number | null; ownerName: string | null; debtLimit: string; allowCredit: boolean; phone: string | null; address: string | null; note: string | null; isActive: boolean; mergedIntoId: number | null; createdAt: Date }
+export interface PartnerDTO { id: number; code: string; name: string; groupId: number; groupName: string; isCustomer: boolean; isSupplier: boolean; ownerUserId: number | null; ownerName: string | null; debtLimit: string; allowCredit: boolean; phone: string | null; address: string | null; taxCode: string | null; deliveryAddress: string | null; note: string | null; isActive: boolean; mergedIntoId: number | null; createdAt: Date }
 
 const INCLUDE = { group: { select: { name: true } }, owner: { select: { fullName: true } } } satisfies Prisma.PartnerInclude;
 type Row = Prisma.PartnerGetPayload<{ include: typeof INCLUDE }>;
-const toDto = (p: Row): PartnerDTO => ({ id: p.id, code: p.code, name: p.name, groupId: p.groupId, groupName: p.group.name, isCustomer: p.isCustomer, isSupplier: p.isSupplier, ownerUserId: p.ownerUserId, ownerName: p.owner?.fullName ?? null, debtLimit: p.debtLimit.toString(), allowCredit: p.allowCredit, phone: p.phone, address: p.address, note: p.note, isActive: p.isActive, mergedIntoId: p.mergedIntoId, createdAt: p.createdAt });
+const toDto = (p: Row): PartnerDTO => ({ id: p.id, code: p.code, name: p.name, groupId: p.groupId, groupName: p.group.name, isCustomer: p.isCustomer, isSupplier: p.isSupplier, ownerUserId: p.ownerUserId, ownerName: p.owner?.fullName ?? null, debtLimit: p.debtLimit.toString(), allowCredit: p.allowCredit, phone: p.phone, address: p.address, taxCode: p.taxCode, deliveryAddress: p.deliveryAddress, note: p.note, isActive: p.isActive, mergedIntoId: p.mergedIntoId, createdAt: p.createdAt });
 const ints = (value: string[] | undefined) => (value ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
 
 /** Điều kiện dùng chung cho danh sách, thống kê và Excel để export không vượt quá phạm vi người xem. */
@@ -39,8 +39,8 @@ export async function getPartner(db: Db, actor: Actor, id: number, kind?: Partne
   return toDto(row);
 }
 export async function searchPartners(db: Db, actor: Actor, opts: { q?: string; kind: PartnerKind; limit?: number }) {
-  const rows = await db.partner.findMany({ where: { AND: [{ mergedIntoId: null, isActive: true }, opts.kind === "customer" ? { isCustomer: true } : { isSupplier: true }, partnerScopeWhere(actor), searchTextWhere(opts.q)] }, orderBy: { name: "asc" }, take: Math.min(Math.max(opts.limit ?? 20, 1), 50), select: { id: true, code: true, name: true, phone: true, address: true } });
-  return rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}`, hint: r.phone ?? undefined, address: r.address ?? undefined }));
+  const rows = await db.partner.findMany({ where: { AND: [{ mergedIntoId: null, isActive: true }, opts.kind === "customer" ? { isCustomer: true } : { isSupplier: true }, partnerScopeWhere(actor), searchTextWhere(opts.q)] }, orderBy: { name: "asc" }, take: Math.min(Math.max(opts.limit ?? 20, 1), 50), select: { id: true, code: true, name: true, phone: true, address: true, taxCode: true, deliveryAddress: true } });
+  return rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}`, hint: r.phone ?? undefined, address: r.address ?? undefined, taxCode: r.taxCode ?? undefined, deliveryAddress: r.deliveryAddress ?? undefined }));
 }
 const MAX_EXPORT = 50_000;
 export async function exportPartnersXlsx(db: Db, actor: Actor, params: ListParams, kind: PartnerKind): Promise<Buffer> {

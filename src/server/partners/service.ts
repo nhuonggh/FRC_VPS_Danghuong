@@ -40,7 +40,7 @@ export async function createPartner(db: Db, actor: Actor, input: CreatePartnerIn
       code, name: input.name, searchText: searchTextOf({ code, name: input.name, phone: input.phone }),
       groupId: input.groupId, isCustomer: input.isCustomer, isSupplier: input.isSupplier, ownerUserId,
       debtLimit: new Prisma.Decimal(input.debtLimit), allowCredit: input.allowCredit,
-      phone: input.phone || null, address: input.address || null, note: input.note || null, isActive: input.isActive,
+      phone: input.phone || null, address: input.address || null, taxCode: input.taxCode || null, deliveryAddress: input.deliveryAddress || null, note: input.note || null, isActive: input.isActive,
     } });
     await writeAudit(db, { userId: actor.userId, action: "partner.create", entity: "Partner", entityId: row.id, after: {
       code, name: row.name, groupId: row.groupId, isCustomer: row.isCustomer, isSupplier: row.isSupplier,
@@ -58,11 +58,11 @@ export async function createPartnerIdempotent(prisma: PrismaClient, actor: Actor
   return withIdempotency(prisma, { userId: actor.userId, scope: "partner.create", key }, (tx) => createPartner(tx, actor, input));
 }
 
-export async function updatePartnerProfile(db: Db, actor: Actor, id: number, v: { name: string; groupId: number; isCustomer: boolean; isSupplier: boolean; phone: string; address: string; note: string }) {
+export async function updatePartnerProfile(db: Db, actor: Actor, id: number, v: { name: string; groupId: number; isCustomer: boolean; isSupplier: boolean; phone: string; address: string; taxCode?: string; deliveryAddress?: string; note: string }) {
   assertCan(actor.perms, "partner.manage");
   const before = await loadEditable(db, actor, id);
   if (v.groupId !== before.groupId) await assertGroupUsable(db, v.groupId);
-  await db.partner.update({ where: { id }, data: { name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, note: v.note || null } });
+  await db.partner.update({ where: { id }, data: { name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, ...(v.taxCode === undefined ? {} : { taxCode: v.taxCode || null }), ...(v.deliveryAddress === undefined ? {} : { deliveryAddress: v.deliveryAddress || null }), note: v.note || null } });
   await writeAudit(db, { userId: actor.userId, action: "partner.update_profile", entity: "Partner", entityId: id, before: { name: before.name, groupId: before.groupId, isCustomer: before.isCustomer, isSupplier: before.isSupplier, phone: before.phone, address: before.address, note: before.note }, after: { name: v.name, groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, note: v.note || null } });
 }
 export async function setPartnerCredit(db: Db, actor: Actor, id: number, v: { debtLimit: number; allowCredit: boolean }) {

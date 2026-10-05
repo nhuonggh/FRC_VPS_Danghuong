@@ -12,7 +12,7 @@ vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 const PRODUCT = { value: 10, label: "TX01 — Tôn xốp", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] };
-const OPTS = { currentUserId: 1, salesUsers: [{ value: 1, label: "Nguyễn Văn A" }, { value: 2, label: "Trần B" }], warehouses: [{ value: 1, label: "Kho chính" }], groups: [{ value: 3, label: "Khách lẻ" }], canCreateCustomer: true, canPrint: true };
+const OPTS = { currentUserId: 1, salesUsers: [{ value: 1, label: "Nguyễn Văn A" }, { value: 2, label: "Trần B" }], warehouses: [{ value: 1, label: "Kho chính" }], groups: [{ value: 3, label: "Khách lẻ" }], canCreateCustomer: true, canPrint: true, cashAccounts: [] as { value: number; label: string; type: "CASH" | "BANK" }[], canCollect: false, canPickup: false, walkInPartnerId: null as number | null };
 let pricing: unknown;
 
 beforeEach(() => {
@@ -258,5 +258,92 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toBeInTheDocument());
     expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 1" })).toHaveValue("TX01 — Tôn xốp");
     expect(document.querySelector('img[src="https://img.example/tx01.png"]')).not.toBeNull();
+  });
+});
+
+describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao ngay)", () => {
+  const COUNTER = { ...OPTS, canCollect: true, canPickup: true, cashAccounts: [{ value: 5, label: "Quỹ tiền mặt", type: "CASH" as const }, { value: 6, label: "Vietcombank", type: "BANK" as const }] };
+  const baseApi = (extra: (url: string, init?: { method?: string }) => unknown) => apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+    const r = extra(url, init);
+    if (r !== undefined) return r;
+    if (url.startsWith("/api/partner-lists/customers/search")) return [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt", hint: "0901", address: "123 ABC", taxCode: "0312345678", deliveryAddress: "Kho 5" }];
+    if (url.startsWith("/api/products/search")) return [PRODUCT];
+    if (url.startsWith("/api/orders/pricing")) return pricing;
+    return [];
+  });
+
+  it("đối tác: hiện MST + địa chỉ giao hàng; thu tiền mặt đủ + giao ngay → gửi checkout kèm tài khoản quỹ", async () => {
+    baseApi((url, init) => (url === "/api/orders" && init?.method === "POST" ? { id: 5, code: "DH000005" } : undefined));
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    expect(await screen.findByText("0312345678")).toBeInTheDocument();
+    expect(screen.getByText("Kho 5")).toBeInTheDocument();
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4"); // 4 × 30.000 = 120.000
+    await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
+    expect(screen.getByLabelText("Số tiền thu")).toHaveValue(120000); // thu đủ mặc định
+    expect(screen.getByLabelText("Quỹ tiền mặt")).toHaveValue("5");
+    await userEvent.click(screen.getByLabelText(/Khách tự chở/));
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(posts()[0]![1].json).toMatchObject({ partnerId: 7, paymentMethod: "CASH", checkout: { pickupNow: true, payment: { amount: 120000, cashAccountId: 5, note: "" } } });
+    expect(posts()[0]![1].json.checkout.walkIn).toBeUndefined();
+  });
+
+  it("chuyển khoản → chỉ liệt kê tài khoản ngân hàng", async () => {
+    baseApi(() => undefined);
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "TRANSFER");
+    const sel = screen.getByLabelText("Ngân hàng");
+    expect(within(sel).getAllByRole("option").map((o) => o.textContent)).toEqual(["— Chọn —", "Vietcombank"].slice(0, 1).concat(["Vietcombank"]));
+    expect(sel).toHaveValue("6");
+  });
+
+  it("khách lẻ: ẩn tìm khách + Lưu nháp, tự bật giao ngay + thu tiền mặt đủ, gửi checkout.walkIn", async () => {
+    baseApi((url, init) => (url === "/api/orders" && init?.method === "POST" ? { id: 8, code: "DH000008" } : undefined));
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
+    expect(screen.queryByRole("combobox", { name: "Khách hàng" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Lưu nháp/ })).toBeNull();
+    expect(screen.getByLabelText(/Khách tự chở/)).toBeChecked();
+    expect(screen.getByLabelText("Hình thức thanh toán")).toHaveValue("CASH");
+    await userEvent.type(screen.getByLabelText(/Tên khách/), "Anh Ba");
+    await userEvent.type(screen.getByLabelText(/Số điện thoại/), "0909");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2"); // 60.000
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/8"));
+    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "Anh Ba", phone: "0909" }, pickupNow: true, payment: { amount: 60000, cashAccountId: 5 } });
+  });
+
+  it("khách lẻ thu thiếu → báo lỗi, KHÔNG gọi POST", async () => {
+    baseApi(() => undefined);
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
+    await userEvent.clear(screen.getByLabelText("Số tiền thu"));
+    await userEvent.type(screen.getByLabelText("Số tiền thu"), "10000");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    expect(await screen.findByText(/Khách lẻ phải thanh toán đủ/)).toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("thu vượt tiền phải thu → báo lỗi, KHÔNG gọi POST; thiếu quyền thu tiền → không có khối thanh toán/khách lẻ", async () => {
+    baseApi(() => undefined);
+    const { unmount } = render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
+    await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
+    await userEvent.clear(screen.getByLabelText("Số tiền thu"));
+    await userEvent.type(screen.getByLabelText("Số tiền thu"), "999999");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    expect(await screen.findByText(/vượt tiền phải thu/)).toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+    unmount();
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    expect(screen.queryByRole("button", { name: "Khách lẻ" })).toBeNull();
+    expect(screen.queryByText("Thông tin thanh toán")).toBeNull();
   });
 });
