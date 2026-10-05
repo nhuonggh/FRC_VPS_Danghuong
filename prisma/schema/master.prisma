@@ -37,6 +37,10 @@ model Partner {
   allowCredit  Boolean  @default(false)
   phone        String?
   address      String?
+  /// Mã số thuế (tuỳ chọn) — hiện ở form bán hàng/hoá đơn.
+  taxCode      String?
+  /// Địa chỉ giao hàng (nếu khác địa chỉ chính).
+  deliveryAddress String?
   note         String?
   isActive     Boolean  @default(true)
   mergedIntoId Int? // sau khi gộp mã (mục 65)

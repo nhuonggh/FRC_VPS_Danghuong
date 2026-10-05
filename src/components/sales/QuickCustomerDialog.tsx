@@ -7,7 +7,7 @@ import { Field, inputClass, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 
-export type QuickCustomer = ComboOption & { address?: string };
+export type QuickCustomer = ComboOption & { address?: string; taxCode?: string; deliveryAddress?: string };
 
 /** Dialog tạo nhanh khách hàng (≤ 4 trường): các thông tin còn lại sửa sau ở trang khách hàng. */
 export function QuickCustomerDialog({ groups, onCreated }: { groups: ComboOption[]; onCreated: (c: QuickCustomer) => void }) {
@@ -16,6 +16,8 @@ export function QuickCustomerDialog({ groups, onCreated }: { groups: ComboOption
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [taxCode, setTaxCode] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [groupId, setGroupId] = useState<string>(groups[0] ? String(groups[0].value) : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,11 +30,11 @@ export function QuickCustomerDialog({ groups, onCreated }: { groups: ComboOption
     try {
       const r = await apiFetch<{ id: number; code: string }>("/api/partners", {
         method: "POST", idempotencyKey: idem.key,
-        json: { code: "", name: name.trim(), groupId: Number(groupId), isCustomer: true, isSupplier: false, ownerUserId: null, debtLimit: 0, allowCredit: false, phone: phone.trim(), address: address.trim(), note: "", isActive: true },
+        json: { code: "", name: name.trim(), groupId: Number(groupId), isCustomer: true, isSupplier: false, ownerUserId: null, debtLimit: 0, allowCredit: false, phone: phone.trim(), address: address.trim(), taxCode: taxCode.trim(), deliveryAddress: deliveryAddress.trim(), note: "", isActive: true },
       });
       idem.reset();
-      onCreated({ value: r.id, label: `${r.code} — ${name.trim()}`, ...(phone.trim() ? { hint: phone.trim() } : {}), ...(address.trim() ? { address: address.trim() } : {}) });
-      setOpen(false); setName(""); setPhone(""); setAddress("");
+      onCreated({ value: r.id, label: `${r.code} — ${name.trim()}`, ...(phone.trim() ? { hint: phone.trim() } : {}), ...(address.trim() ? { address: address.trim() } : {}), ...(taxCode.trim() ? { taxCode: taxCode.trim() } : {}), ...(deliveryAddress.trim() ? { deliveryAddress: deliveryAddress.trim() } : {}) });
+      setOpen(false); setName(""); setPhone(""); setAddress(""); setTaxCode(""); setDeliveryAddress("");
     } catch (e) { setError(e instanceof Error ? e.message : "Không tạo được khách hàng."); } finally { setBusy(false); }
   }
 
@@ -51,6 +53,8 @@ export function QuickCustomerDialog({ groups, onCreated }: { groups: ComboOption
             <Field id="qc-name" label="Tên khách hàng" required><input id="qc-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputClass()} /></Field>
             <Field id="qc-phone" label="Số điện thoại"><input id="qc-phone" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={inputClass()} /></Field>
             <Field id="qc-address" label="Địa chỉ"><input id="qc-address" value={address} onChange={(e) => setAddress(e.target.value)} className={inputClass()} /></Field>
+            <Field id="qc-tax" label="Mã số thuế"><input id="qc-tax" value={taxCode} onChange={(e) => setTaxCode(e.target.value)} inputMode="numeric" className={inputClass()} /></Field>
+            <Field id="qc-ship" label="Địa chỉ giao hàng"><input id="qc-ship" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} className={inputClass()} /></Field>
             <Field id="qc-group" label="Nhóm khách hàng" required>
               <select id="qc-group" value={groupId} onChange={(e) => setGroupId(e.target.value)} className={inputClass()}>
                 {groups.length === 0 && <option value="">Chưa có nhóm</option>}

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Trash2, UserRound } from "lucide-react";
+import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Trash2, UserRound, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
@@ -51,32 +51,46 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
   const lines = watch("lines");
   const partnerId = watch("partnerId");
 
+  // Bán tại quầy: khách lẻ / thu tiền ngay / giao ngay (chỉ khi LẬP đơn mới và có quyền thu tiền)
+  const canCheckout = !edit && options.canCollect;
+  const [walkIn, setWalkIn] = useState(false);
+  const [walkName, setWalkName] = useState("");
+  const [walkPhone, setWalkPhone] = useState("");
+  const [pickupNow, setPickupNow] = useState(false);
+  const [payKind, setPayKind] = useState<"NONE" | "CASH" | "TRANSFER" | "COD">("NONE");
+  const [payAmount, setPayAmount] = useState("");
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [payAccount, setPayAccount] = useState<number | null>(null);
+  const [payNote, setPayNote] = useState("");
+  // Khách lẻ chưa có hồ sơ: gợi ý giá lấy theo "giá gần nhất của bất kỳ khách" (id không tồn tại ⇒ không có giá riêng)
+  const pricingPartnerId = walkIn ? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
+
   const [customer, setCustomer] = useState<ComboOption | null>(edit?.customer ?? null);
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const [processingTypes, setProcessingTypes] = useState<ComboOption[]>([]);
   const requested = useRef(new Set<string>());
-  const key = (productId: number) => `${partnerId}:${productId}`;
+  const key = (productId: number) => `${pricingPartnerId}:${productId}`;
 
   useEffect(() => { apiFetch<ComboOption[]>("/api/orders/options/processing-types").then(setProcessingTypes).catch(() => undefined); }, []);
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
   useEffect(() => {
-    if (!partnerId) return;
+    if (!pricingPartnerId) return;
     for (const l of lines) {
       const pid = l?.productId;
       if (!pid || requested.current.has(key(pid))) continue;
       requested.current.add(key(pid));
-      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${partnerId}&productId=${pid}`)
+      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${pid}`)
         .then((dto) => setPricing((m) => new Map(m).set(key(pid), dto)))
         .catch(() => requested.current.delete(key(pid)));
     }
-  }, [partnerId, lines.map((l) => l?.productId).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricingPartnerId, lines.map((l) => l?.productId).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Có giá gợi ý mới → điền vào ô giá còn trống (hoặc luôn ép khi không có quyền sửa giá)
   useEffect(() => {
     lines.forEach((l, i) => {
-      const dto = l?.productId && partnerId ? pricing.get(key(l.productId)) : null;
+      const dto = l?.productId && pricingPartnerId ? pricing.get(key(l.productId)) : null;
       const suggested = dto?.units.find((u) => u.unit === l.unit)?.suggestedPrice;
       if (suggested == null) return;
       const current = getValues(`lines.${i}.salePrice`);
@@ -85,7 +99,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
       if (existing) return;
       if (!canEditPrice ? num(current) !== Number(suggested) : !num(current)) setValue(`lines.${i}.salePrice`, Number(suggested), { shouldValidate: true });
     });
-  }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricing, pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sau khi lưu: tuỳ chọn in hóa đơn (lỗi in không làm mất đơn đã lập — báo rồi vẫn sang trang chi tiết)
   const finish = async (id: number, print: boolean) => {
@@ -97,13 +111,28 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
     }
     router.replace(`/sales/orders/${id}`);
   };
+  // Phần bán tại quầy gửi kèm đơn; kiểm tra sớm để báo lỗi rõ (server kiểm lại và là nơi quyết định)
+  const buildCheckout = () => {
+    if (!canCheckout) return undefined;
+    const amount = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
+    if (amount > total + 0.004) throw new Error("Số tiền thu vượt tiền phải thu.");
+    if (amount > 0 && !payAccount) throw new Error("Chọn quỹ/tài khoản nhận tiền.");
+    if (walkIn && amount + 0.004 < total) throw new Error("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).");
+    if (!walkIn && !pickupNow && amount <= 0) return undefined;
+    return {
+      ...(walkIn ? { walkIn: { name: walkName.trim(), phone: walkPhone.trim() } } : {}),
+      ...(pickupNow ? { pickupNow: true } : {}),
+      ...(amount > 0 ? { payment: { amount, cashAccountId: payAccount, note: payNote.trim() } } : {}),
+    };
+  };
   const submitWith = (mode: "save" | "print" | "draft") => handleSubmit(async (value) => {
     if (edit) {
       await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
       await finish(edit.orderId, mode === "print" && !edit.isDraft);
       return;
     }
-    const r = await apiFetch<{ id: number }>(mode === "draft" ? "/api/orders/draft" : "/api/orders", { method: "POST", json: value, idempotencyKey: idem.key });
+    const checkout = mode !== "draft" ? buildCheckout() : undefined;
+    const r = await apiFetch<{ id: number }>(mode === "draft" ? "/api/orders/draft" : "/api/orders", { method: "POST", json: checkout ? { ...value, checkout } : value, idempotencyKey: idem.key });
     await finish(r.id, mode === "print");
   });
 
@@ -113,6 +142,24 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
   };
   const total = lines.reduce((sum, l) => sum + round2(num(l?.qty) * num(l?.salePrice)) - num(l?.discountNow), 0);
+  const accounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "CASH" : a.type === "BANK"));
+  const paid = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
+  const changeKind = (k: typeof payKind) => {
+    setPayKind(k);
+    setValue("paymentMethod", k, { shouldDirty: true });
+    const list = options.cashAccounts.filter((a) => (k === "CASH" ? a.type === "CASH" : a.type === "BANK"));
+    setPayAccount(k === "CASH" || k === "TRANSFER" ? (list[0] ? Number(list[0].value) : null) : null);
+    if (k === "CASH" || k === "TRANSFER") { if (!amountTouched) setPayAmount(total ? String(total) : ""); } else { setPayAmount(""); setAmountTouched(false); }
+  };
+  // Chưa chỉnh tay số tiền thì số thu bám theo tiền phải thu (thu đủ)
+  useEffect(() => { if (canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && !amountTouched) setPayAmount(total ? String(total) : ""); }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleWalkIn = (on: boolean) => {
+    setWalkIn(on); setCustomer(null);
+    setValue("partnerId", on ? 1 : (undefined as never), { shouldDirty: true });
+    setPickupNow(on);
+    if (on && (payKind === "NONE" || payKind === "COD")) changeKind("CASH");
+    if (!on) changeKind("NONE");
+  };
   const loadCustomers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/customers/search?q=${encodeURIComponent(q)}`);
   const loadProducts = async (q: string) => {
     const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
@@ -126,7 +173,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
   const [printMenu, setPrintMenu] = useState(false);
   const addQuick = (p: ComboOption | null) => { if (!p) return; addProducts([p as ProductOption]); setQuickKey((k) => k + 1); };
   const lineCount = lines.filter((l) => l?.productId).length;
-  const customerInfo = customer as (ComboOption & { address?: string }) | null;
+  const customerInfo = customer as (ComboOption & { address?: string; taxCode?: string; deliveryAddress?: string }) | null;
   const card = "rounded-sm border border-border bg-surface p-4";
 
   // Một trang, các thẻ: khách hàng | thông tin chung ở trên, danh sách sản phẩm ở dưới — lập đơn không phải chuyển tab.
@@ -134,7 +181,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
     <NewPage wide backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Tạo đơn hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={runWith("save")}
       headerActions={(run, pending) => (
         <>
-          {!edit && (
+          {!edit && !walkIn && (
             <button type="button" disabled={pending} onClick={() => run(runWith("draft"))} className="inline-flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10"><Save size={16} aria-hidden /> Lưu nháp</button>
           )}
           {canPrint && (
@@ -151,7 +198,22 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
       )}>
       <div className="grid gap-4 lg:grid-cols-3">
         <section className={card}>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin khách hàng</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin khách hàng</h2>
+            {canCheckout && (
+              <div role="group" aria-label="Loại khách" className="inline-flex overflow-hidden rounded-full border border-border text-xs font-medium">
+                <button type="button" aria-pressed={!walkIn} onClick={() => walkIn && toggleWalkIn(false)} className={walkIn ? "px-3 py-1.5 hover:bg-hover" : "bg-accent px-3 py-1.5 text-fg-on-accent"}>Đối tác</button>
+                <button type="button" aria-pressed={walkIn} onClick={() => !walkIn && toggleWalkIn(true)} className={walkIn ? "bg-accent px-3 py-1.5 text-fg-on-accent" : "px-3 py-1.5 hover:bg-hover"}>Khách lẻ</button>
+              </div>
+            )}
+          </div>
+          {walkIn ? (
+            <div className="space-y-3">
+              <Field id="walkName" label="Tên khách (tuỳ chọn)"><input id="walkName" value={walkName} onChange={(e) => setWalkName(e.target.value)} placeholder="Khách lẻ" className={inputClass()} /></Field>
+              <Field id="walkPhone" label="Số điện thoại (tuỳ chọn)"><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" className={inputClass()} /></Field>
+              <p className="text-xs text-fg-muted">Khách lẻ dùng khách chung <strong>KHL</strong>, thanh toán đủ ngay, không ghi nợ.</p>
+            </div>
+          ) : (<>
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1">
               <Controller control={control} name="partnerId" render={({ field }) => (
@@ -163,12 +225,15 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
               <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
             )}
           </div>
-          {customerInfo && (customerInfo.hint || customerInfo.address) && (
+          {customerInfo && (customerInfo.hint || customerInfo.address || customerInfo.taxCode || customerInfo.deliveryAddress) && (
             <dl className="mt-3 space-y-1 rounded-sm bg-hover p-3 text-sm">
               {customerInfo.hint && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">SĐT:</dt><dd>{customerInfo.hint}</dd></div>}
+              {customerInfo.taxCode && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">MST:</dt><dd>{customerInfo.taxCode}</dd></div>}
               {customerInfo.address && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">Địa chỉ:</dt><dd>{customerInfo.address}</dd></div>}
+              {customerInfo.deliveryAddress && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">Giao hàng:</dt><dd>{customerInfo.deliveryAddress}</dd></div>}
             </dl>
           )}
+          </>)}
         </section>
         <section className={card}>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText size={16} aria-hidden className="text-accent" /> Thông tin chung</h2>
@@ -201,11 +266,13 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
                 {options.warehouses.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
               </select>
             </Field>
-            <Field id="paymentMethod" label="Hình thức thanh toán">
-              <select id="paymentMethod" {...register("paymentMethod")} className={inputClass()}>
-                {SALE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{SALE_PAYMENT_LABELS[m]}</option>)}
-              </select>
-            </Field>
+            {!canCheckout && (
+              <Field id="paymentMethod" label="Hình thức thanh toán">
+                <select id="paymentMethod" {...register("paymentMethod")} className={inputClass()}>
+                  {SALE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{SALE_PAYMENT_LABELS[m]}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
         </section>
       </div>
@@ -236,7 +303,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
-                  dto={lines[index]?.productId && partnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
+                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
                   processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
             </tbody>
@@ -249,6 +316,47 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
         </div>
         <p className="mt-2 text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
       </section>
+
+      {canCheckout && (
+        <section className={card}>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Wallet size={16} aria-hidden className="text-accent" /> Thông tin thanh toán</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field id="payKind" label="Hình thức thanh toán">
+              <select id="payKind" value={payKind} onChange={(e) => changeKind(e.target.value as typeof payKind)} className={inputClass()}>
+                <option value="NONE">Chưa thu tiền</option>
+                <option value="CASH">Tiền mặt</option>
+                <option value="TRANSFER">Chuyển khoản</option>
+                {!walkIn && <option value="COD">Thu hộ khi giao (COD)</option>}
+              </select>
+            </Field>
+            {(payKind === "CASH" || payKind === "TRANSFER") && (<>
+              <Field id="payAccount" label={payKind === "CASH" ? "Quỹ tiền mặt" : "Ngân hàng"}>
+                <select id="payAccount" value={payAccount ?? ""} onChange={(e) => setPayAccount(e.target.value ? Number(e.target.value) : null)} className={inputClass()}>
+                  <option value="">{accounts.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
+                  {accounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+              </Field>
+              <Field id="payAmount" label="Số tiền thu">
+                <div className="flex gap-2">
+                  <input id="payAmount" type="number" min={0} step="any" value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setAmountTouched(true); }} className={`${inputClass()} tabular text-right`} />
+                  <button type="button" onClick={() => { setPayAmount(total ? String(total) : ""); setAmountTouched(false); }} className="h-11 shrink-0 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-9">Thu đủ</button>
+                </div>
+              </Field>
+              <Field id="payNote" label="Ghi chú thu tiền"><input id="payNote" value={payNote} onChange={(e) => setPayNote(e.target.value)} className={inputClass()} /></Field>
+            </>)}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            {options.canPickup ? (
+              <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={pickupNow} onChange={(e) => setPickupNow(e.target.checked)} className="h-4 w-4" />Khách tự chở — giao hàng ngay (lập phiếu giao)</label>
+            ) : <span />}
+            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <div className="flex gap-2"><dt className="text-fg-muted">Tiền phải thu:</dt><dd className="font-semibold tabular">{formatCurrency(total)}</dd></div>
+              <div className="flex gap-2"><dt className="text-fg-muted">Đã thu:</dt><dd className="font-semibold tabular">{formatCurrency(paid)}</dd></div>
+              <div className="flex gap-2"><dt className="text-fg-muted">{paid > total ? "Thừa:" : "Còn nợ:"}</dt><dd className={`font-semibold tabular ${paid > total || (walkIn && paid < total) ? "text-danger" : ""}`}>{formatCurrency(Math.abs(total - paid))}</dd></div>
+            </dl>
+          </div>
+        </section>
+      )}
     </NewPage>
   );
 }
