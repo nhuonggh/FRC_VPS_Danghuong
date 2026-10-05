@@ -53,6 +53,8 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       <DetailField label="Ngày giao ban đầu">{formatDate(order.originalDeliveryDate)}</DetailField>
       <DetailField label="Ghi chú">{order.note}</DetailField>
       <DetailField label="Người lập">{order.createdByName}</DetailField>
+      {showPrice && Number(order.orderDiscount ?? 0) > 0 && <DetailField label="Chiết khấu cả đơn">{formatCurrency(order.orderDiscount!)}</DetailField>}
+      {showPrice && Number(order.shippingFee ?? 0) > 0 && <DetailField label="Phí vận chuyển">{formatCurrency(order.shippingFee!)}</DetailField>}
       <DetailField label="Nhân viên bán">{order.salesUserName ?? "—"}</DetailField>
       <DetailField label="Kho xuất">{order.warehouseName ?? "—"}</DetailField>
       <DetailField label="Hình thức thanh toán">{SALE_PAYMENT_LABELS[order.paymentMethod]}</DetailField>
@@ -75,6 +77,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
             <tr key={l.id} className="border-t border-border align-top">
               <td className="px-3 py-2">
                 <strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>
+                {l.note && <span className="block text-xs text-fg-secondary">Ghi chú: {l.note}</span>}
                 {l.processingType && <span className="block text-xs text-fg-secondary">Gia công: {l.processingType}</span>}
                 {l.processingType && l.issues.length > 0 && (
                   <div className="mt-1 text-xs text-fg-secondary">
@@ -105,6 +108,18 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
             </tr>
           ))}
         </tbody>
+        {showPrice && (Number(order.shippingFee ?? 0) > 0 || Number(order.orderDiscount ?? 0) > 0) && (
+          <tfoot>
+            <tr className="border-t-2 border-border text-sm">
+              <td colSpan={6} className="px-3 py-2 text-right text-fg-muted">
+                Hàng {formatCurrency(order.lines.reduce((s, l) => s + Number(l.lineAmount ?? 0), 0))}
+                {Number(order.orderDiscount ?? 0) > 0 && <> · CK cả đơn (đã tính trong CK trừ ngay) {formatCurrency(order.orderDiscount!)}</>}
+                {Number(order.shippingFee ?? 0) > 0 && <> · Phí vận chuyển {formatCurrency(order.shippingFee!)}</>}
+              </td>
+              <td className="px-3 py-2 text-right font-semibold tabular">{formatCurrency(order.orderTotal!)}</td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

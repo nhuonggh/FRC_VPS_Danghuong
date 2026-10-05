@@ -18,6 +18,35 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const dateOnly = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 const sortedUnique = (ids: number[]) => [...new Set(ids)].sort((a, b) => a - b);
 
+const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+
+/**
+ * Phân bổ chiết khấu CẢ ĐƠN vào từng dòng theo tỷ lệ phần còn lại của dòng (giá trị − chiết khấu trừ ngay − chiết khấu tích lũy).
+ * Làm tròn 2 số; dòng cuối nhận phần dư nên Σ phần chia = đúng số nhập, không dòng nào bị chiết khấu quá giá trị.
+ */
+export function allocateOrderDiscount(lines: readonly PlannedLine[], orderDiscount: Prisma.Decimal.Value): Prisma.Decimal[] {
+  const total = D(orderDiscount);
+  const zero = lines.map(() => D(0));
+  if (!total.gt(0)) return zero;
+  const cap = lines.map((l) => {
+    const c = round2(D(l.input.qty).times(l.input.salePrice)).minus(l.input.discountNow).minus(l.input.discountAccum);
+    return c.gt(0) ? c : D(0);
+  });
+  const capSum = cap.reduce((s, c) => s.plus(c), D(0));
+  if (total.gt(capSum)) throw new DomainError(`Chiết khấu cả đơn (${total.toString()}) vượt giá trị hàng còn lại sau chiết khấu dòng (${capSum.toString()}).`, 400);
+  const out = zero.slice();
+  let left = total;
+  const last = cap.map((c, i) => (c.gt(0) ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+  cap.forEach((c, i) => {
+    if (!c.gt(0)) return;
+    const share = i === last ? left : round2(total.times(c).div(capSum));
+    const s = share.gt(c) ? c : share;
+    out[i] = s;
+    left = left.minus(s);
+  });
+  return out;
+}
+
 /** Một mã hàng thực sự bị xuất kho cho một dòng bán. */
 export interface PlannedIssue { productId: number; qtyBase: Prisma.Decimal }
 export interface PlannedLine {
@@ -102,7 +131,9 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
  * Sửa: trường bỏ trống (undefined) = giữ nguyên, null = xoá. Người bán phải đang hoạt động, kho phải đang dùng.
  */
 export async function orderExtras(tx: Db, actor: Actor, input: SaleOrderInput, mode: "create" | "edit") {
-  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]> } = {};
+  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number } = {};
+  if (input.shippingFee !== undefined) out.shippingFee = input.shippingFee; else if (mode === "create") out.shippingFee = 0;
+  if (input.orderDiscount !== undefined) out.orderDiscount = input.orderDiscount; else if (mode === "create") out.orderDiscount = 0;
   const salesUserId = input.salesUserId === undefined && mode === "create" ? actor.userId : input.salesUserId;
   if (salesUserId !== undefined) {
     if (salesUserId !== null && !(await tx.user.findFirst({ where: { id: salesUserId, isLocked: false }, select: { id: true } }))) throw new DomainError("Nhân viên bán không hợp lệ.", 400);
@@ -129,6 +160,7 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
   await assertPrices(tx, actor, input.partnerId, lines);
   const period = await getOpenPeriod(tx);
   const extras = await orderExtras(tx, actor, input, "create");
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({
@@ -137,9 +169,9 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
       note: input.note || null, createdBy: actor.userId, ...extras,
       lines: {
-        create: lines.map((l) => ({
+        create: lines.map((l, i) => ({
           productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
-          discountNow: D(l.input.discountNow), discountAccum: D(l.input.discountAccum), processingTypeId: l.input.processingTypeId, at,
+          discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, at,
         })),
       },
     },
@@ -167,6 +199,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   await assertPrices(tx, actor, input.partnerId, lines);
 
   const extras = await orderExtras(tx, actor, input, "create");
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({
@@ -176,11 +209,11 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
       note: input.note || null, createdBy: actor.userId, ...extras, ...extra,
     },
   });
-  for (const l of lines) {
+  for (const [li, l] of lines.entries()) {
     const row = await tx.saleOrderLine.create({
       data: {
         orderId: id, productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
-        salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow), discountAccum: D(l.input.discountAccum),
+        salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
         processingTypeId: l.input.processingTypeId, bomVersionId: l.bomVersionId, at,
       },
     });

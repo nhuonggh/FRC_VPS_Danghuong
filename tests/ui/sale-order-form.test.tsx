@@ -347,3 +347,80 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     expect(screen.queryByText("Thông tin thanh toán")).toBeNull();
   });
 });
+
+describe("SaleOrderForm — phí vận chuyển, chiết khấu cả đơn, ghi chú dòng, chế độ bán lẻ", () => {
+  const COUNTER = { ...OPTS, canCollect: true, canPickup: true, cashAccounts: [{ value: 5, label: "Quỹ tiền mặt", type: "CASH" as const }] };
+  const api = (post?: { url: string; res: unknown }) => apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+    if (post && url === post.url && init?.method === "POST") return post.res;
+    if (url.startsWith("/api/partner-lists/customers/search")) return [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt" }];
+    if (url.startsWith("/api/products/search")) return [PRODUCT];
+    if (url.startsWith("/api/orders/pricing")) return pricing;
+    return [];
+  });
+
+  it("tiền phải thu = hàng − chiết khấu cả đơn + phí vận chuyển; gửi kèm ghi chú dòng", async () => {
+    api({ url: "/api/orders", res: { id: 5, code: "DH000005" } });
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4"); // 120.000
+    await userEvent.type(screen.getByLabelText("Ghi chú dòng 1"), "Cắt 2m");
+    await userEvent.clear(screen.getByLabelText("Chiết khấu cả đơn"));
+    await userEvent.type(screen.getByLabelText("Chiết khấu cả đơn"), "20000");
+    await userEvent.clear(screen.getByLabelText("Phí vận chuyển"));
+    await userEvent.type(screen.getByLabelText("Phí vận chuyển"), "5000");
+    expect(screen.getByText(/105\.000/)).toBeInTheDocument(); // 120.000 − 20.000 + 5.000
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(posts()[0]![1].json).toMatchObject({ orderDiscount: 20000, shippingFee: 5000, lines: [{ note: "Cắt 2m", qty: 4 }] });
+  });
+
+  it("xoá trống ô phí/chiết khấu → coi là 0 (không báo lỗi)", async () => {
+    api({ url: "/api/orders", res: { id: 5, code: "DH000005" } });
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "1");
+    await userEvent.clear(screen.getByLabelText("Phí vận chuyển"));
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(posts()[0]![1].json).toMatchObject({ shippingFee: 0, orderDiscount: 0 });
+  });
+
+  it("thu tiền: số phải thu gồm cả phí vận chuyển (Thu đủ = hàng + phí)", async () => {
+    api();
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2"); // 60.000
+    await userEvent.clear(screen.getByLabelText("Phí vận chuyển"));
+    await userEvent.type(screen.getByLabelText("Phí vận chuyển"), "3000");
+    await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
+    expect(screen.getByLabelText("Số tiền thu")).toHaveValue(63000);
+  });
+
+  it("chế độ bán lẻ: tiêu đề + khách lẻ + giao ngay + thu tiền mặt sẵn, ẩn ngày giao/Thông tin khác, có link về Đơn thường", async () => {
+    api({ url: "/api/orders", res: { id: 9, code: "DH000009" } });
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice retail />);
+    expect(screen.getByRole("heading", { name: "Bán lẻ tại quầy" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Ngày giao dự kiến/)).toBeNull();
+    expect(screen.queryByText("Thông tin khác")).toBeNull();
+    expect(screen.getByLabelText(/Khách tự chở/)).toBeChecked();
+    expect(screen.getByLabelText("Hình thức thanh toán")).toHaveValue("CASH");
+    expect(screen.getByRole("link", { name: /Đơn thường/ })).toHaveAttribute("href", "/sales/orders/new");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2"); // 60.000
+    await userEvent.click(screen.getByRole("button", { name: "Thu tiền & lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/9"));
+    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "", phone: "" }, pickupNow: true, payment: { amount: 60000, cashAccountId: 5 } });
+  });
+
+  it("chế độ thường có link sang Bán lẻ tại quầy (khi có quyền thu tiền); thiếu quyền thì không có", () => {
+    api();
+    const { unmount } = render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    expect(screen.getByRole("link", { name: /Bán lẻ tại quầy/ })).toHaveAttribute("href", "/sales/orders/new?mode=retail");
+    unmount();
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    expect(screen.queryByRole("link", { name: /Bán lẻ tại quầy/ })).toBeNull();
+  });
+});

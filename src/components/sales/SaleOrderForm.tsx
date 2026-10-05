@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Trash2, UserRound, Wallet } from "lucide-react";
+import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Store, Trash2, UserRound, Wallet } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
@@ -16,7 +17,7 @@ import type { SaleFormOptions } from "@/server/sales/form-options";
 import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSchema, type SaleOrderInput } from "@/server/sales/schemas";
 import type { SalePricingDTO } from "@/server/sales/pricing";
 
-const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null } as unknown as SaleOrderInput["lines"][number];
+const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null, note: "" } as unknown as SaleOrderInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -34,15 +35,16 @@ export interface SaleOrderEdit {
   defaults: SaleOrderInput;
 }
 
-export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: string; canEditPrice: boolean; edit?: SaleOrderEdit; options: SaleFormOptions }) {
+export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { today: string; canEditPrice: boolean; edit?: SaleOrderEdit; options: SaleFormOptions; /** Chế độ "Bán lẻ tại quầy": khách lẻ + giao ngay + thu tiền mặt mặc định, bỏ các ô ít dùng. */ retail?: boolean }) {
+  const retailOn = !!retail && !edit && options.canCollect;
   const router = useRouter();
   const idem = useIdempotencyKey();
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
     defaultValues: edit?.defaults ?? {
-      partnerId: undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine],
+      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0,
       salesUserId: options.salesUsers.some((u) => u.value === options.currentUserId) ? options.currentUserId : null,
-      warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: "NONE",
+      warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: retailOn ? "CASH" : "NONE",
     },
   });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
@@ -53,14 +55,14 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
 
   // Bán tại quầy: khách lẻ / thu tiền ngay / giao ngay (chỉ khi LẬP đơn mới và có quyền thu tiền)
   const canCheckout = !edit && options.canCollect;
-  const [walkIn, setWalkIn] = useState(false);
+  const [walkIn, setWalkIn] = useState(retailOn);
   const [walkName, setWalkName] = useState("");
   const [walkPhone, setWalkPhone] = useState("");
-  const [pickupNow, setPickupNow] = useState(false);
-  const [payKind, setPayKind] = useState<"NONE" | "CASH" | "TRANSFER" | "COD">("NONE");
+  const [pickupNow, setPickupNow] = useState(retailOn && options.canPickup);
+  const [payKind, setPayKind] = useState<"NONE" | "CASH" | "TRANSFER" | "COD">(retailOn ? "CASH" : "NONE");
   const [payAmount, setPayAmount] = useState("");
   const [amountTouched, setAmountTouched] = useState(false);
-  const [payAccount, setPayAccount] = useState<number | null>(null);
+  const [payAccount, setPayAccount] = useState<number | null>(() => { const c = retailOn ? options.cashAccounts.find((a) => a.type === "CASH") : undefined; return c ? Number(c.value) : null; });
   const [payNote, setPayNote] = useState("");
   // Khách lẻ chưa có hồ sơ: gợi ý giá lấy theo "giá gần nhất của bất kỳ khách" (id không tồn tại ⇒ không có giá riêng)
   const pricingPartnerId = walkIn ? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
@@ -141,7 +143,10 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
   };
-  const total = lines.reduce((sum, l) => sum + round2(num(l?.qty) * num(l?.salePrice)) - num(l?.discountNow), 0);
+  const linesTotal = lines.reduce((sum, l) => sum + round2(num(l?.qty) * num(l?.salePrice)) - num(l?.discountNow), 0);
+  const orderDiscount = num(watch("orderDiscount"));
+  const shippingFee = num(watch("shippingFee"));
+  const total = round2(linesTotal - orderDiscount + shippingFee);
   const accounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "CASH" : a.type === "BANK"));
   const paid = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
   const changeKind = (k: typeof payKind) => {
@@ -156,7 +161,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
   const toggleWalkIn = (on: boolean) => {
     setWalkIn(on); setCustomer(null);
     setValue("partnerId", on ? 1 : (undefined as never), { shouldDirty: true });
-    setPickupNow(on);
+    setPickupNow(on && options.canPickup);
     if (on && (payKind === "NONE" || payKind === "COD")) changeKind("CASH");
     if (!on) changeKind("NONE");
   };
@@ -178,9 +183,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
 
   // Một trang, các thẻ: khách hàng | thông tin chung ở trên, danh sách sản phẩm ở dưới — lập đơn không phải chuyển tab.
   return (
-    <NewPage wide backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Tạo đơn hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={runWith("save")}
+    <NewPage wide backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : retailOn ? "Bán lẻ tại quầy" : "Tạo đơn hàng"} submitLabel={edit ? "Lưu thay đổi" : retailOn ? "Thu tiền & lập đơn" : "Lập đơn"} isDirty={() => isDirty} onSubmit={runWith("save")}
       headerActions={(run, pending) => (
         <>
+          {!edit && options.canCollect && (
+            <Link href={retailOn ? "/sales/orders/new" : "/sales/orders/new?mode=retail"} className="inline-flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover md:h-10"><Store size={16} aria-hidden /> {retailOn ? "Đơn thường" : "Bán lẻ tại quầy"}</Link>
+          )}
           {!edit && !walkIn && (
             <button type="button" disabled={pending} onClick={() => run(runWith("draft"))} className="inline-flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10"><Save size={16} aria-hidden /> Lưu nháp</button>
           )}
@@ -196,7 +204,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
           )}
         </>
       )}>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className={retailOn ? "grid gap-4 lg:grid-cols-2" : "grid gap-4 lg:grid-cols-3"}>
         <section className={card}>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin khách hàng</h2>
@@ -241,9 +249,11 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
             <Field id="date" label="Ngày đơn" required error={errors.date?.message}>
               <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
             </Field>
-            <Field id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message}>
-              <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
-            </Field>
+            {!retailOn && (
+              <Field id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message}>
+                <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
+              </Field>
+            )}
           </div>
           <div className="mt-4">
             <Field id="note" label="Ghi chú" error={errors.note?.message}>
@@ -251,7 +261,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
             </Field>
           </div>
         </section>
-        <section className={card}>
+        {!retailOn && <section className={card}>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal size={16} aria-hidden className="text-accent" /> Thông tin khác</h2>
           <div className="space-y-4">
             <Field id="salesUserId" label="Nhân viên bán">
@@ -274,7 +284,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
               </Field>
             )}
           </div>
-        </section>
+        </section>}
       </div>
 
       <section className={card}>
@@ -291,12 +301,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
         </div>
         {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="line-table w-full min-w-[1100px] text-sm">
+          <table className="line-table w-full min-w-[1250px] text-sm">
             <thead>
               <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
                 <th className="w-12 px-2 py-2 text-center">STT</th><th className="px-2 py-2">Sản phẩm <span className="text-danger">*</span></th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL <span className="text-danger">*</span></th>
                 <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">CK trừ ngay</th><th className="px-2 py-2 text-right">CK tích lũy</th>
-                <th className="px-2 py-2">Gia công</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2 text-center">Thao tác</th>
+                <th className="px-2 py-2">Gia công</th><th className="px-2 py-2">Ghi chú</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -310,9 +320,18 @@ export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: s
           </table>
         </div>
         {errors.lines?.message && <p role="alert" className="mt-2 text-sm text-danger">{errors.lines.message}</p>}
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-4 border-t border-border pt-3">
           <p className="text-sm">Tổng số dòng: <span className="font-semibold tabular">{lineCount}</span></p>
-          <p className="text-sm font-semibold">Tiền phải thu <span className="ml-3 text-xl text-accent tabular">{formatCurrency(total)}</span></p>
+          <div className="flex flex-wrap items-end gap-4">
+            <p className="text-sm text-fg-secondary">Tiền hàng <span className="ml-1 font-semibold text-fg tabular">{formatCurrency(linesTotal)}</span></p>
+            <Field id="orderDiscount" label="Chiết khấu cả đơn" className="w-36" error={errors.orderDiscount?.message}>
+              <input id="orderDiscount" type="number" min={0} step="any" {...register("orderDiscount", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${inputClass(errors.orderDiscount)} tabular text-right`} />
+            </Field>
+            <Field id="shippingFee" label="Phí vận chuyển" className="w-36" error={errors.shippingFee?.message}>
+              <input id="shippingFee" type="number" min={0} step="any" {...register("shippingFee", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${inputClass(errors.shippingFee)} tabular text-right`} />
+            </Field>
+            <p className="text-sm font-semibold">Tiền phải thu <span className="ml-3 text-xl text-accent tabular">{formatCurrency(total)}</span></p>
+          </div>
         </div>
         <p className="mt-2 text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
       </section>
@@ -431,6 +450,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
           {processingTypes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </td>
+      <td data-label="Ghi chú" className="px-2 py-2"><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={`${inputClass(err?.note)} min-w-36`} /></td>
       <td data-label="Thành tiền" className="px-2 py-2 text-right tabular">{formatCurrency(amount)}</td>
       <td data-action className="px-2 py-2 text-center"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9"><Trash2 size={16} aria-hidden /></button></td>
     </tr>

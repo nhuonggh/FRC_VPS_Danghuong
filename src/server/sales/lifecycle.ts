@@ -8,7 +8,7 @@ import { DomainError } from "@/server/http/errors";
 import {
   docTimestamp, PeriodClosedError, postIssue, productsOfDocument, removeDocument, withInventoryTx, type EngineCtx,
 } from "@/server/inventory";
-import { assertPrices, assertWriter, loadCustomer, orderExtras, planLines, type PlannedLine } from "./service";
+import { allocateOrderDiscount, assertPrices, assertWriter, loadCustomer, orderExtras, planLines, type PlannedLine } from "./service";
 import type { SaleOrderInput } from "./schemas";
 
 type Tx = Prisma.TransactionClient;
@@ -108,10 +108,12 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   if (removed.length) await tx.saleOrderLine.deleteMany({ where: { id: { in: removed.map((l) => l.id) } } });
 
   const accum = new Map<number, Prisma.Decimal>();
-  for (const l of lines) {
+  const extras = await orderExtras(tx, actor, input, "edit");
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? Number(order.orderDiscount));
+  for (const [li, l] of lines.entries()) {
     const data = {
       productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
-      salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow), discountAccum: D(l.input.discountAccum),
+      salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
       processingTypeId: l.input.processingTypeId, bomVersionId: l.bomVersionId, at,
     };
     const row = l.input.id === undefined
@@ -130,7 +132,7 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   await tx.saleOrder.update({
     where: { id },
     data: {
-      partnerId: input.partnerId, orderDate: at, note: input.note || null, ...(await orderExtras(tx, actor, input, "edit")),
+      partnerId: input.partnerId, orderDate: at, note: input.note || null, ...extras,
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate),
       // Người dùng chủ động dời lịch giao ⇒ coi là ngày giao gốc mới (CHECK: dự kiến ≥ gốc)
       ...(expectedChanged ? { originalDeliveryDate: dateOnly(input.expectedDeliveryDate) } : {}),
@@ -248,15 +250,17 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
     return !!cur && cur.productId === l.input.productId && cur.unit === l.input.unit && cur.salePrice.eq(l.input.salePrice);
   });
   await tx.saleOrderLine.deleteMany({ where: { orderId: id } });
+  const extras = await orderExtras(tx, actor, input, "edit");
+  const shares = allocateOrderDiscount(planned, extras.orderDiscount ?? Number(order.orderDiscount));
   await tx.saleOrder.update({
     where: { id },
     data: {
-      partnerId: input.partnerId, note: input.note || null, ...(await orderExtras(tx, actor, input, "edit")),
+      partnerId: input.partnerId, note: input.note || null, ...extras,
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
       lines: {
-        create: planned.map((l) => ({
+        create: planned.map((l, i) => ({
           productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
-          discountNow: D(l.input.discountNow), discountAccum: D(l.input.discountAccum), processingTypeId: l.input.processingTypeId, at: now,
+          discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, at: now,
         })),
       },
     },

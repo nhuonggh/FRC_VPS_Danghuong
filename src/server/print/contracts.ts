@@ -33,14 +33,14 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       if (o.isDraft) throw new DomainError("Đơn nháp chưa xác nhận — chưa in hóa đơn được.", 409);
       const lines = o.lines.map((l, i) => ({
         no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.salePrice),
-        discountNow: money(l.discountNow), discountAccum: money(l.discountAccum), amount: money(l.lineAmount), processing: l.processingType ?? "",
+        discountNow: money(l.discountNow), discountAccum: money(l.discountAccum), amount: money(l.lineAmount), processing: l.processingType ?? "", note: l.note ?? "",
       }));
       const total = o.orderTotal ?? "0"; const deposit = (await orderPaid(db, docId)).toString(); // cọc + thu nợ theo đơn + tiền lái xe đã thu
       return {
         docCode: o.code, partner: await partnerOf(db, o.partnerId),
         doc: { code: o.code, date: formatDate(o.orderDate), expectedDelivery: formatDate(o.expectedDeliveryDate), note: o.note ?? "", createdBy: o.createdByName ?? "", status: o.isCancelled ? "ĐÃ HỦY" : "" },
         lines,
-        totals: { discountNow: money(sum(o.lines.map((l) => l.discountNow))), discountAccum: money(sum(o.lines.map((l) => l.discountAccum))), total: money(total), paid: money(deposit), remaining: money(D(total).minus(deposit).toString()) },
+        totals: { shippingFee: money(o.shippingFee ?? "0"), orderDiscount: money(o.orderDiscount ?? "0"), discountNow: money(sum(o.lines.map((l) => l.discountNow))), discountAccum: money(sum(o.lines.map((l) => l.discountAccum))), total: money(total), paid: money(deposit), remaining: money(D(total).minus(deposit).toString()) },
       };
     }
     case "QUOTE": {
