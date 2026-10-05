@@ -17,6 +17,7 @@ model User {
 
   roles           UserRole[]
   ownedPartners   Partner[]        @relation("PartnerOwner")
+  salesOrders     SaleOrder[]      @relation("SaleOrderSalesUser")
   userPreferences UserPreference[]
 
   @@map("users")

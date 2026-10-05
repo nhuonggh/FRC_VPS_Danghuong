@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const SALE_MAX_LINES = 200;
+export const SALE_PAYMENT_METHODS = ["NONE", "CASH", "TRANSFER", "COD"] as const;
+export const SALE_PAYMENT_LABELS: Record<(typeof SALE_PAYMENT_METHODS)[number], string> = { NONE: "Không", CASH: "Tiền mặt", TRANSFER: "Chuyển khoản", COD: "Thu hộ khi giao (COD)" };
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ.").refine((s) => {
   const d = new Date(`${s}T00:00:00Z`);
@@ -36,6 +38,12 @@ export const saleOrderSchema = z
     date: ymd,
     expectedDeliveryDate: ymd,
     note: z.string().trim().max(500),
+    /** Người bán: bỏ trống khi tạo = người lập; khi sửa bỏ trống = giữ nguyên; null = xoá. */
+    salesUserId: z.number().int().positive().nullable().optional(),
+    /** Kho xuất ghi trên đơn (thông tin). null = không ghi kho; bỏ trống khi sửa = giữ nguyên. */
+    warehouseId: z.number().int().positive().nullable().optional(),
+    /** Hình thức thanh toán dự kiến — không sinh phiếu thu. Bỏ trống = không đổi (đơn mới: NONE). */
+    paymentMethod: z.enum(SALE_PAYMENT_METHODS).optional(),
     lines: z.array(saleLineSchema).min(1, "Nhập ít nhất một dòng hàng.").max(SALE_MAX_LINES, `Tối đa ${SALE_MAX_LINES} dòng.`),
   })
   .superRefine((o, ctx) => {

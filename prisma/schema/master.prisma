@@ -80,6 +80,7 @@ model Product {
   isActive    Boolean     @default(true)
   recomputing Boolean     @default(false) // engine đang tính lại chuỗi nền → chặn xuất mã này
   note        String?
+  imageUrl    String? // ảnh minh hoạ (https hoặc /uploads/…), hiện ở form bán hàng
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -120,6 +121,8 @@ model Warehouse {
   id       Int     @id @default(autoincrement())
   name     String  @unique
   isActive Boolean @default(true)
+
+  saleOrders SaleOrder[]
 
   @@map("warehouses")
 }

@@ -36,6 +36,12 @@ model SaleOrder {
   paymentStatus        PaymentStatus  @default(UNPAID)
   /// Đơn nháp (từ báo giá): CHƯA xuất kho, chưa công nợ. Xác nhận ⇒ xuất kho FIFO (D-25). Chỉ đơn nháp mới xoá hẳn được (34c).
   isDraft              Boolean        @default(false)
+  /// Người bán phụ trách đơn (mặc định = người lập). Chỉ để hiển thị/báo cáo, không ảnh hưởng quyền.
+  salesUserId          Int?
+  /// Kho xuất ghi trên đơn (thông tin; sổ kho FIFO hiện chỉ có một kho logic).
+  warehouseId          Int?
+  /// Hình thức thanh toán dự kiến — KHÔNG sinh phiếu thu; trạng thái thanh toán vẫn theo phiếu thu/công nợ.
+  paymentMethod        SalePaymentMethod @default(NONE)
   /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.
   orderDate            DateTime
   expectedDeliveryDate DateTime       @db.Date
@@ -51,6 +57,8 @@ model SaleOrder {
 
   period       Period          @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner      Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  salesUser    User?           @relation("SaleOrderSalesUser", fields: [salesUserId], references: [id], onDelete: SetNull)
+  warehouse    Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   lines        SaleOrderLine[]
   deliveries   DeliveryNote[]
   quote        Quote?          @relation("QuoteConverted")
@@ -321,4 +329,13 @@ model GoodsReturnLine {
   @@index([productId])
   @@index([orderLineId])
   @@map("goods_return_lines")
+}
+
+enum SalePaymentMethod {
+  NONE
+  CASH
+  TRANSFER
+  COD
+
+  @@map("sale_payment_method")
 }
