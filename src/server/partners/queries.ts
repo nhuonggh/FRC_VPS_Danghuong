@@ -39,8 +39,8 @@ export async function getPartner(db: Db, actor: Actor, id: number, kind?: Partne
   return toDto(row);
 }
 export async function searchPartners(db: Db, actor: Actor, opts: { q?: string; kind: PartnerKind; limit?: number }) {
-  const rows = await db.partner.findMany({ where: { AND: [{ mergedIntoId: null, isActive: true }, opts.kind === "customer" ? { isCustomer: true } : { isSupplier: true }, partnerScopeWhere(actor), searchTextWhere(opts.q)] }, orderBy: { name: "asc" }, take: Math.min(Math.max(opts.limit ?? 20, 1), 50), select: { id: true, code: true, name: true, phone: true } });
-  return rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}`, hint: r.phone ?? undefined }));
+  const rows = await db.partner.findMany({ where: { AND: [{ mergedIntoId: null, isActive: true }, opts.kind === "customer" ? { isCustomer: true } : { isSupplier: true }, partnerScopeWhere(actor), searchTextWhere(opts.q)] }, orderBy: { name: "asc" }, take: Math.min(Math.max(opts.limit ?? 20, 1), 50), select: { id: true, code: true, name: true, phone: true, address: true } });
+  return rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}`, hint: r.phone ?? undefined, address: r.address ?? undefined }));
 }
 const MAX_EXPORT = 50_000;
 export async function exportPartnersXlsx(db: Db, actor: Actor, params: ListParams, kind: PartnerKind): Promise<Buffer> {

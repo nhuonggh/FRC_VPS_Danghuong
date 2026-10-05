@@ -1,15 +1,19 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
 import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { QuickCustomerDialog, type QuickCustomer } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
+import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { ProductOption } from "@/server/products/queries";
-import { SALE_MAX_LINES, saleOrderSchema, type SaleOrderInput } from "@/server/sales/schemas";
+import type { SaleFormOptions } from "@/server/sales/form-options";
+import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSchema, type SaleOrderInput } from "@/server/sales/schemas";
 import type { SalePricingDTO } from "@/server/sales/pricing";
 
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null } as unknown as SaleOrderInput["lines"][number];
@@ -23,17 +27,23 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 export interface SaleOrderEdit {
   orderId: number;
   code: string;
+  /** Đơn nháp: chưa xuất kho → không có nút In, "Lưu thay đổi" chỉ sửa nháp. */
+  isDraft?: boolean;
   customer: ComboOption;
   products: ProductOption[];
   defaults: SaleOrderInput;
 }
 
-export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; canEditPrice: boolean; edit?: SaleOrderEdit }) {
+export function SaleOrderForm({ today, canEditPrice, edit, options }: { today: string; canEditPrice: boolean; edit?: SaleOrderEdit; options: SaleFormOptions }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
-    defaultValues: edit?.defaults ?? { partnerId: undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine] },
+    defaultValues: edit?.defaults ?? {
+      partnerId: undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine],
+      salesUserId: options.salesUsers.some((u) => u.value === options.currentUserId) ? options.currentUserId : null,
+      warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: "NONE",
+    },
   });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
   // keyName riêng: khoá `id` của dòng đơn (khi sửa) không được bị useFieldArray ghi đè
@@ -77,14 +87,24 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     });
   }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = handleSubmit(async (value) => {
+  // Sau khi lưu: tuỳ chọn in hóa đơn (lỗi in không làm mất đơn đã lập — báo rồi vẫn sang trang chi tiết)
+  const finish = async (id: number, print: boolean) => {
+    if (print) {
+      try {
+        const r = await apiFetch<{ url: string }>(`/api/print/SALE_INVOICE/${id}`, { method: "POST" });
+        window.open(r.url, "_blank", "noopener,noreferrer");
+      } catch (e) { toast.error(`Đã lưu đơn nhưng chưa in được: ${e instanceof Error ? e.message : "lỗi không xác định"}`); }
+    }
+    router.replace(`/sales/orders/${id}`);
+  };
+  const submitWith = (mode: "save" | "print" | "draft") => handleSubmit(async (value) => {
     if (edit) {
       await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
-      router.replace(`/sales/orders/${edit.orderId}`);
+      await finish(edit.orderId, mode === "print" && !edit.isDraft);
       return;
     }
-    const r = await apiFetch<{ id: number }>("/api/orders", { method: "POST", json: value, idempotencyKey: idem.key });
-    router.replace(`/sales/orders/${r.id}`);
+    const r = await apiFetch<{ id: number }>(mode === "draft" ? "/api/orders/draft" : "/api/orders", { method: "POST", json: value, idempotencyKey: idem.key });
+    await finish(r.id, mode === "print");
   });
 
   const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyLine, qtyLabel: (i) => `Số lượng dòng ${i + 1}`, max: SALE_MAX_LINES });
@@ -100,38 +120,116 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
     return rows;
   };
 
-  // Một trang: thông tin chung ở trên, dòng hàng ở dưới — lập đơn không phải chuyển qua lại giữa các tab.
-  return (
-    <NewPage backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Bán hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-    <div className="space-y-6">
-      <div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Controller control={control} name="partnerId" render={({ field }) => (
-            <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
-              onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
-          )} />
-          <Field id="date" label="Ngày đơn" required error={errors.date?.message}>
-            <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
-          </Field>
-          <Field id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message}>
-            <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
-          </Field>
-        </div>
-        <Field id="note" label="Ghi chú" error={errors.note?.message}>
-          <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
-      <div className="space-y-3 border-t border-border pt-5">
-        <h2 className="text-sm font-semibold">Dòng hàng</h2>
-        {!canEditPrice && <p className="text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
+  const runWith = (mode: "save" | "print" | "draft") => async () => { entry.dropEmptyLines(); await submitWith(mode)(); };
+  const canPrint = options.canPrint && !edit?.isDraft;
+  const [quickKey, setQuickKey] = useState(0);
+  const [printMenu, setPrintMenu] = useState(false);
+  const addQuick = (p: ComboOption | null) => { if (!p) return; addProducts([p as ProductOption]); setQuickKey((k) => k + 1); };
+  const lineCount = lines.filter((l) => l?.productId).length;
+  const customerInfo = customer as (ComboOption & { address?: string }) | null;
+  const card = "rounded-sm border border-border bg-surface p-4";
 
+  // Một trang, các thẻ: khách hàng | thông tin chung ở trên, danh sách sản phẩm ở dưới — lập đơn không phải chuyển tab.
+  return (
+    <NewPage wide backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : "Tạo đơn hàng"} submitLabel={edit ? "Lưu thay đổi" : "Lập đơn"} isDirty={() => isDirty} onSubmit={runWith("save")}
+      headerActions={(run, pending) => (
+        <>
+          {!edit && (
+            <button type="button" disabled={pending} onClick={() => run(runWith("draft"))} className="inline-flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10"><Save size={16} aria-hidden /> Lưu nháp</button>
+          )}
+          {canPrint && (
+            <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setPrintMenu(false); }}>
+              <button type="button" disabled={pending} aria-haspopup="menu" aria-expanded={printMenu} onClick={() => setPrintMenu((o) => !o)} className="inline-flex h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10"><Printer size={16} aria-hidden /> In đơn hàng <ChevronDown size={14} aria-hidden /></button>
+              {printMenu && (
+                <div role="menu" className="absolute right-0 z-dropdown mt-1 min-w-56 rounded-sm border border-border bg-raised p-1 shadow-lg">
+                  <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); run(runWith("print")); }} className="flex h-11 w-full items-center gap-2 rounded-sm px-3 text-left text-sm hover:bg-hover md:h-9">{edit ? "Lưu thay đổi và in hóa đơn" : "Lập đơn và in hóa đơn"}</button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <section className={card}>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin khách hàng</h2>
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Controller control={control} name="partnerId" render={({ field }) => (
+                <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
+                  onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
+              )} />
+            </div>
+            {options.canCreateCustomer && !edit && (
+              <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
+            )}
+          </div>
+          {customerInfo && (customerInfo.hint || customerInfo.address) && (
+            <dl className="mt-3 space-y-1 rounded-sm bg-hover p-3 text-sm">
+              {customerInfo.hint && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">SĐT:</dt><dd>{customerInfo.hint}</dd></div>}
+              {customerInfo.address && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">Địa chỉ:</dt><dd>{customerInfo.address}</dd></div>}
+            </dl>
+          )}
+        </section>
+        <section className={card}>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText size={16} aria-hidden className="text-accent" /> Thông tin chung</h2>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Field id="date" label="Ngày đơn" required error={errors.date?.message}>
+              <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
+            </Field>
+            <Field id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message}>
+              <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field id="note" label="Ghi chú" error={errors.note?.message}>
+              <textarea id="note" rows={2} placeholder="Nhập ghi chú về đơn hàng…" {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+            </Field>
+          </div>
+        </section>
+        <section className={card}>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal size={16} aria-hidden className="text-accent" /> Thông tin khác</h2>
+          <div className="space-y-4">
+            <Field id="salesUserId" label="Nhân viên bán">
+              <select id="salesUserId" value={watch("salesUserId") ?? ""} onChange={(e) => setValue("salesUserId", e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
+                <option value="">— Không chọn —</option>
+                {options.salesUsers.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+            </Field>
+            <Field id="warehouseId" label="Kho xuất">
+              <select id="warehouseId" value={watch("warehouseId") ?? ""} onChange={(e) => setValue("warehouseId", e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
+                <option value="">— Không chọn —</option>
+                {options.warehouses.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+              </select>
+            </Field>
+            <Field id="paymentMethod" label="Hình thức thanh toán">
+              <select id="paymentMethod" {...register("paymentMethod")} className={inputClass()}>
+                {SALE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{SALE_PAYMENT_LABELS[m]}</option>)}
+              </select>
+            </Field>
+          </div>
+        </section>
+      </div>
+
+      <section className={card}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart size={16} aria-hidden className="text-accent" /> Danh sách sản phẩm</h2>
+          <div className="flex min-w-0 flex-1 flex-wrap items-end justify-end gap-2">
+            <div className="min-w-56 max-w-md flex-1">
+              <Combobox key={quickKey} label="Tìm sản phẩm nhanh" value={null} loadOptions={loadProducts} placeholder="Tìm sản phẩm (mã, tên…)" onChange={addQuick} disabled={fields.length >= SALE_MAX_LINES} />
+            </div>
+            <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
+              className="inline-flex h-11 items-center gap-1 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-40 md:h-10"><Plus size={16} aria-hidden /> Thêm dòng</button>
+            <ProductMultiPicker load={loadProducts} disabled={fields.length >= SALE_MAX_LINES} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
+          </div>
+        </div>
+        {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="line-table w-full min-w-[1050px] text-sm">
+          <table className="line-table w-full min-w-[1100px] text-sm">
             <thead>
               <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-                <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL</th>
+                <th className="w-12 px-2 py-2 text-center">STT</th><th className="px-2 py-2">Sản phẩm <span className="text-danger">*</span></th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL <span className="text-danger">*</span></th>
                 <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">CK trừ ngay</th><th className="px-2 py-2 text-right">CK tích lũy</th>
-                <th className="px-2 py-2">Gia công</th><th className="px-2 py-2 text-right">Thành tiền</th><th aria-label="Thao tác" />
+                <th className="px-2 py-2">Gia công</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -142,23 +240,15 @@ export function SaleOrderForm({ today, canEditPrice, edit }: { today: string; ca
                   processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-hover font-semibold">
-                <td colSpan={7} className="px-2 py-3 text-right">Tiền phải thu</td>
-                <td className="px-2 py-3 text-right tabular">{formatCurrency(total)}</td><td />
-              </tr>
-            </tfoot>
           </table>
         </div>
-        {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
-            className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10">+ Thêm dòng</button>
-          <ProductMultiPicker load={loadProducts} disabled={fields.length >= SALE_MAX_LINES} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
+        {errors.lines?.message && <p role="alert" className="mt-2 text-sm text-danger">{errors.lines.message}</p>}
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+          <p className="text-sm">Tổng số dòng: <span className="font-semibold tabular">{lineCount}</span></p>
+          <p className="text-sm font-semibold">Tiền phải thu <span className="ml-3 text-xl text-accent tabular">{formatCurrency(total)}</span></p>
         </div>
-        <p className="text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
-      </div>
-    </div>
+        <p className="mt-2 text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
+      </section>
     </NewPage>
   );
 }
@@ -183,7 +273,10 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
 
   return (
     <tr className="border-b border-border align-top last:border-b-0">
-      <td className="min-w-64 px-2 py-2" data-line-product={index} data-label="Sản phẩm" data-wide>
+      <td className="min-w-72 px-2 py-2" data-line-product={index} data-label="Sản phẩm" data-wide>
+        <div className="flex items-start gap-2">
+        <ProductThumb url={product?.imageUrl} name={product?.label} />
+        <div className="min-w-0 flex-1">
         <Controller control={control} name={`lines.${index}.productId`} render={({ field }) => (
           <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={err?.productId?.message}
             onChange={(o) => {
@@ -196,6 +289,8 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
             }} />
         )} />
         {duplicateOf > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {duplicateOf}</p>}
+        </div>
+        </div>
         <div className="mt-1 space-y-0.5 text-xs text-fg-secondary">
           {dto?.onHand !== undefined && <p>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</p>}
           {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
@@ -229,7 +324,14 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
         </select>
       </td>
       <td data-label="Thành tiền" className="px-2 py-2 text-right tabular">{formatCurrency(amount)}</td>
-      <td data-action className="px-2 py-2"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button></td>
+      <td data-action className="px-2 py-2 text-center"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9"><Trash2 size={16} aria-hidden /></button></td>
     </tr>
   );
+}
+
+/** Ảnh sản phẩm 40px (hoặc khung trống có icon). Ảnh lỗi → quay về khung trống. */
+function ProductThumb({ url, name }: { url?: string | null; name?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (url && !failed) return <img src={url} alt={name ?? ""} loading="lazy" onError={() => setFailed(true)} className="mt-5 h-10 w-10 shrink-0 rounded-sm border border-border object-cover" />;
+  return <span aria-hidden className="mt-5 flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-border bg-hover text-fg-muted"><Package size={18} /></span>;
 }

@@ -27,12 +27,16 @@ interface Props {
   tabs?: FormTab[];
   /** Khoá các tab có lỗi validate (xem `tabsWithErrors`) — hiện chấm đỏ; bấm Lưu mà còn lỗi ⇒ nhảy tới tab lỗi đầu tiên. */
   errorTabs?: readonly string[];
+  /** Bố cục rộng: bỏ aside + khung bọc, `children` tự dựng các thẻ (vd. form lập đơn). */
+  wide?: boolean;
+  /** Chỉ với `wide`: nút ở đầu trang (cạnh tiêu đề). `run(fn)` chạy một hành động với cùng cơ chế chống bấm đúp + banner lỗi như nút gửi chính. */
+  headerActions?: (run: (action: () => Promise<void>) => void, pending: boolean) => React.ReactNode;
   children?: React.ReactNode;
 }
 
 const DISCARD_CONFIRM = { title: "Bỏ thay đổi chưa lưu?", confirmLabel: "Bỏ thay đổi", danger: true } as const;
 
-export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], children }: Props) {
+export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], wide, headerActions, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,13 +65,13 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
     router.push(backHref);
   }
 
-  async function submit() {
+  async function submit(action: () => Promise<void> = onSubmit) {
     if (busy.current) return;
     busy.current = true;
     setPending(true);
     setError(null);
     try {
-      await onSubmit();
+      await action();
       // Form kiểm tra lỗi xong (handleSubmit không ném khi invalid): còn lỗi ở tab khác ⇒ nhảy tới tab lỗi đầu tiên.
       // Chờ 1 nhịp để `errorTabs` (từ formState.errors) kịp cập nhật.
       if (tabs) {
@@ -104,6 +108,15 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError(null)}><X size={16} aria-hidden /></button>
         </div>
       )}
+      {wide ? (
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-xl font-semibold">{title}</h1>
+            {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}
+          </div>
+          {children}
+        </div>
+      ) : (
       <div className="grid flex-1 gap-4 lg:min-h-[calc(100dvh-16rem)] lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside className={clsx("rounded-sm border border-border bg-surface", !tabs && "p-4")}>
           <h1 className={clsx("text-lg font-semibold", tabs && "p-4")}>{title}</h1>
@@ -121,6 +134,7 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           <div className="min-w-0 rounded-sm border border-border bg-surface p-4 sm:p-6">{children}</div>
         )}
       </div>
+      )}
       {/* Footer sticky đáy vùng cuộn (không absolute/fixed che nội dung). Sticky bám mép vùng cuộn, còn BottomNav
           (fixed, z cao hơn) phủ lên đáy vùng đó ở < md → dính CÁCH đáy đúng chiều cao BottomNav (BOTTOM_NAV_OFFSET).
           `pb-20` của vùng cuộn chỉ chừa chỗ cho cuối trang, không giữ footer khỏi bị BottomNav che. */}

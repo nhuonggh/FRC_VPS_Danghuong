@@ -12,6 +12,7 @@ vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 const PRODUCT = { value: 10, label: "TX01 — Tôn xốp", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] };
+const OPTS = { currentUserId: 1, salesUsers: [{ value: 1, label: "Nguyễn Văn A" }, { value: 2, label: "Trần B" }], warehouses: [{ value: 1, label: "Kho chính" }], groups: [{ value: 3, label: "Khách lẻ" }], canCreateCustomer: true, canPrint: true };
 let pricing: unknown;
 
 beforeEach(() => {
@@ -39,14 +40,14 @@ const posts = () => apiFetch.mock.calls.filter((c) => c[0] === "/api/orders");
 
 describe("SaleOrderForm (/sales/orders/new)", () => {
   it("thiếu khách/sản phẩm/số lượng → báo lỗi, KHÔNG gọi POST", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     await waitFor(() => expect(document.querySelectorAll('[aria-invalid="true"]').length).toBeGreaterThan(0));
     expect(posts()).toHaveLength(0);
   });
 
   it("có quyền sửa giá: gợi ý tồn + giá gần nhất, gửi POST kèm Idempotency-Key rồi mở đơn vừa lập", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
     await pick("Sản phẩm dòng 1", "ton");
     expect(await screen.findByText(/Tồn: 10 md/)).toBeInTheDocument();
@@ -62,7 +63,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   });
 
   it("thiếu quyền sửa giá: ô đơn giá chỉ đọc và luôn bằng giá gợi ý", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice={false} />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice={false} />);
     await pick("Khách hàng", "dat");
     await pick("Sản phẩm dòng 1", "ton");
     const price = screen.getByLabelText("Đơn giá dòng 1");
@@ -72,7 +73,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
   });
 
   it("số lượng vượt tồn → cảnh báo đơn treo nhưng VẪN cho lập", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
     await pick("Sản phẩm dòng 1", "ton");
     await screen.findByText(/Tồn: 10 md/);
@@ -82,7 +83,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
 
   it("không có quyền xem tồn/giá nhập (API không trả) → không hiện gợi ý tồn hay giá nhập", async () => {
     pricing = { productId: 10, baseUnit: "md", units: [{ unit: "md", factor: "1", suggestedPrice: null }], lastSalePrice: null, lastSalePriceForPartner: false };
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
     await pick("Sản phẩm dòng 1", "ton");
     await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).startsWith("/api/orders/pricing"))).toBe(true));
@@ -93,7 +94,7 @@ describe("SaleOrderForm (/sales/orders/new)", () => {
 
 describe("SaleOrderForm — nhập nhanh", () => {
   it("chọn SP ở dòng cuối → tự mở dòng trống mới; dòng trống cuối bị bỏ khi lập đơn", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
     await pick("Sản phẩm dòng 1", "ton");
     expect(await screen.findByLabelText("Số lượng dòng 2")).toBeInTheDocument();
@@ -104,13 +105,13 @@ describe("SaleOrderForm — nhập nhanh", () => {
   });
 
   it("Enter ở ô SL của dòng cuối → mở dòng mới và focus ô tìm sản phẩm", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4{Enter}");
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 2" })).toHaveFocus());
   });
 
   it("Chọn nhiều sản phẩm: tick trong dialog → điền vào dòng trống, ĐVT gốc, lấy giá gợi ý", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
     await userEvent.click(screen.getByRole("button", { name: "Chọn nhiều sản phẩm" }));
     const dialog = await screen.findByRole("dialog");
@@ -122,14 +123,14 @@ describe("SaleOrderForm — nhập nhanh", () => {
   });
 
   it("bảng dòng hàng có lớp line-table + nhãn cột để hiện thẻ trên mobile", () => {
-    const { container } = render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    const { container } = render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     expect(container.querySelector("table.line-table")).not.toBeNull();
     const labels = Array.from(container.querySelectorAll("tbody td[data-label]")).map((td) => td.getAttribute("data-label"));
     expect(labels).toEqual(expect.arrayContaining(["Sản phẩm", "ĐVT", "Số lượng", "Đơn giá", "Thành tiền"]));
   });
 
   it("chọn trùng SP + ĐVT → cảnh báo dòng đã có", async () => {
-    render(<SaleOrderForm today="2026-09-15" canEditPrice />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Sản phẩm dòng 1", "ton");
     await pick("Sản phẩm dòng 2", "ton");
     expect(await screen.findByText(/đã có ở dòng 1/)).toBeInTheDocument();
@@ -152,7 +153,7 @@ describe("SaleOrderForm — chế độ SỬA đơn", () => {
       if (url === "/api/orders/5" && init?.method === "PATCH") return { id: 5 };
       throw new Error(`unexpected ${url}`);
     });
-    render(<SaleOrderForm today="2026-09-15" canEditPrice edit={edit} />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice edit={edit} />);
     expect(screen.getByRole("heading", { name: /Sửa đơn DH000005/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(4);
     await userEvent.clear(screen.getByLabelText("Số lượng dòng 1"));
@@ -166,8 +167,96 @@ describe("SaleOrderForm — chế độ SỬA đơn", () => {
 
   it("thiếu quyền sửa giá: dòng cũ GIỮ giá 25.000 (không bị ép về giá gần nhất 30.000)", async () => {
     apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/orders/pricing") ? pricing : []));
-    render(<SaleOrderForm today="2026-09-15" canEditPrice={false} edit={edit} />);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice={false} edit={edit} />);
     await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).startsWith("/api/orders/pricing"))).toBe(true));
     expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(25000);
+  });
+});
+
+describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nhanh", () => {
+  it("gửi kèm nhân viên bán (mặc định người lập), kho đầu tiên, hình thức thanh toán đã chọn", async () => {
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    expect(screen.getByLabelText("Nhân viên bán")).toHaveValue("1");
+    expect(screen.getByLabelText("Kho xuất")).toHaveValue("1");
+    await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "TRANSFER");
+    await userEvent.selectOptions(screen.getByLabelText("Nhân viên bán"), "2");
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(posts()[0]![1]).toMatchObject({ json: { salesUserId: 2, warehouseId: 1, paymentMethod: "TRANSFER" } });
+  });
+
+  it("Lưu nháp → POST /api/orders/draft (không phải /api/orders) rồi mở đơn nháp", async () => {
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if (url.startsWith("/api/partner-lists/customers/search")) return [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt" }];
+      if (url.startsWith("/api/products/search")) return [PRODUCT];
+      if (url.startsWith("/api/orders/pricing")) return pricing;
+      if (url === "/api/orders/draft" && init?.method === "POST") return { id: 9, code: "DH000009" };
+      return [];
+    });
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4");
+    await userEvent.click(screen.getByRole("button", { name: /Lưu nháp/ }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/9"));
+    expect(posts()).toHaveLength(0);
+    expect(apiFetch.mock.calls.find((c) => c[0] === "/api/orders/draft")![1].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("Lập đơn và in: lập đơn rồi gọi API in hóa đơn", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if (url.startsWith("/api/partner-lists/customers/search")) return [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt" }];
+      if (url.startsWith("/api/products/search")) return [PRODUCT];
+      if (url.startsWith("/api/orders/pricing")) return pricing;
+      if (url === "/api/orders" && init?.method === "POST") return { id: 5, code: "DH000005" };
+      if (url === "/api/print/SALE_INVOICE/5") return { url: "https://docs.example/x", name: "x", replaced: false };
+      return [];
+    });
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4");
+    await userEvent.click(screen.getByRole("button", { name: /In đơn hàng/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Lập đơn và in/ }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
+    expect(open).toHaveBeenCalledWith("https://docs.example/x", "_blank", "noopener,noreferrer");
+    open.mockRestore();
+  });
+
+  it("không có quyền in / thêm khách → ẩn nút In và Thêm khách hàng", () => {
+    render(<SaleOrderForm options={{ ...OPTS, canPrint: false, canCreateCustomer: false }} today="2026-09-15" canEditPrice />);
+    expect(screen.queryByRole("button", { name: /In đơn hàng/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Thêm khách hàng/ })).toBeNull();
+  });
+
+  it("Thêm khách hàng nhanh → tạo qua /api/partners, chọn luôn khách và hiện SĐT/địa chỉ", async () => {
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if (url === "/api/partners" && init?.method === "POST") return { id: 21, code: "KH000021" };
+      return [];
+    });
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: /Thêm khách hàng/ }));
+    await userEvent.type(await screen.findByLabelText(/Tên khách hàng/), "Anh Bảy");
+    await userEvent.type(screen.getByLabelText("Số điện thoại"), "0901234567");
+    await userEvent.type(screen.getByLabelText("Địa chỉ"), "123 Đường ABC");
+    await userEvent.click(screen.getByRole("button", { name: "Thêm" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Khách hàng" })).toHaveValue("KH000021 — Anh Bảy"));
+    expect(screen.getByText("0901234567")).toBeInTheDocument();
+    expect(screen.getByText("123 Đường ABC")).toBeInTheDocument();
+    const post = apiFetch.mock.calls.find((c) => c[0] === "/api/partners")![1];
+    expect(post.json).toMatchObject({ name: "Anh Bảy", groupId: 3, isCustomer: true, isSupplier: false, phone: "0901234567", address: "123 Đường ABC" });
+  });
+
+  it("ô tìm sản phẩm nhanh thêm đúng 1 dòng và hiện ảnh sản phẩm", async () => {
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [{ ...PRODUCT, imageUrl: "https://img.example/tx01.png" }] : url.startsWith("/api/orders/pricing") ? pricing : []));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Tìm sản phẩm nhanh", "ton");
+    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 1" })).toHaveValue("TX01 — Tôn xốp");
+    expect(document.querySelector('img[src="https://img.example/tx01.png"]')).not.toBeNull();
   });
 });

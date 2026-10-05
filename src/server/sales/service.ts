@@ -3,8 +3,10 @@ import { assertCan, can } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
+import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
 import { docTimestamp, postIssue, type EngineCtx } from "@/server/inventory";
+import { getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { convertToBase, resolveFactor } from "@/server/products/units";
 import { planBomIssues } from "./issue-by-bom";
@@ -95,6 +97,62 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
   }
 }
 
+/**
+ * Người bán / kho xuất / hình thức thanh toán. Tạo mới: người bán mặc định = người lập, thanh toán NONE.
+ * Sửa: trường bỏ trống (undefined) = giữ nguyên, null = xoá. Người bán phải đang hoạt động, kho phải đang dùng.
+ */
+export async function orderExtras(tx: Db, actor: Actor, input: SaleOrderInput, mode: "create" | "edit") {
+  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]> } = {};
+  const salesUserId = input.salesUserId === undefined && mode === "create" ? actor.userId : input.salesUserId;
+  if (salesUserId !== undefined) {
+    if (salesUserId !== null && !(await tx.user.findFirst({ where: { id: salesUserId, isLocked: false }, select: { id: true } }))) throw new DomainError("Nhân viên bán không hợp lệ.", 400);
+    out.salesUserId = salesUserId;
+  }
+  if (input.warehouseId !== undefined) {
+    if (input.warehouseId !== null && !(await tx.warehouse.findFirst({ where: { id: input.warehouseId, isActive: true }, select: { id: true } }))) throw new DomainError("Kho xuất không hợp lệ.", 400);
+    out.warehouseId = input.warehouseId;
+  }
+  if (input.paymentMethod !== undefined) out.paymentMethod = input.paymentMethod;
+  return out;
+}
+
+/**
+ * Lưu NHÁP một đơn đang lập: chưa xuất kho, chưa chiết khấu tích lũy, chưa công nợ (như đơn nháp từ báo giá).
+ * Xác nhận sau bằng `confirmDraftOrderTx` (xuất kho FIFO lúc đó). Ngày đơn chốt lại lúc xác nhận.
+ */
+export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: Actor, input: SaleOrderInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
+  assertWriter(actor, "order.create");
+  if (input.lines.some((l) => l.id !== undefined)) throw new DomainError("Đơn mới không được kèm id dòng.", 400);
+  const partner = await loadCustomer(tx, actor, input.partnerId);
+  const at = docTimestamp(input.date, now);
+  const lines = await planLines(tx, input, at);
+  await assertPrices(tx, actor, input.partnerId, lines);
+  const period = await getOpenPeriod(tx);
+  const extras = await orderExtras(tx, actor, input, "create");
+  const id = await nextDocId(tx, "sale_orders");
+  const code = formatDocCode("DH", id);
+  await tx.saleOrder.create({
+    data: {
+      id, code, periodId: period.id, partnerId: input.partnerId, orderDate: at, isDraft: true,
+      expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
+      note: input.note || null, createdBy: actor.userId, ...extras,
+      lines: {
+        create: lines.map((l) => ({
+          productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
+          discountNow: D(l.input.discountNow), discountAccum: D(l.input.discountAccum), processingTypeId: l.input.processingTypeId, at,
+        })),
+      },
+    },
+  });
+  await writeAudit(tx, { userId: actor.userId, action: "sale.create_draft", entity: "SaleOrder", entityId: id, after: { code, partnerCode: partner.code, lineCount: lines.length } });
+  return { id, code };
+}
+
+export async function createDraftSaleOrderIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: SaleOrderInput, now: Date = new Date()) {
+  assertWriter(actor, "order.create");
+  return withIdempotency(prisma, { userId: actor.userId, scope: "sale.create_draft", key }, (tx) => createDraftSaleOrder(tx, actor, input, now));
+}
+
 export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleOrderInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
   assertWriter(actor, "order.create");
   if (input.lines.some((l) => l.id !== undefined)) throw new DomainError("Đơn mới không được kèm id dòng.", 400);
@@ -108,13 +166,14 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   }
   await assertPrices(tx, actor, input.partnerId, lines);
 
+  const extras = await orderExtras(tx, actor, input, "create");
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({
     data: {
       id, code, periodId: ctx.period.id, partnerId: input.partnerId, orderDate: at,
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
-      note: input.note || null, createdBy: actor.userId,
+      note: input.note || null, createdBy: actor.userId, ...extras,
     },
   });
   for (const l of lines) {

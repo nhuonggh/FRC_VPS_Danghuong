@@ -8,7 +8,7 @@ import { DomainError } from "@/server/http/errors";
 import {
   docTimestamp, PeriodClosedError, postIssue, productsOfDocument, removeDocument, withInventoryTx, type EngineCtx,
 } from "@/server/inventory";
-import { assertPrices, assertWriter, loadCustomer, planLines, type PlannedLine } from "./service";
+import { assertPrices, assertWriter, loadCustomer, orderExtras, planLines, type PlannedLine } from "./service";
 import type { SaleOrderInput } from "./schemas";
 
 type Tx = Prisma.TransactionClient;
@@ -130,7 +130,7 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   await tx.saleOrder.update({
     where: { id },
     data: {
-      partnerId: input.partnerId, orderDate: at, note: input.note || null,
+      partnerId: input.partnerId, orderDate: at, note: input.note || null, ...(await orderExtras(tx, actor, input, "edit")),
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate),
       // Người dùng chủ động dời lịch giao ⇒ coi là ngày giao gốc mới (CHECK: dự kiến ≥ gốc)
       ...(expectedChanged ? { originalDeliveryDate: dateOnly(input.expectedDeliveryDate) } : {}),
@@ -251,7 +251,7 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
   await tx.saleOrder.update({
     where: { id },
     data: {
-      partnerId: input.partnerId, note: input.note || null,
+      partnerId: input.partnerId, note: input.note || null, ...(await orderExtras(tx, actor, input, "edit")),
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
       lines: {
         create: planned.map((l) => ({

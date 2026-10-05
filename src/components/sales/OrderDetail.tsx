@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
 import type { OrderDetailDTO } from "@/server/sales/queries";
+import { SALE_PAYMENT_LABELS } from "@/server/sales/schemas";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
 import { DeliveryPanel } from "./DeliveryPanel";
 import { PrintButton } from "@/components/print/PrintButton";
@@ -51,6 +52,9 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       <DetailField label="Ngày giao ban đầu">{formatDate(order.originalDeliveryDate)}</DetailField>
       <DetailField label="Ghi chú">{order.note}</DetailField>
       <DetailField label="Người lập">{order.createdByName}</DetailField>
+      <DetailField label="Nhân viên bán">{order.salesUserName ?? "—"}</DetailField>
+      <DetailField label="Kho xuất">{order.warehouseName ?? "—"}</DetailField>
+      <DetailField label="Hình thức thanh toán">{SALE_PAYMENT_LABELS[order.paymentMethod]}</DetailField>
       <DetailField label="Báo giá nguồn">{order.quote ? <Link href={`/sales/quotes/${order.quote.id}`} className="text-accent hover:underline">{order.quote.code}</Link> : null}</DetailField>
     </dl>
   );

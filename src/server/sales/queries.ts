@@ -121,7 +121,7 @@ export interface OrderDeliveryDTO {
   lines: { orderLineId: number; productName: string; unit: string; qty: string }[];
 }
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
-  note: string | null; createdByName: string | null; cancelReason: string | null; originalDeliveryDate: string;
+  note: string | null; createdByName: string | null; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null }[]; depositTotal: string;
   quote: { id: number; code: string } | null;
@@ -133,6 +133,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     where: { id, partner: partnerScopeWhere(actor) },
     include: {
       partner: { select: { code: true, name: true } },
+      salesUser: { select: { fullName: true } }, warehouse: { select: { name: true } },
       lines: {
         orderBy: { id: "asc" },
         include: {
@@ -190,6 +191,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
     hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
+    salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
     orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).toString(), lines,
     deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note })),
     depositTotal: receipts.reduce((s, r) => s.plus(r.amount), D(0)).toString(),
@@ -250,16 +252,17 @@ export const resetAdvanceMemo = () => { lastAdvanceYmd = ""; };
 export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
   const o = await db.saleOrder.findFirst({
     where: { id, partner: partnerScopeWhere(actor) },
-    include: { partner: { select: { code: true, name: true } }, lines: { orderBy: { id: "asc" } } },
+    include: { partner: { select: { code: true, name: true, phone: true, address: true } }, lines: { orderBy: { id: "asc" } } },
   });
   if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
   if (o.isCancelled) throw new DomainError("Đơn đã hủy, không sửa được. Hãy khôi phục đơn trước.", 409);
   return {
-    orderId: o.id, code: o.code,
-    customer: { value: o.partnerId, label: `${o.partner.code} — ${o.partner.name}` },
+    orderId: o.id, code: o.code, isDraft: o.isDraft,
+    customer: { value: o.partnerId, label: `${o.partner.code} — ${o.partner.name}`, ...(o.partner.phone ? { hint: o.partner.phone } : {}), ...(o.partner.address ? { address: o.partner.address } : {}) },
     products: await productOptionsByIds(db, o.lines.map((l) => l.productId)),
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
+      salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
         discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId,

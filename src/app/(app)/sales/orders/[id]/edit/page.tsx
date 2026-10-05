@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ictYmd } from "@/lib/time";
 import { requireActor } from "@/server/auth/session";
 import { DomainError } from "@/server/http/errors";
+import { loadSaleFormOptions } from "@/server/sales/form-options";
 import { getOrderForEdit } from "@/server/sales/queries";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +19,5 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     if (e instanceof DomainError && e.status === 409) redirect(`/sales/orders/${raw}`); // đơn đã hủy: xem chi tiết để khôi phục
     throw e;
   });
-  return <SaleOrderForm today={ictYmd(new Date())} canEditPrice={actor.perms.has("order.edit_price")} edit={edit} />;
+  return <SaleOrderForm today={ictYmd(new Date())} canEditPrice={actor.perms.has("order.edit_price")} edit={edit} options={await loadSaleFormOptions(prisma, actor)} />;
 }
