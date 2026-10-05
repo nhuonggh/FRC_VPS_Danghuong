@@ -424,3 +424,29 @@ describe("SaleOrderForm — phí vận chuyển, chiết khấu cả đơn, ghi 
     expect(screen.queryByRole("link", { name: /Bán lẻ tại quầy/ })).toBeNull();
   });
 });
+
+describe("SaleOrderForm — bảng dòng hàng dạng lưới", () => {
+  it("mỗi dòng có đúng số ô như số cột tiêu đề (không lệch cột), có STT và colgroup độ rộng cố định", async () => {
+    apiFetch.mockImplementation(async () => []);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    const table = document.querySelector("table.line-table") as HTMLTableElement;
+    const headers = table.querySelectorAll("thead th");
+    expect(headers).toHaveLength(11);
+    expect(Array.from(headers).map((h) => h.textContent?.replace(/\s*\*$/, "").trim()).slice(0, 3)).toEqual(["STT", "Sản phẩm", "ĐVT"]);
+    expect(table.querySelectorAll("colgroup col")).toHaveLength(11);
+    const rows = table.querySelectorAll("tbody tr");
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((r) => expect(r.querySelectorAll(":scope > td")).toHaveLength(headers.length));
+    expect(rows[0]!.querySelector("td")!.textContent).toBe("1");
+  });
+
+  it("thêm dòng: STT tăng dần, vẫn khớp số cột", async () => {
+    apiFetch.mockImplementation(async () => []);
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: /Thêm dòng/ }));
+    const rows = document.querySelectorAll("table.line-table tbody tr");
+    expect(rows).toHaveLength(2);
+    expect(Array.from(rows).map((r) => r.querySelector("td")!.textContent)).toEqual(["1", "2"]);
+    rows.forEach((r) => expect(r.querySelectorAll(":scope > td")).toHaveLength(11));
+  });
+});

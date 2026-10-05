@@ -301,12 +301,14 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
         </div>
         {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="line-table w-full min-w-[1250px] text-sm">
+          <table className="line-table w-full min-w-[1340px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col className="w-12" /><col className="w-[300px]" /><col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-28" /><col className="w-28" /><col className="w-32" /><col className="w-44" /><col className="w-36" /><col className="w-16" />
+            </colgroup>
             <thead>
-              <tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-                <th className="w-12 px-2 py-2 text-center">STT</th><th className="px-2 py-2">Sản phẩm <span className="text-danger">*</span></th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL <span className="text-danger">*</span></th>
-                <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">CK trừ ngay</th><th className="px-2 py-2 text-right">CK tích lũy</th>
-                <th className="px-2 py-2">Gia công</th><th className="px-2 py-2">Ghi chú</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2 text-center">Thao tác</th>
+              <tr className="bg-hover text-xs font-semibold text-fg-secondary">
+                <th className="border border-border px-2 py-2.5 text-center">STT</th><th className="border border-border px-2 py-2.5 text-left">Sản phẩm <span className="text-danger">*</span></th><th className="border border-border px-2 py-2.5 text-center">ĐVT</th><th className="border border-border px-2 py-2.5 text-right">SL <span className="text-danger">*</span></th>
+                <th className="border border-border px-2 py-2.5 text-right">Đơn giá</th><th className="border border-border px-2 py-2.5 text-right">CK trừ ngay</th><th className="border border-border px-2 py-2.5 text-right">CK tích lũy</th><th className="border border-border px-2 py-2.5 text-left">Gia công</th><th className="border border-border px-2 py-2.5 text-left">Ghi chú</th><th className="border border-border px-2 py-2.5 text-right">Thành tiền</th><th className="border border-border px-2 py-2.5 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -398,61 +400,63 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
   const dupIndex = line?.productId ? allLines.findIndex((l, i) => i < index && l?.productId === line.productId && l?.unit === line.unit) : -1;
   const duplicateOf = dupIndex + 1; // 0 = không trùng; số dòng (1-based) của dòng trước đã có cùng SP + ĐVT
 
+  const cell = "border border-border p-1.5 align-middle"; // ô có viền: bảng dạng lưới như bảng tính
   return (
-    <tr className="border-b border-border align-top last:border-b-0">
-      <td className="min-w-72 px-2 py-2" data-line-product={index} data-label="Sản phẩm" data-wide>
-        <div className="flex items-start gap-2">
-        <ProductThumb url={product?.imageUrl} name={product?.label} />
-        <div className="min-w-0 flex-1">
-        <Controller control={control} name={`lines.${index}.productId`} render={({ field }) => (
-          <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={err?.productId?.message}
-            onChange={(o) => {
-              const p = o as ProductOption | null;
-              field.onChange(p ? Number(p.value) : undefined);
-              if (p) setProducts((m) => new Map(m).set(p.value, p));
-              setValue(`lines.${index}.unit`, p?.baseUnit ?? "", { shouldValidate: true });
-              setValue(`lines.${index}.salePrice`, undefined as never);
-              if (p) onProductPicked();
-            }} />
-        )} />
-        {duplicateOf > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {duplicateOf}</p>}
-        </div>
-        </div>
-        <div className="mt-1 space-y-0.5 text-xs text-fg-secondary">
-          {dto?.onHand !== undefined && <p>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</p>}
-          {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
-          {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}</p>}
-          {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</p>}
+    <tr className="align-middle">
+      <td data-stt className={`${cell} text-center tabular text-fg-secondary`}>{index + 1}</td>
+      <td className={cell} data-line-product={index} data-label="Sản phẩm" data-wide>
+        <div className="flex items-center gap-2">
+          <ProductThumb url={product?.imageUrl} name={product?.label} />
+          <div className="min-w-0 flex-1">
+            <Controller control={control} name={`lines.${index}.productId`} render={({ field }) => (
+              <Combobox hideLabel label={`Sản phẩm dòng ${index + 1}`} value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={err?.productId?.message}
+                onChange={(o) => {
+                  const p = o as ProductOption | null;
+                  field.onChange(p ? Number(p.value) : undefined);
+                  if (p) setProducts((m) => new Map(m).set(p.value, p));
+                  setValue(`lines.${index}.unit`, p?.baseUnit ?? "", { shouldValidate: true });
+                  setValue(`lines.${index}.salePrice`, undefined as never);
+                  if (p) onProductPicked();
+                }} />
+            )} />
+            {duplicateOf > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {duplicateOf}</p>}
+            <div className="mt-1 space-y-0.5 text-xs text-fg-secondary">
+              {dto?.onHand !== undefined && <p>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</p>}
+              {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
+              {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}</p>}
+              {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</p>}
+            </div>
+          </div>
         </div>
       </td>
-      <td data-label="ĐVT" className="px-2 py-2">
+      <td data-label="ĐVT" className={cell}>
         {/* Điều khiển bằng state: select không điều khiển bị đặt giá trị trước khi <option> kịp render nên hiện trống */}
-        <select aria-label={`Đơn vị dòng ${index + 1}`} value={line?.unit ?? ""} className={`${inputClass(err?.unit)} min-w-20`}
+        <select aria-label={`Đơn vị dòng ${index + 1}`} value={line?.unit ?? ""} className={inputClass(err?.unit)}
           onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}>
           <option value="">—</option>
           {(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
         </select>
       </td>
-      <td data-label="Số lượng" className="px-2 py-2"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
-        onKeyDown={onQtyKeyDown} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
-      <td data-label="Đơn giá" className="px-2 py-2">
+      <td data-label="Số lượng" className={cell}><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
+        onKeyDown={onQtyKeyDown} className={`${inputClass(err?.qty)} tabular text-right`} /></td>
+      <td data-label="Đơn giá" className={cell}>
         <input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} {...register(`lines.${index}.salePrice`, { valueAsNumber: true })}
-          className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
+          className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
       </td>
-      <td data-label="CK trừ ngay" className="px-2 py-2">
-        <input aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountNow`, { valueAsNumber: true })} className={`${inputClass(err?.discountNow)} min-w-24 tabular text-right`} />
+      <td data-label="CK trừ ngay" className={cell}>
+        <input aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountNow`, { valueAsNumber: true })} className={`${inputClass(err?.discountNow)} tabular text-right`} />
         {err?.discountNow?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.discountNow.message}</p>}
       </td>
-      <td data-label="CK tích lũy" className="px-2 py-2"><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} min-w-24 tabular text-right`} /></td>
-      <td data-label="Gia công" className="px-2 py-2">
+      <td data-label="CK tích lũy" className={cell}><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
+      <td data-label="Gia công" className={cell}>
         <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
           <option value="">Không</option>
           {processingTypes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </td>
-      <td data-label="Ghi chú" className="px-2 py-2"><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={`${inputClass(err?.note)} min-w-36`} /></td>
-      <td data-label="Thành tiền" className="px-2 py-2 text-right tabular">{formatCurrency(amount)}</td>
-      <td data-action className="px-2 py-2 text-center"><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9"><Trash2 size={16} aria-hidden /></button></td>
+      <td data-label="Ghi chú" className={cell}><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
+      <td data-label="Thành tiền" className={cell}><div className="flex h-11 items-center justify-end rounded-sm bg-hover px-2 font-semibold tabular md:h-9">{formatCurrency(amount)}</div></td>
+      <td data-action className={`${cell} text-center`}><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9"><Trash2 size={16} aria-hidden /></button></td>
     </tr>
   );
 }
@@ -460,6 +464,6 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
 /** Ảnh sản phẩm 40px (hoặc khung trống có icon). Ảnh lỗi → quay về khung trống. */
 function ProductThumb({ url, name }: { url?: string | null; name?: string }) {
   const [failed, setFailed] = useState(false);
-  if (url && !failed) return <img src={url} alt={name ?? ""} loading="lazy" onError={() => setFailed(true)} className="mt-5 h-10 w-10 shrink-0 rounded-sm border border-border object-cover" />;
-  return <span aria-hidden className="mt-5 flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-border bg-hover text-fg-muted"><Package size={18} /></span>;
+  if (url && !failed) return <img src={url} alt={name ?? ""} loading="lazy" onError={() => setFailed(true)} className="h-10 w-10 shrink-0 rounded-sm border border-border object-cover" />;
+  return <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-border bg-hover text-fg-muted"><Package size={18} /></span>;
 }

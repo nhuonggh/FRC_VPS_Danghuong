@@ -18,7 +18,8 @@ body { font-size: var(--text-base); }
   .line-table tbody, .line-table tfoot { display: block; }
   .line-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem 0.75rem; padding: 0.75rem; border-bottom: 1px solid var(--border-default); }
   .line-table tbody tr:last-child { border-bottom: 0; }
-  .line-table td { display: block; min-width: 0 !important; padding: 0 !important; text-align: left !important; }
+  .line-table td { display: block; min-width: 0 !important; padding: 0 !important; text-align: left !important; border: 0 !important; }
+  .line-table td[data-stt] { display: none; }
   .line-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 0.125rem; font-size: 0.75rem; color: var(--text-muted); }
   .line-table td[data-wide] { grid-column: 1 / -1; }
   .line-table td[data-action] { grid-column: 1 / -1; justify-self: end; }

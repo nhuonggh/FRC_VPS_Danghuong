@@ -36,6 +36,8 @@ interface Props {
   disabled?: boolean;
   error?: string;
   debounceMs?: number;
+  /** Ẩn nhãn (vẫn đọc được bằng trình đọc màn hình) — dùng trong ô bảng đã có tiêu đề cột. */
+  hideLabel?: boolean;
 }
 
 interface ListPos { left: number; top?: number; bottom?: number; width: number; maxHeight: number }
@@ -43,7 +45,7 @@ const LIST_MAX = 320, LIST_MIN_WIDTH = 360, LIST_GAP = 4;
 
 const BLUR_CLOSE_MS = 120; // chờ để click vào 1 dòng kịp chạy trước khi đóng danh sách
 
-export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300 }: Props) {
+export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300, hideLabel }: Props) {
   const uid = useId();
   const listId = `${uid}-list`;
   const [q, setQ] = useState(value?.label ?? "");
@@ -123,7 +125,7 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
 
   return (
     <div className="relative">
-      <label htmlFor={uid} className="mb-1 block text-xs text-fg-muted">{label}</label>
+      <label htmlFor={uid} className={hideLabel ? "sr-only" : "mb-1 block text-xs text-fg-muted"}>{label}</label>
       <div className="relative" ref={anchorRef}>
         <input
           id={uid} role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
