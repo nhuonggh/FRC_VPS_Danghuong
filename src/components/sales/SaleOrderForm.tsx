@@ -421,7 +421,9 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
             )} />
             {duplicateOf > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {duplicateOf}</p>}
             <div className="mt-1 space-y-0.5 text-xs text-fg-secondary">
-              {dto?.onHand !== undefined && <p>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</p>}
+              {(product?.groupName || dto?.onHand !== undefined) && (
+                <p>{product?.groupName && <>Nhóm: {product.groupName}</>}{product?.groupName && dto?.onHand !== undefined && <span className="px-1 text-fg-muted">|</span>}{dto?.onHand !== undefined && <>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</>}</p>
+              )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
               {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}</p>}
               {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</p>}

@@ -8,7 +8,7 @@ import { delegate } from "./adapters";
 export interface CatalogImportRow { key: string; data: Record<string, string | boolean | null> }
 
 const str = (value: unknown) => (value == null ? "" : String(value).trim());
-const SAMPLES: Record<string, string> = { "partner-groups": "Khách lẻ", warehouses: "Kho chính", vehicles: "51C-123.45", drivers: "Nguyễn Văn A", routes: "Quận 12", "expense-types": "Tiền điện", "cash-accounts": "Tiền mặt", "processing-types": "Tôn xốp" };
+const SAMPLES: Record<string, string> = { "partner-groups": "Khách lẻ", "product-groups": "Tấm alu", warehouses: "Kho chính", vehicles: "51C-123.45", drivers: "Nguyễn Văn A", routes: "Quận 12", "expense-types": "Tiền điện", "cash-accounts": "Tiền mặt", "processing-types": "Tôn xốp" };
 /** Cột phụ chỉ có ở Kiểu gia công: hệ thống chưa có công thức tự động nên gộp vào Ghi chú để không mất dữ liệu cũ (công thức thật nằm ở Định mức/BOM). */
 const PROCESSING_EXTRAS: readonly ImportColumn[] = [{ key: "ratio", header: "Tỷ lệ", sample: "1,08" }, { key: "stockRatio", header: "Tỷ lệ trừ kho", sample: "1" }, { key: "unit", header: "ĐVT", sample: "m2" }];
 
