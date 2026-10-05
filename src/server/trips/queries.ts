@@ -85,7 +85,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
   for (const s of t.stops) {
     const o = s.order;
     const paid = await orderPaid(db, o.id, s.id);
-    const total = o.lines.reduce((a, l) => a.plus(lineAmountOf(l)), D(0));
+    const total = o.lines.reduce((a, l) => a.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee);
     const suggested = total.minus(paid).gt(0) ? total.minus(paid) : D(0);
     stops.push({
       id: s.id, seq: s.seq, orderId: o.id, orderCode: o.code, orderTotal: total.toString(), partnerId: o.partner.id, partnerName: o.partner.name, phone: o.partner.phone, address: o.partner.address, allowCredit: o.partner.allowCredit, debtLimit: o.partner.debtLimit.toString(),

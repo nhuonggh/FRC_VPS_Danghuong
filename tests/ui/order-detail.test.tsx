@@ -26,7 +26,7 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   id: 1, code: "DH000001", orderDate: new Date("2026-09-10T03:00:00Z"), partnerId: 1, partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt",
   deliveryStatus: "PARTIAL", paymentStatus: "UNPAID", expectedDeliveryDate: "2026-09-20", originalDeliveryDate: "2026-09-20", delayDays: 0,
   hasProvisional: false, isCancelled: false, isDraft: false, deposits: [], depositTotal: "0", quote: null, note: null, cancelReason: null, createdByName: "An", walkInName: null, walkInPhone: null, salesUserName: null, warehouseName: null, paymentMethod: "NONE", orderTotal: "300000", history: [],
-  lines: [{
+  lines: [{ note: null,
     id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, bomVersionId: null, bomVersionLabel: null,
     isProvisional: false, deliveredQty: "4", salePrice: "30000", discountNow: "0", discountAccum: "0", lineAmount: "300000", issues: [],
   }],

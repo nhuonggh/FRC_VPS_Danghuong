@@ -99,7 +99,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
       expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
-      orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
+      orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).toString(),
     };
   });
   return { rows: redactDeep(out, actor.perms), total, stats: { all, pending, late } };
@@ -110,6 +110,8 @@ export interface OrderLineDTO {
   qty: string; unit: string; qtyBase: string; processingType: string | null; bomVersionId: number | null;
   isProvisional: boolean; deliveredQty: string;
   salePrice?: string; discountNow?: string; discountAccum?: string; lineAmount?: string;
+  /** Ghi chú theo dòng hàng. */
+  note: string | null;
   unitCostFifo?: string; lineProfit?: string | null;
   /** Định mức đã dùng (snapshot): "v2 · từ 01/10/2026". Chỉ dòng gia công. */
   bomVersionLabel: string | null;
@@ -121,7 +123,7 @@ export interface OrderDeliveryDTO {
   lines: { orderLineId: number; productName: string; unit: string; qty: string }[];
 }
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
-  note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
+  note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; shippingFee?: string; orderDiscount?: string; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null }[]; depositTotal: string;
   quote: { id: number; code: string } | null;
@@ -174,7 +176,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     const amount = lineAmountOf(l);
     const profit = l.isProvisional ? null : amount.minus(l.discountAccum).minus(l.unitCostFifo.times(l.qtyBase));
     return {
-      id: l.id, productId: l.productId, productCode: l.product.code, productName: l.product.name, baseUnit: l.product.baseUnit,
+      id: l.id, note: l.note, productId: l.productId, productCode: l.product.code, productName: l.product.name, baseUnit: l.product.baseUnit,
       qty: l.qty.toString(), unit: l.unit, qtyBase: l.qtyBase.toString(), processingType: l.processingType?.name ?? null, bomVersionId: l.bomVersionId,
       isProvisional: l.isProvisional, deliveredQty: l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)).toString(),
       salePrice: l.salePrice.toString(), discountNow: l.discountNow.toString(), discountAccum: l.discountAccum.toString(), lineAmount: amount.toString(),
@@ -192,7 +194,8 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
     hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
     walkInName: o.walkInName, walkInPhone: o.walkInPhone, salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
-    orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).toString(), lines,
+    shippingFee: o.shippingFee.toString(), orderDiscount: o.orderDiscount.toString(),
+    orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).plus(o.shippingFee).toString(), lines,
     deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note })),
     depositTotal: receipts.reduce((s, r) => s.plus(r.amount), D(0)).toString(),
     quote: quoteRow,
@@ -263,9 +266,10 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
+      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount),
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
-        discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId,
+        discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, note: l.note ?? "",
       })),
     },
   };

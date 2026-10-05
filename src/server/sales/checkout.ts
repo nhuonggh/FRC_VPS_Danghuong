@@ -81,7 +81,7 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
     const created = await createSaleOrder(ctx, eff, order, now, extra);
     createdId = created.id;
     const row = await tx.saleOrder.findUniqueOrThrow({ where: { id: created.id }, include: { lines: { orderBy: { id: "asc" } } } });
-    const total = row.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
+    const total = row.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(row.shippingFee);
 
     if (pay) {
       if (D(pay.amount).gt(total)) throw new DomainError("Số tiền thu vượt tiền phải thu của đơn.", 400);

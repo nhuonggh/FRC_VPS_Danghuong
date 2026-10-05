@@ -45,6 +45,10 @@ model SaleOrder {
   /// Khách lẻ (đơn gắn khách chung KHL): tên/SĐT khách ghi trên đơn.
   walkInName           String?
   walkInPhone          String?
+  /// Phí vận chuyển thu của khách: cộng vào tiền phải thu; ghi công nợ theo tỷ lệ giá trị hàng đã giao (cùng phiếu giao).
+  shippingFee          Decimal        @default(0) @db.Decimal(18, 2)
+  /// Chiết khấu cả đơn do người dùng nhập; đã được PHÂN BỔ vào `discountNow` của từng dòng (xem `discountOrder`).
+  orderDiscount        Decimal        @default(0) @db.Decimal(18, 2)
   /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.
   orderDate            DateTime
   expectedDeliveryDate DateTime       @db.Date
@@ -89,6 +93,10 @@ model SaleOrderLine {
   discountNow      Decimal  @default(0) @db.Decimal(18, 2)
   /// Chiết khấu tích lũy trả sau — SỐ TIỀN của cả dòng, KHÔNG giảm tiền phải thu (D-27).
   discountAccum    Decimal  @default(0) @db.Decimal(18, 2)
+  /// Phần chiết khấu CẢ ĐƠN đã phân bổ vào dòng này (ĐÃ nằm trong `discountNow`; tách riêng để sửa đơn dựng lại ô chiết khấu của người dùng).
+  discountOrder    Decimal  @default(0) @db.Decimal(18, 2)
+  /// Ghi chú theo dòng hàng.
+  note             String?
   /// Chủ dòng (engine) ghi lại sau mỗi lần tính; chỉ engine được sửa.
   unitCostFifo     Decimal  @default(0) @db.Decimal(18, 4)
   isProvisional    Boolean  @default(false)

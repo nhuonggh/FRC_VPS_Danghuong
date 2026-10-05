@@ -6,7 +6,8 @@ import { loadSaleFormOptions } from "@/server/sales/form-options";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewSaleOrderPage() {
+export default async function NewSaleOrderPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const actor = await requireActor("order.create");
-  return <SaleOrderForm today={ictYmd(new Date())} canEditPrice={actor.perms.has("order.edit_price")} options={await loadSaleFormOptions(prisma, actor)} />;
+  const retail = (await searchParams).mode === "retail";
+  return <SaleOrderForm today={ictYmd(new Date())} canEditPrice={actor.perms.has("order.edit_price")} options={await loadSaleFormOptions(prisma, actor)} retail={retail} />;
 }

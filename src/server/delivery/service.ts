@@ -27,6 +27,15 @@ export function deliveredValue(net: Prisma.Decimal, lineQty: Prisma.Decimal, cum
 }
 
 /**
+ * Phần phí vận chuyển ghi cùng một phiếu giao: theo tỷ lệ GIÁ TRỊ hàng giao (luỹ kế như `deliveredValue`, nên Σ các lần giao
+ * đúng bằng phí). `before`/`now` là giá trị hàng đã giao trước đó / lần này; `linesTotal` = thành tiền hàng cả đơn.
+ */
+export function shippingShare(fee: Prisma.Decimal, linesTotal: Prisma.Decimal, before: Prisma.Decimal, now: Prisma.Decimal): Prisma.Decimal {
+  if (!fee.gt(0) || !linesTotal.gt(0)) return D(0);
+  return deliveredValue(fee, linesTotal, before, now);
+}
+
+/**
  * Khoá đơn (tuần tự hoá giao/sửa/hủy cùng đơn) và nạp kèm lượng đã giao còn hiệu lực theo từng dòng.
  * Mặc định đơn phải thuộc KỲ ĐANG MỞ (sửa/hủy/xác nhận đơn là thao tác lên chứng từ gốc). `allowClosedPeriod`: cho đơn của kỳ đã
  * kết sổ — dùng cho chứng từ MỚI sinh ở kỳ mở liên quan đơn cũ (giao nốt, thu cọc; spec 4.4, Plan 07 F1d). Chứng từ mới tự mang
@@ -76,6 +85,9 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
 
   const byId = new Map(order.lines.map((l) => [l.id, l]));
   let value = D(0);
+  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
+  // giá trị hàng đã giao trước phiếu này (để chia phí vận chuyển luỹ kế)
+  const valueBefore = order.lines.reduce((s, l) => s.plus(deliveredValue(lineAmountOf(l), l.qty, D(0), deliveredOf(l))), D(0));
   const rows = input.lines.map((l, i) => {
     const line = byId.get(l.orderLineId);
     if (!line) throw new DomainError(`Dòng ${i + 1}: không thuộc đơn này.`, 400);
@@ -86,6 +98,7 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
     return { orderLineId: line.id, qty: D(l.qty) };
   });
 
+  value = value.plus(shippingShare(order.shippingFee, linesTotal, valueBefore, value));
   const id = await nextDocId(tx, "delivery_notes");
   const code = formatDocCode("PG", id);
   await tx.deliveryNote.create({
@@ -147,6 +160,8 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
   const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
   const lineById = new Map(order.lines.map((l) => [l.id, l]));
   const cum = new Map<number, Prisma.Decimal>();
+  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
+  let valueSoFar = D(0);
   for (const note of notes) {
     let value = D(0);
     for (const dl of note.lines) {
@@ -155,6 +170,9 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
       value = value.plus(deliveredValue(lineAmountOf(line), line.qty, before, dl.qty));
       cum.set(line.id, before.plus(dl.qty));
     }
+    const goods = value;
+    value = value.plus(shippingShare(order.shippingFee, linesTotal, valueSoFar, goods));
+    valueSoFar = valueSoFar.plus(goods);
     await removePartnerLedger(tx, "DELIVERY", note.id);
     if (value.gt(0)) {
       await postPartnerLedger(tx, { periodId: note.periodId, partnerId: order.partnerId, side: "debit", amount: value, docType: "DELIVERY", docId: note.id, at: note.at, createdBy: actor.userId });
