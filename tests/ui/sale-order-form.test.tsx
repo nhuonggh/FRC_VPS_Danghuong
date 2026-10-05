@@ -450,3 +450,13 @@ describe("SaleOrderForm — bảng dòng hàng dạng lưới", () => {
     rows.forEach((r) => expect(r.querySelectorAll(":scope > td")).toHaveLength(11));
   });
 });
+
+describe("SaleOrderForm — nhóm hàng trên dòng", () => {
+  it("hiện 'Nhóm: … | Tồn: …' dưới ô sản phẩm; chưa có nhóm thì chỉ hiện Tồn", async () => {
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [{ ...PRODUCT, groupName: "Tấm alu" }] : url.startsWith("/api/orders/pricing") ? pricing : url.startsWith("/api/partner-lists") ? [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt" }] : []));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    expect(await screen.findByText(/Nhóm: Tấm alu/)).toHaveTextContent(/Nhóm: Tấm alus*|s*Tồn: 10 md/);
+  });
+});

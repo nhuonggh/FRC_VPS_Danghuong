@@ -24,6 +24,17 @@ model PartnerGroup {
   @@map("partner_groups")
 }
 
+/// Nhóm hàng của sản phẩm (danh mục cấu hình: Hệ thống → Cài đặt danh mục → Nhóm hàng). Tuỳ chọn — sản phẩm có thể chưa có nhóm.
+model ProductGroup {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  products Product[]
+
+  @@map("product_groups")
+}
+
 model Partner {
   id           Int      @id @default(autoincrement())
   code         String   @unique
@@ -85,9 +96,11 @@ model Product {
   recomputing Boolean     @default(false) // engine đang tính lại chuỗi nền → chặn xuất mã này
   note        String?
   imageUrl    String? // ảnh minh hoạ (https hoặc /uploads/…), hiện ở form bán hàng
+  groupId     Int? // nhóm hàng (tuỳ chọn)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  group               ProductGroup? @relation(fields: [groupId], references: [id], onDelete: Restrict)
   units               ProductUnit[]
   openingStock        OpeningStock[]
   layers              CostLayer[]
@@ -106,6 +119,7 @@ model Product {
 
   @@index([searchText])
   @@index([kind])
+  @@index([groupId])
   @@map("products")
 }
 

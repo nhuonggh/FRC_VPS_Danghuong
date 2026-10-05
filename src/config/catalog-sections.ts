@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-export type CatalogKey = "partner-groups" | "warehouses" | "vehicles" | "drivers" | "routes" | "expense-types" | "cash-accounts" | "processing-types";
+export type CatalogKey = "partner-groups" | "product-groups" | "warehouses" | "vehicles" | "drivers" | "routes" | "expense-types" | "cash-accounts" | "processing-types";
 export interface CatalogField { name: string; label: string; type: "text" | "checkbox" | "select"; required?: boolean; maxLength?: number; options?: readonly { value: string; label: string }[]; inTable?: boolean }
 export interface CatalogSection { key: CatalogKey; label: string; singular: string; icon: string; codes: readonly string[]; entity: string; titleField: string; fields: readonly CatalogField[] }
 const name = (label: string, maxLength = 80): CatalogField => ({ name: "name", label, type: "text", required: true, maxLength });
 
 export const CATALOG_SECTIONS: readonly CatalogSection[] = [
   { key: "partner-groups", label: "Nhóm khách hàng", singular: "nhóm khách hàng", icon: "users", codes: ["8"], entity: "PartnerGroup", titleField: "name", fields: [name("Tên nhóm", 60)] },
+  { key: "product-groups", label: "Nhóm hàng", singular: "nhóm hàng", icon: "layers", codes: ["8a"], entity: "ProductGroup", titleField: "name", fields: [name("Tên nhóm hàng", 60)] },
   { key: "warehouses", label: "Kho", singular: "kho", icon: "warehouse", codes: ["14"], entity: "Warehouse", titleField: "name", fields: [name("Tên kho", 60)] },
   { key: "vehicles", label: "Xe", singular: "xe", icon: "truck", codes: ["15"], entity: "Vehicle", titleField: "plate", fields: [{ name: "plate", label: "Biển số", type: "text", required: true, maxLength: 20 }] },
   { key: "drivers", label: "Lái xe & phụ xe", singular: "lái xe / phụ xe", icon: "users", codes: ["15"], entity: "Driver", titleField: "name", fields: [name("Họ tên"), { name: "isAssistant", label: "Là phụ xe", type: "checkbox", inTable: true }] },
