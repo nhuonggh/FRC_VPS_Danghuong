@@ -13,6 +13,7 @@ function sheets_() {
   var yn = ['Có', 'Không'];
   return [
     { name: 'Nhóm khách hàng', note: 'Liệt kê các nhóm khách (vd: Khách lẻ, Đại lý, Thầu). Trang Khách hàng/NCC sẽ chọn từ danh sách này.', help: 'Nhập ở Hệ thống → Cài đặt danh mục → Nhóm khách hàng.', cols: [{ h: 'Tên nhóm', s: 'Khách lẻ', r: 1, w: 220 }] },
+    { name: 'Nhóm hàng', help: 'Nhóm sản phẩm (vd: Tôn, Hộp mạ kẽm, Inox). Cài đặt danh mục → Nhóm hàng; cột Nhóm hàng ở sheet Sản phẩm chọn từ danh sách này.', cols: [{ h: 'Tên nhóm hàng', s: 'Tôn', r: 1, w: 220 }] },
     { name: 'Kho', help: 'Cài đặt danh mục → Kho.', cols: [{ h: 'Tên kho', s: 'Kho chính', r: 1, w: 220 }] },
     { name: 'Xe', help: 'Cài đặt danh mục → Xe.', cols: [{ h: 'Biển số', s: '51C-123.45', r: 1, w: 180 }] },
     { name: 'Lái xe & phụ xe', help: 'Cài đặt danh mục → Lái xe & phụ xe.', cols: [{ h: 'Họ tên', s: 'Nguyễn Văn A', r: 1, w: 220 }, { h: 'Là phụ xe', s: 'Không', w: 110, list: yn }] },
@@ -25,6 +26,7 @@ function sheets_() {
     { name: 'Khách hàng', imp: 'Nhập bằng Excel: Bán hàng → Khách hàng → Nhập từ Excel.', cols: partnerCols_(yn) },
     { name: 'Nhà cung cấp', imp: 'Nhập bằng Excel: Nhập hàng → Nhà cung cấp → Nhập từ Excel.', cols: partnerCols_(yn) },
     { name: 'Sản phẩm', imp: 'Nhập bằng Excel: Kho → Sản phẩm → Nhập từ Excel. Mã ngừng bán/trùng sẽ ra tệp riêng để xác nhận.', cols: [
+      { h: 'Nhóm hàng', s: 'Tôn', w: 150, listRef: "'Nhóm hàng'!A2:A" },
       { h: 'Mã', s: 'SP001', r: 1, w: 110 }, { h: 'Tên', s: 'Tôn lạnh', r: 1, w: 260 },
       { h: 'Loại', s: 'Hàng hóa', w: 150, list: ['Hàng hóa', 'Nguyên vật liệu', 'Thành phẩm', 'Phụ kiện'] },
       { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Hệ số quy đổi', s: '2,4', w: 120 },
