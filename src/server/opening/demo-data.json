@@ -1,0 +1,670 @@
+{
+ "version": 1,
+ "note": "Số demo để test — reset khi chạy chính thức",
+ "debts": [
+  {
+   "code": "ano",
+   "amount": 58714540
+  },
+  {
+   "code": "aviettl",
+   "amount": -500
+  },
+  {
+   "code": "hhlvc",
+   "amount": 15297000
+  },
+  {
+   "code": "xtha",
+   "amount": 206038500
+  },
+  {
+   "code": "ahienls",
+   "amount": 127101000
+  },
+  {
+   "code": "asvn",
+   "amount": 5171000
+  },
+  {
+   "code": "altlvc",
+   "amount": 51378000
+  },
+  {
+   "code": "adxdvn",
+   "amount": -200
+  },
+  {
+   "code": "addyn",
+   "amount": 46350000
+  },
+  {
+   "code": "acuongtd",
+   "amount": 55575000
+  },
+  {
+   "code": "ahong",
+   "amount": 142634640
+  },
+  {
+   "code": "angoctd",
+   "amount": 44664000
+  },
+  {
+   "code": "anguypl",
+   "amount": 29410170
+  },
+  {
+   "code": "cktbao",
+   "amount": 33618000
+  },
+  {
+   "code": "avuvn",
+   "amount": 110355000
+  },
+  {
+   "code": "asangpl",
+   "amount": 72440000
+  },
+  {
+   "code": "amuithuan",
+   "amount": 11101000
+  },
+  {
+   "code": "adungpl",
+   "amount": 9469950
+  },
+  {
+   "code": "aluongre",
+   "amount": 185645000
+  },
+  {
+   "code": "an2td",
+   "amount": 238639600
+  },
+  {
+   "code": "acxkvs",
+   "amount": 670000
+  },
+  {
+   "code": "aluanvs2",
+   "amount": 3690000
+  },
+  {
+   "code": "abacxt",
+   "amount": -50
+  },
+  {
+   "code": "akhanhdth",
+   "amount": 16161000
+  },
+  {
+   "code": "adenpl2",
+   "amount": 15373000
+  },
+  {
+   "code": "atxt",
+   "amount": 9310000
+  },
+  {
+   "code": "ahoatuare",
+   "amount": 20500000
+  },
+  {
+   "code": "ehyxo",
+   "amount": 128370000
+  },
+  {
+   "code": "acntd",
+   "amount": 36530000
+  },
+  {
+   "code": "athongtl2",
+   "amount": 10135000
+  },
+  {
+   "code": "attd",
+   "amount": 5000000
+  },
+  {
+   "code": "POshacotx",
+   "amount": -124168504
+  },
+  {
+   "code": "VKGHN",
+   "amount": -6750000
+  },
+  {
+   "code": "hthanh",
+   "amount": -13565600
+  },
+  {
+   "code": "vminh",
+   "amount": 8
+  },
+  {
+   "code": "tlong",
+   "amount": -548859948
+  },
+  {
+   "code": "dlien",
+   "amount": -249502019
+  },
+  {
+   "code": "xky",
+   "amount": -434301851
+  },
+  {
+   "code": "vphap",
+   "amount": -47324664
+  },
+  {
+   "code": "ttruong",
+   "amount": 192
+  },
+  {
+   "code": "kthinh",
+   "amount": -454800
+  },
+  {
+   "code": "vy",
+   "amount": 72
+  },
+  {
+   "code": "dlqb",
+   "amount": -1263450659
+  },
+  {
+   "code": "vinhphu",
+   "amount": -61500000
+  },
+  {
+   "code": "ato",
+   "amount": 154715000
+  },
+  {
+   "code": "aqxkvs",
+   "amount": -300
+  },
+  {
+   "code": "aym",
+   "amount": 12803000
+  },
+  {
+   "code": "alpr",
+   "amount": 543640000
+  },
+  {
+   "code": "actnnm",
+   "amount": 4199000
+  },
+  {
+   "code": "lvien",
+   "amount": 273722500
+  },
+  {
+   "code": "hthongvb",
+   "amount": 406
+  },
+  {
+   "code": "ctrang",
+   "amount": 37095000
+  },
+  {
+   "code": "atvn",
+   "amount": 114000000
+  },
+  {
+   "code": "anpl",
+   "amount": 13931000
+  },
+  {
+   "code": "acbh",
+   "amount": 25000000
+  },
+  {
+   "code": "actvn",
+   "amount": 9600000
+  },
+  {
+   "code": "acxa",
+   "amount": 25110000
+  },
+  {
+   "code": "acdl",
+   "amount": 32382000
+  },
+  {
+   "code": "adxb",
+   "amount": 285685000
+  },
+  {
+   "code": "advn",
+   "amount": 17530150
+  },
+  {
+   "code": "adcs",
+   "amount": 9440000
+  },
+  {
+   "code": "adpl",
+   "amount": 139540000
+  },
+  {
+   "code": "aho",
+   "amount": 8635000
+  },
+  {
+   "code": "ahtd",
+   "amount": 135000000
+  },
+  {
+   "code": "ahls",
+   "amount": 616000
+  },
+  {
+   "code": "almt",
+   "amount": 107510000
+  },
+  {
+   "code": "alxm",
+   "amount": 40000000
+  },
+  {
+   "code": "anxt",
+   "amount": 100000000
+  },
+  {
+   "code": "antd",
+   "amount": 36000000
+  },
+  {
+   "code": "anxa",
+   "amount": 10000000
+  },
+  {
+   "code": "ancv",
+   "amount": 6592000
+  },
+  {
+   "code": "anhtd",
+   "amount": 50000000
+  },
+  {
+   "code": "aqpl",
+   "amount": 21600000
+  },
+  {
+   "code": "aspl",
+   "amount": 7840000
+  },
+  {
+   "code": "atcb",
+   "amount": 299184900
+  },
+  {
+   "code": "atcmvs",
+   "amount": 99186200
+  },
+  {
+   "code": "atxm",
+   "amount": 190670000
+  },
+  {
+   "code": "atqd",
+   "amount": 1510000
+  },
+  {
+   "code": "atbcv",
+   "amount": 15496736.64
+  },
+  {
+   "code": "atxk",
+   "amount": 2120000
+  },
+  {
+   "code": "atlvc",
+   "amount": 129999801
+  },
+  {
+   "code": "atvb",
+   "amount": 11440000
+  },
+  {
+   "code": "atxd",
+   "amount": 160000
+  },
+  {
+   "code": "avvn",
+   "amount": 119005000
+  },
+  {
+   "code": "clxt",
+   "amount": 3350000
+  },
+  {
+   "code": "qcmt",
+   "amount": 5470000
+  },
+  {
+   "code": "anxd",
+   "amount": 4340000
+  },
+  {
+   "code": "adxa",
+   "amount": 15600000
+  },
+  {
+   "code": "anxmoi",
+   "amount": 22310000
+  },
+  {
+   "code": "acxt1",
+   "amount": 93736020
+  },
+  {
+   "code": "alnm",
+   "amount": 18000000
+  },
+  {
+   "code": "at1",
+   "amount": 52390000
+  },
+  {
+   "code": "thuongvn",
+   "amount": 103200000
+  },
+  {
+   "code": "athtd",
+   "amount": 3550000
+  },
+  {
+   "code": "asr",
+   "amount": 14440000
+  },
+  {
+   "code": "atoanxq",
+   "amount": 15190000
+  },
+  {
+   "code": "aqxdtd",
+   "amount": 39999990
+  },
+  {
+   "code": "athxttl",
+   "amount": 100000000
+  },
+  {
+   "code": "avtd",
+   "amount": 10181000
+  },
+  {
+   "code": "atienxd",
+   "amount": -60000
+  },
+  {
+   "code": "ahautd",
+   "amount": 5800000
+  }
+ ],
+ "stock": [
+  {
+   "code": "TKKHKN",
+   "qty": 100,
+   "unitCost": 275000
+  },
+  {
+   "code": "757525",
+   "qty": 50,
+   "unitCost": 678200
+  },
+  {
+   "code": "KINHDANXK",
+   "qty": 50,
+   "unitCost": 745600
+  },
+  {
+   "code": "BKCO2B",
+   "qty": 100,
+   "unitCost": 600000
+  },
+  {
+   "code": "INOX20140X80X1.0",
+   "qty": 200,
+   "unitCost": 48500
+  },
+  {
+   "code": "INOX20120X20X08",
+   "qty": 200,
+   "unitCost": 48500
+  },
+  {
+   "code": "I304P1612",
+   "qty": 200,
+   "unitCost": 69800
+  },
+  {
+   "code": "HD306020",
+   "qty": 50,
+   "unitCost": 301740
+  },
+  {
+   "code": "10010014EC",
+   "qty": 50,
+   "unitCost": 442170
+  },
+  {
+   "code": "5010025",
+   "qty": 50,
+   "unitCost": 678200
+  },
+  {
+   "code": "CCNKTD16",
+   "qty": 100,
+   "unitCost": 1250000
+  },
+  {
+   "code": "757514EC",
+   "qty": 50,
+   "unitCost": 322811
+  },
+  {
+   "code": "NXPHMGL",
+   "qty": 200,
+   "unitCost": 133000
+  },
+  {
+   "code": "P3414HS",
+   "qty": 50,
+   "unitCost": 133133
+  },
+  {
+   "code": "TNNVP23GH",
+   "qty": 300,
+   "unitCost": 31200
+  },
+  {
+   "code": "CX06",
+   "qty": 100,
+   "unitCost": 247000
+  },
+  {
+   "code": "CCNKTD1.2",
+   "qty": 100,
+   "unitCost": 1100000
+  },
+  {
+   "code": "NDMGVGL",
+   "qty": 200,
+   "unitCost": 116000
+  },
+  {
+   "code": "NDMTMC",
+   "qty": 200,
+   "unitCost": 134000
+  },
+  {
+   "code": "L3STM309",
+   "qty": 300,
+   "unitCost": 33000
+  },
+  {
+   "code": "909014HS",
+   "qty": 50,
+   "unitCost": 518784
+  },
+  {
+   "code": "132614HS",
+   "qty": 50,
+   "unitCost": 100039
+  },
+  {
+   "code": "SDTP14",
+   "qty": 200,
+   "unitCost": 14500
+  },
+  {
+   "code": "CCTLECO06",
+   "qty": 100,
+   "unitCost": 290000
+  },
+  {
+   "code": "TNNVP24",
+   "qty": 300,
+   "unitCost": 31200
+  },
+  {
+   "code": "TLD045XR3",
+   "qty": 300,
+   "unitCost": 66554
+  },
+  {
+   "code": "505014CA",
+   "qty": 50,
+   "unitCost": 198744
+  },
+  {
+   "code": "TLD04XD",
+   "qty": 300,
+   "unitCost": 52733
+  },
+  {
+   "code": "THS035XD",
+   "qty": 300,
+   "unitCost": 86700
+  },
+  {
+   "code": "CNNT2040",
+   "qty": 100,
+   "unitCost": 360
+  },
+  {
+   "code": "TSSVN04X",
+   "qty": 300,
+   "unitCost": 100000
+  },
+  {
+   "code": "THP04XR",
+   "qty": 300,
+   "unitCost": 91500
+  },
+  {
+   "code": "THP04X",
+   "qty": 300,
+   "unitCost": 89500
+  },
+  {
+   "code": "P10",
+   "qty": 200,
+   "unitCost": 14400
+  },
+  {
+   "code": "TLD04X",
+   "qty": 300,
+   "unitCost": 52978
+  },
+  {
+   "code": "CBDI12",
+   "qty": 200,
+   "unitCost": 63000
+  },
+  {
+   "code": "CBD1M",
+   "qty": 200,
+   "unitCost": 60000
+  },
+  {
+   "code": "THS035X",
+   "qty": 300,
+   "unitCost": 86700
+  },
+  {
+   "code": "TV5D",
+   "qty": 200,
+   "unitCost": 15400
+  },
+  {
+   "code": "NNMXR400",
+   "qty": 300,
+   "unitCost": 45000
+  },
+  {
+   "code": "NNMXD400",
+   "qty": 300,
+   "unitCost": 45000
+  },
+  {
+   "code": "NNMX400",
+   "qty": 300,
+   "unitCost": 41000
+  },
+  {
+   "code": "CX11UDNT",
+   "qty": 100,
+   "unitCost": 450000
+  },
+  {
+   "code": "CX08",
+   "qty": 100,
+   "unitCost": 300000
+  },
+  {
+   "code": "THS04X",
+   "qty": 300,
+   "unitCost": 97500
+  },
+  {
+   "code": "BL4DXFCK",
+   "qty": 100,
+   "unitCost": 45000
+  }
+ ],
+ "cash": [
+  {
+   "name": "Tiền mặt",
+   "amount": 50000000
+  },
+  {
+   "name": "stk công ty MB",
+   "amount": 150000000
+  },
+  {
+   "name": "stk công ty Agribank",
+   "amount": 30000000
+  }
+ ],
+ "discounts": [
+  {
+   "code": "ano",
+   "amount": 500000
+  },
+  {
+   "code": "atubvs",
+   "amount": 1000000
+  },
+  {
+   "code": "aviettl",
+   "amount": 1500000
+  }
+ ]
+}

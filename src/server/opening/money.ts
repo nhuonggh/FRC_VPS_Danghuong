@@ -58,15 +58,15 @@ async function save(tx: Prisma.TransactionClient, actor: Actor, kind: OpeningMon
     if (kind === "cash") {
       const where = { periodId_cashAccountId: { periodId, cashAccountId: r.targetId } };
       if (overwrite) before = await tx.openingCash.findUnique({ where, select: { amount: true } });
-      id = (await tx.openingCash.upsert({ where, create: { periodId, cashAccountId: r.targetId, amount }, update: { amount }, select: { id: true } })).id;
+      id = (await tx.openingCash.upsert({ where, create: { periodId, cashAccountId: r.targetId, amount }, update: { amount, isDemo: false }, select: { id: true } })).id;
     } else {
       const where = { periodId_partnerId: { periodId, partnerId: r.targetId } };
       if (kind === "debt") {
         if (overwrite) before = await tx.openingDebt.findUnique({ where, select: { amount: true } });
-        id = (await tx.openingDebt.upsert({ where, create: { periodId, partnerId: r.targetId, amount }, update: { amount }, select: { id: true } })).id;
+        id = (await tx.openingDebt.upsert({ where, create: { periodId, partnerId: r.targetId, amount }, update: { amount, isDemo: false }, select: { id: true } })).id;
       } else {
         if (overwrite) before = await tx.openingDiscount.findUnique({ where, select: { amount: true } });
-        id = (await tx.openingDiscount.upsert({ where, create: { periodId, partnerId: r.targetId, amount }, update: { amount }, select: { id: true } })).id;
+        id = (await tx.openingDiscount.upsert({ where, create: { periodId, partnerId: r.targetId, amount }, update: { amount, isDemo: false }, select: { id: true } })).id;
       }
     }
     await writeAudit(tx, { userId: actor.userId, action: `opening.${kind}.${overwrite ? "update" : "create"}`, entity: META[kind].entity, entityId: id, before, after: { key: r.key, amount: r.amount } });

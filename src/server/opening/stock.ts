@@ -55,7 +55,7 @@ async function writeLine(tx: Prisma.TransactionClient, actor: Actor, ctx: Ctx, r
   const o = toIct(ctx.openedAt); const at = ictStartOfDay(o.y, o.m, o.d);
   const data = { qty: new Prisma.Decimal(r.qty), unitCost: new Prisma.Decimal(r.unitCost) };
   let before: unknown = null; let id = existingId;
-  if (id !== null) { before = await tx.openingStock.findUniqueOrThrow({ where: { id }, select: { qty: true, unitCost: true } }); await removeDocument(engine, "OPENING", id); await tx.openingStock.update({ where: { id }, data }); }
+  if (id !== null) { before = await tx.openingStock.findUniqueOrThrow({ where: { id }, select: { qty: true, unitCost: true } }); await removeDocument(engine, "OPENING", id); await tx.openingStock.update({ where: { id }, data: { ...data, isDemo: false } }); }
   else id = (await tx.openingStock.create({ data: { periodId: ctx.periodId, productId: r.productId, ...data }, select: { id: true } })).id;
   await postReceipt(engine, { productId: r.productId, qty: r.qty, unitCost: r.unitCost, docType: "OPENING", docId: id, docLineId: id, at });
   await writeAudit(tx, { userId: actor.userId, action: existingId === null ? "opening.stock.create" : "opening.stock.update", entity: "OpeningStock", entityId: id, before, after: { code: r.code, qty: r.qty, unitCost: r.unitCost } });

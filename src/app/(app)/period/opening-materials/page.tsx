@@ -5,7 +5,8 @@ import { listOpening } from "@/server/opening/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function OpeningMaterialPage() {
+export default async function OpeningMaterialPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const onlyDemo = (await searchParams).demo === "1";
   const actor = await requireActor("data.import");
-  return <OpeningPage kind="material" data={await listOpening(prisma, "material")} canForce={actor.perms.has("period.close")} />;
+  return <OpeningPage kind="material" data={await listOpening(prisma, "material", { onlyDemo })} canForce={actor.perms.has("period.close")} onlyDemo={onlyDemo} />;
 }
