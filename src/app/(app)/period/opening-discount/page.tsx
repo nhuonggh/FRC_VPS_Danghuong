@@ -5,7 +5,8 @@ import { listOpening } from "@/server/opening/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function OpeningDiscountPage() {
+export default async function OpeningDiscountPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const onlyDemo = (await searchParams).demo === "1";
   const actor = await requireActor("data.import");
-  return <OpeningPage kind="discount" data={await listOpening(prisma, "discount")} canForce={actor.perms.has("period.close")} />;
+  return <OpeningPage kind="discount" data={await listOpening(prisma, "discount", { onlyDemo })} canForce={actor.perms.has("period.close")} onlyDemo={onlyDemo} />;
 }
