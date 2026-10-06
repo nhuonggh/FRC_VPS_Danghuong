@@ -208,6 +208,7 @@ Trạng thái `main`: đã gồm Plan 07 F0–F4 (kết sổ + tra cứu kỳ + 
 
 **Phiên 02/10/2026 — việc user giao & trạng thái (cập nhật cuối phiên)**
 - ĐÃ vào `main` & deploy: nạp dữ liệu khách tự động, nhập Excel 8 danh mục, sửa lỗi Cài đặt danh mục, bỏ tiêu đề nhóm sidebar, logo/favicon + thông tin công ty, tab module + yêu thích (bảng `user_preferences`, migration `20261002100000`), trang đăng nhập có ảnh nền.
+- Phiên 06/10/2026 (nhánh `feat/sidebar-icons`, CHƯA merge/deploy — chờ user duyệt): sidebar chức năng con có icon + đường kẻ dọc bên trái (như app nhatro mẫu) + huy hiệu số chức năng ở module accordion (`src/components/shell/Sidebar.tsx`).
 - ĐÃ merge `main` (6d69311), deploy xanh: đổi tên **TT ERP** + nút **Truy cập nhanh** trên header (lưu `user_preferences.data.quickAccess`, không migration).
 - **Chờ user quyết:** Trang chủ có cần thanh tab ngang (Trang chủ + mục yêu thích) không — chưa làm vì tab module khác sẽ thay thế thanh này khi chuyển trang.
 - **Chờ khách** (file `data/DHERP – Bảng bổ sung dữ liệu (gửi khách).xlsx`): ngày chốt + số đầu kỳ, BOM/công thức gia công, phân loại thành phẩm/NVL, SĐT thật, TK ngân hàng (MB 2318189999 vs 12345), vị trí của Bùi Thị Lan, mẫu in M1–M9 (Google Docs), giá gia công thuê E3, định mức tồn thật.

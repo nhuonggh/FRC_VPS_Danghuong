@@ -118,6 +118,11 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
                   <span className={clsx("truncate", collapsed ? "hidden" : "hidden lg:inline")}>{m.label}</span>
                 </Link>
                 {m.type === "accordion" && !collapsed && (
+                  <span className="hidden min-w-5 rounded-full bg-hover px-1.5 text-center text-xs font-semibold text-fg-secondary lg:inline" title={`${m.categories.reduce((n, c) => n + c.functions.length, 0)} chức năng`}>
+                    {m.categories.reduce((n, c) => n + c.functions.length, 0)}
+                  </span>
+                )}
+                {m.type === "accordion" && !collapsed && (
                   <button
                     type="button"
                     aria-label={`${expanded ? "Thu gọn" : "Mở rộng"} ${m.label}`}
@@ -131,7 +136,7 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
               </div>
 
               {expanded && (
-                <div className="hidden pb-1 lg:block">
+                <div className="ml-5 hidden border-l border-border pb-1 pl-1.5 lg:block">
                   {m.categories.map((c) => (
                     <div key={c.key} className="mt-1">
                       {!c.hideTitle && (
@@ -147,10 +152,11 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
                             href={f.path}
                             aria-current={on ? "page" : undefined}
                             className={clsx(
-                              "ml-8 flex h-9 items-center gap-2 truncate rounded-sm border-l-[3px] px-3 text-sm",
-                              on ? "border-accent bg-accent-soft font-medium text-accent" : "border-transparent text-fg-secondary hover:bg-hover",
+                              "relative flex h-9 items-center gap-3 truncate rounded-sm px-3 text-sm",
+                              on ? "bg-accent-soft font-medium text-accent before:absolute before:-left-[8px] before:inset-y-2 before:w-[3px] before:rounded before:bg-accent" : "text-fg-secondary hover:bg-hover",
                             )}
                           >
+                            <Icon name={f.icon} size={16} />
                             <span className="truncate">{f.label}</span>
                           </Link>
                         );
