@@ -115,7 +115,7 @@ export async function createReceipt(tx: Tx, actor: Actor, input: ReceiptInput, n
   return { id, code };
 }
 
-export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInput, "kind"> & { kind: PaymentInput["kind"] | "CHI_PHI" | "TAT_TOAN_CK" }, now: Date = new Date()): Promise<{ id: number; code: string }> {
+export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInput, "kind"> & { kind: PaymentInput["kind"] | "CHI_PHI" | "TAT_TOAN_CK"; goodsReturnId?: number | null }, now: Date = new Date()): Promise<{ id: number; code: string }> {
   assertVoucherPerm(actor, "PAYMENT", "create", input.kind);
   const period = await getOpenPeriod(tx);
   const at = docTimestamp(input.date, now);
@@ -125,7 +125,7 @@ export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInp
   const id = await nextDocId(tx, "payments");
   const code = formatDocCode(VOUCHER_PREFIX.PAYMENT, id);
   const amount = D(input.amount);
-  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, createdBy: actor.userId } });
+  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, goodsReturnId: input.goodsReturnId ?? null, createdBy: actor.userId } });
   await postVoucherLedgers(tx, { doc: "PAYMENT", id, periodId: period.id, type: input.kind, partnerId: input.partnerId, cashAccountId: input.cashAccountId, amount, at }, actor.userId);
   await addReviewEvent(tx, "PAYMENT", id, "SUBMIT", actor.userId);
   await writeAudit(tx, { userId: actor.userId, action: "payment.create", entity: "Payment", entityId: id, after: { code, kind: input.kind, amount: input.amount, cashAccountId: input.cashAccountId } });

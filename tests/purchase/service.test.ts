@@ -3,7 +3,7 @@ import type { Actor } from "@/lib/permissions/scope";
 import { toIct } from "@/lib/time";
 import { cancelPurchaseTx, createPurchaseIdempotent, updatePurchaseFreightTx, updatePurchaseTx } from "@/server/purchase/service";
 import { prisma, resetDb } from "../helpers/db";
-import { makePartner, makePeriod, makeProduct, makeUser } from "../helpers/factories";
+import { makeCashAccount, makePartner, makePeriod, makeProduct, makeUser } from "../helpers/factories";
 import { assertLedgerBalanced } from "../inventory/helpers";
 
 const todayIct = () => {
@@ -36,6 +36,21 @@ beforeEach(async () => {
 });
 
 describe("purchase service", () => {
+  it("trả NCC cùng lúc tiền mặt + chuyển khoản khi lập phiếu; phần còn lại ghi nợ; trả vượt thì rollback", async () => {
+    const cash = await makeCashAccount({ type: "CASH", name: "Quỹ TM" }), bank = await makeCashAccount({ type: "BANK", name: "NH" });
+    const payer: Actor = { userId: actor.userId, perms: new Set([...actor.perms, "payment.manage", "cash.transaction.create"]) };
+    const input = { ...document(), payments: [{ amount: 500_000, cashAccountId: cash.id }, { amount: 700_000, cashAccountId: bank.id }] };
+    const { code } = await createPurchaseIdempotent(prisma, payer, "pay-1", input as never);
+    expect(await prisma.payment.count({ where: { kind: "TRA_NCC", partnerId: supplierId, amount: 500_000, cashAccountId: cash.id } })).toBe(1);
+    expect(await prisma.payment.count({ where: { kind: "TRA_NCC", partnerId: supplierId, amount: 700_000, cashAccountId: bank.id, note: { contains: code } } })).toBe(1);
+    const led = await prisma.partnerLedger.aggregate({ where: { partnerId: supplierId }, _sum: { debit: true, credit: true } });
+    expect(Number(led._sum.credit) - Number(led._sum.debit)).toBe(2_000_000 - 1_200_000); // còn nợ NCC 800.000
+    const before = await prisma.purchase.count();
+    await expect(createPurchaseIdempotent(prisma, payer, "pay-2", { ...document(), payments: [{ amount: 2_000_001, cashAccountId: cash.id }] } as never)).rejects.toMatchObject({ status: 400 });
+    expect(await prisma.purchase.count()).toBe(before);
+    await expect(createPurchaseIdempotent(prisma, actor, "pay-3", { ...document(), payments: [{ amount: 1, cashAccountId: cash.id }] } as never)).rejects.toMatchObject({ status: 403 });
+  });
+
   it("creates one idempotent receipt, inventory lot and supplier liability excluding freight", async () => {
     const [first, replay] = await Promise.all([
       createPurchaseIdempotent(prisma, actor, "receipt-1", document({ freightCost: 1_000 })),

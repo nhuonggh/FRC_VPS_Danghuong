@@ -172,6 +172,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
         badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : order.isDraft ? [{ label: "Nháp", tone: "warning" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
         facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : [])],
       }}
+      stacked
       tabs={[
         { key: "info", label: "Thông tin cơ bản", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },

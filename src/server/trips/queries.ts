@@ -20,7 +20,7 @@ const ymd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slic
 
 export interface TripRowDTO {
   id: number; code: string; date: string; status: TripStatus; statusLabel: string; routeName: string | null; vehiclePlate: string; driverName: string; assistantName: string | null;
-  stops: number; done: number; expected: string; collected: string;
+  stops: number; done: number; expected: string; collected: string; cash: string; transfer: string;
 }
 export interface TripStatsDTO { active: number; returned: number; settled: number; confirmed: number }
 
@@ -48,6 +48,7 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
       id: t.id, code: t.code, date: ymd(t.tripDate), status: t.status, statusLabel: TRIP_STATUS_LABEL[t.status], routeName: t.route?.name ?? null, vehiclePlate: t.vehicle.plate, driverName: t.driver.name, assistantName: t.assistant?.name ?? null,
       stops: t.stops.length, done: t.stops.filter((s) => s.result !== null).length,
       expected: t.stops.reduce((s, x) => s.plus(x.dueAmount ?? 0), D(0)).toString(), collected: t.stops.reduce((s, x) => s.plus(x.cashAmount).plus(x.transferAmount), D(0)).toString(),
+      cash: t.stops.reduce((s, x) => s.plus(x.cashAmount), D(0)).toString(), transfer: t.stops.reduce((s, x) => s.plus(x.transferAmount), D(0)).toString(),
     })),
   };
 }

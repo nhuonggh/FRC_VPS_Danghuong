@@ -28,7 +28,7 @@ const COPY = {
 } as const;
 
 /** Trả theo sản phẩm (45) và trả NCC (47). Giá gợi ý điền vào ô giá còn trống, sửa tay được. */
-export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUPPLIER"; today: string }) {
+export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY_PRODUCT" | "SUPPLIER"; today: string; /** Chỉ khách trả: quỹ/ngân hàng để hoàn tiền (thiếu quyền chi ⇒ không có ô hoàn tiền). */ refundAccounts?: (ComboOption & { type: "CASH" | "BANK" })[] }) {
   const c = COPY[mode];
   const router = useRouter();
   const idem = useIdempotencyKey();
@@ -62,8 +62,26 @@ export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUP
     });
   }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Khấu trừ (phí vận chuyển…) + hoàn tiền khách bằng tiền mặt / chuyển khoản; phần còn lại trừ vào công nợ
+  const customerMode = mode === "BY_PRODUCT";
+  const [dedAmount, setDedAmount] = useState(""), [dedReason, setDedReason] = useState("");
+  const cashList = (refundAccounts ?? []).filter((a) => a.type === "CASH"), bankList = (refundAccounts ?? []).filter((a) => a.type === "BANK");
+  const [cashRefund, setCashRefund] = useState(""), [cashAcc, setCashAcc] = useState<number | "">(cashList[0] ? Number(cashList[0].value) : "");
+  const [bankRefund, setBankRefund] = useState(""), [bankAcc, setBankAcc] = useState<number | "">(bankList[0] ? Number(bankList[0].value) : "");
   const submit = handleSubmit(async (value) => {
-    const r = await apiFetch<{ id: number }>(c.endpoint, { method: "POST", json: value, idempotencyKey: idem.key });
+    const body: Record<string, unknown> = { ...value };
+    if (customerMode) {
+      const goods = lines.reduce((s, l) => s + amountOf(l), 0);
+      const net = Math.round((goods - num(dedAmount)) * 100) / 100;
+      if (num(dedAmount) > 0) body.deduction = { amount: num(dedAmount), reason: dedReason.trim() };
+      if (num(dedAmount) > goods + 0.004) throw new Error("Khoản khấu trừ vượt giá trị hàng trả.");
+      if (num(cashRefund) + num(bankRefund) > net + 0.004) throw new Error("Số tiền hoàn vượt giá trị hàng trả sau khấu trừ.");
+      if (num(cashRefund) > 0 && cashAcc === "") throw new Error("Chọn quỹ tiền mặt để hoàn tiền.");
+      if (num(bankRefund) > 0 && bankAcc === "") throw new Error("Chọn tài khoản ngân hàng để hoàn tiền.");
+      const refunds = [...(num(cashRefund) > 0 ? [{ amount: num(cashRefund), cashAccountId: Number(cashAcc) }] : []), ...(num(bankRefund) > 0 ? [{ amount: num(bankRefund), cashAccountId: Number(bankAcc) }] : [])];
+      if (refunds.length) body.refunds = refunds;
+    }
+    const r = await apiFetch<{ id: number }>(c.endpoint, { method: "POST", json: body, idempotencyKey: idem.key });
     router.replace(`/returns/${r.id}`);
   });
   const loadPartners = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/${c.search}/search?q=${encodeURIComponent(q)}`);
@@ -144,6 +162,38 @@ export function ReturnByProductForm({ mode, today }: { mode: "BY_PRODUCT" | "SUP
             </table>
           </div>
           {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}
+          {customerMode && (() => {
+            const net = Math.round((total - num(dedAmount)) * 100) / 100, refunded = num(cashRefund) + num(bankRefund);
+            const sel = (id: string, list: (ComboOption & { type: string })[], value: number | "", set: (v: number | "") => void) => (
+              <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
+                <option value="">{list.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>{list.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+            );
+            const money = "tabular text-right";
+            return (
+              <div className="space-y-3 rounded-sm border border-border p-4">
+                <h3 className="text-sm font-semibold">Xử lý tiền khi khách trả hàng</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field id="ret-ded" label="Khấu trừ (phí vận chuyển, hao hụt…)" hint="Trừ vào tiền khách được nhận lại"><input id="ret-ded" type="number" min={0} step="any" value={dedAmount} placeholder="0" onChange={(e) => setDedAmount(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
+                  <Field id="ret-ded-reason" label="Lý do khấu trừ"><input id="ret-ded-reason" maxLength={200} value={dedReason} onChange={(e) => setDedReason(e.target.value)} className={inputClass()} /></Field>
+                </div>
+                {refundAccounts && (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <Field id="ret-cash" label="Hoàn tiền mặt"><input id="ret-cash" type="number" min={0} step="any" value={cashRefund} placeholder="0" onChange={(e) => setCashRefund(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
+                    <Field id="ret-cash-acc" label="Quỹ tiền mặt">{sel("ret-cash-acc", cashList, cashAcc, setCashAcc)}</Field>
+                    <Field id="ret-bank" label="Hoàn chuyển khoản"><input id="ret-bank" type="number" min={0} step="any" value={bankRefund} placeholder="0" onChange={(e) => setBankRefund(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
+                    <Field id="ret-bank-acc" label="Ngân hàng">{sel("ret-bank-acc", bankList, bankAcc, setBankAcc)}</Field>
+                  </div>
+                )}
+                <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                  <div className="flex gap-2"><dt className="text-fg-muted">Giá trị hàng trả:</dt><dd className="font-semibold tabular">{formatCurrency(total)}</dd></div>
+                  <div className="flex gap-2"><dt className="text-fg-muted">Sau khấu trừ:</dt><dd className="font-semibold tabular">{formatCurrency(net)}</dd></div>
+                  <div className="flex gap-2"><dt className="text-fg-muted">Hoàn lại khách:</dt><dd className="font-semibold tabular">{formatCurrency(refunded)}</dd></div>
+                  <div className="flex gap-2"><dt className="text-fg-muted">Trừ vào công nợ:</dt><dd className={`font-semibold tabular ${refunded > net ? "text-danger" : ""}`}>{formatCurrency(net - refunded)}</dd></div>
+                </dl>
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => append(emptyLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
             <ProductMultiPicker load={loadProducts} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />

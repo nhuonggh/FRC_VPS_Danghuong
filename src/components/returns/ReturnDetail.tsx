@@ -45,6 +45,8 @@ export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canMana
                 <DetailField label="Ngày trả">{formatDate(ret.at)}</DetailField>
                 <DetailField label="Đơn hàng gốc">{ret.orderId ? <Link href={`/sales/orders/${ret.orderId}`} className="text-accent hover:underline">{ret.orderCode}</Link> : null}</DetailField>
                 <DetailField label="Ghi chú">{ret.note}</DetailField>
+                {ret.returnDeduction !== undefined && Number(ret.returnDeduction) > 0 && <DetailField label="Khấu trừ">{formatCurrency(ret.returnDeduction)}{ret.deductionNote ? ` — ${ret.deductionNote}` : ""}</DetailField>}
+                {(ret.refunds ?? []).length > 0 && <DetailField label="Đã hoàn tiền khách">{(ret.refunds ?? []).map((p) => <span key={p.id} className={`block ${p.isCancelled ? "text-fg-muted line-through" : ""}`}><Link href={`/accounting/payments/${p.id}`} className="font-mono text-xs text-accent hover:underline">{p.code}</Link> · {p.refundAmount !== undefined && formatCurrency(p.refundAmount)} · {p.accountName}</span>)}</DetailField>}
                 <DetailField label="Người lập">{ret.createdByName}</DetailField>
               </dl>
             ),

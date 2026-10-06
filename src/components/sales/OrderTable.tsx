@@ -17,6 +17,12 @@ export function OrderTable({ rows, params }: { rows: OrderRowDTO[]; params: List
     ...(rows.some((o) => o.orderTotal !== undefined)
       ? [{ key: "orderTotal", label: "Phải thu", align: "right" as const, render: (o: OrderRowDTO) => (o.orderTotal === undefined ? null : formatCurrency(o.orderTotal)) }]
       : []),
+    ...(rows.some((o) => o.oldDebt !== undefined)
+      ? [
+          { key: "oldDebt", label: "Nợ cũ", align: "right" as const, render: (o: OrderRowDTO) => (o.oldDebt === undefined ? null : formatCurrency(o.oldDebt)) },
+          { key: "totalPayable", label: "Tổng phải trả", align: "right" as const, render: (o: OrderRowDTO) => (o.totalPayable === undefined ? null : <strong>{formatCurrency(o.totalPayable)}</strong>) },
+        ]
+      : []),
     {
       key: "delivery", label: "Giao hàng",
       render: (o) => <Badge tone={DELIVERY_LABEL[o.deliveryStatus].tone}>{DELIVERY_LABEL[o.deliveryStatus].label}</Badge>,

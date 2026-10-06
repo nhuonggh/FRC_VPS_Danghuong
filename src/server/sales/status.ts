@@ -5,7 +5,7 @@ export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
 export const DELIVERY_LABEL: Record<DeliveryStatus, { label: string; tone: Tone }> = {
   NEW: { label: "Mới tạo", tone: "neutral" },
-  WAITING_STOCK: { label: "Chờ hàng", tone: "warning" },
+  WAITING_STOCK: { label: "Chưa đủ tồn", tone: "warning" },
   READY: { label: "Sẵn hàng", tone: "info" },
   LOADED: { label: "Đã xếp xe", tone: "info" },
   DELIVERING: { label: "Đang giao", tone: "info" },
@@ -26,7 +26,7 @@ export const PAYMENT_LABEL: Record<PaymentStatus, { label: string; tone: Tone }>
 
 /**
  * Trục giao hàng hiển thị. Đơn mới xuất kho ngay (D-25) nên "Mới tạo" chưa dùng phiếu giao/chuyến được suy ra từ tồn:
- * còn dòng treo (bán âm kho) → "Chờ hàng"; đủ tồn → "Sẵn hàng". Các trạng thái sau do phiếu giao/chuyến đặt (C3, plan 05).
+ * còn dòng treo (bán âm kho) → "Chưa đủ tồn"; đủ tồn → "Sẵn hàng". Các trạng thái sau do phiếu giao/chuyến đặt (C3, plan 05).
  */
 export function effectiveDeliveryStatus(stored: DeliveryStatus, hasProvisional: boolean): DeliveryStatus {
   if (stored !== "NEW") return stored;

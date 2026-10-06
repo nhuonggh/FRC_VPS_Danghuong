@@ -51,16 +51,20 @@ model Payment {
   cancelledBy   Int?
   createdBy     Int
   createdAt     DateTime         @default(now())
+  /// Phiếu hoàn tiền sinh cùng phiếu trả hàng (HOAN_KHACH).
+  goodsReturnId Int?
 
   period      Period              @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner     Partner?            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   cashAccount CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  goodsReturn GoodsReturn?        @relation(fields: [goodsReturnId], references: [id], onDelete: Restrict)
   expense     OperatingExpense?
   settlement  DiscountSettlement?
 
   @@index([periodId, at])
   @@index([partnerId])
   @@index([reviewStatus])
+  @@index([goodsReturnId])
   @@map("payments")
 }
 

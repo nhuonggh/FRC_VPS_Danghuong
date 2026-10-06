@@ -34,15 +34,15 @@ export function TripList({ title, base, rows, total, stats, params, vehicles, ca
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => href(page)} />}
     >
       {total === 0 ? <EmptyState kind={filtered ? "no-result" : "empty"} title={filtered ? "Không có chuyến phù hợp" : "Chưa có chuyến nào"} /> : (
-        <table className="w-full min-w-[820px] text-sm">
-          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Mã</th><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Tuyến</th><th className="px-3 py-2">Xe / lái xe</th><th className="px-3 py-2 text-right">Điểm giao</th><th className="px-3 py-2 text-right">Phải thu</th><th className="px-3 py-2 text-right">Đã thu</th><th className="px-3 py-2">Trạng thái</th></tr></thead>
+        <table className="w-full min-w-[920px] text-sm">
+          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Mã</th><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Tuyến</th><th className="px-3 py-2">Xe / lái xe</th><th className="px-3 py-2 text-right">Điểm giao</th><th className="px-3 py-2 text-right">Phải thu</th><th className="px-3 py-2 text-right">Đã thu tiền mặt</th><th className="px-3 py-2 text-right">Đã thu chuyển khoản</th><th className="px-3 py-2">Trạng thái</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-t border-border">
                 <td className="px-3 py-2 font-mono text-xs"><Link href={`/delivery/trips/${r.id}`} className="text-accent hover:underline">{r.code}</Link></td>
                 <td className="px-3 py-2 whitespace-nowrap">{r.date.split("-").reverse().join("/")}</td><td className="px-3 py-2">{r.routeName}</td>
                 <td className="px-3 py-2"><strong>{r.vehiclePlate}</strong><span className="block text-xs text-fg-muted">{r.driverName}{r.assistantName ? ` + ${r.assistantName}` : ""}</span></td>
-                <td className="px-3 py-2 text-right tabular">{r.done}/{r.stops}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.expected)}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.collected)}</td>
+                <td className="px-3 py-2 text-right tabular">{r.done}/{r.stops}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.expected)}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.cash)}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.transfer)}</td>
                 <td className="px-3 py-2"><Badge tone={TONE[r.status]}>{r.statusLabel}</Badge></td>
               </tr>
             ))}

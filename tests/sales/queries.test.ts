@@ -1,3 +1,16 @@
+
+  it("nợ cũ = số đầu kỳ + sổ công nợ TRƯỚC ngày đơn; tổng phải trả = nợ cũ + tiền đơn; chỉ thấy khi có debt.view", async () => {
+    const period = await prisma.period.findFirstOrThrow();
+    await prisma.openingDebt.create({ data: { periodId: period.id, partnerId: customer.id, amount: 500_000 } });
+    await prisma.partnerLedger.create({ data: { periodId: period.id, partnerId: customer.id, debit: 200_000, docType: "DEBT_ADJ", docId: 1, at: new Date("2026-09-10T03:00:00Z"), createdBy: w.userId } });
+    await prisma.partnerLedger.create({ data: { periodId: period.id, partnerId: customer.id, debit: 900_000, docType: "DEBT_ADJ", docId: 2, at: new Date("2026-09-20T03:00:00Z"), createdBy: w.userId } }); // sau ngày đơn: không tính
+    await make(1);
+    const withDebt: Actor = { userId: w.userId, perms: new Set([...WRITER, "order.view", "debt.view"]) };
+    const row = (await listOrders(prisma, withDebt, params(), NOW)).rows[0]!;
+    expect(row.oldDebt).toBe("700000"); expect(row.totalPayable).toBe(String(700_000 + Number(row.orderTotal)));
+    const noDebt = (await listOrders(prisma, { userId: w.userId, perms: new Set([...WRITER, "order.view"]) }, params(), NOW)).rows[0]!;
+    expect("oldDebt" in noDebt).toBe(false); expect("totalPayable" in noDebt).toBe(false);
+  });
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { parseListParams } from "@/lib/query-params";
@@ -45,7 +58,7 @@ describe("status", () => {
 });
 
 describe("listOrders", () => {
-  it("lọc theo trạng thái HIỂN THỊ: đơn đủ tồn = Sẵn hàng, đơn treo = Chờ hàng; stats đếm đúng", async () => {
+  it("lọc theo trạng thái HIỂN THỊ: đơn đủ tồn = Sẵn hàng, đơn treo = Chưa đủ tồn; stats đếm đúng", async () => {
     const ok = await make(5); const pending = await make(20); // tồn 10 → đơn 2 thiếu
     const all = await listOrders(prisma, writer, params(), NOW);
     expect(all.rows.map((r) => r.code).sort()).toEqual([ok.code, pending.code].sort());
