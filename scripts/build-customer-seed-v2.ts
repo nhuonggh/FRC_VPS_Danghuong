@@ -26,6 +26,11 @@ async function readRows(file: string): Promise<Cell[][]> {
   return rows;
 }
 const text = (v: Cell | undefined) => (v == null ? "" : String(v)).replace(/\s+/g, " ").trim();
+/**
+ * Tỷ lệ kiểu `1.2000` bị Excel đọc thành ngày "tháng 1 năm 2000" (định dạng m.yyyy) ⇒ khôi phục = tháng + năm/10000 (ra 1,2).
+ * Chỉ là SUY RA từ file — các bản ghi này được báo cho khách xác nhận (xem --report).
+ */
+const ratioNum = (c: Cell | undefined): { value: number; recovered: boolean } => c instanceof Date ? { value: Number(`${c.getUTCMonth() + 1}.${c.getUTCFullYear()}`), recovered: true } : { value: Number(c) || 0, recovered: false };
 const report: string[] = [];
 
 /** SĐT: bỏ ô rác (chỉ dấu chấm / < 8 chữ số), thêm số 0 đầu cho từng số bị Excel làm mất. */
@@ -67,8 +72,8 @@ async function main() {
     const kindText = normalizeSearch(text(r[18])); const kind = kindText.startsWith("thanh pham") ? "THANH_PHAM" : /^phu kien/.test(normalizeSearch(groupRaw)) ? "PHU_KIEN" : "HANG";
     const unit = text(r[10]).toLowerCase() || "cái";
     const gcs = (gcById.get(String(r[0])) ?? []).map((g) => {
-      const gname = text(g[6]); const stock = g[7]; const ratio = Number(g[8]) || 0; const gunit = text(g[9]);
-      if (stock instanceof Date) badStockRatio.push(`${code} / ${gname}`);
+      const gname = text(g[6]); const stock = ratioNum(g[7]); const { value: ratio, recovered } = ratioNum(g[8]); const gunit = text(g[9]);
+      if (stock.recovered || recovered) badStockRatio.push(`${code} / ${gname}: trừ kho ${stock.value}${stock.recovered ? " (suy từ ngày)" : ""}, nhân ${ratio}${recovered ? " (suy từ ngày)" : ""}`);
       if (gname && !processingMap.has(normalizeSearch(gname))) processingMap.set(normalizeSearch(gname), { name: gname, note: ratio ? `Tỷ lệ ${fmtVi(ratio)}${gunit ? ` ${gunit}` : ""} (theo sản phẩm đầu tiên dùng kiểu này)` : "" });
       return `${gname} (×${fmtVi(ratio)} ${gunit})`;
     });
@@ -84,6 +89,6 @@ async function main() {
   writeFileSync(outPath, `{\n${body}\n}\n`.replace(/^\{\n {2}"version": 2,\n/, '{\n  "version": 2,\n'), "utf8");
   const debts = partners.filter((p) => p.openingBalance).map((p) => `${p.code}\t${p.name}\t${p.openingBalance}`);
   console.log(`Đã ghi ${outPath}: khách/NCC ${partners.length}, sản phẩm ${products.length}, nhóm hàng ${productGroups.size}, kiểu gia công ${processingMap.size}`);
-  if (reportPath) writeFileSync(reportPath, [`# Đổi mã sản phẩm (${codeMap.length})`, ...codeMap, "", `# Dòng gia công có tỷ lệ trừ kho bị Excel đổi thành ngày (${badStockRatio.length})`, ...badStockRatio, "", `# Cảnh báo`, ...report, "", `# Số dư công nợ đầu kỳ chưa nạp (${debts.length}; dương = khách nợ?)`, ...debts].join("\n"), "utf8");
+  if (reportPath) writeFileSync(reportPath, [`# Đổi mã sản phẩm (${codeMap.length})`, ...codeMap, "", `# Dòng gia công có tỷ lệ bị Excel đổi thành ngày (đã suy lại, cần khách xác nhận) (${badStockRatio.length})`, ...badStockRatio, "", `# Cảnh báo`, ...report, "", `# Số dư công nợ đầu kỳ chưa nạp (${debts.length}; dương = khách nợ?)`, ...debts].join("\n"), "utf8");
 }
 main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
