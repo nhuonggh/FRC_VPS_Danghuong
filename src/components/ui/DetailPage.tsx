@@ -186,6 +186,8 @@ interface Props {
   activeTab: string;
   onTabChange: (key: string) => void;
   initialEditing?: string | null;
+  /** Hiện mọi phần xếp dọc trên MỘT màn hình (nav bên trái cuộn tới phần) thay vì chuyển tab. */
+  stacked?: boolean;
   /** Mặc định router.refresh(). */
   onSaved?: () => void;
 }
@@ -196,7 +198,7 @@ function TabBody({ tab, ctx }: { tab: DetailTab; ctx: TabRenderCtx }) {
 }
 
 export function DetailPage({
-  backHref, backLabel, headerActions, summary, tabs, activeTab, onTabChange, initialEditing = null, onSaved,
+  backHref, backLabel, headerActions, summary, tabs, activeTab, onTabChange, initialEditing = null, onSaved, stacked = false,
 }: Props) {
   const router = useRouter();
   const selected = tabs.some((t) => t.key === activeTab) ? activeTab : tabs[0]!.key;
@@ -295,8 +297,8 @@ export function DetailPage({
           {/* Nav tab dọc — chỉ ≥ 1024. < 1024 dùng thanh tab ngang trong <main>. */}
           <nav className="hidden border-t border-border p-2 lg:block" aria-label="Các phần">
             {tabs.map((t) => (
-              <button key={t.key} type="button" onClick={() => void changeTab(t.key)} aria-current={selected === t.key ? "page" : undefined}
-                className={clsx("flex min-h-10 w-full items-center rounded-sm px-3 text-left text-sm", selected === t.key ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary hover:bg-hover hover:text-fg")}>
+              <button key={t.key} type="button" onClick={() => (stacked ? document.getElementById(`sec-${t.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }) : void changeTab(t.key))} aria-current={!stacked && selected === t.key ? "page" : undefined}
+                className={clsx("flex min-h-10 w-full items-center rounded-sm px-3 text-left text-sm", !stacked && selected === t.key ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary hover:bg-hover hover:text-fg")}>
                 {label(t)}
               </button>
             ))}
@@ -306,13 +308,22 @@ export function DetailPage({
         <div className="min-w-0 rounded-sm border border-border bg-surface">
           <div className="flex overflow-x-auto border-b border-border px-2 lg:hidden">
             {tabs.map((t) => (
-              <button key={t.key} type="button" onClick={() => void changeTab(t.key)} aria-current={selected === t.key ? "page" : undefined}
-                className={clsx("min-h-12 shrink-0 border-b-2 px-3 text-sm font-medium", selected === t.key ? "border-accent text-accent" : "border-transparent text-fg-secondary")}>
+              <button key={t.key} type="button" onClick={() => (stacked ? document.getElementById(`sec-${t.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }) : void changeTab(t.key))} aria-current={!stacked && selected === t.key ? "page" : undefined}
+                className={clsx("min-h-12 shrink-0 border-b-2 px-3 text-sm font-medium", !stacked && selected === t.key ? "border-accent text-accent" : "border-transparent text-fg-secondary")}>
                 {label(t)}
               </button>
             ))}
           </div>
-          <div className="space-y-6 p-4 sm:p-6"><TabBody key={selected} tab={current} ctx={ctx} /></div>
+          {stacked ? (
+            <div className="divide-y divide-border">
+              {tabs.map((t) => (
+                <section key={t.key} id={`sec-${t.key}`} className="scroll-mt-4 space-y-4 p-4 sm:p-6">
+                  <h2 className="text-base font-semibold">{label(t)}</h2>
+                  <TabBody tab={t} ctx={ctx} />
+                </section>
+              ))}
+            </div>
+          ) : <div className="space-y-6 p-4 sm:p-6"><TabBody key={selected} tab={current} ctx={ctx} /></div>}
         </div>
       </div>
     </div>

@@ -23,10 +23,13 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   const [error, setError] = useState<string | null>(null);
   const canCreate = canDeposit && !order.isCancelled;
 
-  useEffect(() => {
-    if (!canCreate) return;
-    apiFetch<CashOption[]>("/api/deposits/options/cash-accounts").then((o) => { setOptions(o); setCashAccountId((c) => c || String(o[0]?.id ?? "")); }).catch(() => setOptions([]));
-  }, [canCreate]);
+  // Quỹ chỉ tải khi người dùng bắt đầu nhập (panel nằm cùng màn hình với các phần khác nên không tải sẵn)
+  const [loaded, setLoaded] = useState(false);
+  const loadOptions = () => {
+    if (loaded || !canCreate) return;
+    setLoaded(true);
+    Promise.resolve(apiFetch<CashOption[]>("/api/deposits/options/cash-accounts")).then((o) => { const list = o ?? []; setOptions(list); setCashAccountId((c) => c || String(list[0]?.id ?? "")); }).catch(() => setOptions([]));
+  };
 
   async function create() {
     if (busy) return;
@@ -45,7 +48,7 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   return (
     <div className="space-y-6">
       {canCreate && (
-        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4">
+        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4" onFocusCapture={loadOptions} onPointerDownCapture={loadOptions}>
           <h3 className="text-sm font-semibold">Thu tiền cọc</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">Số tiền

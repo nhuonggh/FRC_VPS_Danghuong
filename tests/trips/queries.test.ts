@@ -54,6 +54,7 @@ describe("danh sách và chi tiết chuyến", () => {
     expect(all.total).toBe(2); expect(all.stats).toMatchObject({ active: 2, returned: 0 });
     const row = all.rows.find((r) => r.id === t1.id)!;
     expect(row).toMatchObject({ stops: 2, done: 1, expected: "200000", collected: "200000", vehiclePlate: "51C-12345", driverName: "Lái A" });
+    expect(Number(row.cash) + Number(row.transfer)).toBe(200000);
     expect((await listTrips(prisma, KT, P({ q: "lái b" }))).rows.map((r) => r.id)).toEqual([t2.id]);
     expect((await listTrips(prisma, KT, P({ status: "RETURNED" }))).total).toBe(0);
     expect((await listTrips(prisma, KT, P(), { statuses: ["PLANNED", "ON_ROAD"] })).total).toBe(2);

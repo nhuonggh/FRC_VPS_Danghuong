@@ -37,6 +37,10 @@ export interface OrderRowDTO {
   /** Đơn nháp (từ báo giá): chưa xuất kho, chưa công nợ. */
   isDraft: boolean;
   orderTotal?: string;
+  /** Công nợ khách TRƯỚC ngày lập đơn (số đầu kỳ + sổ công nợ; dương = khách nợ). Cần `debt.view`. */
+  oldDebt?: string;
+  /** Nợ cũ + tiền đơn (cần `debt.view` và `sale_price.view`). */
+  totalPayable?: string;
 }
 
 const ymdOf = (d: Date) => d.toISOString().slice(0, 10);
@@ -79,6 +83,19 @@ const lateWhere = (now: Date): Prisma.SaleOrderWhereInput => ({
   isCancelled: false, isDraft: false, deliveryStatus: { notIn: ["DELIVERED", "FAILED"] }, originalDeliveryDate: { lt: new Date(`${ictYmd(now)}T00:00:00Z`) },
 });
 
+/** Công nợ của khách ngay trước ngày lập từng đơn (trong kỳ của đơn): số đầu kỳ + Σ(nợ − có) các dòng sổ có `at` < ngày đơn. */
+async function oldDebtBefore(db: Db, rows: { id: number; partnerId: number; periodId: number; orderDate: Date }[]): Promise<Map<number, Prisma.Decimal>> {
+  const out = new Map<number, Prisma.Decimal>();
+  await Promise.all(rows.map(async (o) => {
+    const [opening, led] = await Promise.all([
+      db.openingDebt.findFirst({ where: { periodId: o.periodId, partnerId: o.partnerId }, select: { amount: true } }),
+      db.partnerLedger.aggregate({ where: { periodId: o.periodId, partnerId: o.partnerId, at: { lt: o.orderDate } }, _sum: { debit: true, credit: true } }),
+    ]);
+    out.set(o.id, D(opening?.amount ?? 0).plus(led._sum.debit ?? 0).minus(led._sum.credit ?? 0));
+  }));
+  return out;
+}
+
 export async function listOrders(db: Db, actor: Actor, params: ListParams, now: Date = new Date()) {
   const where = orderWhere(actor, params, now);
   const scope: Prisma.SaleOrderWhereInput = { isCancelled: false, partner: partnerScopeWhere(actor) };
@@ -93,6 +110,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
     db.saleOrder.count({ where: { AND: [scope, { lines: { some: { isProvisional: true } } }] } }),
     db.saleOrder.count({ where: { AND: [scope, lateWhere(now)] } }),
   ]);
+  const oldDebts = actor.perms.has("debt.view") ? await oldDebtBefore(db, rows) : null;
   const out: OrderRowDTO[] = rows.map((o) => {
     const hasProvisional = o.lines.some((l) => l.isProvisional);
     return {
@@ -100,6 +118,8 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
       expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
       orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).toString(),
+      ...(oldDebts ? { oldDebt: oldDebts.get(o.id)!.toString() } : {}),
+      ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
     };
   });
   return { rows: redactDeep(out, actor.perms), total, stats: { all, pending, late } };

@@ -295,6 +295,9 @@ model GoodsReturn {
   at           DateTime
   note         String?
   totalAmount  Decimal    @db.Decimal(18, 2)
+  /// Khoản khấu trừ khi khách trả hàng (phí vận chuyển/khác): công nợ khách chỉ giảm `totalAmount − deductionAmount`.
+  deductionAmount Decimal @default(0) @db.Decimal(18, 2)
+  deductionNote   String?
   isCancelled  Boolean    @default(false)
   cancelledAt  DateTime?
   cancelledBy  Int?
@@ -306,6 +309,8 @@ model GoodsReturn {
   partner Partner           @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   order   SaleOrder?        @relation(fields: [orderId], references: [id], onDelete: Restrict)
   lines   GoodsReturnLine[]
+  /// Phiếu chi hoàn tiền khách (tiền mặt/chuyển khoản) lập cùng phiếu trả.
+  refunds Payment[]
 
   @@index([periodId, at])
   @@index([partnerId])

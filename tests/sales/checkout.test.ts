@@ -48,6 +48,17 @@ describe("bán tại quầy — thu tiền + giao ngay cùng giao dịch", () =>
     expect(await prisma.receipt.count({ where: { orderId: o2.id } })).toBe(0);
   });
 
+  it("thu cùng lúc tiền mặt + chuyển khoản ⇒ 2 phiếu thu vào 2 quỹ, đơn đã thanh toán; tổng vượt ⇒ rollback", async () => {
+    const bank = await makeCashAccount({ type: "BANK", name: "Ngân hàng MB" });
+    const o = await run(body(), { payments: [{ amount: 100_000, cashAccountId: cash.id, note: "" }, { amount: 50_000, cashAccountId: bank.id, note: "" }] });
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).paymentStatus).toBe("PAID");
+    expect(await prisma.receipt.count({ where: { orderId: o.id, cashAccountId: cash.id, amount: 100_000 } })).toBe(1);
+    expect(await prisma.receipt.count({ where: { orderId: o.id, cashAccountId: bank.id, amount: 50_000 } })).toBe(1);
+    const before = await counts();
+    await expect(run(body(), { payments: [{ amount: 100_000, cashAccountId: cash.id, note: "" }, { amount: 60_000, cashAccountId: bank.id, note: "" }] })).rejects.toMatchObject({ status: 400 });
+    expect(await counts()).toEqual(before);
+  });
+
   it("thu vượt tiền phải thu / thiếu quỹ ⇒ từ chối và KHÔNG ghi gì (rollback toàn bộ)", async () => {
     const before = await counts();
     await expect(run(body(), { payment: { amount: 150_001, cashAccountId: cash.id, note: "" } })).rejects.toMatchObject({ status: 400 });

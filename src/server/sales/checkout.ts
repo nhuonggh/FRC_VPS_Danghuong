@@ -21,17 +21,21 @@ export const WALK_IN_CODE = "KHL";
  * Phần "bán tại quầy" đi kèm đơn: khách lẻ, thu tiền ngay, giao ngay (khách tự chở).
  * Tất cả nằm CÙNG giao dịch với việc lập đơn: lỗi bất kỳ bước nào ⇒ không có đơn/phiếu thu/phiếu giao nào được ghi.
  */
+const paymentRow = z.object({
+  amount: z.number({ invalid_type_error: "Nhập số tiền thu." }).finite().min(0, "Số tiền không được âm.").max(99_999_999_999).refine((n) => Number(n.toFixed(2)) === n, "Tối đa 2 chữ số thập phân."),
+  cashAccountId: z.number().int().positive().nullable().optional(),
+  note: z.string().trim().max(300),
+});
+
 export const checkoutSchema = z.object({
   /** Có = khách lẻ: đơn gắn khách chung KHL, tên/SĐT chỉ ghi trên đơn. */
   walkIn: z.object({ name: z.string().trim().max(120, "Tên tối đa 120 ký tự."), phone: z.string().trim().max(30, "SĐT tối đa 30 ký tự.") }).optional(),
   /** Khách tự chở: tạo luôn phiếu giao đủ số lượng. */
   pickupNow: z.boolean().optional(),
-  /** Thu tiền ngay (phiếu thu gắn đơn). amount = 0 → không thu. */
-  payment: z.object({
-    amount: z.number({ invalid_type_error: "Nhập số tiền thu." }).finite().min(0, "Số tiền không được âm.").max(99_999_999_999).refine((n) => Number(n.toFixed(2)) === n, "Tối đa 2 chữ số thập phân."),
-    cashAccountId: z.number().int().positive().nullable().optional(),
-    note: z.string().trim().max(300),
-  }).optional(),
+  /** Thu tiền ngay (mỗi dòng = một phiếu thu gắn đơn). amount = 0 → bỏ qua. Dạng cũ một khoản: `payment`. */
+  payment: paymentRow.optional(),
+  /** Thu nhiều khoản cùng lúc (vd tiền mặt + chuyển khoản vào 2 quỹ khác nhau), tối đa 4. */
+  payments: z.array(paymentRow).max(4, "Tối đa 4 khoản thu.").optional(),
 });
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
@@ -54,8 +58,8 @@ export async function ensureWalkInCustomer(prisma: PrismaClient): Promise<number
 
 export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: SaleOrderInput, checkout: CheckoutInput, now: Date = new Date()) {
   assertWriter(actor, "order.create");
-  const pay = checkout.payment && checkout.payment.amount > 0 ? checkout.payment : null;
-  if (pay) assertCan(actor.perms, "deposit.manage");
+  const pays = [...(checkout.payments ?? []), ...(checkout.payment ? [checkout.payment] : [])].filter((p) => p.amount > 0);
+  if (pays.length) assertCan(actor.perms, "deposit.manage");
   if (checkout.pickupNow) assertCan(actor.perms, "order.edit");
 
   // Khách lẻ: khách chung KHL không thuộc "khách của mình" của ai ⇒ chỉ trong phạm vi đơn này cho phép nhìn thấy nó
@@ -83,13 +87,12 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
     const row = await tx.saleOrder.findUniqueOrThrow({ where: { id: created.id }, include: { lines: { orderBy: { id: "asc" } } } });
     const total = row.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(row.shippingFee);
 
-    if (pay) {
-      if (D(pay.amount).gt(total)) throw new DomainError("Số tiền thu vượt tiền phải thu của đơn.", 400);
-      if (!pay.cashAccountId) throw new DomainError("Chọn quỹ/tài khoản nhận tiền.", 400);
-    }
-    if (checkout.walkIn && D(pay?.amount ?? 0).lt(total)) throw new DomainError("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).", 400);
+    const paid = pays.reduce((s, p) => s.plus(p.amount), D(0));
+    if (paid.gt(total)) throw new DomainError("Số tiền thu vượt tiền phải thu của đơn.", 400);
+    if (pays.some((p) => !p.cashAccountId)) throw new DomainError("Chọn quỹ/tài khoản nhận tiền.", 400);
+    if (checkout.walkIn && paid.lt(total)) throw new DomainError("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).", 400);
 
-    if (pay) await createDeposit(tx, eff, { orderId: created.id, amount: pay.amount, cashAccountId: pay.cashAccountId!, date: order.date, note: pay.note }, now);
+    for (const p of pays) await createDeposit(tx, eff, { orderId: created.id, amount: p.amount, cashAccountId: p.cashAccountId!, date: order.date, note: p.note }, now);
     if (checkout.pickupNow) {
       await createDeliveryNoteCore(tx, eff, { orderId: created.id, date: order.date, note: "Giao tại quầy", lines: row.lines.map((l) => ({ orderLineId: l.id, qty: Number(l.qty) })) }, now);
     }

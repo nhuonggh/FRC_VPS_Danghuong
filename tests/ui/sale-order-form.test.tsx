@@ -286,7 +286,7 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     await userEvent.click(screen.getByLabelText(/Khách tự chở/));
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
-    expect(posts()[0]![1].json).toMatchObject({ partnerId: 7, paymentMethod: "CASH", checkout: { pickupNow: true, payment: { amount: 120000, cashAccountId: 5, note: "" } } });
+    expect(posts()[0]![1].json).toMatchObject({ partnerId: 7, paymentMethod: "CASH", checkout: { pickupNow: true, payments: [{ amount: 120000, cashAccountId: 5, note: "" }] } });
     expect(posts()[0]![1].json.checkout.walkIn).toBeUndefined();
   });
 
@@ -313,7 +313,7 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2"); // 60.000
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/8"));
-    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "Anh Ba", phone: "0909" }, pickupNow: true, payment: { amount: 60000, cashAccountId: 5 } });
+    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "Anh Ba", phone: "0909" }, pickupNow: true, payments: [{ amount: 60000, cashAccountId: 5 }] });
   });
 
   it("khách lẻ thu thiếu → báo lỗi, KHÔNG gọi POST", async () => {
@@ -412,7 +412,7 @@ describe("SaleOrderForm — phí vận chuyển, chiết khấu cả đơn, ghi 
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2"); // 60.000
     await userEvent.click(screen.getByRole("button", { name: "Thu tiền & lập đơn" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/9"));
-    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "", phone: "" }, pickupNow: true, payment: { amount: 60000, cashAccountId: 5 } });
+    expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "", phone: "" }, pickupNow: true, payments: [{ amount: 60000, cashAccountId: 5 }] });
   });
 
   it("chế độ thường có link sang Bán lẻ tại quầy (khi có quyền thu tiền); thiếu quyền thì không có", () => {

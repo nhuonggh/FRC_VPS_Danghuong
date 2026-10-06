@@ -13,7 +13,7 @@ import { cancelSaleOrderTx, editSaleOrderTx } from "@/server/sales/lifecycle";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { prisma, resetDb } from "../helpers/db";
-import { makePartner, makePeriod } from "../helpers/factories";
+import { makeCashAccount, makePartner, makePeriod } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 const NOW = new Date("2026-09-15T03:00:00Z");
@@ -175,6 +175,28 @@ describe("trả theo sản phẩm (45)", () => {
     const layer = await prisma.costLayer.findFirstOrThrow({ where: { sourceDocType: "RETURN_IN" } });
     expect(layer.unitCost.toString()).toBe("10000");
     expect(layer.costRefType).toBeNull();
+  });
+
+  it("khấu trừ + hoàn tiền mặt/chuyển khoản: công nợ chỉ giảm (tiền hàng − khấu trừ), phiếu chi HOAN_KHACH ghi nợ lại phần hoàn; hủy phiếu trả hủy luôn phiếu hoàn", async () => {
+    const cash = await makeCashAccount({ type: "CASH", name: "Quỹ TM" }), bank = await makeCashAccount({ type: "BANK", name: "NH" });
+    const payer: Actor = { userId: w.userId, perms: new Set([...PERMS, "payment.manage", "cash.transaction.create"]) };
+    // Khách đã trả đủ trước đó (số dư 0) rồi trả lại 2 × 50.000 = 100.000, khấu trừ 20.000 phí vận chuyển ⇒ nhận lại 80.000 (50.000 mặt + 30.000 CK)
+    const r = await createReturnByProductIdempotent(prisma, payer, "BY_PRODUCT", `rf-${++n}`, returnByProductSchema.parse({
+      partnerId: customer.id, date: "2026-09-15", note: "", deduction: { amount: 20_000, reason: "Phí vận chuyển" },
+      refunds: [{ amount: 50_000, cashAccountId: cash.id }, { amount: 30_000, cashAccountId: bank.id }],
+      lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: 2, unitPrice: 50_000 }],
+    }), NOW);
+    const head = await prisma.goodsReturn.findUniqueOrThrow({ where: { id: r.id } });
+    expect(head.totalAmount.toString()).toBe("100000"); expect(head.deductionAmount.toString()).toBe("20000"); expect(head.deductionNote).toBe("Phí vận chuyển");
+    expect(await balance(customer.id)).toBe("0"); // credit 80.000 (net) rồi debit 80.000 (hoàn)
+    expect(await prisma.payment.count({ where: { goodsReturnId: r.id, kind: "HOAN_KHACH", isCancelled: false } })).toBe(2);
+    expect((await getReturn(prisma, payer, r.id)).refunds).toHaveLength(2);
+    await expect(createReturnByProductIdempotent(prisma, payer, "BY_PRODUCT", `rf-${++n}`, returnByProductSchema.parse({ partnerId: customer.id, date: "2026-09-15", note: "", deduction: { amount: 20_000, reason: "" }, refunds: [{ amount: 90_000, cashAccountId: cash.id }], lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: 2, unitPrice: 50_000 }] }), NOW)).rejects.toMatchObject({ status: 400 });
+    await expect(createReturnByProductIdempotent(prisma, actor, "BY_PRODUCT", `rf-${++n}`, returnByProductSchema.parse({ partnerId: customer.id, date: "2026-09-15", note: "", refunds: [{ amount: 1, cashAccountId: cash.id }], lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty: 1, unitPrice: 50_000 }] }), NOW)).rejects.toMatchObject({ status: 403 });
+    await cancelReturnTx(prisma, payer, r.id, "nhầm");
+    expect(await balance(customer.id)).toBe("0");
+    expect(await prisma.payment.count({ where: { goodsReturnId: r.id, isCancelled: false } })).toBe(0);
+    expect(await onHand()).toBe("100");
   });
 
   it("đã bán cho khách ⇒ vốn = vốn lần bán gần nhất của khách", async () => {

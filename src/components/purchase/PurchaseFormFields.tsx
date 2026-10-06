@@ -3,6 +3,7 @@
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { useState } from "react";
 import { addPickedLines, Combobox, Field, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
 import type { PurchaseInput } from "@/server/purchase/schemas";
@@ -22,12 +23,13 @@ export function dropEmptyPurchaseLines(form: UseFormReturn<PurchaseInput>) {
 }
 
 /** Nhà cung cấp · ngày nhập · cước vận chuyển. */
-export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate }: FormProps & { initialSupplier?: ComboOption | null; maxDate: string }) {
-  const { register, control, watch, formState: { errors } } = form;
-  const supplier = watch("partnerId") ? initialSupplier : null;
+export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, supplierGroups }: FormProps & { initialSupplier?: ComboOption | null; maxDate: string; /** Có = hiện nút thêm nhanh nhà cung cấp (cần quyền quản lý đối tác). */ supplierGroups?: ComboOption[] }) {
+  const { register, control, watch, setValue, formState: { errors } } = form;
+  const [picked, setPicked] = useState<ComboOption | null>(initialSupplier);
+  const supplier = watch("partnerId") ? picked : null;
   const loadSuppliers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/suppliers/search?q=${encodeURIComponent(q)}`);
   return <>
-    <div className="grid gap-4 sm:grid-cols-3"><Controller control={control} name="partnerId" render={({ field }) => <Combobox label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => field.onChange(option ? Number(option.value) : undefined)} error={errors.partnerId?.message} />} />
+    <div className="grid gap-4 sm:grid-cols-3"><Controller control={control} name="partnerId" render={({ field }) => <div className="flex items-end gap-2"><div className="min-w-0 flex-1"><Combobox label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => { setPicked(option); field.onChange(option ? Number(option.value) : undefined); }} error={errors.partnerId?.message} /></div>{supplierGroups && <QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} />}</div>} />
       <Field id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} className={inputClass(errors.date)} /></Field>
       <Field id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message}><input id="freightCost" type="number" min={0} step="any" {...register("freightCost", { valueAsNumber: true })} className={`${inputClass(errors.freightCost)} tabular text-right`} /></Field></div>
   </>;

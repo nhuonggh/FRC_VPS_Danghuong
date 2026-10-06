@@ -64,17 +64,18 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const [amountTouched, setAmountTouched] = useState(false);
   const [payAccount, setPayAccount] = useState<number | null>(() => { const c = retailOn ? options.cashAccounts.find((a) => a.type === "CASH") : undefined; return c ? Number(c.value) : null; });
   const [payNote, setPayNote] = useState("");
+  // Khoản thu thứ 2 bằng hình thức còn lại (vd 5 triệu tiền mặt + phần còn lại chuyển khoản), cùng lúc với khoản 1
+  const [secAmount, setSecAmount] = useState("");
+  const [secAccount, setSecAccount] = useState<number | null>(null);
   // Khách lẻ chưa có hồ sơ: gợi ý giá lấy theo "giá gần nhất của bất kỳ khách" (id không tồn tại ⇒ không có giá riêng)
   const pricingPartnerId = walkIn ? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
 
   const [customer, setCustomer] = useState<ComboOption | null>(edit?.customer ?? null);
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
-  const [processingTypes, setProcessingTypes] = useState<ComboOption[]>([]);
   const requested = useRef(new Set<string>());
   const key = (productId: number) => `${pricingPartnerId}:${productId}`;
 
-  useEffect(() => { apiFetch<ComboOption[]>("/api/orders/options/processing-types").then(setProcessingTypes).catch(() => undefined); }, []);
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
   useEffect(() => {
@@ -116,15 +117,18 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   // Phần bán tại quầy gửi kèm đơn; kiểm tra sớm để báo lỗi rõ (server kiểm lại và là nơi quyết định)
   const buildCheckout = () => {
     if (!canCheckout) return undefined;
-    const amount = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
+    const first = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
+    const second = first > 0 || secAmount ? num(secAmount) : 0;
+    const amount = first + second;
     if (amount > total + 0.004) throw new Error("Số tiền thu vượt tiền phải thu.");
-    if (amount > 0 && !payAccount) throw new Error("Chọn quỹ/tài khoản nhận tiền.");
+    if (first > 0 && !payAccount) throw new Error("Chọn quỹ/tài khoản nhận tiền.");
+    if (second > 0 && !secAccount) throw new Error("Chọn quỹ/tài khoản cho khoản thu thứ hai.");
     if (walkIn && amount + 0.004 < total) throw new Error("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).");
     if (!walkIn && !pickupNow && amount <= 0) return undefined;
     return {
       ...(walkIn ? { walkIn: { name: walkName.trim(), phone: walkPhone.trim() } } : {}),
       ...(pickupNow ? { pickupNow: true } : {}),
-      ...(amount > 0 ? { payment: { amount, cashAccountId: payAccount, note: payNote.trim() } } : {}),
+      ...(amount > 0 ? { payments: [...(first > 0 ? [{ amount: first, cashAccountId: payAccount, note: payNote.trim() }] : []), ...(second > 0 ? [{ amount: second, cashAccountId: secAccount, note: payNote.trim() }] : [])] } : {}),
     };
   };
   const submitWith = (mode: "save" | "print" | "draft") => handleSubmit(async (value) => {
@@ -148,12 +152,14 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const shippingFee = num(watch("shippingFee"));
   const total = round2(linesTotal - orderDiscount + shippingFee);
   const accounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "CASH" : a.type === "BANK"));
-  const paid = payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0;
+  const otherAccounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "BANK" : a.type === "CASH"));
+  const paid = (payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0) + num(secAmount);
   const changeKind = (k: typeof payKind) => {
     setPayKind(k);
     setValue("paymentMethod", k, { shouldDirty: true });
     const list = options.cashAccounts.filter((a) => (k === "CASH" ? a.type === "CASH" : a.type === "BANK"));
     setPayAccount(k === "CASH" || k === "TRANSFER" ? (list[0] ? Number(list[0].value) : null) : null);
+    setSecAmount(""); setSecAccount(null);
     if (k === "CASH" || k === "TRANSFER") { if (!amountTouched) setPayAmount(total ? String(total) : ""); } else { setPayAmount(""); setAmountTouched(false); }
   };
   // Chưa chỉnh tay số tiền thì số thu bám theo tiền phải thu (thu đủ)
@@ -316,7 +322,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
                   dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
-                  processingTypes={processingTypes} canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
+                  canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
             </tbody>
           </table>
@@ -360,13 +366,26 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
               <Field id="payAmount" label="Số tiền thu">
                 <div className="flex gap-2">
                   <input id="payAmount" type="number" min={0} step="any" value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setAmountTouched(true); }} className={`${inputClass()} tabular text-right`} />
-                  <button type="button" onClick={() => { setPayAmount(total ? String(total) : ""); setAmountTouched(false); }} className="h-11 shrink-0 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-9">Thu đủ</button>
+                  <button type="button" onClick={() => { setPayAmount(total ? String(Math.max(0, round2(total - num(secAmount)))) : ""); setAmountTouched(true); }} className="h-11 shrink-0 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-9">Thu đủ</button>
                 </div>
               </Field>
+              <Field id="secAmount" label={payKind === "CASH" ? "Thu thêm bằng chuyển khoản" : "Thu thêm bằng tiền mặt"}>
+                <input id="secAmount" type="number" min={0} step="any" value={secAmount} placeholder="0"
+                  onChange={(e) => { setSecAmount(e.target.value); if (!secAccount && otherAccounts[0]) setSecAccount(Number(otherAccounts[0].value)); if (!amountTouched) setPayAmount(String(Math.max(0, round2(total - num(e.target.value))))); }} className={`${inputClass()} tabular text-right`} />
+              </Field>
+              {num(secAmount) > 0 && (
+                <Field id="secAccount" label={payKind === "CASH" ? "Ngân hàng nhận (khoản 2)" : "Quỹ tiền mặt (khoản 2)"}>
+                  <select id="secAccount" value={secAccount ?? ""} onChange={(e) => setSecAccount(e.target.value ? Number(e.target.value) : null)} className={inputClass()}>
+                    <option value="">{otherAccounts.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
+                    {otherAccounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                </Field>
+              )}
               <Field id="payNote" label="Ghi chú thu tiền"><input id="payNote" value={payNote} onChange={(e) => setPayNote(e.target.value)} className={inputClass()} /></Field>
             </>)}
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <p className="mt-3 text-xs text-fg-muted">Tiền thu khi chưa giao hàng được ghi là <strong>tiền cọc</strong> của đơn (trừ vào công nợ khi giao). Có thể thu bằng cả tiền mặt và chuyển khoản cùng lúc.</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             {options.canPickup ? (
               <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={pickupNow} onChange={(e) => setPickupNow(e.target.checked)} className="h-4 w-4" />Khách tự chở — giao hàng ngay (lập phiếu giao)</label>
             ) : <span />}
@@ -382,11 +401,11 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   );
 }
 
-function LineRow({ index, form, products, setProducts, loadProducts, dto, processingTypes, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown }: {
+function LineRow({ index, form, products, setProducts, loadProducts, dto, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown }: {
   onProductPicked: () => void; onQtyKeyDown: (e: React.KeyboardEvent) => void;
   index: number; form: UseFormReturn<SaleOrderInput>; products: Map<number, ProductOption>;
   setProducts: React.Dispatch<React.SetStateAction<Map<number, ProductOption>>>; loadProducts: (q: string) => Promise<ProductOption[]>;
-  dto: SalePricingDTO | null; processingTypes: ComboOption[]; canEditPrice: boolean; canRemove: boolean; onRemove: () => void;
+  dto: SalePricingDTO | null; canEditPrice: boolean; canRemove: boolean; onRemove: () => void;
 }) {
   const { control, register, setValue, watch, formState: { errors } } = form;
   const line = watch(`lines.${index}`);
@@ -396,6 +415,15 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
   const qtyBase = num(line?.qty) / factor;
   const short = dto?.onHand !== undefined && qtyBase > num(dto.onHand);
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
+  // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
+  const [types, setTypes] = useState<ComboOption[]>([]);
+  const productId = line?.productId;
+  useEffect(() => {
+    if (!productId) { setTypes([]); return; }
+    let live = true;
+    apiFetch<ComboOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) setTypes(t); }).catch(() => { if (live) setTypes([]); });
+    return () => { live = false; };
+  }, [productId]);
   const allLines = watch("lines");
   const dupIndex = line?.productId ? allLines.findIndex((l, i) => i < index && l?.productId === line.productId && l?.unit === line.unit) : -1;
   const duplicateOf = dupIndex + 1; // 0 = không trùng; số dòng (1-based) của dòng trước đã có cùng SP + ĐVT
@@ -453,7 +481,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, proces
       <td data-label="Gia công" className={cell}>
         <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
           <option value="">Không</option>
-          {processingTypes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </td>
       <td data-label="Ghi chú" className={cell}><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>

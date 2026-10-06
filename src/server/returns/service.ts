@@ -5,6 +5,7 @@ import { ictYmd } from "@/lib/time";
 import { writeAudit } from "@/server/audit/write";
 import { deliveredValue } from "@/server/delivery/service";
 import { DomainError } from "@/server/http/errors";
+import { cancelVoucher, createPayment } from "@/server/cash/vouchers";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
 import { docTimestamp, getOnHand, PeriodClosedError, postIssue, postReceipt, productsOfDocument, removeDocument, withInventoryTx, type EngineCtx } from "@/server/inventory";
 import { convertToBase, resolveFactor } from "@/server/products/units";
@@ -125,6 +126,7 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
     : await loadCustomer(tx, actor, input.partnerId);
   if (!partner) throw new DomainError("Không tìm thấy nhà cung cấp.", 404);
   const at = docTimestamp(input.date, now);
+  if (mode === "SUPPLIER" && (input.deduction || input.refunds?.length)) throw new DomainError("Khấu trừ/hoàn tiền chỉ áp dụng cho khách trả hàng.", 400);
 
   const products = await tx.product.findMany({ where: { id: { in: sortedUnique(input.lines.map((l) => l.productId)) } }, include: { units: true } });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -151,8 +153,14 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
     }
   }
 
+  const deduction = D(input.deduction?.amount ?? 0);
+  if (deduction.gt(total)) throw new DomainError("Khoản khấu trừ vượt giá trị hàng trả.", 400);
+  const net = total.minus(deduction);
+  const refunded = (input.refunds ?? []).reduce((s, x) => s.plus(x.amount), D(0));
+  if (refunded.gt(net)) throw new DomainError("Số tiền hoàn vượt giá trị hàng trả sau khấu trừ.", 400);
+
   const { id, code } = await nextCode(tx, mode);
-  await tx.goodsReturn.create({ data: { id, code, periodId: ctx.period.id, kind: mode, partnerId: partner.id, at, note: input.note || null, totalAmount: total, createdBy: actor.userId } });
+  await tx.goodsReturn.create({ data: { id, code, periodId: ctx.period.id, kind: mode, partnerId: partner.id, at, note: input.note || null, totalAmount: total, deductionAmount: deduction, deductionNote: input.deduction?.reason || null, createdBy: actor.userId } });
   for (const r of rows) {
     const row = await tx.goodsReturnLine.create({
       data: { returnId: id, productId: r.productId, qty: r.qty, unit: r.unit, factorUsed: r.factor, qtyBase: r.qtyBase, unitPrice: r.unitPrice, amount: r.amount, at },
@@ -163,8 +171,12 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
     await tx.goodsReturnLine.update({ where: { id: row.id }, data: { seq } });
   }
   // Khách trả → khách nợ ít đi (credit). Trả NCC → mình nợ NCC ít đi (debit; mua hàng là credit).
-  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: partner.id, side: mode === "SUPPLIER" ? "debit" : "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
-  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: mode, partnerCode: partner.code, lineCount: rows.length } });
+  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: partner.id, side: mode === "SUPPLIER" ? "debit" : "credit", amount: net, docType: "RETURN", docId: id, at, createdBy: actor.userId });
+  // Hoàn tiền khách: phiếu chi HOAN_KHACH (ghi nợ lại đúng phần đã hoàn) liên kết phiếu trả để hủy cùng
+  for (const x of input.refunds ?? []) {
+    await createPayment(tx, actor, { kind: "HOAN_KHACH", partnerId: partner.id, cashAccountId: x.cashAccountId, amount: x.amount, date: input.date, note: `Hoàn tiền phiếu trả ${code}`, goodsReturnId: id }, now);
+  }
+  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: mode, partnerCode: partner.code, lineCount: rows.length, deduction: deduction.toString(), refunded: refunded.toString() } });
   return { id, code };
 }
 
@@ -196,6 +208,11 @@ export async function cancelReturn(ctx: EngineCtx, actor: Actor, id: number, rea
 
   await removeDocument(ctx, stockDocOf(ret.kind), id);
   await removePartnerLedger(tx, "RETURN", id);
+  // Phiếu hoàn tiền đi kèm cũng hủy (đã được thủ quỹ kiểm tra thì cancelVoucher từ chối ⇒ cả thao tác hủy bị rollback)
+  for (const p of await tx.payment.findMany({ where: { goodsReturnId: id, isCancelled: false }, select: { id: true } })) {
+    // người có return.manage được hủy phiếu hoàn tiền của CHÍNH phiếu trả này (không cần quyền phiếu chi); phiếu đã kiểm tra vẫn bị chặn
+    await cancelVoucher(tx, { ...actor, perms: new Set([...actor.perms, "cash.transaction.edit_pending", "payment.manage"]) }, "PAYMENT", p.id, `Hủy phiếu trả ${ret.code}: ${reason}`, now);
+  }
   for (const l of ret.lines) {
     if (l.discountAccumReversed.gt(0) && l.orderLineId !== null) {
       await tx.discountLedger.create({ data: { periodId: ctx.period.id, partnerId: ret.partnerId, orderLineId: l.orderLineId, amountIn: l.discountAccumReversed, docType: "RETURN_CANCEL", docId: id, at: now, createdBy: actor.userId } });

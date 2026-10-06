@@ -20,6 +20,9 @@ export interface ReturnRowDTO {
 }
 export interface ReturnDetailDTO extends Omit<ReturnRowDTO, "lineCount"> {
   note: string | null; cancelReason: string | null; createdByName: string | null;
+  /** Khấu trừ khi khách trả (cần sale_price.view) và các khoản đã hoàn lại cho khách. */
+  returnDeduction?: string; deductionNote?: string | null;
+  refunds?: { id: number; code: string; refundAmount: string; accountName: string; isCancelled: boolean }[];
   lines: { id: number; productCode: string; productName: string; unit: string; qty: string; salePrice?: string; lineAmount?: string; purchasePrice?: string; purchaseAmount?: string }[];
 }
 
@@ -56,7 +59,7 @@ export async function listReturns(db: Db, actor: Actor, kinds: ReturnKind[], par
 export async function getReturn(db: Db, actor: Actor, id: number): Promise<ReturnDetailDTO> {
   const r = await db.goodsReturn.findUnique({
     where: { id },
-    include: { partner: { select: { code: true, name: true } }, order: { select: { code: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } } } } },
+    include: { partner: { select: { code: true, name: true } }, order: { select: { code: true } }, refunds: { orderBy: { id: "asc" }, select: { id: true, code: true, amount: true, isCancelled: true, cashAccount: { select: { name: true } } } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } } } } },
   });
   // Ngoài phạm vi "khách của mình" trả cùng lỗi như không tồn tại
   const visible = r && (r.kind === "SUPPLIER" || (await db.partner.count({ where: { id: r.partnerId, ...partnerScopeWhere(actor) } })) > 0);
@@ -66,7 +69,8 @@ export async function getReturn(db: Db, actor: Actor, id: number): Promise<Retur
   const dto: ReturnDetailDTO = {
     id: r.id, code: r.code, kind: r.kind, at: r.at, partnerCode: r.partner.code, partnerName: r.partner.name, orderId: r.orderId, orderCode: r.order?.code ?? null,
     isCancelled: r.isCancelled, note: r.note, cancelReason: r.cancelReason, createdByName: creator?.fullName ?? null,
-    ...(supplier ? { purchaseTotal: r.totalAmount.toString() } : { returnTotal: r.totalAmount.toString() }),
+    ...(supplier ? { purchaseTotal: r.totalAmount.toString() } : { returnTotal: r.totalAmount.toString(), returnDeduction: r.deductionAmount.toString(), deductionNote: r.deductionNote }),
+    refunds: r.refunds.map((p) => ({ id: p.id, code: p.code, refundAmount: p.amount.toString(), accountName: p.cashAccount.name, isCancelled: p.isCancelled })),
     lines: r.lines.map((l) => ({
       id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(),
       ...(supplier ? { purchasePrice: l.unitPrice.toString(), purchaseAmount: l.amount.toString() } : { salePrice: l.unitPrice.toString(), lineAmount: l.amount.toString() }),

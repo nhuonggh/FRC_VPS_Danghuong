@@ -14,6 +14,7 @@ import { convertToBase, resolveFactor } from "@/server/products/units";
 import { formatDocCode, nextDocId } from "./codes";
 import { allocateFreight, FREIGHT_IN_COST } from "./freight";
 import type { PurchaseInput } from "./schemas";
+import { createPayment } from "@/server/cash/vouchers";
 import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
 
 type Tx = Prisma.TransactionClient;
@@ -171,6 +172,11 @@ export async function createPurchase(
     await ctx.tx.purchaseLine.update({ where: { id: row.id }, data: { seq } });
   }
   await rewritePartnerLedger(ctx.tx, ctx, actor, purchase, total);
+  const paid = (input.payments ?? []).reduce((s, p) => s.plus(p.amount), D(0));
+  if (paid.gt(total)) throw new DomainError("Số tiền trả vượt tiền hàng của phiếu nhập.", 400);
+  for (const p of input.payments ?? []) {
+    await createPayment(ctx.tx, actor, { kind: "TRA_NCC", partnerId: input.partnerId, cashAccountId: p.cashAccountId, amount: p.amount, date: input.date, note: [`Trả tiền phiếu nhập ${code}`, p.note].filter(Boolean).join(" — ") }, now);
+  }
   await writeAudit(ctx.tx, {
     userId: actor.userId, action: "purchase.create", entity: "Purchase", entityId: id,
     after: auditSummary(purchase, lines.length),
