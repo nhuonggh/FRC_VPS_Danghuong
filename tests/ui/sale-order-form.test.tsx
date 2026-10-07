@@ -493,4 +493,28 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(screen.getByLabelText("Ghi chú dòng 1")).toHaveValue("5 m × 1 × 2 = 10 m²");
     expect(apiFetch.mock.calls.some((c) => c[0] === "/api/orders/processing-ratio" && (c[1] as { json: { ratio: number } }).json.ratio === 1)).toBe(true);
   });
+
+  it("khối nhập nhanh theo kích thước: chọn SP + kiểu + giá/m² + 7.1*7+6.8*1 → Thêm vào đơn sinh 2 dòng", async () => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: 1.08 }] : base(url, init)));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm", "ton");
+    await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công")).getByRole("option", { name: "Tôn xốp,11 sóng" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công"), "4");
+    const price = screen.getByLabelText("Đơn giá theo m²");
+    await userEvent.clear(price); await userEvent.type(price, "150000");
+    await userEvent.type(screen.getByLabelText(/Chiều dài \(dài/), "7.1*7+6.8*1");
+    await userEvent.click(screen.getByRole("button", { name: /Thêm vào đơn/ }));
+    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 2")).toHaveValue(6.8));
+    expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(49.7);
+    expect(screen.getByLabelText("Đơn giá dòng 2")).toHaveValue(162000);
+    expect(screen.queryByLabelText("Số lượng dòng 3")).toBeNull();
+  });
+
+  it("sản phẩm chưa có định mức gia công: báo rõ ở dòng và ở khối nhập nhanh", async () => {
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Sản phẩm dòng 1", "ton");
+    expect((await screen.findAllByText(/chưa có định mức gia công/)).length).toBeGreaterThan(0);
+  });
 });

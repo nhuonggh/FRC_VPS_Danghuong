@@ -18,8 +18,7 @@ import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSch
 import type { SalePricingDTO } from "@/server/sales/pricing";
 import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
-/** Kiểu gia công của sản phẩm kèm tỷ lệ m²/md (null = chưa khai báo). */
-type TypeOption = ComboOption & { ratio?: number | null };
+import { QuickDimensionEntry, type TypeOption } from "@/components/sales/QuickDimensionEntry";
 
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null, note: "" } as unknown as SaleOrderInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
@@ -153,6 +152,15 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     const rows = terms.map((t, k) => ({ ...base, id: k === 0 ? base.id : undefined, qty: termQty(t), note: [base.note?.trim(), termNote(t, ratio)].filter(Boolean).join(" — ") }));
     update(index, rows[0]!);
     if (rows.length > 1) insert(index + 1, rows.slice(1));
+  };
+  /** Dòng từ khối nhập nhanh theo kích thước: lấp các dòng trống trước, còn lại thêm cuối. */
+  const addDimensionRows = (product: ProductOption, rows: SaleOrderInput["lines"]) => {
+    setProducts((m) => new Map(m).set(product.value, product));
+    const current = getValues("lines");
+    const blanks = current.flatMap((l, i) => (l?.productId ? [] : [i]));
+    rows.slice(0, blanks.length).forEach((r, k) => update(blanks[k], r));
+    const rest = rows.slice(blanks.length);
+    if (rest.length) append(rest.slice(0, Math.max(0, SALE_MAX_LINES - current.length)));
   };
   const addProducts = (picked: ProductOption[]) => {
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
@@ -316,6 +324,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             <ProductMultiPicker load={loadProducts} disabled={fields.length >= SALE_MAX_LINES} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
           </div>
         </div>
+        <QuickDimensionEntry loadProducts={loadProducts} pricingPartnerId={pricingPartnerId} canEditPrice={canEditPrice} disabled={fields.length >= SALE_MAX_LINES} onAdd={addDimensionRows} />
         {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="line-table w-full min-w-[1460px] table-fixed border-collapse text-sm">
@@ -430,14 +439,16 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
+  const [typesLoaded, setTypesLoaded] = useState(false);
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
   const [lengthExpr, setLengthExpr] = useState("");
   const [dimError, setDimError] = useState("");
   const productId = line?.productId;
   useEffect(() => {
-    if (!productId) { setTypes([]); return; }
+    if (!productId) { setTypes([]); setTypesLoaded(false); return; }
     let live = true;
-    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) setTypes(t); }).catch(() => { if (live) setTypes([]); });
+    setTypesLoaded(false);
+    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) { setTypes(t); setTypesLoaded(true); } }).catch(() => { if (live) { setTypes([]); setTypesLoaded(true); } });
     return () => { live = false; };
   }, [productId]);
   const allLines = watch("lines");
@@ -519,6 +530,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        {productId && typesLoaded && types.length === 0 && <p className="mt-1 text-xs text-fg-muted">Sản phẩm chưa có định mức gia công.</p>}
         {typeId && (
           <div className="mt-2 space-y-1.5 text-xs">
             {!ratioKnown && (
