@@ -439,16 +439,14 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
-  const [typesLoaded, setTypesLoaded] = useState(false);
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
   const [lengthExpr, setLengthExpr] = useState("");
   const [dimError, setDimError] = useState("");
   const productId = line?.productId;
   useEffect(() => {
-    if (!productId) { setTypes([]); setTypesLoaded(false); return; }
+    if (!productId) { setTypes([]); return; }
     let live = true;
-    setTypesLoaded(false);
-    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) { setTypes(t); setTypesLoaded(true); } }).catch(() => { if (live) { setTypes([]); setTypesLoaded(true); } });
+    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) setTypes(t); }).catch(() => { if (live) setTypes([]); });
     return () => { live = false; };
   }, [productId]);
   const allLines = watch("lines");
@@ -530,7 +528,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {productId && typesLoaded && types.length === 0 && <p className="mt-1 text-xs text-fg-muted">Sản phẩm chưa có định mức gia công.</p>}
+        {currentType && !currentType.hasBom && <p className="mt-1 text-xs text-fg-muted">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
         {typeId && (
           <div className="mt-2 space-y-1.5 text-xs">
             {!ratioKnown && (

@@ -79,7 +79,7 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     if (!line) throw new DomainError(`Dòng ${i + 1}: không thuộc đơn này.`, 400);
     if (seen.has(line.id)) throw new DomainError(`Dòng ${i + 1}: bị trùng.`, 400);
     seen.add(line.id);
-    if (line.processingTypeId !== null) throw new DomainError(`Dòng ${i + 1}: hàng gia công theo định mức không trả theo đơn được.`, 400);
+    if (line.bomVersionId !== null) throw new DomainError(`Dòng ${i + 1}: hàng gia công theo định mức không trả theo đơn được.`, 400);
     if (!ctx.locked.has(line.productId)) throw new DomainError("Đơn vừa được người khác sửa, hãy tải lại trang rồi thử lại.", 409);
     const delivered = qtyDelivered(line);
     const returned = qtyReturned(line);

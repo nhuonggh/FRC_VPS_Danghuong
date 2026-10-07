@@ -11,7 +11,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import type { SaleOrderInput } from "@/server/sales/schemas";
 
 /** Kiểu gia công của sản phẩm kèm tỷ lệ m²/md (null = chưa khai báo). */
-export type TypeOption = ComboOption & { ratio?: number | null };
+export type TypeOption = ComboOption & { ratio?: number | null; hasBom?: boolean };
 
 /**
  * Nhập nhanh bán tôn theo kích thước (giống màn "Thêm vào đơn" của hệ thống cũ): chọn SP → kiểu gia công → giá/m² → chiều dài
@@ -23,7 +23,6 @@ export function QuickDimensionEntry({ loadProducts, pricingPartnerId, canEditPri
 }) {
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [types, setTypes] = useState<TypeOption[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const [typeId, setTypeId] = useState<number | null>(null);
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
   const [priceM2, setPriceM2] = useState("");
@@ -33,9 +32,9 @@ export function QuickDimensionEntry({ loadProducts, pricingPartnerId, canEditPri
 
   const pickProduct = (o: ComboOption | null) => {
     const p = o as ProductOption | null;
-    setProduct(p); setTypes([]); setTypeId(null); setLoaded(false); setDto(null); setPriceM2(""); setError("");
+    setProduct(p); setTypes([]); setTypeId(null); setDto(null); setPriceM2(""); setError("");
     if (!p) return;
-    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${p.value}`).then((t) => { setTypes(t); setLoaded(true); }).catch(() => setLoaded(true));
+    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${p.value}`).then(setTypes).catch(() => setTypes([]));
   };
   const currentType = typeId ? types.find((t) => Number(t.value) === typeId) ?? null : null;
   const ratioKnown = !!currentType?.ratio;
@@ -80,11 +79,12 @@ export function QuickDimensionEntry({ loadProducts, pricingPartnerId, canEditPri
         <Combobox label="Sản phẩm" value={product} loadOptions={loadProducts} placeholder="Tìm sản phẩm (mã, tên…)" onChange={pickProduct} disabled={disabled} />
         <div>
           <label htmlFor="qd-type" className={lab}>Kiểu gia công</label>
-          <select id="qd-type" value={typeId ?? ""} disabled={!product} onChange={(e) => { setTypeId(e.target.value ? Number(e.target.value) : null); setPriceM2(""); setError(""); }} className={inputClass()}>
-            <option value="">{!product ? "Chọn sản phẩm trước" : loaded && types.length === 0 ? "Sản phẩm chưa có định mức gia công" : "— Chọn kiểu gia công —"}</option>
+          <select id="qd-type" value={typeId ?? ""} onChange={(e) => { setTypeId(e.target.value ? Number(e.target.value) : null); setPriceM2(""); setError(""); }} className={inputClass()}>
+            <option value="">{product ? "— Chọn kiểu gia công —" : "Chọn sản phẩm trước"}</option>
             {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+        {typeId && currentType && !currentType.hasBom && <p className="self-end text-xs text-fg-muted md:col-span-2">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
         {typeId && !ratioKnown && (
           <div>
             <label htmlFor="qd-ratio" className={lab}>Tỷ lệ m²/md (lưu cho lần sau)</label>

@@ -113,7 +113,7 @@ export async function getBom(db: Db, id: number, now: Date = new Date()): Promis
     productName: b.product.name,
     processingTypeId: b.processingTypeId,
     processingType: b.processingType.name,
-    areaRatio: b.areaRatio?.toString() ?? null,
+    areaRatio: (await db.productProcessingRatio.findUnique({ where: { productId_processingTypeId: { productId: b.productId, processingTypeId: b.processingTypeId } }, select: { ratio: true } }))?.ratio.toString() ?? null,
     versions: b.versions.map((v) => ({
       id: v.id,
       versionNo: v.versionNo,

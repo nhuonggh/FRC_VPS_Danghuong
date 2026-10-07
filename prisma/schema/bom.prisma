@@ -14,8 +14,6 @@ model Bom {
   id               Int      @id @default(autoincrement())
   productId        Int
   processingTypeId Int
-  /// Tỷ lệ m² bán trên 1 md đơn vị gốc (vd 1,08 = khổ tôn). Null = chưa khai báo; người bán nhập lần đầu, sau đó chỉ sửa ở định mức.
-  areaRatio        Decimal? @db.Decimal(18, 4)
   createdBy        Int
   createdAt        DateTime @default(now())
 
@@ -100,4 +98,22 @@ model PrintFile {
 
   @@unique([docType, docId])
   @@map("print_files")
+}
+
+/// Tỷ lệ m² bán trên 1 md đơn vị gốc theo (sản phẩm × kiểu gia công) — không cần có định mức (BOM).
+/// Người bán nhập lần đầu khi chưa có; sau đó chỉ sửa ở cài đặt (chi tiết sản phẩm / định mức).
+model ProductProcessingRatio {
+  id               Int      @id @default(autoincrement())
+  productId        Int
+  processingTypeId Int
+  ratio            Decimal  @db.Decimal(18, 4)
+  updatedBy        Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  processingType ProcessingType @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, processingTypeId])
+  @@map("product_processing_ratios")
 }

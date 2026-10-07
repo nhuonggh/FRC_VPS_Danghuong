@@ -512,9 +512,13 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(screen.queryByLabelText("Số lượng dòng 3")).toBeNull();
   });
 
-  it("sản phẩm chưa có định mức gia công: báo rõ ở dòng và ở khối nhập nhanh", async () => {
+  it("kiểu gia công chưa có định mức: báo bán như hàng thường, vẫn nhập được", async () => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: null, hasBom: false }] : base(url, init)));
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Sản phẩm dòng 1", "ton");
-    expect((await screen.findAllByText(/chưa có định mức gia công/)).length).toBeGreaterThan(0);
+    await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công dòng 1")).getByRole("option", { name: "Tôn xốp,11 sóng" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công dòng 1"), "4");
+    expect((await screen.findAllByText(/Chưa có định mức: bán như hàng thường/)).length).toBeGreaterThan(0);
   });
 });

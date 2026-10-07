@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { setBomAreaRatio } from "@/server/bom/service";
+import { setProcessingRatio } from "@/server/bom/service";
 import { requireActorApi } from "@/server/auth/session";
 import { apiHandler } from "@/server/http/handler";
 import { DomainError } from "@/server/http/errors";
@@ -14,6 +14,6 @@ export const PATCH = apiHandler(async (req, ctx: { params: Promise<{ id: string 
   return prisma.$transaction(async (tx) => {
     const bom = await tx.bom.findUnique({ where: { id }, select: { productId: true, processingTypeId: true } });
     if (!bom) throw new DomainError("Không tìm thấy định mức.", 404);
-    return setBomAreaRatio(tx, actor, { ...bom, ratio, onlyIfMissing: false });
+    return setProcessingRatio(tx, actor, { ...bom, ratio, onlyIfMissing: false });
   });
 });

@@ -96,6 +96,12 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: P
       out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: product.id, qtyBase }], bomVersionId: null });
       continue;
     }
+    // Chưa có định mức nào cho (SP × kiểu gia công): bán như hàng thường (xuất chính mã này), kiểu gia công chỉ ghi trên dòng
+    const hasBom = await db.bom.count({ where: { productId: product.id, processingTypeId: line.processingTypeId, versions: { some: { status: "ACTIVE" } } } });
+    if (!hasBom) {
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: product.id, qtyBase }], bomVersionId: null });
+      continue;
+    }
     const pin = line.id === undefined ? undefined : opts.pinned?.get(line.id);
     const pinnedVersionId = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId ? pin.bomVersionId : null;
     const plan = await planBomIssues(db, { n, product, processingTypeId: line.processingTypeId, qtyBase, at, pinnedVersionId });

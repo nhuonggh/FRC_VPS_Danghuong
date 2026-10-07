@@ -122,7 +122,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): 
       const returned = l.returnLines.reduce((s, d) => s.plus(d.qty), D(0));
       return {
         id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, delivered: delivered.toString(), returned: returned.toString(),
-        remaining: delivered.minus(returned).toString(), returnable: l.processingTypeId === null,
+        remaining: delivered.minus(returned).toString(), returnable: l.bomVersionId === null,
       };
     }),
   };

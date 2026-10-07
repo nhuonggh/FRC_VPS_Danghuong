@@ -183,7 +183,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
   const auditUsers = new Map((await db.user.findMany({ where: { id: { in: [...new Set(audit.flatMap((a) => (a.userId === null ? [] : [a.userId])))] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
   const hasProvisional = o.lines.some((l) => l.isProvisional);
   // Vốn + phần thiếu tồn TỪNG NVL của dòng gia công: cộng từ sổ kho (engine là nơi duy nhất ghi giá vốn)
-  const bomLineIds = o.lines.filter((l) => l.processingTypeId !== null).map((l) => l.id);
+  const bomLineIds = o.lines.filter((l) => l.bomVersionId !== null).map((l) => l.id);
   const ledgerRows = bomLineIds.length
     ? await db.stockLedger.findMany({ where: { docType: "SALE", docLineId: { in: bomLineIds }, qtyOut: { gt: 0 } }, select: { docLineId: true, productId: true, qtyOut: true, unitCostOut: true, qtyProvisional: true } })
     : [];

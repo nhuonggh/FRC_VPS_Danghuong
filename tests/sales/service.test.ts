@@ -99,11 +99,15 @@ describe("bán hàng gia công (tôn xốp) — xuất NVL theo BOM (D-20)", () 
     expect(issues.every((i) => i.seq !== null)).toBe(true);
   });
 
-  it("thiếu một NVL → đơn treo; chưa có định mức hiệu lực → lỗi rõ ràng, không ghi gì", async () => {
+  it("thiếu một NVL → đơn treo; chưa có định mức nào → bán như hàng thường (giữ kiểu gia công, không có phiên bản BOM)", async () => {
     const fg = await makeProduct({ kind: "THANH_PHAM" }); const m1 = await makeProduct({ kind: "NVL" });
     const pt = await makeProcessingType();
-    await expect(order([line(fg.id, 1, 1, { processingTypeId: pt.id })])).rejects.toThrow(/chưa có định mức hiệu lực/);
-    expect(await prisma.saleOrder.count()).toBe(0);
+    const plain = await order([line(fg.id, 1, 1, { processingTypeId: pt.id })]);
+    const plainLine = await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId: plain.id } });
+    expect(plainLine.processingTypeId).toBe(pt.id);
+    expect(plainLine.bomVersionId).toBeNull();
+    expect((await prisma.saleLineIssue.findMany({ where: { orderLineId: plainLine.id } })).map((i) => i.productId)).toEqual([fg.id]); // xuất chính mã, không xuất NVL
+    await prisma.saleOrder.deleteMany();
     await makeBomVersion({ productId: fg.id, processingTypeId: pt.id, createdBy: w.userId, validFrom: "2026-09-01", lines: [{ materialProductId: m1.id, qtyPerUnit: 1 }] });
     const o = await order([line(fg.id, 5, 1_000, { processingTypeId: pt.id })]);
     expect((await linesOf(o.id))[0]!.isProvisional).toBe(true);

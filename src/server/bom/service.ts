@@ -127,16 +127,19 @@ const ratioOf = (v: unknown) => {
 };
 
 /**
- * Đặt tỷ lệ m²/md của định mức (sản phẩm × kiểu gia công).
- * `onlyIfMissing` (người bán): chỉ ghi khi chưa có — đã có thì giữ nguyên, việc sửa thuộc về người quản lý định mức (`bom.manage`).
+ * Đặt tỷ lệ m²/md của (sản phẩm × kiểu gia công) — không cần có định mức.
+ * `onlyIfMissing` (người bán): chỉ ghi khi chưa có — đã có thì giữ nguyên, việc sửa thuộc về người quản lý (`bom.manage` hoặc `product.manage`).
  */
-export async function setBomAreaRatio(db: Db, actor: Actor, o: { productId: number; processingTypeId: number; ratio: number; onlyIfMissing: boolean }) {
-  assertCan(actor.perms, o.onlyIfMissing ? "order.create" : "bom.manage");
+export async function setProcessingRatio(db: Db, actor: Actor, o: { productId: number; processingTypeId: number; ratio: number; onlyIfMissing: boolean }) {
+  if (o.onlyIfMissing) assertCan(actor.perms, "order.create");
+  else if (!actor.perms.has("bom.manage") && !actor.perms.has("product.manage")) assertCan(actor.perms, "bom.manage");
   const ratio = ratioOf(o.ratio);
-  const bom = await db.bom.findUnique({ where: { productId_processingTypeId: { productId: o.productId, processingTypeId: o.processingTypeId } }, select: { id: true, areaRatio: true } });
-  if (!bom) throw new DomainError("Sản phẩm chưa có định mức cho kiểu gia công này.", 404);
-  if (o.onlyIfMissing && bom.areaRatio) return { bomId: bom.id, ratio: bom.areaRatio.toString(), saved: false };
-  await db.bom.update({ where: { id: bom.id }, data: { areaRatio: ratio } });
-  await writeAudit(db, { userId: actor.userId, action: "bom.set_area_ratio", entity: "Bom", entityId: bom.id, before: { areaRatio: bom.areaRatio?.toString() ?? null }, after: { areaRatio: ratio.toString() } });
-  return { bomId: bom.id, ratio: ratio.toString(), saved: true };
+  const [product, type] = await Promise.all([db.product.findUnique({ where: { id: o.productId }, select: { id: true } }), db.processingType.findUnique({ where: { id: o.processingTypeId }, select: { id: true } })]);
+  if (!product || !type) throw new DomainError("Không tìm thấy sản phẩm hoặc kiểu gia công.", 404);
+  const key = { productId_processingTypeId: { productId: o.productId, processingTypeId: o.processingTypeId } };
+  const cur = await db.productProcessingRatio.findUnique({ where: key });
+  if (o.onlyIfMissing && cur) return { ratio: cur.ratio.toString(), saved: false };
+  await db.productProcessingRatio.upsert({ where: key, create: { productId: o.productId, processingTypeId: o.processingTypeId, ratio, updatedBy: actor.userId }, update: { ratio, updatedBy: actor.userId } });
+  await writeAudit(db, { userId: actor.userId, action: "product.set_processing_ratio", entity: "Product", entityId: o.productId, before: { processingTypeId: o.processingTypeId, ratio: cur?.ratio.toString() ?? null }, after: { processingTypeId: o.processingTypeId, ratio: ratio.toString() } });
+  return { ratio: ratio.toString(), saved: true };
 }
