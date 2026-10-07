@@ -119,3 +119,24 @@ export async function cancelBomVersion(db: Db, actor: Actor, versionId: number, 
     after: { status: "CANCELLED" },
   });
 }
+
+const ratioOf = (v: unknown) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || n > 99 || Number(n.toFixed(4)) !== n) throw new ValidationError("Tỷ lệ phải lớn hơn 0 và tối đa 4 chữ số thập phân.");
+  return new Prisma.Decimal(n);
+};
+
+/**
+ * Đặt tỷ lệ m²/md của định mức (sản phẩm × kiểu gia công).
+ * `onlyIfMissing` (người bán): chỉ ghi khi chưa có — đã có thì giữ nguyên, việc sửa thuộc về người quản lý định mức (`bom.manage`).
+ */
+export async function setBomAreaRatio(db: Db, actor: Actor, o: { productId: number; processingTypeId: number; ratio: number; onlyIfMissing: boolean }) {
+  assertCan(actor.perms, o.onlyIfMissing ? "order.create" : "bom.manage");
+  const ratio = ratioOf(o.ratio);
+  const bom = await db.bom.findUnique({ where: { productId_processingTypeId: { productId: o.productId, processingTypeId: o.processingTypeId } }, select: { id: true, areaRatio: true } });
+  if (!bom) throw new DomainError("Sản phẩm chưa có định mức cho kiểu gia công này.", 404);
+  if (o.onlyIfMissing && bom.areaRatio) return { bomId: bom.id, ratio: bom.areaRatio.toString(), saved: false };
+  await db.bom.update({ where: { id: bom.id }, data: { areaRatio: ratio } });
+  await writeAudit(db, { userId: actor.userId, action: "bom.set_area_ratio", entity: "Bom", entityId: bom.id, before: { areaRatio: bom.areaRatio?.toString() ?? null }, after: { areaRatio: ratio.toString() } });
+  return { bomId: bom.id, ratio: ratio.toString(), saved: true };
+}

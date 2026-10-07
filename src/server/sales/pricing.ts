@@ -8,13 +8,14 @@ type Db = Prisma.TransactionClient | PrismaClient;
 
 /**
  * Giá bán gần nhất TRÊN MỘT ĐƠN VỊ GỐC (đơn giá dòng × hệ số: 1 đơn vị gốc = `factorUsed` đơn vị dòng).
- * `forPartner` = của khách này; không có thì lấy của bất kỳ khách (spec mục 31). Bỏ qua đơn đã hủy.
+ * `processingTypeId` ⇒ chỉ xét các dòng cùng kiểu gia công (giá tôn xốp khác giá tôn phẳng). `forPartner` = của khách này; không có thì lấy của bất kỳ khách (spec mục 31). Bỏ qua đơn đã hủy.
  */
-export async function lastSalePricePerBase(db: Db, productId: number, partnerId: number): Promise<{ perBase: Prisma.Decimal; forPartner: boolean } | null> {
+export async function lastSalePricePerBase(db: Db, productId: number, partnerId: number, processingTypeId?: number | null): Promise<{ perBase: Prisma.Decimal; forPartner: boolean } | null> {
   const pick = { salePrice: true, factorUsed: true } as const;
-  const own = await db.saleOrderLine.findFirst({ where: { productId, order: { partnerId, isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
+  const type = processingTypeId ? { processingTypeId } : {};
+  const own = await db.saleOrderLine.findFirst({ where: { productId, ...type, order: { partnerId, isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
   if (own) return { perBase: own.salePrice.times(own.factorUsed), forPartner: true };
-  const any = await db.saleOrderLine.findFirst({ where: { productId, order: { isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
+  const any = await db.saleOrderLine.findFirst({ where: { productId, ...type, order: { isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
   return any ? { perBase: any.salePrice.times(any.factorUsed), forPartner: false } : null;
 }
 
@@ -37,11 +38,11 @@ export interface SalePricingDTO {
 }
 
 /** Dữ liệu gợi ý cho màn bán hàng (31): tồn, giá bán gần nhất, giá nhập gần nhất — mỗi thứ chỉ khi đủ quyền. */
-export async function salePricing(db: PrismaClient, actor: Actor, partnerId: number, productId: number): Promise<SalePricingDTO | null> {
+export async function salePricing(db: PrismaClient, actor: Actor, partnerId: number, productId: number, processingTypeId?: number | null): Promise<SalePricingDTO | null> {
   if (!can(actor.perms, "sale_price.view")) return null;
   const product = await db.product.findUnique({ where: { id: productId }, include: { units: { orderBy: { unit: "asc" } } } });
   if (!product) return null;
-  const last = await lastSalePricePerBase(db, productId, partnerId);
+  const last = await lastSalePricePerBase(db, productId, partnerId, processingTypeId);
   const out: SalePricingDTO = {
     productId,
     baseUnit: product.baseUnit,

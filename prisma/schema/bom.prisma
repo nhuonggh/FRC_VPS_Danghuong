@@ -14,6 +14,8 @@ model Bom {
   id               Int      @id @default(autoincrement())
   productId        Int
   processingTypeId Int
+  /// Tỷ lệ m² bán trên 1 md đơn vị gốc (vd 1,08 = khổ tôn). Null = chưa khai báo; người bán nhập lần đầu, sau đó chỉ sửa ở định mức.
+  areaRatio        Decimal? @db.Decimal(10, 4)
   createdBy        Int
   createdAt        DateTime @default(now())
 
