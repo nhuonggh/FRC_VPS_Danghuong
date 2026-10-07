@@ -117,7 +117,7 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
   if (can(actor.perms, "order.edit_price")) return;
   for (const l of lines) {
     if (unchanged(l)) continue; // dòng giữ nguyên mã/đơn vị/giá của đơn cũ không bị coi là "sửa giá"
-    const last = await lastSalePricePerBase(tx, l.input.productId, partnerId);
+    const last = await lastSalePricePerBase(tx, l.input.productId, partnerId, l.input.processingTypeId);
     if (!last) throw new DomainError(`Dòng ${l.index + 1}: ${l.productCode} chưa có giá bán tham chiếu — cần người có quyền sửa giá nhập giá lần đầu.`, 403);
     const expected = priceForUnit(last.perBase, l.factor);
     if (!D(l.input.salePrice).eq(expected)) {

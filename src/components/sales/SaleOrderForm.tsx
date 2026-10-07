@@ -16,6 +16,10 @@ import type { ProductOption } from "@/server/products/queries";
 import type { SaleFormOptions } from "@/server/sales/form-options";
 import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSchema, type SaleOrderInput } from "@/server/sales/schemas";
 import type { SalePricingDTO } from "@/server/sales/pricing";
+import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
+
+/** Kiểu gia công của sản phẩm kèm tỷ lệ m²/md (null = chưa khai báo). */
+type TypeOption = ComboOption & { ratio?: number | null };
 
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null, note: "" } as unknown as SaleOrderInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
@@ -49,7 +53,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
   // keyName riêng: khoá `id` của dòng đơn (khi sửa) không được bị useFieldArray ghi đè
-  const { fields, append, remove, update } = useFieldArray({ control, name: "lines", keyName: "_key" });
+  const { fields, append, remove, update, insert } = useFieldArray({ control, name: "lines", keyName: "_key" });
   const lines = watch("lines");
   const partnerId = watch("partnerId");
 
@@ -74,26 +78,26 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const requested = useRef(new Set<string>());
-  const key = (productId: number) => `${pricingPartnerId}:${productId}`;
+  const key = (productId: number, typeId?: number | null) => `${pricingPartnerId}:${productId}:${typeId ?? 0}`;
 
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
   useEffect(() => {
     if (!pricingPartnerId) return;
     for (const l of lines) {
-      const pid = l?.productId;
-      if (!pid || requested.current.has(key(pid))) continue;
-      requested.current.add(key(pid));
-      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${pid}`)
-        .then((dto) => setPricing((m) => new Map(m).set(key(pid), dto)))
-        .catch(() => requested.current.delete(key(pid)));
+      const pid = l?.productId, tid = l?.processingTypeId ?? null;
+      if (!pid || requested.current.has(key(pid, tid))) continue;
+      requested.current.add(key(pid, tid));
+      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${pid}${tid ? `&processingTypeId=${tid}` : ""}`)
+        .then((dto) => setPricing((m) => new Map(m).set(key(pid, tid), dto)))
+        .catch(() => requested.current.delete(key(pid, tid)));
     }
-  }, [pricingPartnerId, lines.map((l) => l?.productId).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Có giá gợi ý mới → điền vào ô giá còn trống (hoặc luôn ép khi không có quyền sửa giá)
   useEffect(() => {
     lines.forEach((l, i) => {
-      const dto = l?.productId && pricingPartnerId ? pricing.get(key(l.productId)) : null;
+      const dto = l?.productId && pricingPartnerId ? pricing.get(key(l.productId, l.processingTypeId)) : null;
       const suggested = dto?.units.find((u) => u.unit === l.unit)?.suggestedPrice;
       if (suggested == null) return;
       const current = getValues(`lines.${i}.salePrice`);
@@ -102,7 +106,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
       if (existing) return;
       if (!canEditPrice ? num(current) !== Number(suggested) : !num(current)) setValue(`lines.${i}.salePrice`, Number(suggested), { shouldValidate: true });
     });
-  }, [pricing, pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricing, pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.unit}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sau khi lưu: tuỳ chọn in hóa đơn (lỗi in không làm mất đơn đã lập — báo rồi vẫn sang trang chi tiết)
   const finish = async (id: number, print: boolean) => {
@@ -143,6 +147,13 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   });
 
   const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyLine, qtyLabel: (i) => `Số lượng dòng ${i + 1}`, max: SALE_MAX_LINES });
+  /** Bán tôn theo kích thước: mỗi số hạng "dài*số tấm" thành 1 dòng cùng sản phẩm/kiểu gia công/đơn giá (dòng đang nhập giữ vị trí, các dòng sau chèn liền kề). */
+  const expandDimensions = (index: number, terms: LengthTerm[], ratio: number) => {
+    const base = getValues(`lines.${index}`);
+    const rows = terms.map((t, k) => ({ ...base, id: k === 0 ? base.id : undefined, qty: termQty(t), note: [base.note?.trim(), termNote(t, ratio)].filter(Boolean).join(" — ") }));
+    update(index, rows[0]!);
+    if (rows.length > 1) insert(index + 1, rows.slice(1));
+  };
   const addProducts = (picked: ProductOption[]) => {
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
@@ -307,9 +318,9 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
         </div>
         {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
-          <table className="line-table w-full min-w-[1340px] table-fixed border-collapse text-sm">
+          <table className="line-table w-full min-w-[1460px] table-fixed border-collapse text-sm">
             <colgroup>
-              <col className="w-12" /><col className="w-[300px]" /><col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-28" /><col className="w-28" /><col className="w-32" /><col className="w-44" /><col className="w-36" /><col className="w-16" />
+              <col className="w-12" /><col className="w-[300px]" /><col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-28" /><col className="w-28" /><col className="w-56" /><col className="w-44" /><col className="w-36" /><col className="w-16" />
             </colgroup>
             <thead>
               <tr className="bg-hover text-xs font-semibold text-fg-secondary">
@@ -321,7 +332,8 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
-                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId)) ?? null : null}
+                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId, lines[index]!.processingTypeId)) ?? null : null}
+                  onExpand={(terms, ratio) => expandDimensions(index, terms, ratio)}
                   canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
             </tbody>
@@ -401,7 +413,8 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   );
 }
 
-function LineRow({ index, form, products, setProducts, loadProducts, dto, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown }: {
+function LineRow({ index, form, products, setProducts, loadProducts, dto, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown, onExpand }: {
+  onExpand: (terms: LengthTerm[], ratio: number) => void;
   onProductPicked: () => void; onQtyKeyDown: (e: React.KeyboardEvent) => void;
   index: number; form: UseFormReturn<SaleOrderInput>; products: Map<number, ProductOption>;
   setProducts: React.Dispatch<React.SetStateAction<Map<number, ProductOption>>>; loadProducts: (q: string) => Promise<ProductOption[]>;
@@ -416,17 +429,40 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const short = dto?.onHand !== undefined && qtyBase > num(dto.onHand);
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
-  const [types, setTypes] = useState<ComboOption[]>([]);
+  const [types, setTypes] = useState<TypeOption[]>([]);
+  const [ratioInput, setRatioInput] = useState("");
+  const [lengthExpr, setLengthExpr] = useState("");
+  const [dimError, setDimError] = useState("");
   const productId = line?.productId;
   useEffect(() => {
     if (!productId) { setTypes([]); return; }
     let live = true;
-    apiFetch<ComboOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) setTypes(t); }).catch(() => { if (live) setTypes([]); });
+    apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((t) => { if (live) setTypes(t); }).catch(() => { if (live) setTypes([]); });
     return () => { live = false; };
   }, [productId]);
   const allLines = watch("lines");
   const dupIndex = line?.productId ? allLines.findIndex((l, i) => i < index && l?.productId === line.productId && l?.unit === line.unit) : -1;
   const duplicateOf = dupIndex + 1; // 0 = không trùng; số dòng (1-based) của dòng trước đã có cùng SP + ĐVT
+
+  // Bán theo kích thước: tỷ lệ m²/md của kiểu gia công (đã lưu ở định mức, hoặc người bán nhập lần đầu rồi lưu lại)
+  const typeId = line?.processingTypeId ?? null;
+  const currentType = typeId ? types.find((t) => Number(t.value) === typeId) ?? null : null;
+  const ratio = currentType?.ratio ?? (Number(ratioInput.replace(",", ".")) || 0);
+  const ratioKnown = !!currentType?.ratio;
+  const submitLength = async () => {
+    if (!lengthExpr.trim()) return;
+    const parsed = parseLengthExpr(lengthExpr);
+    if ("error" in parsed) { setDimError(parsed.error); return; }
+    if (!(ratio > 0)) { setDimError("Nhập tỷ lệ m²/md trước."); return; }
+    if (!ratioKnown && productId && typeId) {
+      try {
+        const r = await apiFetch<{ ratio: string }>("/api/orders/processing-ratio", { method: "POST", json: { productId, processingTypeId: typeId, ratio } });
+        setTypes((all) => all.map((t) => (Number(t.value) === typeId ? { ...t, ratio: Number(r.ratio) } : t)));
+      } catch (e) { setDimError(e instanceof Error ? e.message : "Không lưu được tỷ lệ."); return; }
+    }
+    setDimError(""); setLengthExpr("");
+    onExpand(parsed.terms, ratio);
+  };
 
   const cell = "border border-border p-1.5 align-middle"; // ô có viền: bảng dạng lưới như bảng tính
   return (
@@ -479,10 +515,31 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
       </td>
       <td data-label="CK tích lũy" className={cell}><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
       <td data-label="Gia công" className={cell}>
-        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
+        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError(""); }} className={inputClass()}>
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        {typeId && (
+          <div className="mt-2 space-y-1.5 text-xs">
+            {!ratioKnown && (
+              <label className="flex items-center gap-1">Tỷ lệ m²/md
+                <input aria-label={`Tỷ lệ m²/md dòng ${index + 1}`} inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} placeholder="1,08" className={`${inputClass()} w-20 tabular text-right`} />
+              </label>
+            )}
+            {ratio > 0 && (<>
+              <label className="flex items-center gap-1">Giá/m²
+                <input aria-label={`Đơn giá theo m² dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), ratio) : ""}
+                  onChange={(e) => setValue(`lines.${index}.salePrice`, e.target.value === "" ? (undefined as never) : pricePerMd(Number(e.target.value), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass()} w-28 tabular text-right`} />
+              </label>
+              <label className="flex items-center gap-1">Chiều dài
+                <input aria-label={`Chiều dài dòng ${index + 1}`} value={lengthExpr} onChange={(e) => { setLengthExpr(e.target.value); setDimError(""); }} onBlur={submitLength}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitLength(); } }} placeholder="7.1*7+6.8*1" className={`${inputClass()} w-32`} />
+              </label>
+              <p className="text-fg-muted">Dài*số tấm, nối bằng +; Enter để tách dòng. Tỷ lệ {String(ratio).replace(".", ",")} m²/md.</p>
+            </>)}
+            {dimError && <p role="alert" className="text-danger">{dimError}</p>}
+          </div>
+        )}
       </td>
       <td data-label="Ghi chú" className={cell}><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
       <td data-label="Thành tiền" className={cell}><div className="flex h-11 items-center justify-end rounded-sm bg-hover px-2 font-semibold tabular md:h-9">{formatCurrency(amount)}</div></td>

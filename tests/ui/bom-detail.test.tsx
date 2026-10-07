@@ -28,7 +28,7 @@ const version = (over: Partial<BomVersionDTO>): BomVersionDTO => ({
   ...over,
 });
 const bom: BomDetailDTO = {
-  id: 1, productId: 10, productCode: "TP01", productName: "Tôn xốp", processingTypeId: 3, processingType: "Dán xốp",
+  id: 1, productId: 10, productCode: "TP01", productName: "Tôn xốp", processingTypeId: 3, processingType: "Dán xốp", areaRatio: null,
   versions: [
     version({ id: 2, versionNo: 2, validFrom: "2026-10-01" }), // lên lịch
     version({ id: 1, versionNo: 1, validFrom: "2026-09-01", isCurrent: true }),

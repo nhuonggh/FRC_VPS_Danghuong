@@ -42,6 +42,8 @@ export interface BomDetailDTO {
   productName: string;
   processingTypeId: number;
   processingType: string;
+  /** Tỷ lệ m²/md (null = chưa khai báo). */
+  areaRatio: string | null;
   versions: BomVersionDTO[];
 }
 
@@ -111,6 +113,7 @@ export async function getBom(db: Db, id: number, now: Date = new Date()): Promis
     productName: b.product.name,
     processingTypeId: b.processingTypeId,
     processingType: b.processingType.name,
+    areaRatio: b.areaRatio?.toString() ?? null,
     versions: b.versions.map((v) => ({
       id: v.id,
       versionNo: v.versionNo,

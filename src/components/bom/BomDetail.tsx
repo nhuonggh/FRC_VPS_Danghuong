@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, DetailPage, useDetailNav } from "@/components/ui";
+import { useState } from "react";
+import { Badge, DetailPage, inputClass, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatDate, formatDateTime, formatQty } from "@/lib/format";
@@ -35,6 +36,27 @@ function LinesTable({ lines }: { lines: BomVersionDTO["lines"] }) {
   );
 }
 
+/** Tỷ lệ m²/md (khổ tôn…) dùng khi bán tôn theo kích thước ở màn bán hàng. Người bán chỉ nhập được khi chưa có; sửa ở đây. */
+function RatioEditor({ bomId, initial, canManage }: { bomId: number; initial: string | null; canManage: boolean }) {
+  const router = useRouter();
+  const [value, setValue] = useState(initial ?? "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { await apiFetch(`/api/bom/${bomId}/ratio`, { method: "PATCH", json: { ratio: Number(value.replace(",", ".")) } }); router.refresh(); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-sm border border-border p-3">
+      <label htmlFor="areaRatio" className="text-sm font-semibold">Tỷ lệ m²/md (bán theo kích thước)</label>
+      <div className="mt-2 flex items-center gap-2">
+        <input id="areaRatio" inputMode="decimal" value={value} disabled={!canManage} onChange={(e) => setValue(e.target.value)} placeholder="vd 1,08" className={`${inputClass()} w-32 tabular text-right`} />
+        {canManage && <button type="button" disabled={busy || !value.trim()} onClick={save} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-40">Lưu tỷ lệ</button>}
+      </div>
+      <p className="mt-1 text-xs text-fg-muted">Dài 7,1 m × tỷ lệ 1,08 × 7 tấm = 53,676 m². Để trống nếu kiểu này không bán theo m².</p>
+    </div>
+  );
+}
+
 const STATUS = {
   ACTIVE: { label: "Hiệu lực", tone: "success" as const },
   DRAFT: { label: "Nháp", tone: "neutral" as const },
@@ -60,6 +82,7 @@ export function BomDetail({ bom, canManage, today }: { bom: BomDetailDTO; canMan
 
   const currentTab = () => (
     <div className="space-y-4">
+      <RatioEditor bomId={bom.id} initial={bom.areaRatio} canManage={canManage} />
       {current ? (
         <>
           <p className="text-sm text-fg-secondary">Phiên bản v{current.versionNo} — hiệu lực từ {formatDate(current.validFrom)}.</p>

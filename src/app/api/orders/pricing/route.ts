@@ -13,7 +13,7 @@ export const GET = apiHandler(async (req) => {
   const actor = await requireActorApi(); // lập đơn HOẶC làm báo giá đều cần giá gợi ý
   if (!actor.perms.has("order.create") && !actor.perms.has("quote.manage")) throw new ForbiddenError("order.create");
   const sp = new URL(req.url).searchParams;
-  const partnerId = positiveInt(sp.get("partnerId")), productId = positiveInt(sp.get("productId"));
+  const partnerId = positiveInt(sp.get("partnerId")), productId = positiveInt(sp.get("productId")), processingTypeId = positiveInt(sp.get("processingTypeId"));
   if (!partnerId || !productId) return null;
-  return salePricing(prisma, actor, partnerId, productId);
+  return salePricing(prisma, actor, partnerId, productId, processingTypeId);
 }, { noStore: true });
