@@ -430,7 +430,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
-  const [ratioInput, setRatioInput] = useState("");
+  const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
   const [lengthExpr, setLengthExpr] = useState("");
   const [dimError, setDimError] = useState("");
   const productId = line?.productId;
@@ -523,7 +523,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           <div className="mt-2 space-y-1.5 text-xs">
             {!ratioKnown && (
               <label className="flex items-center gap-1">Tỷ lệ m²/md
-                <input aria-label={`Tỷ lệ m²/md dòng ${index + 1}`} inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} placeholder="1,08" className={`${inputClass()} w-20 tabular text-right`} />
+                <input aria-label={`Tỷ lệ m²/md dòng ${index + 1}`} inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} placeholder="1" className={`${inputClass()} w-20 tabular text-right`} />
               </label>
             )}
             {ratio > 0 && (<>

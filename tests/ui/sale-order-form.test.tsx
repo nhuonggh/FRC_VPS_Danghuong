@@ -478,4 +478,19 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(screen.getByLabelText("Ghi chú dòng 1")).toHaveValue("7,1 m × 1,08 × 7 = 53,676 m²");
     expect(screen.getByLabelText("Ghi chú dòng 2")).toHaveValue("6,8 m × 1,08 × 1 = 7,344 m²");
   });
+
+  it("kiểu gia công chưa có tỷ lệ: mặc định 1, lưu tỷ lệ người bán nhập khi tách dòng", async () => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: null }] : url === "/api/orders/processing-ratio" ? { ratio: "1.08", saved: true } : base(url, init)));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công dòng 1")).getByRole("option", { name: "Tôn xốp,11 sóng" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công dòng 1"), "4");
+    expect(await screen.findByLabelText("Tỷ lệ m²/md dòng 1")).toHaveValue("1");
+    await userEvent.type(screen.getByLabelText("Chiều dài dòng 1"), "5*2{Enter}");
+    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(10));
+    expect(screen.getByLabelText("Ghi chú dòng 1")).toHaveValue("5 m × 1 × 2 = 10 m²");
+    expect(apiFetch.mock.calls.some((c) => c[0] === "/api/orders/processing-ratio" && (c[1] as { json: { ratio: number } }).json.ratio === 1)).toBe(true);
+  });
 });
