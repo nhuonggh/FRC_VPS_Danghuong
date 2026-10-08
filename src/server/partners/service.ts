@@ -5,6 +5,7 @@ import { normalizeSearch } from "@/lib/search";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError, FieldConflictError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
+import { assertOpeningAllowed } from "@/server/opening/guard";
 import { nextPartnerCodes } from "./codes";
 import type { CreatePartnerInput } from "./schemas";
 
@@ -34,14 +35,23 @@ export async function createPartner(db: Db, actor: Actor, input: CreatePartnerIn
   // Không có view_all thì người tạo phải thấy bản ghi theo phạm vi "khách của mình"; cấp quản lý giữ được bản ghi chưa phân công.
   const ownerUserId = input.ownerUserId ?? (can(actor.perms, "partner.view_all") ? null : actor.userId);
   await assertOwnerUsable(db, ownerUserId);
+  // Công nợ đầu kỳ: kiểm tra kỳ trước khi tạo để không sinh đối tác rồi mới báo lỗi (cả giao dịch hoàn tác nếu lỗi)
+  const openingDebt = new Prisma.Decimal(input.openingDebt ?? 0);
+  const openingPeriod = openingDebt.isZero() ? null : await assertOpeningAllowed(db, actor, false);
   const code = input.code !== "" ? input.code.toUpperCase() : (await nextPartnerCodes(db, input.isCustomer ? "customer" : "supplier", 1))[0]!;
   try {
     const row = await db.partner.create({ data: {
       code, name: input.name, searchText: searchTextOf({ code, name: input.name, phone: input.phone }),
       groupId: input.groupId, isCustomer: input.isCustomer, isSupplier: input.isSupplier, ownerUserId,
       debtLimit: new Prisma.Decimal(input.debtLimit), allowCredit: input.allowCredit,
-      phone: input.phone || null, address: input.address || null, taxCode: input.taxCode || null, deliveryAddress: input.deliveryAddress || null, note: input.note || null, isActive: input.isActive,
+      phone: input.phone || null, address: input.address || null, taxCode: input.taxCode || null, deliveryAddress: input.deliveryAddress || null,
+      email: input.email || null, bankAccount: input.bankAccount || null, representative: input.representative || null, sortOrder: input.sortOrder ?? null, isExpense: input.isExpense ?? false,
+      note: input.note || null, isActive: input.isActive,
     } });
+    if (openingPeriod) {
+      const od = await db.openingDebt.create({ data: { periodId: openingPeriod.id, partnerId: row.id, amount: openingDebt }, select: { id: true } });
+      await writeAudit(db, { userId: actor.userId, action: "opening.debt.create", entity: "OpeningDebt", entityId: od.id, before: null, after: { key: code, amount: openingDebt.toString() } });
+    }
     await writeAudit(db, { userId: actor.userId, action: "partner.create", entity: "Partner", entityId: row.id, after: {
       code, name: row.name, groupId: row.groupId, isCustomer: row.isCustomer, isSupplier: row.isSupplier,
       debtLimit: row.debtLimit.toString(), allowCredit: row.allowCredit,

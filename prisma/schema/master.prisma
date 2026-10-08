@@ -52,6 +52,12 @@ model Partner {
   taxCode      String?
   /// Địa chỉ giao hàng (nếu khác địa chỉ chính).
   deliveryAddress String?
+  /// Bổ sung từ hộp thoại "Thêm khách hàng" ở form bán hàng (tất cả tuỳ chọn).
+  email          String?
+  bankAccount    String? // TK ngân hàng
+  representative String? // người đại diện
+  sortOrder      Int? // thứ tự hiển thị
+  isExpense      Boolean  @default(false) // loại đối tác "Chi phí"
   note         String?
   isActive     Boolean  @default(true)
   mergedIntoId Int? // sau khi gộp mã (mục 65)

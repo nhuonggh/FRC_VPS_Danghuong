@@ -240,22 +240,34 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     });
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await userEvent.click(screen.getByRole("button", { name: /Thêm khách hàng/ }));
-    await userEvent.type(await screen.findByLabelText(/Tên khách hàng/), "Anh Bảy");
-    await userEvent.type(screen.getByLabelText("Số điện thoại"), "0901234567");
-    await userEvent.type(screen.getByLabelText("Địa chỉ"), "123 Đường ABC");
-    await userEvent.click(screen.getByRole("button", { name: "Thêm" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText(/Tên khách hàng/), "Anh Bảy");
+    await userEvent.type(within(dialog).getByLabelText("Số điện thoại"), "0901234567");
+    await userEvent.type(within(dialog).getByLabelText("Địa chỉ"), "123 Đường ABC");
+    await userEvent.type(within(dialog).getByLabelText("Email"), "bay@example.com");
+    await userEvent.type(within(dialog).getByLabelText("TK ngân hàng"), "0123456789 VCB");
+    await userEvent.type(within(dialog).getByLabelText("Người đại diện"), "Bảy");
+    await userEvent.type(within(dialog).getByLabelText("Thứ tự"), "3");
+    await userEvent.type(within(dialog).getByLabelText("Công nợ đầu kỳ"), "-500000");
+    await userEvent.type(within(dialog).getByLabelText("Hạn mức công nợ"), "20000000");
+    await userEvent.click(within(dialog).getByLabelText("Chi phí"));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Thêm mới" }));
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Khách hàng" })).toHaveValue("KH000021 — Anh Bảy"));
-    expect(screen.getByText("0901234567")).toBeInTheDocument();
-    expect(screen.getByText("123 Đường ABC")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0901234567")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("123 Đường ABC")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mã khách hàng")).toHaveValue("KH000021");
     const post = apiFetch.mock.calls.find((c) => c[0] === "/api/partners")![1];
-    expect(post.json).toMatchObject({ name: "Anh Bảy", groupId: 3, isCustomer: true, isSupplier: false, phone: "0901234567", address: "123 Đường ABC" });
+    expect(post.json).toMatchObject({ name: "Anh Bảy", groupId: 3, isCustomer: true, isSupplier: false, isExpense: true, phone: "0901234567", address: "123 Đường ABC", email: "bay@example.com", bankAccount: "0123456789 VCB", representative: "Bảy", sortOrder: 3, openingDebt: -500000, debtLimit: 20000000, allowCredit: true });
   });
 
-  it("ô tìm sản phẩm nhanh thêm đúng 1 dòng và hiện ảnh sản phẩm", async () => {
+  it("dải nhập sản phẩm: chọn SP + đơn giá → Thêm vào đơn sinh đúng 1 dòng và hiện ảnh sản phẩm", async () => {
     apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [{ ...PRODUCT, imageUrl: "https://img.example/tx01.png" }] : url.startsWith("/api/orders/pricing") ? pricing : []));
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
-    await pick("Tìm sản phẩm nhanh", "ton");
-    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toBeInTheDocument());
+    await pick("Tên sản phẩm", "ton");
+    await userEvent.type(await screen.findByLabelText("Đơn giá"), "30000");
+    await userEvent.click(screen.getByRole("button", { name: /Thêm vào đơn/ }));
+    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(1));
+    expect(screen.queryByLabelText("Số lượng dòng 2")).toBeNull();
     expect(screen.getByRole("combobox", { name: "Sản phẩm dòng 1" })).toHaveValue("TX01 — Tôn xốp");
     expect(document.querySelector('img[src="https://img.example/tx01.png"]')).not.toBeNull();
   });
@@ -276,8 +288,8 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     baseApi((url, init) => (url === "/api/orders" && init?.method === "POST" ? { id: 5, code: "DH000005" } : undefined));
     render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
-    expect(await screen.findByText("0312345678")).toBeInTheDocument();
-    expect(screen.getByText("Kho 5")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("0312345678")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Kho 5")).toBeInTheDocument();
     await pick("Sản phẩm dòng 1", "ton");
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4"); // 4 × 30.000 = 120.000
     await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
@@ -344,7 +356,8 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     unmount();
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     expect(screen.queryByRole("button", { name: "Khách lẻ" })).toBeNull();
-    expect(screen.queryByText("Thông tin thanh toán")).toBeNull();
+    expect(screen.queryByLabelText("Số tiền thu")).toBeNull();
+    expect(screen.queryByLabelText(/Khách tự chở/)).toBeNull();
   });
 });
 
@@ -369,7 +382,7 @@ describe("SaleOrderForm — phí vận chuyển, chiết khấu cả đơn, ghi 
     await userEvent.type(screen.getByLabelText("Chiết khấu cả đơn"), "20000");
     await userEvent.clear(screen.getByLabelText("Phí vận chuyển"));
     await userEvent.type(screen.getByLabelText("Phí vận chuyển"), "5000");
-    expect(screen.getByText(/105\.000/)).toBeInTheDocument(); // 120.000 − 20.000 + 5.000
+    expect(screen.getAllByText(/105\.000/).length).toBeGreaterThan(0); // 120.000 − 20.000 + 5.000
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
     expect(posts()[0]![1].json).toMatchObject({ orderDiscount: 20000, shippingFee: 5000, lines: [{ note: "Cắt 2m", qty: 4 }] });
@@ -494,17 +507,17 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(apiFetch.mock.calls.some((c) => c[0] === "/api/orders/processing-ratio" && (c[1] as { json: { ratio: number } }).json.ratio === 1)).toBe(true);
   });
 
-  it("khối nhập nhanh theo kích thước: chọn SP + kiểu + giá/m² + 7.1*7+6.8*1 → Thêm vào đơn sinh 2 dòng", async () => {
+  it("dải nhập sản phẩm theo kích thước: chọn SP + kiểu + 7.1*7+6.8*1 + giá/m² → Thêm vào đơn sinh 2 dòng", async () => {
     const base = apiFetch.getMockImplementation()!;
     apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: 1.08 }] : base(url, init)));
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Khách hàng", "dat");
-    await pick("Sản phẩm", "ton");
+    await pick("Tên sản phẩm", "ton");
     await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công")).getByRole("option", { name: "Tôn xốp,11 sóng" })).toBeInTheDocument());
     await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công"), "4");
-    const price = screen.getByLabelText("Đơn giá theo m²");
+    await userEvent.type(screen.getByLabelText("Chiều dài"), "7.1*7+6.8*1");
+    const price = await screen.findByLabelText("Giá/m²");
     await userEvent.clear(price); await userEvent.type(price, "150000");
-    await userEvent.type(screen.getByLabelText(/Chiều dài \(dài/), "7.1*7+6.8*1");
     await userEvent.click(screen.getByRole("button", { name: /Thêm vào đơn/ }));
     await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 2")).toHaveValue(6.8));
     expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(49.7);

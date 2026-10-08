@@ -1942,3 +1942,225 @@ CREATE UNIQUE INDEX "print_files_docType_docId_key" ON "print_files"("docType", 
 
 -- CHECK: URL bản in phải là https
 ALTER TABLE "print_files" ADD CONSTRAINT "print_files_url_chk" CHECK ("url" LIKE 'https://%');
+
+-- >>> prisma/migrations/20261002000000_production_orders/migration.sql
+-- Plan 06-E1: lệnh sản xuất phụ kiện
+CREATE TABLE "production_orders" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "outSeq" BIGINT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "production_orders_pkey" PRIMARY KEY ("id")
+);
+-- CreateTable
+CREATE TABLE "production_materials" (
+    "id" SERIAL NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "materialProductId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "seq" BIGINT,
+    CONSTRAINT "production_materials_pkey" PRIMARY KEY ("id")
+);
+-- CreateIndex
+CREATE UNIQUE INDEX "production_orders_code_key" ON "production_orders"("code");
+-- CreateIndex
+CREATE INDEX "production_orders_periodId_at_idx" ON "production_orders"("periodId", "at");
+-- CreateIndex
+CREATE UNIQUE INDEX "production_materials_orderId_materialProductId_key" ON "production_materials"("orderId", "materialProductId");
+-- AddForeignKey
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "production_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_materialProductId_fkey" FOREIGN KEY ("materialProductId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Số liệu hợp lệ
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_qty_chk" CHECK ("qty" > 0);
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_qty_chk" CHECK ("qty" > 0);
+
+-- >>> prisma/migrations/20261002010000_stocktakes/migration.sql
+-- Plan 06-E4: kiểm kho
+-- CreateEnum
+CREATE TYPE "stocktake_status" AS ENUM ('DRAFT', 'DONE', 'CANCELLED');
+-- CreateTable
+CREATE TABLE "stocktakes" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "status" "stocktake_status" NOT NULL DEFAULT 'DRAFT',
+    "note" TEXT,
+    "confirmedAt" TIMESTAMP(3),
+    "confirmedBy" INTEGER,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "stocktakes_pkey" PRIMARY KEY ("id")
+);
+-- CreateTable
+CREATE TABLE "stocktake_lines" (
+    "id" SERIAL NOT NULL,
+    "stocktakeId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "actualQty" DECIMAL(18,3) NOT NULL,
+    "systemQty" DECIMAL(18,3),
+    "diff" DECIMAL(18,3),
+    "unitCost" DECIMAL(18,4),
+    "seq" BIGINT,
+    CONSTRAINT "stocktake_lines_pkey" PRIMARY KEY ("id")
+);
+-- CreateIndex
+CREATE UNIQUE INDEX "stocktakes_code_key" ON "stocktakes"("code");
+-- CreateIndex
+CREATE INDEX "stocktakes_periodId_at_idx" ON "stocktakes"("periodId", "at");
+-- CreateIndex
+CREATE INDEX "stocktakes_periodId_status_idx" ON "stocktakes"("periodId", "status");
+-- CreateIndex
+CREATE UNIQUE INDEX "stocktake_lines_stocktakeId_productId_key" ON "stocktake_lines"("stocktakeId", "productId");
+-- AddForeignKey
+ALTER TABLE "stocktakes" ADD CONSTRAINT "stocktakes_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_stocktakeId_fkey" FOREIGN KEY ("stocktakeId") REFERENCES "stocktakes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_actual_chk" CHECK ("actualQty" >= 0);
+-- Đã chốt (DONE) thì phải có đủ số liệu chốt; chưa chốt thì chưa có
+ALTER TABLE "stocktakes" ADD CONSTRAINT "stocktakes_confirm_chk" CHECK (("status" = 'DONE') = ("confirmedAt" IS NOT NULL) OR "status" = 'CANCELLED');
+
+-- >>> prisma/migrations/20261002100000_user_preferences/migration.sql
+-- Cấu hình giao diện theo tài khoản (module tabs). Chỉ thêm bảng, không đụng dữ liệu cũ.
+-- CreateTable
+CREATE TABLE "user_preferences" (
+    "userId" INTEGER NOT NULL,
+    "data" JSONB NOT NULL DEFAULT '{}',
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_preferences_pkey" PRIMARY KEY ("userId")
+);
+
+-- AddForeignKey
+ALTER TABLE "user_preferences" ADD CONSTRAINT "user_preferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- >>> prisma/migrations/20261005000000_sale_order_extras/migration.sql
+-- Đơn bán: người bán, kho xuất, hình thức thanh toán dự kiến; sản phẩm: ảnh minh hoạ. Chỉ thêm cột (nullable/default) — không đụng dữ liệu cũ.
+CREATE TYPE "sale_payment_method" AS ENUM ('NONE', 'CASH', 'TRANSFER', 'COD');
+
+ALTER TABLE "sale_orders" ADD COLUMN "salesUserId" INTEGER,
+ADD COLUMN "warehouseId" INTEGER,
+ADD COLUMN "paymentMethod" "sale_payment_method" NOT NULL DEFAULT 'NONE';
+
+ALTER TABLE "products" ADD COLUMN "imageUrl" TEXT;
+
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_salesUserId_fkey" FOREIGN KEY ("salesUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "warehouses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- >>> prisma/migrations/20261005100000_sale_checkout_walkin/migration.sql
+-- Bán lẻ tại quầy: khách lẻ ghi tên/SĐT trên đơn; khách hàng có MST và địa chỉ giao hàng. Chỉ thêm cột nullable.
+ALTER TABLE "partners" ADD COLUMN "taxCode" TEXT,
+ADD COLUMN "deliveryAddress" TEXT;
+
+ALTER TABLE "sale_orders" ADD COLUMN "walkInName" TEXT,
+ADD COLUMN "walkInPhone" TEXT;
+
+-- >>> prisma/migrations/20261005200000_sale_shipping_discount_note/migration.sql
+-- Phí vận chuyển + chiết khấu cả đơn (đã phân bổ vào dòng) + ghi chú theo dòng. Chỉ thêm cột có mặc định.
+ALTER TABLE "sale_orders" ADD COLUMN "shippingFee" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "orderDiscount" DECIMAL(18,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE "sale_order_lines" ADD COLUMN "discountOrder" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "note" TEXT;
+
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_shipping_discount_chk" CHECK ("shippingFee" >= 0 AND "orderDiscount" >= 0);
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_discount_order_chk" CHECK ("discountOrder" >= 0 AND "discountOrder" <= "discountNow");
+
+-- >>> prisma/migrations/20261005300000_product_groups/migration.sql
+-- Nhóm hàng của sản phẩm (tuỳ chọn). Chỉ thêm bảng + cột nullable.
+CREATE TABLE "product_groups" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "product_groups_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "product_groups_name_key" ON "product_groups"("name");
+
+ALTER TABLE "products" ADD COLUMN "groupId" INTEGER;
+
+CREATE INDEX "products_groupId_idx" ON "products"("groupId");
+
+ALTER TABLE "products" ADD CONSTRAINT "products_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "product_groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- app_rw: cùng quyền như các bảng danh mục khác (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON "product_groups" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "product_groups_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261006100000_return_refund_deduction/migration.sql
+-- Trả hàng của khách: khoản khấu trừ (phí vận chuyển/khác) + liên kết phiếu hoàn tiền (HOAN_KHACH) sinh cùng phiếu trả. Chỉ thêm cột.
+ALTER TABLE "goods_returns" ADD COLUMN "deductionAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "deductionNote" TEXT;
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_deduction_chk" CHECK ("deductionAmount" >= 0 AND "deductionAmount" <= "totalAmount");
+
+ALTER TABLE "payments" ADD COLUMN "goodsReturnId" INTEGER;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_goodsReturnId_fkey" FOREIGN KEY ("goodsReturnId") REFERENCES "goods_returns"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "payments_goodsReturnId_idx" ON "payments"("goodsReturnId");
+
+-- >>> prisma/migrations/20261006200000_opening_demo_flag/migration.sql
+-- Cờ "số demo" cho số đầu kỳ (nạp tạm để test, reset khi chạy chính thức). Chỉ thêm cột có mặc định.
+ALTER TABLE "opening_stock" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_debt" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_cash" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_discount" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261007100000_bom_area_ratio/migration.sql
+-- Tỷ lệ m²/md của định mức (bán tôn gia công theo kích thước). Chỉ thêm cột nullable.
+ALTER TABLE "boms" ADD COLUMN "areaRatio" DECIMAL(18,4);
+ALTER TABLE "boms" ADD CONSTRAINT "boms_areaRatio_positive" CHECK ("areaRatio" IS NULL OR "areaRatio" > 0);
+
+-- >>> prisma/migrations/20261007200000_product_processing_ratios/migration.sql
+-- Tỷ lệ m²/md theo (sản phẩm × kiểu gia công), không phụ thuộc định mức. Chuyển dữ liệu từ boms.areaRatio rồi bỏ cột.
+CREATE TABLE "product_processing_ratios" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "processingTypeId" INTEGER NOT NULL,
+    "ratio" DECIMAL(18,4) NOT NULL,
+    "updatedBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "product_processing_ratios_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "product_processing_ratios_ratio_positive" CHECK ("ratio" > 0)
+);
+CREATE UNIQUE INDEX "product_processing_ratios_productId_processingTypeId_key" ON "product_processing_ratios"("productId", "processingTypeId");
+ALTER TABLE "product_processing_ratios" ADD CONSTRAINT "product_processing_ratios_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "product_processing_ratios" ADD CONSTRAINT "product_processing_ratios_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+INSERT INTO "product_processing_ratios" ("productId", "processingTypeId", "ratio", "updatedBy", "updatedAt")
+SELECT "productId", "processingTypeId", "areaRatio", "createdBy", CURRENT_TIMESTAMP FROM "boms" WHERE "areaRatio" IS NOT NULL;
+
+ALTER TABLE "boms" DROP COLUMN "areaRatio";
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "product_processing_ratios" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "product_processing_ratios_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261008100000_partner_extra_fields/migration.sql
+-- Thông tin bổ sung của đối tác (tuỳ chọn): email, TK ngân hàng, người đại diện, thứ tự, loại "Chi phí".
+ALTER TABLE "partners" ADD COLUMN "email" TEXT;
+ALTER TABLE "partners" ADD COLUMN "bankAccount" TEXT;
+ALTER TABLE "partners" ADD COLUMN "representative" TEXT;
+ALTER TABLE "partners" ADD COLUMN "sortOrder" INTEGER;
+ALTER TABLE "partners" ADD COLUMN "isExpense" BOOLEAN NOT NULL DEFAULT false;

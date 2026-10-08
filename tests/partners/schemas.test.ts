@@ -15,5 +15,12 @@ describe("createPartnerSchema", () => {
     expect(message({ ...valid, debtLimit: -1 })).toBe("Không được âm.");
     expect(message({ ...valid, phone: "abc" })).toBe("Số điện thoại không hợp lệ.");
   });
+  it("trường bổ sung đều tuỳ chọn; kiểm tra email, thứ tự, công nợ đầu kỳ", () => {
+    expect(createPartnerSchema.safeParse(valid).success).toBe(true);
+    expect(createPartnerSchema.parse({ ...valid, email: "a@b.vn", bankAccount: "0123", representative: "Đạt", sortOrder: 2, isExpense: true, openingDebt: -1500000 })).toMatchObject({ sortOrder: 2, openingDebt: -1500000 });
+    expect(message({ ...valid, email: "khong-hop-le" })).toBe("Email không hợp lệ.");
+    expect(message({ ...valid, sortOrder: -1 })).toBe("Không được âm.");
+    expect(message({ ...valid, sortOrder: 1.5 })).toBe("Thứ tự phải là số nguyên.");
+  });
   it("section hồ sơ cũng bắt buộc có ít nhất một loại", () => expect(profileSectionSchema.safeParse({ name: "A", groupId: 1, isCustomer: false, isSupplier: false, phone: "", address: "", note: "" }).success).toBe(false));
 });

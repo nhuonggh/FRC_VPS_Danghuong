@@ -31,12 +31,14 @@ interface Props {
   wide?: boolean;
   /** Chỉ với `wide`: nút ở đầu trang (cạnh tiêu đề). `run(fn)` chạy một hành động với cùng cơ chế chống bấm đúp + banner lỗi như nút gửi chính. */
   headerActions?: (run: (action: () => Promise<void>) => void, pending: boolean) => React.ReactNode;
+  /** Thông tin hiện bên trái thanh Hủy/Lưu dính đáy (vd. Tổng tiền, Nợ của form lập đơn). */
+  footerInfo?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 const DISCARD_CONFIRM = { title: "Bỏ thay đổi chưa lưu?", confirmLabel: "Bỏ thay đổi", danger: true } as const;
 
-export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], wide, headerActions, children }: Props) {
+export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], wide, headerActions, footerInfo, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +140,8 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
       {/* Footer sticky đáy vùng cuộn (không absolute/fixed che nội dung). Sticky bám mép vùng cuộn, còn BottomNav
           (fixed, z cao hơn) phủ lên đáy vùng đó ở < md → dính CÁCH đáy đúng chiều cao BottomNav (BOTTOM_NAV_OFFSET).
           `pb-20` của vùng cuộn chỉ chừa chỗ cho cuối trang, không giữ footer khỏi bị BottomNav che. */}
-      <div className={clsx("sticky bottom-0 z-header mt-4 flex justify-end gap-2 border-t border-border bg-surface px-4 py-3", BOTTOM_NAV_OFFSET)}>
+      <div className={clsx("sticky bottom-0 z-header mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-surface px-4 py-3", BOTTOM_NAV_OFFSET)}>
+        {footerInfo && <div className="mr-auto flex flex-wrap items-center gap-x-6 gap-y-1">{footerInfo}</div>}
         <button type="button" onClick={() => void leave()} disabled={pending} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10">Hủy</button>
         <button type="submit" disabled={pending} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">
           {pending ? "Đang lưu" : submitLabel}

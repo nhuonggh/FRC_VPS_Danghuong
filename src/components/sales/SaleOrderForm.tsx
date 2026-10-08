@@ -1,13 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, FileText, Package, Plus, Printer, Save, ShoppingCart, SlidersHorizontal, Store, Trash2, UserRound, Wallet } from "lucide-react";
+import { CalendarDays, ChevronDown, Package, Plus, Printer, Save, ShoppingCart, Store, Trash2, UserRound, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
-import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import { QuickCustomerDialog, type QuickCustomer } from "@/components/sales/QuickCustomerDialog";
+import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
@@ -18,8 +20,11 @@ import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSch
 import type { SalePricingDTO } from "@/server/sales/pricing";
 import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
-import { QuickDimensionEntry, type TypeOption } from "@/components/sales/QuickDimensionEntry";
+import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
 
+const LABEL = "sm:min-w-40";
+/** Nhãn trong ô tìm khách là "MÃ — Tên"; lấy phần mã để hiện ở ô "Mã khách hàng". */
+const partnerCode = (label: string) => (label.includes(" — ") ? label.split(" — ")[0]! : "");
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, discountNow: 0, discountAccum: 0, processingTypeId: null, note: "" } as unknown as SaleOrderInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -199,9 +204,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
 
   const runWith = (mode: "save" | "print" | "draft") => async () => { entry.dropEmptyLines(); await submitWith(mode)(); };
   const canPrint = options.canPrint && !edit?.isDraft;
-  const [quickKey, setQuickKey] = useState(0);
   const [printMenu, setPrintMenu] = useState(false);
-  const addQuick = (p: ComboOption | null) => { if (!p) return; addProducts([p as ProductOption]); setQuickKey((k) => k + 1); };
   const lineCount = lines.filter((l) => l?.productId).length;
   const customerInfo = customer as (ComboOption & { address?: string; taxCode?: string; deliveryAddress?: string }) | null;
   const card = "rounded-sm border border-border bg-surface p-4";
@@ -209,6 +212,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   // Một trang, các thẻ: khách hàng | thông tin chung ở trên, danh sách sản phẩm ở dưới — lập đơn không phải chuyển tab.
   return (
     <NewPage wide backHref={edit ? `/sales/orders/${edit.orderId}` : "/sales/orders"} backLabel={edit ? `Quay lại đơn ${edit.code}` : "Quay lại danh sách đơn"} title={edit ? `Sửa đơn ${edit.code}` : retailOn ? "Bán lẻ tại quầy" : "Tạo đơn hàng"} submitLabel={edit ? "Lưu thay đổi" : retailOn ? "Thu tiền & lập đơn" : "Lập đơn"} isDirty={() => isDirty} onSubmit={runWith("save")}
+      footerInfo={(
+        <>
+          <span className="text-sm font-semibold">Tổng tiền: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>
+          <span className="text-sm font-semibold">{paid > total && canCheckout ? "Thừa" : "Nợ"}: <b className={`ml-1 text-lg tabular ${(paid > total || (walkIn && paid < total)) && canCheckout ? "text-danger" : "text-accent"}`}>{formatCurrency(canCheckout ? Math.abs(total - paid) : total)}</b></span>
+        </>
+      )}
       headerActions={(run, pending) => (
         <>
           {!edit && options.canCollect && (
@@ -229,103 +238,85 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           )}
         </>
       )}>
-      <div className={retailOn ? "grid gap-4 lg:grid-cols-2" : "grid gap-4 lg:grid-cols-3"}>
-        <section className={card}>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin khách hàng</h2>
-            {canCheckout && (
-              <div role="group" aria-label="Loại khách" className="inline-flex overflow-hidden rounded-full border border-border text-xs font-medium">
-                <button type="button" aria-pressed={!walkIn} onClick={() => walkIn && toggleWalkIn(false)} className={walkIn ? "px-3 py-1.5 hover:bg-hover" : "bg-accent px-3 py-1.5 text-fg-on-accent"}>Đối tác</button>
-                <button type="button" aria-pressed={walkIn} onClick={() => !walkIn && toggleWalkIn(true)} className={walkIn ? "bg-accent px-3 py-1.5 text-fg-on-accent" : "px-3 py-1.5 hover:bg-hover"}>Khách lẻ</button>
-              </div>
-            )}
-          </div>
-          {walkIn ? (
-            <div className="space-y-3">
-              <Field id="walkName" label="Tên khách (tuỳ chọn)"><input id="walkName" value={walkName} onChange={(e) => setWalkName(e.target.value)} placeholder="Khách lẻ" className={inputClass()} /></Field>
-              <Field id="walkPhone" label="Số điện thoại (tuỳ chọn)"><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" className={inputClass()} /></Field>
-              <p className="text-xs text-fg-muted">Khách lẻ dùng khách chung <strong>KHL</strong>, thanh toán đủ ngay, không ghi nợ.</p>
-            </div>
-          ) : (<>
-          <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1">
-              <Controller control={control} name="partnerId" render={({ field }) => (
-                <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
-                  onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
-              )} />
-            </div>
-            {options.canCreateCustomer && !edit && (
-              <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
-            )}
-          </div>
-          {customerInfo && (customerInfo.hint || customerInfo.address || customerInfo.taxCode || customerInfo.deliveryAddress) && (
-            <dl className="mt-3 space-y-1 rounded-sm bg-hover p-3 text-sm">
-              {customerInfo.hint && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">SĐT:</dt><dd>{customerInfo.hint}</dd></div>}
-              {customerInfo.taxCode && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">MST:</dt><dd>{customerInfo.taxCode}</dd></div>}
-              {customerInfo.address && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">Địa chỉ:</dt><dd>{customerInfo.address}</dd></div>}
-              {customerInfo.deliveryAddress && <div className="flex gap-2"><dt className="shrink-0 text-fg-muted">Giao hàng:</dt><dd>{customerInfo.deliveryAddress}</dd></div>}
-            </dl>
+      {/* 1. Ngày tạo đơn */}
+      <section className={card}>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><CalendarDays size={16} aria-hidden className="text-accent" /> Ngày tạo đơn</h2>
+        <div className="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+          <InlineField id="date" label="Ngày đơn" required error={errors.date?.message} labelClass={LABEL}>
+            <input id="date" type="date" max={today} {...register("date")} aria-invalid={!!errors.date} className={igInput} />
+          </InlineField>
+          {!retailOn && (
+            <InlineField id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message} labelClass={LABEL}>
+              <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} aria-invalid={!!errors.expectedDeliveryDate} className={igInput} />
+            </InlineField>
           )}
-          </>)}
-        </section>
-        <section className={card}>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText size={16} aria-hidden className="text-accent" /> Thông tin chung</h2>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Field id="date" label="Ngày đơn" required error={errors.date?.message}>
-              <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
-            </Field>
-            {!retailOn && (
-              <Field id="expectedDeliveryDate" label="Ngày giao dự kiến" required error={errors.expectedDeliveryDate?.message}>
-                <input id="expectedDeliveryDate" type="date" {...register("expectedDeliveryDate")} className={inputClass(errors.expectedDeliveryDate)} />
-              </Field>
-            )}
-          </div>
-          <div className="mt-4">
-            <Field id="note" label="Ghi chú" error={errors.note?.message}>
-              <textarea id="note" rows={2} placeholder="Nhập ghi chú về đơn hàng…" {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-            </Field>
-          </div>
-        </section>
-        {!retailOn && <section className={card}>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal size={16} aria-hidden className="text-accent" /> Thông tin khác</h2>
-          <div className="space-y-4">
-            <Field id="salesUserId" label="Nhân viên bán">
-              <select id="salesUserId" value={watch("salesUserId") ?? ""} onChange={(e) => setValue("salesUserId", e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
+          {!retailOn && (
+            <InlineField id="salesUserId" label="Nhân viên bán" labelClass={LABEL}>
+              <select id="salesUserId" value={watch("salesUserId") ?? ""} onChange={(e) => setValue("salesUserId", e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={`${igInput} cursor-pointer`}>
                 <option value="">— Không chọn —</option>
                 {options.salesUsers.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
-            </Field>
-            <Field id="warehouseId" label="Kho xuất">
-              <select id="warehouseId" value={watch("warehouseId") ?? ""} onChange={(e) => setValue("warehouseId", e.target.value ? Number(e.target.value) : null, { shouldDirty: true })} className={inputClass()}>
-                <option value="">— Không chọn —</option>
-                {options.warehouses.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
-              </select>
-            </Field>
-            {!canCheckout && (
-              <Field id="paymentMethod" label="Hình thức thanh toán">
-                <select id="paymentMethod" {...register("paymentMethod")} className={inputClass()}>
-                  {SALE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{SALE_PAYMENT_LABELS[m]}</option>)}
-                </select>
-              </Field>
-            )}
-          </div>
-        </section>}
-      </div>
+            </InlineField>
+          )}
+        </div>
+      </section>
 
+      {/* 2. Thông tin đối tác */}
+      <section className={card}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><UserRound size={16} aria-hidden className="text-accent" /> Thông tin đối tác</h2>
+          {canCheckout && (
+            <div role="group" aria-label="Loại khách" className="inline-flex overflow-hidden rounded-full border border-border text-xs font-medium">
+              <button type="button" aria-pressed={!walkIn} onClick={() => walkIn && toggleWalkIn(false)} className={walkIn ? "px-4 py-2 hover:bg-hover" : "bg-accent px-4 py-2 text-fg-on-accent"}>Đối tác</button>
+              <button type="button" aria-pressed={walkIn} onClick={() => !walkIn && toggleWalkIn(true)} className={walkIn ? "bg-accent px-4 py-2 text-fg-on-accent" : "px-4 py-2 hover:bg-hover"}>Khách lẻ</button>
+            </div>
+          )}
+          {options.canCreateCustomer && !edit && !walkIn
+            ? <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
+            : <span />}
+        </div>
+        <div className="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+          {walkIn ? (<>
+            <InlineField id="walkName" label="Tên khách (tuỳ chọn)" labelClass={LABEL}><input id="walkName" value={walkName} onChange={(e) => setWalkName(e.target.value)} placeholder="Khách lẻ (tuỳ chọn)" autoComplete="off" className={igInput} /></InlineField>
+            <InlineField id="walkCode" label="Mã khách hàng" labelClass={LABEL} readOnly><input id="walkCode" readOnly value="KHL" className={igInput} /></InlineField>
+            <InlineField id="walkPhone" label="Số điện thoại (tuỳ chọn)" labelClass={LABEL}><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" placeholder="Tuỳ chọn" className={igInput} /></InlineField>
+            <p className="text-xs text-fg-muted md:col-span-2 xl:col-span-3">Khách lẻ dùng khách chung <strong>KHL</strong>, thanh toán đủ ngay, không ghi nợ.</p>
+          </>) : (<>
+            <InlineField id="partnerId" label="Tên khách hàng" required error={errors.partnerId?.message} labelClass={LABEL}>
+              <div className={igCombo}>
+                <Controller control={control} name="partnerId" render={({ field }) => (
+                  <Combobox hideLabel label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…"
+                    onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
+                )} />
+              </div>
+            </InlineField>
+            <InlineField id="ccode" label="Mã khách hàng" labelClass={LABEL} readOnly><input id="ccode" readOnly value={customer ? partnerCode(customer.label) : ""} className={igInput} /></InlineField>
+            <InlineField id="cphone" label="Điện thoại" labelClass={LABEL} readOnly><input id="cphone" readOnly value={customerInfo?.hint ?? ""} className={igInput} /></InlineField>
+            <InlineField id="caddr" label="Địa chỉ" labelClass={LABEL} readOnly className="md:col-span-2"><input id="caddr" readOnly value={customerInfo?.address ?? ""} className={igInput} /></InlineField>
+            <InlineField id="ctax" label="Mã số thuế" labelClass={LABEL} readOnly><input id="ctax" readOnly value={customerInfo?.taxCode ?? ""} className={igInput} /></InlineField>
+            <InlineField id="cship" label="Địa chỉ giao hàng" labelClass={LABEL} readOnly className="md:col-span-2 xl:col-span-3"><input id="cship" readOnly value={customerInfo?.deliveryAddress ?? ""} className={igInput} /></InlineField>
+          </>)}
+        </div>
+      </section>
+
+      {/* 3. Thông tin sản phẩm (dải nhập) */}
+      <section className={card}>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Package size={16} aria-hidden className="text-accent" /> Thông tin sản phẩm</h2>
+        <SaleLineEntry loadProducts={loadProducts} pricingPartnerId={pricingPartnerId} canEditPrice={canEditPrice} disabled={fields.length >= SALE_MAX_LINES}
+          warehouses={options.warehouses} warehouseId={watch("warehouseId") ?? null} onWarehouse={(id) => setValue("warehouseId", id, { shouldDirty: true })} onAdd={addDimensionRows} />
+        {!canEditPrice && <p className="mt-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
+      </section>
+
+      {/* 4. Chi tiết sản phẩm */}
       <section className={card}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart size={16} aria-hidden className="text-accent" /> Danh sách sản phẩm</h2>
-          <div className="flex min-w-0 flex-1 flex-wrap items-end justify-end gap-2">
-            <div className="min-w-56 max-w-md flex-1">
-              <Combobox key={quickKey} label="Tìm sản phẩm nhanh" value={null} loadOptions={loadProducts} placeholder="Tìm sản phẩm (mã, tên…)" onChange={addQuick} disabled={fields.length >= SALE_MAX_LINES} />
-            </div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart size={16} aria-hidden className="text-accent" /> Chi tiết sản phẩm</h2>
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => append(emptyLine)} disabled={fields.length >= SALE_MAX_LINES}
-              className="inline-flex h-11 items-center gap-1 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-40 md:h-10"><Plus size={16} aria-hidden /> Thêm dòng</button>
+              className="inline-flex h-11 items-center gap-1 rounded-sm border border-border bg-surface px-3 text-sm font-medium hover:bg-hover disabled:opacity-40 md:h-10"><Plus size={16} aria-hidden /> Thêm dòng</button>
             <ProductMultiPicker load={loadProducts} disabled={fields.length >= SALE_MAX_LINES} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
           </div>
         </div>
-        <QuickDimensionEntry loadProducts={loadProducts} pricingPartnerId={pricingPartnerId} canEditPrice={canEditPrice} disabled={fields.length >= SALE_MAX_LINES} onAdd={addDimensionRows} />
-        {!canEditPrice && <p className="mb-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="line-table w-full min-w-[1460px] table-fixed border-collapse text-sm">
             <colgroup>
@@ -349,75 +340,82 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           </table>
         </div>
         {errors.lines?.message && <p role="alert" className="mt-2 text-sm text-danger">{errors.lines.message}</p>}
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-4 border-t border-border pt-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
           <p className="text-sm">Tổng số dòng: <span className="font-semibold tabular">{lineCount}</span></p>
-          <div className="flex flex-wrap items-end gap-4">
-            <p className="text-sm text-fg-secondary">Tiền hàng <span className="ml-1 font-semibold text-fg tabular">{formatCurrency(linesTotal)}</span></p>
-            <Field id="orderDiscount" label="Chiết khấu cả đơn" className="w-36" error={errors.orderDiscount?.message}>
-              <input id="orderDiscount" type="number" min={0} step="any" {...register("orderDiscount", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${inputClass(errors.orderDiscount)} tabular text-right`} />
-            </Field>
-            <Field id="shippingFee" label="Phí vận chuyển" className="w-36" error={errors.shippingFee?.message}>
-              <input id="shippingFee" type="number" min={0} step="any" {...register("shippingFee", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${inputClass(errors.shippingFee)} tabular text-right`} />
-            </Field>
-            <p className="text-sm font-semibold">Tiền phải thu <span className="ml-3 text-xl text-accent tabular">{formatCurrency(total)}</span></p>
-          </div>
+          <p className="text-sm text-fg-secondary">Tiền hàng <span className="ml-1 font-semibold text-fg tabular">{formatCurrency(linesTotal)}</span></p>
         </div>
-        <p className="mt-2 text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
+        <p className="mt-2 text-xs text-fg-muted">Dòng đã thêm vẫn sửa trực tiếp được trong bảng; chọn sản phẩm → nhập SL → Enter để sang dòng kế. Dòng trống cuối sẽ bị bỏ khi lập đơn.</p>
       </section>
 
-      {canCheckout && (
-        <section className={card}>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Wallet size={16} aria-hidden className="text-accent" /> Thông tin thanh toán</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field id="payKind" label="Hình thức thanh toán">
-              <select id="payKind" value={payKind} onChange={(e) => changeKind(e.target.value as typeof payKind)} className={inputClass()}>
+      {/* 5. Thông tin thanh toán */}
+      <section className={card}>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Wallet size={16} aria-hidden className="text-accent" /> Thông tin thanh toán</h2>
+        <div className="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+          {canCheckout ? (<>
+            <InlineField id="payKind" label="Hình thức thanh toán" labelClass={LABEL}>
+              <select id="payKind" value={payKind} onChange={(e) => changeKind(e.target.value as typeof payKind)} className={`${igInput} cursor-pointer`}>
                 <option value="NONE">Chưa thu tiền</option>
                 <option value="CASH">Tiền mặt</option>
                 <option value="TRANSFER">Chuyển khoản</option>
                 {!walkIn && <option value="COD">Thu hộ khi giao (COD)</option>}
               </select>
-            </Field>
-            {(payKind === "CASH" || payKind === "TRANSFER") && (<>
-              <Field id="payAccount" label={payKind === "CASH" ? "Quỹ tiền mặt" : "Ngân hàng"}>
-                <select id="payAccount" value={payAccount ?? ""} onChange={(e) => setPayAccount(e.target.value ? Number(e.target.value) : null)} className={inputClass()}>
+            </InlineField>
+            {(payKind === "CASH" || payKind === "TRANSFER") ? (
+              <InlineField id="payAccount" label={payKind === "CASH" ? "Quỹ tiền mặt" : "Ngân hàng"} labelClass={LABEL}>
+                <select id="payAccount" value={payAccount ?? ""} onChange={(e) => setPayAccount(e.target.value ? Number(e.target.value) : null)} className={`${igInput} cursor-pointer`}>
                   <option value="">{accounts.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
                   {accounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
-              </Field>
-              <Field id="payAmount" label="Số tiền thu">
-                <div className="flex gap-2">
-                  <input id="payAmount" type="number" min={0} step="any" value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setAmountTouched(true); }} className={`${inputClass()} tabular text-right`} />
-                  <button type="button" onClick={() => { setPayAmount(total ? String(Math.max(0, round2(total - num(secAmount)))) : ""); setAmountTouched(true); }} className="h-11 shrink-0 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-9">Thu đủ</button>
-                </div>
-              </Field>
-              <Field id="secAmount" label={payKind === "CASH" ? "Thu thêm bằng chuyển khoản" : "Thu thêm bằng tiền mặt"}>
-                <input id="secAmount" type="number" min={0} step="any" value={secAmount} placeholder="0"
-                  onChange={(e) => { setSecAmount(e.target.value); if (!secAccount && otherAccounts[0]) setSecAccount(Number(otherAccounts[0].value)); if (!amountTouched) setPayAmount(String(Math.max(0, round2(total - num(e.target.value))))); }} className={`${inputClass()} tabular text-right`} />
-              </Field>
-              {num(secAmount) > 0 && (
-                <Field id="secAccount" label={payKind === "CASH" ? "Ngân hàng nhận (khoản 2)" : "Quỹ tiền mặt (khoản 2)"}>
-                  <select id="secAccount" value={secAccount ?? ""} onChange={(e) => setSecAccount(e.target.value ? Number(e.target.value) : null)} className={inputClass()}>
-                    <option value="">{otherAccounts.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
-                    {otherAccounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
-                </Field>
-              )}
-              <Field id="payNote" label="Ghi chú thu tiền"><input id="payNote" value={payNote} onChange={(e) => setPayNote(e.target.value)} className={inputClass()} /></Field>
-            </>)}
-          </div>
+              </InlineField>
+            ) : <span className="hidden md:block" />}
+          </>) : (
+            <InlineField id="paymentMethod" label="Hình thức thanh toán" labelClass={LABEL}>
+              <select id="paymentMethod" {...register("paymentMethod")} className={`${igInput} cursor-pointer`}>
+                {SALE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{SALE_PAYMENT_LABELS[m]}</option>)}
+              </select>
+            </InlineField>
+          )}
+          <InlineField id="shippingFee" label="Phí vận chuyển" error={errors.shippingFee?.message} labelClass={LABEL}>
+            <input id="shippingFee" type="number" min={0} step="any" {...register("shippingFee", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${igInput} tabular text-right`} />
+          </InlineField>
+
+          {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
+            <InlineField id="payAmount" label="Số tiền thu" labelClass={LABEL}>
+              <input id="payAmount" type="number" min={0} step="any" value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setAmountTouched(true); }} className={`${igInput} tabular text-right`} />
+              <button type="button" onClick={() => { setPayAmount(total ? String(Math.max(0, round2(total - num(secAmount)))) : ""); setAmountTouched(true); }} className="h-11 shrink-0 border-l border-border bg-hover px-3 text-sm font-medium hover:bg-border md:h-9">Thu đủ</button>
+            </InlineField>
+            <InlineField id="secAmount" label={payKind === "CASH" ? "Thu thêm bằng chuyển khoản" : "Thu thêm bằng tiền mặt"} labelClass={LABEL}>
+              <input id="secAmount" type="number" min={0} step="any" value={secAmount} placeholder="0"
+                onChange={(e) => { setSecAmount(e.target.value); if (!secAccount && otherAccounts[0]) setSecAccount(Number(otherAccounts[0].value)); if (!amountTouched) setPayAmount(String(Math.max(0, round2(total - num(e.target.value))))); }} className={`${igInput} tabular text-right`} />
+            </InlineField>
+          </>)}
+          <InlineField id="orderDiscount" label="Chiết khấu cả đơn" error={errors.orderDiscount?.message} labelClass={LABEL}>
+            <input id="orderDiscount" type="number" min={0} step="any" {...register("orderDiscount", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${igInput} tabular text-right`} />
+          </InlineField>
+          {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
+            {num(secAmount) > 0 && (
+              <InlineField id="secAccount" label={payKind === "CASH" ? "Ngân hàng nhận (khoản 2)" : "Quỹ tiền mặt (khoản 2)"} labelClass={LABEL}>
+                <select id="secAccount" value={secAccount ?? ""} onChange={(e) => setSecAccount(e.target.value ? Number(e.target.value) : null)} className={`${igInput} cursor-pointer`}>
+                  <option value="">{otherAccounts.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
+                  {otherAccounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+              </InlineField>
+            )}
+            <InlineField id="payNote" label="Ghi chú thu tiền" labelClass={LABEL} className={num(secAmount) > 0 ? undefined : "md:col-span-2"}><input id="payNote" value={payNote} onChange={(e) => setPayNote(e.target.value)} className={igInput} /></InlineField>
+          </>)}
+          <InlineField id="note" label="Ghi chú" error={errors.note?.message} labelClass={LABEL} className="md:col-span-2 xl:col-span-3">
+            <textarea id="note" rows={2} placeholder="Nhập ghi chú về đơn hàng…" {...register("note")} className="min-h-11 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-sm outline-none" />
+          </InlineField>
+        </div>
+        {canCheckout && (<>
           <p className="mt-3 text-xs text-fg-muted">Tiền thu khi chưa giao hàng được ghi là <strong>tiền cọc</strong> của đơn (trừ vào công nợ khi giao). Có thể thu bằng cả tiền mặt và chuyển khoản cùng lúc.</p>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-            {options.canPickup ? (
+          {options.canPickup && (
+            <div className="mt-2 border-t border-border pt-3">
               <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={pickupNow} onChange={(e) => setPickupNow(e.target.checked)} className="h-4 w-4" />Khách tự chở — giao hàng ngay (lập phiếu giao)</label>
-            ) : <span />}
-            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              <div className="flex gap-2"><dt className="text-fg-muted">Tiền phải thu:</dt><dd className="font-semibold tabular">{formatCurrency(total)}</dd></div>
-              <div className="flex gap-2"><dt className="text-fg-muted">Đã thu:</dt><dd className="font-semibold tabular">{formatCurrency(paid)}</dd></div>
-              <div className="flex gap-2"><dt className="text-fg-muted">{paid > total ? "Thừa:" : "Còn nợ:"}</dt><dd className={`font-semibold tabular ${paid > total || (walkIn && paid < total) ? "text-danger" : ""}`}>{formatCurrency(Math.abs(total - paid))}</dd></div>
-            </dl>
-          </div>
-        </section>
-      )}
+            </div>
+          )}
+        </>)}
+      </section>
     </NewPage>
   );
 }

@@ -17,6 +17,14 @@ export const partnerBase = z.object({
   address: text(250, "Địa chỉ"),
   taxCode: text(20, "Mã số thuế").refine((v) => v === "" || /^[0-9][0-9-]{8,18}[0-9]$/.test(v), "Mã số thuế gồm 10–13 chữ số (có thể có dấu -).").optional(),
   deliveryAddress: text(250, "Địa chỉ giao hàng").optional(),
+  /** Các trường bổ sung của hộp thoại "Thêm khách hàng" (form bán hàng) — tất cả tuỳ chọn. */
+  email: text(120, "Email").refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Email không hợp lệ.").optional(),
+  bankAccount: text(120, "TK ngân hàng").optional(),
+  representative: text(120, "Người đại diện").optional(),
+  sortOrder: z.number({ invalid_type_error: "Thứ tự phải là số." }).int("Thứ tự phải là số nguyên.").min(0, "Không được âm.").max(1_000_000, "Số quá lớn.").nullable().optional(),
+  isExpense: z.boolean().optional(),
+  /** Công nợ đầu kỳ (+ khách nợ, − mình nợ); ghi vào số đầu kỳ của kỳ đang mở. 0/trống = không ghi. */
+  openingDebt: z.number({ invalid_type_error: "Nhập số tiền." }).min(-9_999_999_999_999, "Số quá lớn.").max(9_999_999_999_999, "Số quá lớn.").optional(),
   note: text(500, "Ghi chú"),
   isActive: z.boolean(),
 });
