@@ -47,12 +47,20 @@ describe("nhập Excel Cài đặt danh mục", () => {
     expect(await prisma.cashAccount.findUniqueOrThrow({ where: { name: "Tiền mặt" } })).toMatchObject({ type: "CASH", bankNo: null });
   });
 
-  it("kiểu gia công: tỷ lệ/trừ kho/ĐVT gộp vào Ghi chú; ghi đè không xoá ghi chú khi ô trống", async () => {
-    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Ghi chú", "Tỷ lệ", "Tỷ lệ trừ kho", "ĐVT"], [["Tôn xốp 6S", null, 1.07, 1, "m2"]]));
-    expect((await prisma.processingType.findUniqueOrThrow({ where: { name: "Tôn xốp 6S" } })).note).toBe("Tỷ lệ 1,07 · Trừ kho 1 · ĐVT m2");
-    const res = await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Ghi chú"], [["Tôn xốp 6S", null]]), true);
+  it("kiểu gia công: tỷ lệ/trừ kho/ĐVT/trạng thái vào cột riêng; ghi đè không xoá khi ô trống", async () => {
+    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Ghi chú", "Tỷ lệ", "Tỷ lệ trừ kho", "ĐVT"], [["Tôn xốp 6S", "Ghi chú A", 1.185, "1,5", "m2"]]));
+    const row = () => prisma.processingType.findUniqueOrThrow({ where: { name: "Tôn xốp 6S" } });
+    expect(await row()).toMatchObject({ note: "Ghi chú A", unit: "m2", isActive: true });
+    expect(String((await row()).ratio)).toBe("1.185"); expect(String((await row()).stockRatio)).toBe("1.5");
+    const res = await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Trạng thái"], [["Tôn xốp 6S", "Đã tắt"]]), true);
     expect(res.updated).toBe(1);
-    expect((await prisma.processingType.findUniqueOrThrow({ where: { name: "Tôn xốp 6S" } })).note).toBe("Tỷ lệ 1,07 · Trừ kho 1 · ĐVT m2");
+    expect(await row()).toMatchObject({ note: "Ghi chú A", unit: "m2", isActive: false });
+    expect(String((await row()).ratio)).toBe("1.185");
+  });
+
+  it("kiểu gia công: tỷ lệ không hợp lệ bị loại", async () => {
+    const pv = await previewImport(prisma, catalogImportSpec("processing-types"), await toXlsx(["Tên kiểu gia công", "Tỷ lệ"], [["A", "abc"], ["B", 0]]), { overwrite: false });
+    expect(pv.counts.error).toBe(2);
   });
 
   it("chạy lại cùng tệp + cùng Idempotency-Key không nhân đôi", async () => {

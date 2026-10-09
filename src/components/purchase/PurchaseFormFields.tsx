@@ -64,7 +64,7 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[900px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Hệ số</th><th className="px-2 py-2 text-right">SL gốc</th>
+          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th>
           <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú cuộn</th><th aria-label="Thao tác" />
         </tr></thead>
         <tbody>{fields.map((field, index) => {
@@ -86,7 +86,7 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
             </td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
             <td className="px-2 py-2" data-label="Số lượng"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} /></td>
-            <td className="px-2 py-2" data-label="Hệ số"><input aria-label={`Hệ số dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.factor`, { valueAsNumber: true })} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
+            <td className="px-2 py-2" data-label="Tỷ trọng"><input aria-label={`Tỷ trọng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.factor`, { valueAsNumber: true })} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
             <td className="px-2 py-2 text-right tabular" data-label="SL gốc">{qtyBase ? formatQty(qtyBase) : "—"}</td>
             <td className="px-2 py-2" data-label="Đơn giá"><input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.purchasePrice`, { valueAsNumber: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} /></td>
             <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td>

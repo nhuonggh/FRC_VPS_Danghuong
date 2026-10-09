@@ -13,7 +13,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ section: string
   if (!section) return Response.json({ error: "Không tìm thấy mục danh mục." }, { status: 404 });
   const params = parseListParams(Object.fromEntries(new URL(req.url).searchParams), ["status"]);
   const rows = await listCatalogForExport(prisma, key, params);
-  const columns = [...section.fields, { name: "isActive", label: "Trạng thái", type: "text" as const }];
-  const buffer = await buildXlsx(section.label, columns.map((f) => ({ header: f.label, key: f.name })), rows.map((r) => ({ ...r, isActive: r.isActive ? "Đang dùng" : "Đã tắt" })));
+  // Cột/giá trị giống file mẫu nhập (Có/Không, nhãn loại, số dấu phẩy, Trạng thái) để xuất → sửa → nhập lại.
+  const show = (f: (typeof section.fields)[number], v: unknown) => (f.type === "checkbox" ? (v ? "Có" : "Không") : f.type === "select" ? (f.options?.find((o) => o.value === v)?.label ?? "") : v == null ? "" : f.type === "number" ? String(v).replace(".", ",") : String(v));
+  const columns = [...section.fields.map((f) => ({ header: f.label, key: f.name })), { header: "Trạng thái", key: "isActive" }];
+  const buffer = await buildXlsx(section.label, columns, rows.map((r) => ({ ...Object.fromEntries(section.fields.map((f) => [f.name, show(f, r[f.name])])), isActive: r.isActive ? "Đang dùng" : "Đã tắt" })));
   return xlsxResponse(`${section.key}.xlsx`, buffer);
 }

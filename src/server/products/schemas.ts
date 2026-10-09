@@ -6,7 +6,7 @@ export const PRODUCT_KINDS = [
 ] as const;
 export const BASE_UNIT_SUGGESTIONS = ["md", "kg", "cái", "cây", "bộ", "tấm", "cuộn"] as const;
 const unitName = z.string().trim().min(1, "Nhập đơn vị.").max(10, "Đơn vị tối đa 10 ký tự.");
-const unitRow = z.object({ unit: unitName, factor: z.number().finite("Hệ số không hợp lệ.").gt(0, "Hệ số phải lớn hơn 0.").max(1_000_000) });
+const unitRow = z.object({ unit: unitName, factor: z.number().finite("Tỷ trọng không hợp lệ.").gt(0, "Tỷ trọng phải lớn hơn 0.").max(1_000_000) });
 const uniqueUnits = (value: { unit: string }[], ctx: z.RefinementCtx) => {
   const seen = new Set<string>();
   value.forEach((row, index) => { const key = row.unit.toLocaleLowerCase("vi"); if (seen.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, "unit"], message: "Đơn vị quy đổi bị trùng." }); seen.add(key); });

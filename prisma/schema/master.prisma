@@ -216,6 +216,10 @@ model ProcessingType {
   name     String  @unique
   note     String?
   isActive Boolean @default(true)
+  /// Tỷ lệ m²/md mặc định (khi sản phẩm chưa có tỷ lệ riêng ở product_processing_ratios), tỷ lệ trừ kho, ĐVT. CHECK > 0.
+  ratio      Decimal? @db.Decimal(18, 4)
+  stockRatio Decimal? @db.Decimal(18, 4)
+  unit       String?
 
   boms      Bom[]
   ratios    ProductProcessingRatio[]

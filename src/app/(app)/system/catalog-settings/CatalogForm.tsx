@@ -8,7 +8,7 @@ import { ApiError, apiFetch } from "@/lib/api-fetch";
 import type { CatalogRow } from "@/server/catalog/adapters";
 
 type Values = Record<string, string | boolean>;
-const defaults = (section: CatalogSection, row?: CatalogRow): Values => Object.fromEntries(section.fields.map((f) => [f.name, f.type === "checkbox" ? Boolean(row?.[f.name]) : String(row?.[f.name] ?? "")]));
+const defaults = (section: CatalogSection, row?: CatalogRow): Values => Object.fromEntries(section.fields.map((f) => [f.name, f.type === "checkbox" ? Boolean(row?.[f.name]) : f.type === "number" ? String(row?.[f.name] ?? "").replace(".", ",") : String(row?.[f.name] ?? "")]));
 
 function Fields({ section, values, setValues, errors }: { section: CatalogSection; values: Values; setValues: (v: Values) => void; errors: Record<string, string> }) {
   return <div className="grid gap-4 sm:grid-cols-2">{section.fields.map((field) => <label key={field.name} className={field.type === "checkbox" ? "flex min-h-11 items-center gap-3 sm:col-span-2" : "grid gap-1.5"}>

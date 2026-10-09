@@ -8,7 +8,7 @@ describe("product units", () => {
     expect(convertToBase("2", "3").toString()).toBe("0.667");
   });
   it("từ chối số âm và hệ số không dương", () => {
-    expect(() => convertToBase(1, 0)).toThrow("Hệ số quy đổi phải lớn hơn 0.");
+    expect(() => convertToBase(1, 0)).toThrow("Tỷ trọng phải lớn hơn 0.");
     expect(() => convertToBase(-1, 2)).toThrow("Số lượng không được âm.");
   });
   it("đơn vị gốc có hệ số 1", () => expect(resolveFactor({ baseUnit: "md", units: [] }, "md").toString()).toBe("1"));

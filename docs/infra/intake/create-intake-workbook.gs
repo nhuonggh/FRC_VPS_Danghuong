@@ -20,7 +20,7 @@ function sheets_() {
     { name: 'Tuyến giao hàng', help: 'Cài đặt danh mục → Tuyến giao hàng.', cols: [{ h: 'Tên tuyến', s: 'Quận 12', r: 1, w: 220 }] },
     { name: 'Loại thu chi', help: 'Loại chi phí: lương, dầu, điện, sửa xe… Cài đặt danh mục → Loại thu chi.', cols: [{ h: 'Tên loại', s: 'Tiền điện', r: 1, w: 220 }] },
     { name: 'Ngân hàng & quỹ', help: 'Quỹ tiền mặt và từng tài khoản ngân hàng. Cài đặt danh mục → Ngân hàng & quỹ.', cols: [{ h: 'Tên tài khoản', s: 'Tiền mặt', r: 1, w: 220 }, { h: 'Loại', s: 'Tiền mặt', r: 1, w: 120, list: ['Tiền mặt', 'Ngân hàng'] }, { h: 'Số tài khoản', s: '0123456789', w: 180 }] },
-    { name: 'Kiểu gia công', help: 'Tôn xốp, 1 lớp, 6 sóng, 11 sóng… Cài đặt danh mục → Kiểu gia công.', cols: [{ h: 'Tên kiểu gia công', s: 'Tôn xốp', r: 1, w: 220 }, { h: 'Ghi chú', s: '', w: 260 }] },
+    { name: 'Kiểu gia công', help: 'Tôn xốp, 1 lớp, 6 sóng, 11 sóng… Cài đặt danh mục → Kiểu gia công.', cols: [{ h: 'Tên kiểu gia công', s: 'Tôn xốp', r: 1, w: 220 }, { h: 'Ghi chú', s: '', w: 260 }, { h: 'Tỷ lệ', s: '1,08', w: 90 }, { h: 'Tỷ lệ trừ kho', s: '1', w: 110 }, { h: 'ĐVT', s: 'm2', w: 80 }] },
     { name: 'Công ty', help: 'Hệ thống → Công ty & mẫu in. Logo/QR: gửi kèm file ảnh, không dán vào bảng.', cols: [{ h: 'Thông tin', s: '', w: 260 }, { h: 'Giá trị', s: '', w: 420 }], rows: [['Tên công ty', ''], ['Địa chỉ', ''], ['Điện thoại', ''], ['Mã số thuế', ''], ['Ngân hàng', ''], ['Số tài khoản', ''], ['Chủ tài khoản', ''], ['Chi nhánh', ''], ['Người ký (in trên phiếu)', ''], ['Ghi chú chân phiếu', '']], noSample: true },
     { name: 'Người dùng', help: 'Hệ thống → Người dùng. Hệ thống tự cấp mật khẩu tạm; email dùng để đăng nhập bằng Google.', cols: [{ h: 'Họ tên', s: 'Nguyễn Thị B', r: 1, w: 220 }, { h: 'Tên đăng nhập', s: 'ketoan1', r: 1, w: 160 }, { h: 'Email Google', s: 'ketoan1@gmail.com', w: 240 }, { h: 'Vị trí', s: 'Kế toán', r: 1, w: 140, list: ['Giám đốc', 'Kế toán', 'Thủ kho', 'Thủ quỹ', 'Bán hàng'] }] },
     { name: 'Khách hàng', imp: 'Nhập bằng Excel: Bán hàng → Khách hàng → Nhập từ Excel.', cols: partnerCols_(yn) },
@@ -29,7 +29,7 @@ function sheets_() {
       { h: 'Nhóm hàng', s: 'Tôn', w: 150, listRef: "'Nhóm hàng'!A2:A" },
       { h: 'Mã', s: 'SP001', r: 1, w: 110 }, { h: 'Tên', s: 'Tôn lạnh', r: 1, w: 260 },
       { h: 'Loại', s: 'Hàng hóa', w: 150, list: ['Hàng hóa', 'Nguyên vật liệu', 'Thành phẩm', 'Phụ kiện'] },
-      { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Hệ số quy đổi', s: '2,4', w: 120 },
+      { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Tỷ trọng', s: '2,4', w: 120 },
       { h: 'Tôn cuộn', s: 'Không', w: 90, list: yn }, { h: 'Ngừng bán', s: 'Không', w: 100, list: yn }, { h: 'Ghi chú', s: '', w: 240 }] },
     { name: 'Định mức (BOM)', help: 'Nhập tay ở Sản xuất → Định mức (chưa có nhập Excel). Mỗi dòng = 1 nguyên vật liệu của 1 thành phẩm theo kiểu gia công, kèm ngày bắt đầu hiệu lực.', cols: [
       { h: 'Mã thành phẩm', s: 'TX01', r: 1, w: 130 }, { h: 'Kiểu gia công', s: 'Tôn xốp', r: 1, w: 150, listRef: "'Kiểu gia công'!A2:A" }, { h: 'Ngày hiệu lực (dd/mm/yyyy)', s: '01/10/2026', r: 1, w: 170 },

@@ -31,7 +31,7 @@ export function sanitizeCode(raw: string, used: Set<string>): string {
 }
 
 export interface ProductSheetResult { rows: Row[]; fromLegacy: number; fromIntake: number; overlapByName: number; codeChanges: { legacy: string; code: string }[]; zeroPrice: number; codeByLegacyId: Map<string, string> }
-export const PRODUCT_HEADERS = ["Mã", "Tên", "Loại", "Đơn vị gốc", "Định mức tồn", "Đơn vị quy đổi", "Hệ số quy đổi", "Tôn cuộn", "Ngừng bán", "Ghi chú"] as const;
+export const PRODUCT_HEADERS = ["Mã", "Tên", "Loại", "Đơn vị gốc", "Định mức tồn", "Đơn vị quy đổi", "Tỷ trọng", "Tôn cuộn", "Ngừng bán", "Ghi chú"] as const;
 
 const priceNote = (p: LegacyProduct) => (p.buyPrice || p.sellPrice ? ["[PM cũ]", p.buyPrice ? `giá nhập ${fmtVi(p.buyPrice)}` : "", p.sellPrice ? `giá bán ${fmtVi(p.sellPrice)}` : ""].filter(Boolean).join(" ") : "");
 

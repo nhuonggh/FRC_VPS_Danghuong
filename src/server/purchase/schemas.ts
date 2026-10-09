@@ -8,7 +8,7 @@ export const purchaseLineSchema = z.object({
   productId: num("Chọn sản phẩm.").int("Chọn sản phẩm.").positive("Chọn sản phẩm."),
   qty: num("Nhập số lượng.").gt(0, "Số lượng phải lớn hơn 0.").max(999_999_999, "Số lượng quá lớn."),
   unit: z.string({ required_error: "Chọn đơn vị." }).trim().min(1, "Chọn đơn vị.").max(10, "Đơn vị tối đa 10 ký tự."),
-  factor: num("Nhập hệ số.").gt(0, "Hệ số phải lớn hơn 0.").max(1_000_000, "Hệ số quá lớn."),
+  factor: num("Nhập tỷ trọng.").gt(0, "Tỷ trọng phải lớn hơn 0.").max(1_000_000, "Tỷ trọng quá lớn."),
   purchasePrice: num("Nhập đơn giá.").min(0, "Đơn giá không được âm.").max(9_999_999_999, "Đơn giá quá lớn."),
   rollInfo: z.string().trim().max(200, "Ghi chú cuộn tối đa 200 ký tự."),
 });

@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { parseViNumber } from "@/lib/parse-number";
 
 export type CatalogKey = "partner-groups" | "product-groups" | "warehouses" | "vehicles" | "drivers" | "routes" | "expense-types" | "cash-accounts" | "processing-types";
-export interface CatalogField { name: string; label: string; type: "text" | "checkbox" | "select"; required?: boolean; maxLength?: number; options?: readonly { value: string; label: string }[]; inTable?: boolean }
+export interface CatalogField { name: string; label: string; type: "text" | "checkbox" | "select" | "number"; required?: boolean; maxLength?: number; options?: readonly { value: string; label: string }[]; inTable?: boolean; /** Ô mẫu trong file nhập Excel. */ sample?: string }
 export interface CatalogSection { key: CatalogKey; label: string; singular: string; icon: string; codes: readonly string[]; entity: string; titleField: string; fields: readonly CatalogField[] }
 const name = (label: string, maxLength = 80): CatalogField => ({ name: "name", label, type: "text", required: true, maxLength });
 
@@ -14,7 +15,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
   { key: "routes", label: "Tuyến giao hàng", singular: "tuyến giao hàng", icon: "arrow-left-right", codes: ["16"], entity: "Route", titleField: "name", fields: [name("Tên tuyến")] },
   { key: "expense-types", label: "Loại thu chi", singular: "loại thu chi", icon: "coins", codes: ["17"], entity: "ExpenseType", titleField: "name", fields: [name("Tên loại")] },
   { key: "cash-accounts", label: "Ngân hàng & quỹ", singular: "tài khoản quỹ", icon: "landmark", codes: ["18"], entity: "CashAccount", titleField: "name", fields: [name("Tên tài khoản"), { name: "type", label: "Loại", type: "select", options: [{ value: "CASH", label: "Tiền mặt" }, { value: "BANK", label: "Ngân hàng" }], inTable: true }, { name: "bankNo", label: "Số tài khoản", type: "text", maxLength: 40, inTable: true }] },
-  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }] },
+  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }, { name: "ratio", label: "Tỷ lệ", type: "number", inTable: true, sample: "1,08" }, { name: "stockRatio", label: "Tỷ lệ trừ kho", type: "number", inTable: true, sample: "1" }, { name: "unit", label: "ĐVT", type: "text", maxLength: 10, inTable: true, sample: "m2" }] },
 ];
 export const getSection = (key: string): CatalogSection | null => CATALOG_SECTIONS.find((x) => x.key === key) ?? null;
 export const resolveSection = (key: string | undefined): CatalogSection => (key ? getSection(key) : null) ?? CATALOG_SECTIONS[0]!;
@@ -23,6 +24,7 @@ export function catalogSchema(section: CatalogSection) {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const f of section.fields) {
     if (f.type === "checkbox") shape[f.name] = z.boolean();
+    else if (f.type === "number") shape[f.name] = z.string().trim().transform((v, ctx) => { const r = parseViNumber(v); if (!r.ok) { ctx.addIssue({ code: "custom", message: `${f.label}: ${r.message}` }); return z.NEVER; } if (r.value !== null && !(Number(r.value) > 0)) { ctx.addIssue({ code: "custom", message: `${f.label} phải lớn hơn 0.` }); return z.NEVER; } return r.value ?? ""; });
     else if (f.type === "select") {
       const values = (f.options ?? []).map((x) => x.value) as [string, ...string[]];
       shape[f.name] = z.enum(values, { errorMap: () => ({ message: `Chọn ${lower(f.label)}.` }) });
