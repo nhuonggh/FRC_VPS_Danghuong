@@ -1,8 +1,9 @@
 "use client";
 
+import { Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Field, inputClass, NewPage } from "@/components/ui";
+import { FormCard, FormGrid, igArea, igInput, InlineField, NewPage } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 
@@ -28,23 +29,24 @@ export function ExpenseForm({ id, code, today, types, accounts, initial }: { id?
     router.replace("/accounting/expenses");
   }
   return (
-    <NewPage backHref="/accounting/expenses" backLabel="Quay lại danh sách" title={editing ? `Sửa chi phí ${code}` : "Lập chi phí"} submitLabel={editing ? "Lưu thay đổi" : "Lưu chi phí"} isDirty={() => Boolean(amount || note)} onSubmit={submit}>
-      <div className="space-y-5">
-        {types.length === 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">Chưa có loại chi phí nào — tạo ở Hệ thống → Cài đặt danh mục → Loại chi phí.</p>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="etype" label="Loại chi phí" required>
-            <select id="etype" value={typeId} onChange={(e) => setTypeId(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
+    <NewPage bare backHref="/accounting/expenses" backLabel="Quay lại danh sách" title={editing ? `Sửa chi phí ${code}` : "Lập chi phí"} submitLabel={editing ? "Lưu thay đổi" : "Lưu chi phí"} isDirty={() => Boolean(amount || note)} onSubmit={submit}
+      footerInfo={amount ? <span className="text-sm font-semibold">Số tiền: <b className="ml-1 text-lg text-accent tabular">{Number(amount).toLocaleString("vi-VN")}</b></span> : undefined}>
+      {types.length === 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">Chưa có loại chi phí nào — tạo ở Hệ thống → Cài đặt danh mục → Loại chi phí.</p>}
+      <FormCard icon={Receipt} title="Thông tin chi phí">
+        <FormGrid cols={2}>
+          <InlineField id="etype" label="Loại chi phí" required>
+            <select id="etype" value={typeId} onChange={(e) => setTypeId(e.target.value ? Number(e.target.value) : "")} className={`${igInput} cursor-pointer`}>
               <option value="">Chọn loại…</option>{types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-          </Field>
-          <Field id="date" label="Ngày" required><input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} /></Field>
-          <Field id="account" label="Chi từ quỹ / tài khoản" required>
-            <select id="account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={inputClass()}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.type === "BANK" ? " (ngân hàng)" : ""}</option>)}</select>
-          </Field>
-          <Field id="amount" label="Số tiền" required><input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass()} tabular`} /></Field>
-        </div>
-        <Field id="note" label="Ghi chú"><textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
-      </div>
+          </InlineField>
+          <InlineField id="date" label="Ngày" required><input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
+          <InlineField id="account" label="Chi từ quỹ / tài khoản" required>
+            <select id="account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={`${igInput} cursor-pointer`}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.type === "BANK" ? " (ngân hàng)" : ""}</option>)}</select>
+          </InlineField>
+          <InlineField id="amount" label="Số tiền" required><input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+          <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2"><textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
+        </FormGrid>
+      </FormCard>
     </NewPage>
   );
 }

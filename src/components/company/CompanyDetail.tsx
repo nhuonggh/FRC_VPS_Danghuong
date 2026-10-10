@@ -1,7 +1,7 @@
 "use client";
 
 import type { UseFormReturn } from "react-hook-form";
-import { Badge, DetailField, DetailPage, EditableSection, Field, inputClass, useDetailNav, type TabRenderCtx } from "@/components/ui";
+import { Badge, DetailField, DetailPage, EditableSection, useDetailNav, type TabRenderCtx, InlineField, igInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { CompanyDTO, PrintTemplateDTO } from "@/server/company/queries";
@@ -25,32 +25,32 @@ function TemplateFields({ form, hasSecret, creating }: { form: TemplateForm; has
   const { register, watch, formState: { errors } } = f;
   const action = watch("secretAction");
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
       {creating && (
-        <Field id="docType" label="Loại chứng từ" required error={errors.docType?.message} hint="Chữ HOA, ví dụ SALE_INVOICE">
-          <input id="docType" {...register("docType")} className={inputClass(errors.docType)} />
-        </Field>
+        <InlineField id="docType" label="Loại chứng từ" required error={errors.docType?.message} hint="Chữ HOA, ví dụ SALE_INVOICE">
+          <input id="docType" {...register("docType")} className={igInput} />
+        </InlineField>
       )}
-      <Field id="tpl-name" label="Tên mẫu in" required error={errors.name?.message}>
-        <input id="tpl-name" {...register("name")} className={inputClass(errors.name)} />
-      </Field>
-      <Field id="tpl-title" label="Tiêu đề in" error={errors.title?.message}>
-        <input id="tpl-title" {...register("title")} className={inputClass(errors.title)} />
-      </Field>
-      <Field id="tpl-signer" label="Người ký" error={errors.signerName?.message}>
-        <input id="tpl-signer" {...register("signerName")} className={inputClass(errors.signerName)} />
-      </Field>
-      <Field id="tpl-phone" label="Số điện thoại in" error={errors.phone?.message}>
-        <input id="tpl-phone" {...register("phone")} className={inputClass(errors.phone)} />
-      </Field>
-      <Field id="tpl-qr" label="Ảnh QR" error={errors.qrImage?.message} hint="/uploads/… hoặc https đã được cho phép">
-        <input id="tpl-qr" {...register("qrImage")} className={inputClass(errors.qrImage)} />
-      </Field>
-      <Field id="tpl-webhook" label="Địa chỉ webhook (https)" error={errors.webhookUrl?.message} className="sm:col-span-2"
+      <InlineField id="tpl-name" label="Tên mẫu in" required error={errors.name?.message}>
+        <input id="tpl-name" {...register("name")} className={igInput} />
+      </InlineField>
+      <InlineField id="tpl-title" label="Tiêu đề in" error={errors.title?.message}>
+        <input id="tpl-title" {...register("title")} className={igInput} />
+      </InlineField>
+      <InlineField id="tpl-signer" label="Người ký" error={errors.signerName?.message}>
+        <input id="tpl-signer" {...register("signerName")} className={igInput} />
+      </InlineField>
+      <InlineField id="tpl-phone" label="Số điện thoại in" error={errors.phone?.message}>
+        <input id="tpl-phone" {...register("phone")} className={igInput} />
+      </InlineField>
+      <InlineField id="tpl-qr" label="Ảnh QR" error={errors.qrImage?.message} hint="/uploads/… hoặc https đã được cho phép">
+        <input id="tpl-qr" {...register("qrImage")} className={igInput} />
+      </InlineField>
+      <InlineField id="tpl-webhook" label="Địa chỉ webhook (https)" error={errors.webhookUrl?.message} className="md:col-span-2"
         hint="Phần sau dấu ? không hiển thị lại; để nguyên ô này thì giữ địa chỉ đã lưu.">
-        <input id="tpl-webhook" {...register("webhookUrl")} className={inputClass(errors.webhookUrl)} />
-      </Field>
-      <fieldset className="sm:col-span-2 space-y-2 rounded-sm border border-border p-3">
+        <input id="tpl-webhook" {...register("webhookUrl")} className={igInput} />
+      </InlineField>
+      <fieldset className="md:col-span-2 space-y-2 rounded-sm border border-border p-3">
         <legend className="px-1 text-xs font-semibold text-fg-secondary">Secret webhook</legend>
         <label className="flex min-h-10 items-center gap-2 text-sm">
           <input type="radio" value="keep" {...register("secretAction")} />{hasSecret ? "Giữ secret hiện tại" : "Chưa đặt secret"}
@@ -59,9 +59,9 @@ function TemplateFields({ form, hasSecret, creating }: { form: TemplateForm; has
           <input type="radio" value="replace" {...register("secretAction")} />{hasSecret ? "Thay bằng secret mới" : "Đặt secret"}
         </label>
         {action === "replace" && (
-          <Field id="tpl-secret" label="Secret mới" error={errors.secret?.message} hint="Tối thiểu 8 ký tự; chỉ lưu dạng mã hoá, không hiển thị lại.">
-            <input id="tpl-secret" type="password" autoComplete="new-password" {...register("secret")} className={inputClass(errors.secret)} />
-          </Field>
+          <InlineField id="tpl-secret" label="Secret mới" error={errors.secret?.message} hint="Tối thiểu 8 ký tự; chỉ lưu dạng mã hoá, không hiển thị lại.">
+            <input id="tpl-secret" type="password" autoComplete="new-password" {...register("secret")} className={igInput} />
+          </InlineField>
         )}
         {hasSecret && (
           <label className="flex min-h-10 items-center gap-2 text-sm text-danger">
@@ -69,9 +69,9 @@ function TemplateFields({ form, hasSecret, creating }: { form: TemplateForm; has
           </label>
         )}
       </fieldset>
-      <Field id="tpl-footer" label="Ghi chú cuối phiếu" className="sm:col-span-2" error={errors.footerNote?.message}>
+      <InlineField id="tpl-footer" label="Ghi chú cuối phiếu" className="md:col-span-2" error={errors.footerNote?.message}>
         <textarea id="tpl-footer" rows={2} {...register("footerNote")} className={textarea} />
-      </Field>
+      </InlineField>
       <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("showCompanyInfo")} />In thông tin công ty</label>
       <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("isActive")} />Đang bật</label>
     </div>
@@ -139,22 +139,22 @@ export function CompanyDetail({ company, templates }: { company: CompanyDTO; tem
           </dl>
         }
         edit={(form) => (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="name" label="Tên công ty" required error={form.formState.errors.name?.message} className="sm:col-span-2">
-              <input id="name" {...form.register("name")} className={inputClass(form.formState.errors.name)} />
-            </Field>
-            <Field id="address" label="Địa chỉ" error={form.formState.errors.address?.message} className="sm:col-span-2">
-              <input id="address" {...form.register("address")} className={inputClass(form.formState.errors.address)} />
-            </Field>
-            <Field id="phone" label="Điện thoại" error={form.formState.errors.phone?.message}>
-              <input id="phone" {...form.register("phone")} className={inputClass(form.formState.errors.phone)} />
-            </Field>
-            <Field id="taxCode" label="Mã số thuế" error={form.formState.errors.taxCode?.message}>
-              <input id="taxCode" {...form.register("taxCode")} className={inputClass(form.formState.errors.taxCode)} />
-            </Field>
-            <Field id="logo" label="Logo" error={form.formState.errors.logo?.message} hint="/uploads/… hoặc https đã được cho phép" className="sm:col-span-2">
-              <input id="logo" {...form.register("logo")} className={inputClass(form.formState.errors.logo)} />
-            </Field>
+          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+            <InlineField id="name" label="Tên công ty" required error={form.formState.errors.name?.message} className="md:col-span-2">
+              <input id="name" {...form.register("name")} className={igInput} />
+            </InlineField>
+            <InlineField id="address" label="Địa chỉ" error={form.formState.errors.address?.message} className="md:col-span-2">
+              <input id="address" {...form.register("address")} className={igInput} />
+            </InlineField>
+            <InlineField id="phone" label="Điện thoại" error={form.formState.errors.phone?.message}>
+              <input id="phone" {...form.register("phone")} className={igInput} />
+            </InlineField>
+            <InlineField id="taxCode" label="Mã số thuế" error={form.formState.errors.taxCode?.message}>
+              <input id="taxCode" {...form.register("taxCode")} className={igInput} />
+            </InlineField>
+            <InlineField id="logo" label="Logo" error={form.formState.errors.logo?.message} hint="/uploads/… hoặc https đã được cho phép" className="md:col-span-2">
+              <input id="logo" {...form.register("logo")} className={igInput} />
+            </InlineField>
           </div>
         )}
       />
@@ -170,11 +170,11 @@ export function CompanyDetail({ company, templates }: { company: CompanyDTO; tem
           </dl>
         }
         edit={(form) => (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
             {(["bankName", "accountNo", "accountHolder", "branch"] as const).map((k, i) => (
-              <Field key={k} id={`bank-${k}`} label={["Ngân hàng", "Số tài khoản", "Chủ tài khoản", "Chi nhánh"][i]!} error={form.formState.errors[k]?.message}>
-                <input id={`bank-${k}`} {...form.register(k)} className={inputClass(form.formState.errors[k])} />
-              </Field>
+              <InlineField key={k} id={`bank-${k}`} label={["Ngân hàng", "Số tài khoản", "Chủ tài khoản", "Chi nhánh"][i]!} error={form.formState.errors[k]?.message}>
+                <input id={`bank-${k}`} {...form.register(k)} className={igInput} />
+              </InlineField>
             ))}
           </div>
         )}

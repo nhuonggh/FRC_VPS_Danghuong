@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { FileText, Package } from "lucide-react";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { BOM_MAX_LINES, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
@@ -76,30 +77,33 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
 
   return (
     <NewPage
-      backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
+      bare backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
       isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-      <div className="space-y-6">
-        <div className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-3">
+      <FormCard icon={FileText} title="Thông tin định mức">
+        <FormGrid>
+          <InlineField id="productId" label="Thành phẩm" required error={errors.productId?.message}>
             <Controller control={control} name="productId" render={({ field }) => (
-              <Combobox label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
-                error={errors.productId?.message} onChange={(o) => { setProduct(o); field.onChange(o ? Number(o.value) : undefined); }} />
+              <div className={igCombo}><Combobox hideLabel label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
+                onChange={(o) => { setProduct(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
             )} />
+          </InlineField>
+          <InlineField id="processingTypeId" label="Kiểu gia công" required error={errors.processingTypeId?.message}>
             <Controller control={control} name="processingTypeId" render={({ field }) => (
-              <Combobox label="Kiểu gia công" value={field.value ? processingType : null} loadOptions={loadProcessingTypes} placeholder="Chọn kiểu gia công…"
-                error={errors.processingTypeId?.message} onChange={(o) => { setProcessingType(o); field.onChange(o ? Number(o.value) : undefined); }} />
+              <div className={igCombo}><Combobox hideLabel label="Kiểu gia công" value={field.value ? processingType : null} loadOptions={loadProcessingTypes} placeholder="Chọn kiểu gia công…"
+                onChange={(o) => { setProcessingType(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
             )} />
-            <Field id="validFrom" label="Hiệu lực từ ngày" required error={errors.validFrom?.message}
-              hint={defaults.hasVersions ? "Không được trước hôm nay" : "Phiên bản đầu tiên có thể chọn ngày quá khứ"}>
-              <input id="validFrom" type="date" {...(defaults.hasVersions ? { min: today } : {})} {...register("validFrom")} className={inputClass(errors.validFrom)} />
-            </Field>
-          </div>
-          <Field id="note" label="Ghi chú phiên bản" error={errors.note?.message}>
-            <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-          </Field>
-        </div>
-        <div className="space-y-3 border-t border-border pt-5">
-          <h2 className="text-sm font-semibold">Nguyên vật liệu</h2>
+          </InlineField>
+          <InlineField id="validFrom" label="Hiệu lực từ ngày" required error={errors.validFrom?.message}
+            hint={defaults.hasVersions ? "Không được trước hôm nay" : "Phiên bản đầu tiên có thể chọn ngày quá khứ"} labelClass="sm:min-w-40">
+            <input id="validFrom" type="date" {...(defaults.hasVersions ? { min: today } : {})} {...register("validFrom")} aria-invalid={!!errors.validFrom} className={igInput} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú phiên bản" multiline error={errors.note?.message} className="md:col-span-2 xl:col-span-3">
+            <textarea id="note" rows={3} {...register("note")} className={igArea} />
+          </InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Package} title="Nguyên vật liệu">
+        <div className="space-y-3">
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[640px] text-sm">
               <thead>
@@ -157,7 +161,7 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
             <ProductMultiPicker load={searchMaterialsForPicker} disabled={fields.length >= BOM_MAX_LINES} existingIds={lines.flatMap((l) => (l?.materialProductId ? [l.materialProductId] : []))} onPicked={addMaterials} />
           </div>
         </div>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }

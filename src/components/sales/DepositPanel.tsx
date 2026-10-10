@@ -1,7 +1,8 @@
 "use client";
 
+import { igInput, InlineField } from "@/components/ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-fetch";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -50,21 +51,21 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
       {canCreate && (
         <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4" onFocusCapture={loadOptions} onPointerDownCapture={loadOptions}>
           <h3 className="text-sm font-semibold">Thu tiền cọc</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">Số tiền
-              <input type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1 h-11 w-full rounded-sm border border-border px-3 md:h-10" />
-            </label>
-            <label className="text-sm">Quỹ / tài khoản
-              <select value={cashAccountId} onChange={(e) => setCashAccountId(e.target.value)} className="mt-1 h-11 w-full rounded-sm border border-border px-3 md:h-10">
+          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+            <InlineField id="dep-amount" label="Số tiền">
+              <input id="dep-amount" type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+            </InlineField>
+            <InlineField id="dep-account" label="Quỹ / tài khoản">
+              <select id="dep-account" value={cashAccountId} onChange={(e) => setCashAccountId(e.target.value)} className={`${igInput} cursor-pointer`}>
                 {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
-            </label>
-            <label className="text-sm">Ngày thu
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 h-11 w-full rounded-sm border border-border px-3 md:h-10" />
-            </label>
-            <label className="text-sm">Ghi chú
-              <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} className="mt-1 h-11 w-full rounded-sm border border-border px-3 md:h-10" />
-            </label>
+            </InlineField>
+            <InlineField id="dep-date" label="Ngày thu">
+              <input id="dep-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
+            </InlineField>
+            <InlineField id="dep-note" label="Ghi chú">
+              <input id="dep-note" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} className={igInput} />
+            </InlineField>
           </div>
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <button type="button" onClick={create} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50 md:h-10">Lưu phiếu cọc</button>

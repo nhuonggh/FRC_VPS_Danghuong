@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FileText, ListChecks } from "lucide-react";
-import { Field, inputClass, NewPage, tabsWithErrors, type FormTab } from "@/components/ui";
+import { FormCard, FormGrid, igArea, igInput, InlineField, inputClass, NewPage } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -41,27 +41,27 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
     router.replace(`/delivery/trips/${res.id}`);
   }
   const sel = (id: string, label: string, value: number | "", set: (v: number | "") => void, list: { id: number; name: string }[], opts: { required?: boolean; empty?: string } = {}) => (
-    <Field id={id} label={label} required={opts.required}>
-      <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
+    <InlineField id={id} label={label} required={opts.required}>
+      <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={`${igInput} cursor-pointer`}>
         {opts.empty !== undefined && <option value="">{opts.empty}</option>}
         {list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
       </select>
-    </Field>
+    </InlineField>
   );
-  const tabs: FormTab[] = [
-    { key: "chung", label: "Thông tin chuyến", icon: FileText, fields: ["date"], render: () => (<div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field id="date" label="Ngày chuyến" required><input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} /></Field>
+  return (
+    <NewPage bare backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit}>
+      <FormCard icon={FileText} title="Thông tin chuyến">
+        <FormGrid>
+          <InlineField id="date" label="Ngày chuyến" required><input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
           {sel("route", "Tuyến", routeId, setRouteId, options.routes, { empty: "Không chọn" })}
           {sel("vehicle", "Xe", vehicleId, setVehicleId, options.vehicles, { required: true })}
           {sel("driver", "Lái xe", driverId, setDriverId, options.drivers, { required: true })}
           {sel("assistant", "Phụ xe", assistantId, setAssistantId, options.assistants, { empty: "Không có" })}
-        </div>
-        <Field id="note" label="Ghi chú"><textarea id="note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
-    </div>) },
-    { key: "don-hang", label: "Đơn hàng trên chuyến", icon: ListChecks, fields: [], render: () => (<div className="space-y-5">
-        {(options.vehicles.length === 0 || options.drivers.length === 0) && <p role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">Chưa có xe hoặc lái xe — tạo ở Hệ thống → Cài đặt danh mục.</p>}
-
+          <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2 xl:col-span-3"><textarea id="note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={ListChecks} title="Đơn hàng trên chuyến">
+        {(options.vehicles.length === 0 || options.drivers.length === 0) && <p role="status" className="mb-3 rounded-sm border border-warning bg-warning-soft p-3 text-sm">Chưa có xe hoặc lái xe — tạo ở Hệ thống → Cài đặt danh mục.</p>}
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <h2 className="text-sm font-semibold">Đơn cần giao</h2>
@@ -93,9 +93,7 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
             </ol>
           </div>
         </section>
-    </div>) },
-  ];
-  return (
-    <NewPage backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit} tabs={tabs} errorTabs={tabsWithErrors({}, tabs)} />
+      </FormCard>
+    </NewPage>
   );
 }

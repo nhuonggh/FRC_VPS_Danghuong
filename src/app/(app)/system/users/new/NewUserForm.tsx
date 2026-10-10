@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { z } from "zod";
+import { KeyRound, ShieldCheck } from "lucide-react";
+import { FormCard, FormGrid, igInput, InlineField } from "@/components/ui";
 import { NewPage } from "@/components/ui/NewPage";
 import { TempPasswordDialog } from "@/components/ui/TempPasswordDialog";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
@@ -41,33 +43,22 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
 
   return (
     <>
-      <NewPage backHref="/system/users" backLabel="Quay lại người dùng" title="Tạo mới người dùng" submitLabel="Tạo người dùng"
+      <NewPage bare backHref="/system/users" backLabel="Quay lại người dùng" title="Tạo mới người dùng" submitLabel="Tạo người dùng"
         isDirty={() => isDirty && !created} onSubmit={async () => { await submit(); }}>
-        <div className="space-y-5">
-          <h2 className="text-base font-semibold">Thông tin đăng nhập</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="username" className="mb-1 block text-xs text-fg-muted">Tên đăng nhập</label>
-              <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} aria-describedby={errors.username ? "username-error" : undefined}
-                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.username ? "border-danger" : "border-border"}`} />
-              {errors.username && <p id="username-error" className="mt-1 text-xs text-danger">{errors.username.message}</p>}
-            </div>
-            <div>
-              <label htmlFor="fullName" className="mb-1 block text-xs text-fg-muted">Họ tên</label>
-              <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} aria-describedby={errors.fullName ? "fullName-error" : undefined}
-                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.fullName ? "border-danger" : "border-border"}`} />
-              {errors.fullName && <p id="fullName-error" className="mt-1 text-xs text-danger">{errors.fullName.message}</p>}
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="email" className="mb-1 block text-xs text-fg-muted">Email đăng nhập Google (không bắt buộc)</label>
-              <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? "email-error email-hint" : "email-hint"}
-                className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.email ? "border-danger" : "border-border"}`} />
-              {errors.email && <p id="email-error" className="mt-1 text-xs text-danger">{errors.email.message}</p>}
-              <p id="email-hint" className="mt-1 text-xs text-fg-muted">Có email → người này đăng nhập được bằng tài khoản Google đúng email đó.</p>
-            </div>
-          </div>
-          <h2 className="pt-2 text-base font-semibold">Nhóm quyền</h2>
+        <FormCard icon={KeyRound} title="Thông tin đăng nhập">
+          <FormGrid cols={2}>
+            <InlineField id="username" label="Tên đăng nhập" error={errors.username?.message} labelClass="sm:min-w-40">
+              <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} className={igInput} />
+            </InlineField>
+            <InlineField id="fullName" label="Họ tên" error={errors.fullName?.message} labelClass="sm:min-w-40">
+              <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} className={igInput} />
+            </InlineField>
+            <InlineField id="email" label="Email đăng nhập Google (không bắt buộc)" error={errors.email?.message} hint="Có email → người này đăng nhập được bằng tài khoản Google đúng email đó." className="md:col-span-2" labelClass="sm:min-w-40">
+              <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email} className={igInput} />
+            </InlineField>
+          </FormGrid>
+        </FormCard>
+        <FormCard icon={ShieldCheck} title="Nhóm quyền">
           <Controller control={control} name="roleIds" render={({ field }) => (
             <fieldset className="space-y-2" aria-describedby={errors.roleIds ? "roleIds-error" : undefined}>
               <legend className="sr-only">Nhóm quyền</legend>
@@ -81,8 +72,8 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
               {errors.roleIds && <p id="roleIds-error" className="text-xs text-danger">{errors.roleIds.message}</p>}
             </fieldset>
           )} />
-          <p className="text-xs text-fg-muted">Hệ thống tự sinh mật khẩu tạm; người dùng phải đổi ở lần đăng nhập đầu.</p>
-        </div>
+          <p className="mt-3 text-xs text-fg-muted">Hệ thống tự sinh mật khẩu tạm; người dùng phải đổi ở lần đăng nhập đầu.</p>
+        </FormCard>
       </NewPage>
       <TempPasswordDialog open={!!created} username={created?.username ?? ""} password={created?.password ?? null}
         onClose={() => { const id = created!.id; setCreated(null); router.replace(`/system/users/${id}`); }} />

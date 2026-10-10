@@ -2,7 +2,7 @@
 
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { useState } from "react";
-import { addPickedLines, Combobox, Field, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
@@ -29,19 +29,22 @@ export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, su
   const [picked, setPicked] = useState<ComboOption | null>(initialSupplier);
   const supplier = watch("partnerId") ? picked : null;
   const loadSuppliers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/suppliers/search?q=${encodeURIComponent(q)}`);
-  return <>
-    <div className="grid gap-4 sm:grid-cols-3"><Controller control={control} name="partnerId" render={({ field }) => <div className="flex items-end gap-2"><div className="min-w-0 flex-1"><Combobox label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => { setPicked(option); field.onChange(option ? Number(option.value) : undefined); }} error={errors.partnerId?.message} /></div>{supplierGroups && <QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} />}</div>} />
-      <Field id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} className={inputClass(errors.date)} /></Field>
-      <Field id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message}><input id="freightCost" type="number" min={0} step="any" {...register("freightCost", { valueAsNumber: true })} className={`${inputClass(errors.freightCost)} tabular text-right`} /></Field></div>
-  </>;
+  return <FormGrid>
+    <InlineField id="supplier" label="Nhà cung cấp" required error={errors.partnerId?.message}>
+      <Controller control={control} name="partnerId" render={({ field }) => <>
+        <div className={igCombo}><Combobox hideLabel label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => { setPicked(option); field.onChange(option ? Number(option.value) : undefined); }} /></div>
+        {supplierGroups && <div className="flex items-center border-l border-border px-1"><QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} /></div>}
+      </>} />
+    </InlineField>
+    <InlineField id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} aria-invalid={!!errors.date} className={igInput} /></InlineField>
+    <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><input id="freightCost" type="number" min={0} step="any" {...register("freightCost", { valueAsNumber: true })} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>
+  </FormGrid>;
 }
 
 /** Ghi chú phiếu. */
 export function PurchaseNoteField({ form }: FormProps) {
   const { register, formState: { errors } } = form;
-  return <>
-    <Field id="note" label="Ghi chú" error={errors.note?.message}><textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
-  </>;
+  return <InlineField id="note" label="Ghi chú" multiline error={errors.note?.message}><textarea id="note" rows={3} {...register("note")} className={igArea} /></InlineField>;
 }
 
 /**
@@ -63,15 +66,15 @@ function PurchaseDimensionEntry({ loadProducts, onAdd }: { loadProducts: (q: str
     setProduct(null); setLen(""); setPerMd(""); setError(""); setKey((k) => k + 1);
   };
   const enter = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
-  const small = `${inputClass()} tabular text-right`;
+  const small = `${igInput} tabular text-right`;
   return <div className="rounded-sm border border-dashed border-border p-3">
     <h3 className="text-sm font-semibold">Nhập theo kích thước</h3>
     <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <div className="xl:col-span-2"><Combobox key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setError(""); }} /></div>
-      <Field id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={inputClass()} /></Field>
-      <Field id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></Field>
-      <Field id="pd-price" label="Giá nhập/md"><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => setPerMd(e.target.value)} onKeyDown={enter} className={small} /></Field>
-      <Field id="pd-m2" label="Giá nhập/m²" hint="liên động với giá/md"><input id="pd-m2" type="number" min={0} step="any" value={perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : ""} onChange={(e) => setPerMd(e.target.value === "" || r <= 0 ? "" : String(pricePerMd(Number(e.target.value), r)))} onKeyDown={enter} className={small} /></Field>
+      <InlineField id="pd-product" label="Sản phẩm" className="xl:col-span-2"><div className={igCombo}><Combobox hideLabel key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setError(""); }} /></div></InlineField>
+      <InlineField id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} /></InlineField>
+      <InlineField id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
+      <InlineField id="pd-price" label="Giá nhập/md"><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => setPerMd(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
+      <InlineField id="pd-m2" label="Giá nhập/m²" hint="liên động với giá/md"><input id="pd-m2" type="number" min={0} step="any" value={perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : ""} onChange={(e) => setPerMd(e.target.value === "" || r <= 0 ? "" : String(pricePerMd(Number(e.target.value), r)))} onKeyDown={enter} className={small} /></InlineField>
     </div>
     {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     <div className="mt-3 flex justify-end"><button type="button" onClick={submit} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Thêm vào phiếu</button></div>

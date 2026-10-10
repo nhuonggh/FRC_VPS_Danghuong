@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Badge, EmptyState, Field, inputClass, ReasonDialog } from "@/components/ui";
+import { Badge, EmptyState, ReasonDialog, InlineField, igInput, igArea } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -122,9 +122,9 @@ function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, o
         <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-lg border border-border bg-raised p-5 shadow-lg">
           <Dialog.Title className="text-base font-semibold">Chốt quỹ — {accountName}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Hệ thống tính tồn đầu + thu − chi đến mốc chốt rồi so với tiền kiểm đếm. Có chênh lệch vẫn chốt được nhưng phải ghi lý do.</Dialog.Description>
-          <Field id="close-at" label="Mốc chốt — tính đến hết phút này (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={inputClass()} /></Field>
-          <Field id="close-actual" label="Tiền kiểm đếm thực tế" required><input id="close-actual" type="number" min={0} step="any" value={actual} onChange={(e) => setActual(e.target.value)} className={`${inputClass()} tabular`} /></Field>
-          <Field id="close-reason" label="Lý do chênh lệch (nếu có)"><textarea id="close-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+          <InlineField id="close-at" label="Mốc chốt — tính đến hết phút này (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={igInput} /></InlineField>
+          <InlineField id="close-actual" label="Tiền kiểm đếm thực tế" required><input id="close-actual" type="number" min={0} step="any" value={actual} onChange={(e) => setActual(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+          <InlineField id="close-reason" label="Lý do chênh lệch (nếu có)" multiline><textarea id="close-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Chốt quỹ</button></div>
         </Dialog.Content>

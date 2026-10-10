@@ -28,7 +28,6 @@ describe("TripForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tạo chuyến" }));
     expect(await screen.findByText("Chọn ít nhất một đơn.")).toBeInTheDocument();
     expect(apiFetch.mock.calls.some((c) => c[0] === "/api/trips")).toBe(false);
-    await userEvent.click(screen.getAllByRole("tab", { name: "Đơn hàng trên chuyến" })[0]!); // form chia tab
     await userEvent.click(await screen.findByRole("button", { name: "Thêm DH000011" }));
     await userEvent.click(await screen.findByRole("button", { name: "Thêm DH000012" }));
     await userEvent.click(screen.getByRole("button", { name: "Lên DH000012" }));

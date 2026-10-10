@@ -25,16 +25,16 @@ function Harness({ onSave }: { onSave: (v: V) => void }) {
 }
 
 describe("NewPage với tab dọc", () => {
-  it("panel trái có card tiêu đề + tab; chỉ panel của tab đang chọn hiện; đổi tab KHÔNG mất dữ liệu", async () => {
+  it("mọi nhóm hiện thành thẻ xếp dọc + mục lục; bấm mục lục KHÔNG mất dữ liệu", async () => {
     render(<Harness onSave={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "Thêm khách hàng" })).toBeInTheDocument();
     expect(screen.getAllByRole("tab", { name: /Thông tin cơ bản/ }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Tên")).toBeVisible();
-    expect(screen.getByLabelText("Hạn mức", { selector: "input" })).not.toBeVisible();
+    expect(screen.getByLabelText("Hạn mức", { selector: "input" })).toBeVisible();
     await userEvent.type(screen.getByLabelText("Tên"), "Đạt");
     await userEvent.click(screen.getAllByRole("tab", { name: /Công nợ/ })[0]!);
     expect(screen.getByLabelText("Hạn mức")).toBeVisible();
-    expect(screen.getByLabelText("Tên", { selector: "input" })).not.toBeVisible();
+    expect(screen.getByLabelText("Tên", { selector: "input" })).toBeVisible();
     await userEvent.click(screen.getAllByRole("tab", { name: /Thông tin cơ bản/ })[0]!);
     expect(screen.getByLabelText("Tên")).toHaveValue("Đạt");
   });

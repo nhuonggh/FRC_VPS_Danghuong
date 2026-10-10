@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { addPickedLines, Combobox, Field, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
+import { Package, PackagePlus } from "lucide-react";
+import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 // Schema thuần Zod: không import barrel service vì Client Component không được kéo engine FIFO vào bundle browser.
@@ -20,17 +21,16 @@ export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetC
  const err = form.formState.errors;
  const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
  return (
-  <NewPage backHref="/purchase/adjustments-in" backLabel="Quay lại nhập kho không NCC" title="Nhập kho không NCC" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-   <div className="space-y-6">
-    <div className="space-y-5">
-     <p className="text-sm text-fg-secondary">Cho hàng lệch, hàng dư không theo nhà cung cấp; tạo lô FIFO mới và không sinh công nợ.</p>
-     <div className="grid gap-4 sm:grid-cols-2">
-      <Field id="date" label="Ngày nhập" error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} className={inputClass(err.date)} /></Field>
-      <Field id="note" label="Ghi chú"><input id="note" {...form.register("note")} className={inputClass()} /></Field>
-     </div>
-    </div>
-    <div className="space-y-3 border-t border-border pt-5">
-     <h2 className="text-sm font-semibold">Danh sách sản phẩm</h2>
+  <NewPage bare backHref="/purchase/adjustments-in" backLabel="Quay lại nhập kho không NCC" title="Nhập kho không NCC" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+   <FormCard icon={PackagePlus} title="Thông tin chung">
+    <p className="mb-3 text-sm text-fg-secondary">Cho hàng lệch, hàng dư không theo nhà cung cấp; tạo lô FIFO mới và không sinh công nợ.</p>
+    <FormGrid cols={2}>
+     <InlineField id="date" label="Ngày nhập" error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} aria-invalid={!!err.date} className={igInput} /></InlineField>
+     <InlineField id="note" label="Ghi chú"><input id="note" {...form.register("note")} className={igInput} /></InlineField>
+    </FormGrid>
+   </FormCard>
+   <FormCard icon={Package} title="Danh sách sản phẩm">
+    <div className="space-y-3">
      <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[620px] text-sm">
        <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2 text-right">Số lượng (đv gốc)</th>{canSetCost && <th className="px-2 py-2 text-right">Đơn giá vốn</th>}<th /></tr></thead>
@@ -55,7 +55,7 @@ export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetC
       <ProductMultiPicker load={load} existingIds={lineIds} onPicked={addProducts} />
      </div>
     </div>
-   </div>
+   </FormCard>
   </NewPage>
  );
 }

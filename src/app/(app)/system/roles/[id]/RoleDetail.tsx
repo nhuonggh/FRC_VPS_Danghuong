@@ -1,5 +1,6 @@
 "use client";
 
+import { igArea, igInput, InlineField } from "@/components/ui";
 import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,21 +41,12 @@ function InfoSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
       action={s.editing ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} /> : <EditButton label="Chỉnh sửa thông tin nhóm" onClick={() => ctx.beginEdit("info")} />}>
       {s.editing ? (
         <div className="space-y-3">
-          <div>
-            <label htmlFor="name" className="mb-1 block text-xs text-fg-muted">Tên nhóm quyền</label>
-            <input id="name" disabled={p.role.isSystem} {...s.form.register("name")} aria-invalid={!!errors.name}
-              aria-describedby={p.role.isSystem ? "name-hint" : errors.name ? "name-error" : undefined}
-              className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm disabled:bg-hover md:h-9 ${errors.name ? "border-danger" : "border-border"}`} />
-            {p.role.isSystem && <p id="name-hint" className="mt-1 text-xs text-fg-muted">Nhóm mặc định của hệ thống không đổi tên.</p>}
-            {errors.name && <p id="name-error" className="mt-1 text-xs text-danger">{errors.name.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="description" className="mb-1 block text-xs text-fg-muted">Mô tả</label>
-            <textarea id="description" rows={3} {...s.form.register("description")} aria-invalid={!!errors.description}
-              aria-describedby={errors.description ? "description-error" : undefined}
-              className={`w-full rounded-sm border bg-canvas px-3 py-2 text-sm ${errors.description ? "border-danger" : "border-border"}`} />
-            {errors.description && <p id="description-error" className="mt-1 text-xs text-danger">{errors.description.message}</p>}
-          </div>
+          <InlineField id="name" label="Tên nhóm quyền" error={errors.name?.message} hint={p.role.isSystem ? "Nhóm mặc định của hệ thống không đổi tên." : undefined} readOnly={p.role.isSystem}>
+            <input id="name" disabled={p.role.isSystem} {...s.form.register("name")} aria-invalid={!!errors.name} className={igInput} />
+          </InlineField>
+          <InlineField id="description" label="Mô tả" multiline error={errors.description?.message}>
+            <textarea id="description" rows={3} {...s.form.register("description")} aria-invalid={!!errors.description} className={igArea} />
+          </InlineField>
         </div>
       ) : (
         <dl className="space-y-2"><DetailField label="Tên nhóm">{p.role.name}</DetailField><DetailField label="Mô tả">{p.role.description}</DetailField></dl>

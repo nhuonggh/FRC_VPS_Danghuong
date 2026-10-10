@@ -5,7 +5,7 @@ import { ArrowLeft, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FormTabsBar, FormTabsNav, FormTabUrlSync, type FormTab } from "./FormTabs";
+import { FormTabsBar, FormTabUrlSync, type FormTab } from "./FormTabs";
 import { BOTTOM_NAV_OFFSET } from "@/components/shell/layout-constants";
 import { confirm } from "@/lib/confirm-store";
 import { registerDirtyGuard } from "@/lib/dirty-guard";
@@ -13,7 +13,7 @@ import { registerDirtyGuard } from "@/lib/dirty-guard";
 interface Props {
   backHref: string;
   backLabel: string;
-  /** "Tạo mới người dùng" — hiện ở aside. */
+  /** "Tạo mới người dùng" — tiêu đề đầu trang. */
   title: string;
   submitLabel?: string;
   /** Trả về true nếu form đang có thay đổi chưa lưu. */
@@ -27,9 +27,11 @@ interface Props {
   tabs?: FormTab[];
   /** Khoá các tab có lỗi validate (xem `tabsWithErrors`) — hiện chấm đỏ; bấm Lưu mà còn lỗi ⇒ nhảy tới tab lỗi đầu tiên. */
   errorTabs?: readonly string[];
-  /** Bố cục rộng: bỏ aside + khung bọc, `children` tự dựng các thẻ (vd. form lập đơn). */
+  /** Bố cục rộng toàn chiều ngang: `children` tự dựng các thẻ (vd. form lập đơn). Mặc định: khung tối đa 5xl, children nằm trong 1 thẻ. */
   wide?: boolean;
-  /** Chỉ với `wide`: nút ở đầu trang (cạnh tiêu đề). `run(fn)` chạy một hành động với cùng cơ chế chống bấm đúp + banner lỗi như nút gửi chính. */
+  /** Khung tối đa 5xl nhưng `children` tự dựng các FormCard (không bọc thêm thẻ). */
+  bare?: boolean;
+  /** Nút ở đầu trang (cạnh tiêu đề). `run(fn)` chạy một hành động với cùng cơ chế chống bấm đúp + banner lỗi như nút gửi chính. */
   headerActions?: (run: (action: () => Promise<void>) => void, pending: boolean) => React.ReactNode;
   /** Thông tin hiện bên trái thanh Hủy/Lưu dính đáy (vd. Tổng tiền, Nợ của form lập đơn). */
   footerInfo?: React.ReactNode;
@@ -38,7 +40,7 @@ interface Props {
 
 const DISCARD_CONFIRM = { title: "Bỏ thay đổi chưa lưu?", confirmLabel: "Bỏ thay đổi", danger: true } as const;
 
-export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], wide, headerActions, footerInfo, children }: Props) {
+export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isDirty, onSubmit, tabs, errorTabs = [], wide, bare, headerActions, footerInfo, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +50,9 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
   const [active, setActive] = useState(tabs?.[0]?.key ?? "");
   const errorRef = useRef(errorTabs);
   errorRef.current = errorTabs;
-  const activeRef = useRef(active);
-  activeRef.current = active;
   const select = (key: string) => { setActive(key); };
+  /** Chọn nhóm + cuộn tới thẻ của nhóm (kể cả khi đổi từ ?tab= lúc mở trang). */
+  const jump = (key: string) => { select(key); requestAnimationFrame(() => document.getElementById(`panel-${key}`)?.scrollIntoView?.({ behavior: "smooth", block: "start" })); };
 
   // Điều hướng trong app (tab module, sidebar…) hỏi sổ dirty trước khi rời trang
   useEffect(() => registerDirtyGuard(() => dirtyRef.current()), []);
@@ -80,8 +82,12 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
         await new Promise((r) => setTimeout(r, 0));
         const first = errorRef.current[0];
         if (first) {
-          if (first !== activeRef.current) setActive(first);
-          requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLElement>('[role=tabpanel]:not([hidden]) [aria-invalid="true"]')?.focus()));
+          setActive(first);
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            const panel = document.getElementById(`panel-${first}`);
+            panel?.scrollIntoView?.({ block: "start" });
+            panel?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+          }));
         }
       }
     } catch (e) {
@@ -110,33 +116,27 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError(null)}><X size={16} aria-hidden /></button>
         </div>
       )}
-      {wide ? (
-        <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold">{title}</h1>
-            {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}
-          </div>
-          {children}
+      <div className={clsx("min-w-0 flex-1 space-y-4", !wide && "mx-auto w-full max-w-5xl")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}
         </div>
-      ) : (
-      <div className="grid flex-1 gap-4 lg:min-h-[calc(100dvh-16rem)] lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className={clsx("rounded-sm border border-border bg-surface", !tabs && "p-4")}>
-          <h1 className={clsx("text-lg font-semibold", tabs && "p-4")}>{title}</h1>
-          {tabs && <FormTabsNav tabs={tabs} active={active} errorTabs={errorTabs} onSelect={select} />}
-        </aside>
         {tabs ? (
-          <div className="min-w-0 rounded-sm border border-border bg-surface">
-            <FormTabUrlSync tabs={tabs} active={active} onChange={select} />
-            <FormTabsBar tabs={tabs} active={active} errorTabs={errorTabs} onSelect={select} />
-            <div className="p-4 sm:p-6">
-              {tabs.map((t) => <div key={t.key} role="tabpanel" id={`panel-${t.key}`} aria-labelledby={`tab-${t.key}`} hidden={t.key !== active} className="space-y-5">{t.render()}</div>)}
-            </div>
-          </div>
-        ) : (
-          <div className="min-w-0 rounded-sm border border-border bg-surface p-4 sm:p-6">{children}</div>
+          <>
+            <FormTabUrlSync tabs={tabs} active={active} onChange={jump} />
+            {/* Mục lục dính đầu trang: bấm → cuộn tới thẻ tương ứng (mọi nhóm đều hiện, chung 1 form state) */}
+            <FormTabsBar tabs={tabs} active={active} errorTabs={errorTabs} onSelect={jump} className="sticky top-0 z-header rounded-sm border bg-surface" />
+            {tabs.map((t) => (
+              <section key={t.key} role="tabpanel" id={`panel-${t.key}`} aria-labelledby={`tab-${t.key}-h`} className="scroll-mt-16 rounded-sm border border-border bg-surface p-4">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><t.icon size={16} aria-hidden className="text-accent" /> {t.label}</h2>
+                {t.disabled ? <p className="text-sm text-fg-muted">{t.disabledHint ?? "Lưu trước để xem"}</p> : <div className="space-y-5">{t.render()}</div>}
+              </section>
+            ))}
+          </>
+        ) : wide || bare ? children : (
+          <div className="min-w-0 rounded-sm border border-border bg-surface p-4">{children}</div>
         )}
       </div>
-      )}
       {/* Footer sticky đáy vùng cuộn (không absolute/fixed che nội dung). Sticky bám mép vùng cuộn, còn BottomNav
           (fixed, z cao hơn) phủ lên đáy vùng đó ở < md → dính CÁCH đáy đúng chiều cao BottomNav (BOTTOM_NAV_OFFSET).
           `pb-20` của vùng cuộn chỉ chừa chỗ cho cuối trang, không giữ footer khỏi bị BottomNav che. */}

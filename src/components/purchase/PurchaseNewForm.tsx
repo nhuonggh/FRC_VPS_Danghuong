@@ -1,11 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Wallet } from "lucide-react";
+import { Package, Truck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { FormCard, FormGrid, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -38,37 +38,36 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts }: { today:
     router.replace(`/purchase/orders/${result.id}`);
   });
   const accountSelect = (id: string, list: PayAccount[], value: number | "", set: (v: number | "") => void) => (
-    <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
+    <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={`${igInput} cursor-pointer`}>
       <option value="">{list.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>
       {list.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
     </select>
   );
   return (
-    <NewPage backHref="/purchase/orders" backLabel="Quay lại phiếu nhập" title="Lập phiếu nhập" submitLabel="Lập phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { dropEmptyPurchaseLines(form); await submit(); }}>
-      <div className="space-y-6">
-        <div className="space-y-5"><PurchaseHeaderFields form={form} maxDate={today} supplierGroups={supplierGroups} /><PurchaseNoteField form={form} /></div>
-        <div className="space-y-3 border-t border-border pt-5">
-          <h2 className="text-sm font-semibold">Danh sách sản phẩm</h2>
-          <PurchaseLinesFields form={form} />
-        </div>
-        {payAccounts && (
-          <section className="space-y-3 border-t border-border pt-5">
-            <h2 className="flex items-center gap-2 text-sm font-semibold"><Wallet size={16} aria-hidden className="text-accent" /> Thanh toán nhà cung cấp</h2>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field id="pay-cash-amount" label="Trả tiền mặt"><input id="pay-cash-amount" type="number" min={0} step="any" value={cashAmount} placeholder="0" onChange={(e) => setCashAmount(e.target.value)} className={`${inputClass()} tabular text-right`} /></Field>
-              <Field id="pay-cash-account" label="Quỹ tiền mặt">{accountSelect("pay-cash-account", cashList, cashAccount, setCashAccount)}</Field>
-              <Field id="pay-bank-amount" label="Trả chuyển khoản"><input id="pay-bank-amount" type="number" min={0} step="any" value={bankAmount} placeholder="0" onChange={(e) => setBankAmount(e.target.value)} className={`${inputClass()} tabular text-right`} /></Field>
-              <Field id="pay-bank-account" label="Ngân hàng">{accountSelect("pay-bank-account", bankList, bankAccount, setBankAccount)}</Field>
-            </div>
-            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              <div className="flex gap-2"><dt className="text-fg-muted">Tiền hàng:</dt><dd className="font-semibold tabular">{formatCurrency(goodsTotal)}</dd></div>
-              <div className="flex gap-2"><dt className="text-fg-muted">Đã trả:</dt><dd className="font-semibold tabular">{formatCurrency(paid)}</dd></div>
-              <div className="flex gap-2"><dt className="text-fg-muted">{paid > goodsTotal ? "Trả thừa:" : "Ghi nợ NCC:"}</dt><dd className={`font-semibold tabular ${paid > goodsTotal ? "text-danger" : ""}`}>{formatCurrency(Math.abs(goodsTotal - paid))}</dd></div>
-            </dl>
-            <p className="text-xs text-fg-muted">Phần chưa trả được ghi nợ nhà cung cấp. Cước vận chuyển tính riêng, không nằm trong khoản này.</p>
-          </section>
-        )}
-      </div>
+    <NewPage bare backHref="/purchase/orders" backLabel="Quay lại phiếu nhập" title="Lập phiếu nhập" submitLabel="Lập phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { dropEmptyPurchaseLines(form); await submit(); }}
+      footerInfo={(
+        <>
+          <span className="text-sm font-semibold">Tiền hàng: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(goodsTotal)}</b></span>
+          {payAccounts && <span className="text-sm font-semibold">{paid > goodsTotal ? "Trả thừa" : "Ghi nợ NCC"}: <b className={`ml-1 text-lg tabular ${paid > goodsTotal ? "text-danger" : "text-accent"}`}>{formatCurrency(Math.abs(goodsTotal - paid))}</b></span>}
+        </>
+      )}>
+      <FormCard icon={Truck} title="Thông tin chung">
+        <div className="space-y-3"><PurchaseHeaderFields form={form} maxDate={today} supplierGroups={supplierGroups} /><PurchaseNoteField form={form} /></div>
+      </FormCard>
+      <FormCard icon={Package} title="Danh sách sản phẩm">
+        <PurchaseLinesFields form={form} />
+      </FormCard>
+      {payAccounts && (
+        <FormCard icon={Wallet} title="Thanh toán nhà cung cấp">
+          <FormGrid cols={2}>
+            <InlineField id="pay-cash-amount" label="Trả tiền mặt" labelClass="sm:min-w-40"><input id="pay-cash-amount" type="number" min={0} step="any" value={cashAmount} placeholder="0" onChange={(e) => setCashAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+            <InlineField id="pay-cash-account" label="Quỹ tiền mặt" labelClass="sm:min-w-40">{accountSelect("pay-cash-account", cashList, cashAccount, setCashAccount)}</InlineField>
+            <InlineField id="pay-bank-amount" label="Trả chuyển khoản" labelClass="sm:min-w-40"><input id="pay-bank-amount" type="number" min={0} step="any" value={bankAmount} placeholder="0" onChange={(e) => setBankAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+            <InlineField id="pay-bank-account" label="Ngân hàng" labelClass="sm:min-w-40">{accountSelect("pay-bank-account", bankList, bankAccount, setBankAccount)}</InlineField>
+          </FormGrid>
+          <p className="mt-3 text-xs text-fg-muted">Phần chưa trả được ghi nợ nhà cung cấp. Cước vận chuyển tính riêng, không nằm trong khoản này.</p>
+        </FormCard>
+      )}
     </NewPage>
   );
 }

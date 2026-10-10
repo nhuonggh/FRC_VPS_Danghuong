@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Field, inputClass, NewPage } from "@/components/ui";
+import { ClipboardList, Undo2 } from "lucide-react";
+import { FormCard, FormGrid, igArea, igInput, InlineField, inputClass, NewPage } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDate, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -25,12 +26,19 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
   }
 
   return (
-    <NewPage backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={`Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
-      <div className="space-y-5">
-        <p className="text-sm text-fg-secondary">{order.partnerCode} — {order.partnerName} · đơn ngày {formatDate(order.orderDate)}</p>
-        <Field id="date" label="Ngày trả" required>
-          <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} />
-        </Field>
+    <NewPage bare backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={`Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
+      <FormCard icon={Undo2} title="Thông tin trả hàng">
+        <p className="mb-3 text-sm text-fg-secondary">{order.partnerCode} — {order.partnerName} · đơn ngày {formatDate(order.orderDate)}</p>
+        <FormGrid cols={2}>
+          <InlineField id="date" label="Ngày trả" required>
+            <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú" multiline>
+            <textarea id="note" rows={2} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} className={igArea} />
+          </InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={ClipboardList} title="Dòng hàng đã giao">
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[640px] text-sm">
             <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -53,10 +61,7 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
             </tbody>
           </table>
         </div>
-        <Field id="note" label="Ghi chú">
-          <textarea id="note" rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }
