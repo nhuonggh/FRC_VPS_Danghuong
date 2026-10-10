@@ -27,6 +27,7 @@ function sheets_() {
     { name: 'Nhà cung cấp', imp: 'Nhập bằng Excel: Nhập hàng → Nhà cung cấp → Nhập từ Excel.', cols: partnerCols_(yn) },
     { name: 'Sản phẩm', imp: 'Nhập bằng Excel: Kho → Sản phẩm → Nhập từ Excel. Mã ngừng bán/trùng sẽ ra tệp riêng để xác nhận.', cols: [
       { h: 'Nhóm hàng', s: 'Tôn', w: 150, listRef: "'Nhóm hàng'!A2:A" },
+      { h: 'Kiểu gia công', s: 'Tôn xốp,11 sóng', w: 200 },
       { h: 'Mã', s: 'SP001', r: 1, w: 110 }, { h: 'Tên', s: 'Tôn lạnh', r: 1, w: 260 },
       { h: 'Loại', s: 'Hàng hóa', w: 150, list: ['Hàng hóa', 'Nguyên vật liệu', 'Thành phẩm', 'Phụ kiện'] },
       { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Tỷ trọng', s: '2,4', w: 120 },
