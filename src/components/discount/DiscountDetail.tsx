@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Badge, Field, inputClass, ReasonDialog } from "@/components/ui";
+import { Badge, ReasonDialog, InlineField, igInput, igArea } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -108,11 +108,11 @@ function SettleDialog({ open, onClose, d, accounts, today, idemKey, onDone }: { 
         <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 overflow-y-auto rounded-lg border border-border bg-raised p-5 shadow-lg">
           <Dialog.Title className="text-base font-semibold">Tất toán chiết khấu — {d.partner.name}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Còn lại {formatCurrency(d.balance)}. Chi tiền: sinh phiếu chi (thủ quỹ kiểm sau). Trừ công nợ: giảm số khách đang nợ ({formatCurrency(String(Math.max(debt, 0)))}).</Dialog.Description>
-          <Field id="st-method" label="Hình thức" required><select id="st-method" value={method} onChange={(e) => { setMethod(e.target.value as "CASH" | "OFFSET"); setError(null); }} className={inputClass()}><option value="CASH">Chi tiền cho khách</option><option value="OFFSET">Trừ vào công nợ</option></select></Field>
-          <Field id="st-amount" label={`Số tiền (tối đa ${formatCurrency(String(max))})`} required><input id="st-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass()} tabular`} /></Field>
-          {method === "CASH" && <Field id="st-account" label="Chi từ quỹ / tài khoản" required><select id="st-account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={inputClass()}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
-          <Field id="st-date" label="Ngày" required><input id="st-date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} /></Field>
-          <Field id="st-note" label="Ghi chú"><textarea id="st-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+          <InlineField id="st-method" label="Hình thức" required><select id="st-method" value={method} onChange={(e) => { setMethod(e.target.value as "CASH" | "OFFSET"); setError(null); }} className={igInput}><option value="CASH">Chi tiền cho khách</option><option value="OFFSET">Trừ vào công nợ</option></select></InlineField>
+          <InlineField id="st-amount" label={`Số tiền (tối đa ${formatCurrency(String(max))})`} required><input id="st-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+          {method === "CASH" && <InlineField id="st-account" label="Chi từ quỹ / tài khoản" required><select id="st-account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={igInput}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
+          <InlineField id="st-date" label="Ngày" required><input id="st-date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
+          <InlineField id="st-note" label="Ghi chú" multiline><textarea id="st-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Tất toán</button></div>
         </Dialog.Content>

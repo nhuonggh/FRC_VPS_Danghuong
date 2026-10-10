@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
+import { ShieldCheck } from "lucide-react";
+import { FormCard, igArea, igInput, InlineField } from "@/components/ui";
 import { NewPage } from "@/components/ui/NewPage";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -34,23 +36,18 @@ export function NewRoleForm() {
     router.replace(`/system/roles/${r.id}?edit=permissions`); // tạo xong: vào thẳng phần cấu hình quyền
   });
   return (
-    <NewPage backHref="/system/roles" backLabel="Quay lại nhóm quyền" title="Tạo mới nhóm quyền" submitLabel="Tạo nhóm quyền" isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
-      <div className="space-y-4">
-        <h2 className="text-base font-semibold">Thông tin nhóm</h2>
-        <div>
-          <label htmlFor="name" className="mb-1 block text-xs text-fg-muted">Tên nhóm quyền</label>
-          <input id="name" autoComplete="off" {...register("name")} aria-invalid={!!errors.name} aria-describedby={errors.name ? "name-error" : undefined}
-            className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${errors.name ? "border-danger" : "border-border"}`} />
-          {errors.name && <p id="name-error" className="mt-1 text-xs text-danger">{errors.name.message}</p>}
+    <NewPage bare backHref="/system/roles" backLabel="Quay lại nhóm quyền" title="Tạo mới nhóm quyền" submitLabel="Tạo nhóm quyền" isDirty={() => isDirty} onSubmit={async () => { await submit(); }}>
+      <FormCard icon={ShieldCheck} title="Thông tin nhóm">
+        <div className="space-y-3">
+          <InlineField id="name" label="Tên nhóm quyền" error={errors.name?.message}>
+            <input id="name" autoComplete="off" {...register("name")} aria-invalid={!!errors.name} className={igInput} />
+          </InlineField>
+          <InlineField id="description" label="Mô tả" multiline error={errors.description?.message}>
+            <textarea id="description" rows={3} {...register("description")} aria-invalid={!!errors.description} className={igArea} />
+          </InlineField>
+          <p className="text-xs text-fg-muted">Sau khi tạo, hệ thống mở phần cấu hình quyền cho nhóm này.</p>
         </div>
-        <div>
-          <label htmlFor="description" className="mb-1 block text-xs text-fg-muted">Mô tả</label>
-          <textarea id="description" rows={3} {...register("description")} aria-invalid={!!errors.description} aria-describedby={errors.description ? "description-error" : undefined}
-            className={`w-full rounded-sm border bg-canvas px-3 py-2 text-sm ${errors.description ? "border-danger" : "border-border"}`} />
-          {errors.description && <p id="description-error" className="mt-1 text-xs text-danger">{errors.description.message}</p>}
-        </div>
-        <p className="text-xs text-fg-muted">Sau khi tạo, hệ thống mở phần cấu hình quyền cho nhóm này.</p>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }

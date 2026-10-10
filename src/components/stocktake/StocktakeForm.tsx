@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { addPickedLines, Combobox, Field, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
+import { ClipboardCheck, Package } from "lucide-react";
+import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
 import { stocktakeSchema, type StocktakeInput } from "@/server/stocktake/schemas";
@@ -34,17 +35,16 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
   const err = form.formState.errors;
   const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
   return (
-    <NewPage backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-      <div className="space-y-6">
-        <div className="space-y-5">
-          <p className="text-sm text-fg-secondary">Nhập tồn thực đếm (đơn vị gốc). Lưu nháp chưa đổi kho; khi bấm “Chốt” hệ thống so với tồn sổ sách và tự nhập/xuất phần chênh lệch.</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="date" label="Ngày kiểm kho" required error={err.date?.message}><input id="date" type="date" max={today} {...form.register("date")} className={inputClass(err.date)} /></Field>
-            <Field id="note" label="Ghi chú"><input id="note" {...form.register("note")} className={inputClass()} /></Field>
-          </div>
-        </div>
-        <div className="space-y-3 border-t border-border pt-5">
-          <h2 className="text-sm font-semibold">Danh sách sản phẩm</h2>
+    <NewPage bare backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+      <FormCard icon={ClipboardCheck} title="Thông tin kiểm kho">
+        <p className="mb-3 text-sm text-fg-secondary">Nhập tồn thực đếm (đơn vị gốc). Lưu nháp chưa đổi kho; khi bấm “Chốt” hệ thống so với tồn sổ sách và tự nhập/xuất phần chênh lệch.</p>
+        <FormGrid cols={2}>
+          <InlineField id="date" label="Ngày kiểm kho" required error={err.date?.message} labelClass="sm:min-w-40"><input id="date" type="date" max={today} {...form.register("date")} aria-invalid={!!err.date} className={igInput} /></InlineField>
+          <InlineField id="note" label="Ghi chú" labelClass="sm:min-w-40"><input id="note" {...form.register("note")} className={igInput} /></InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Package} title="Danh sách sản phẩm">
+        <div className="space-y-3">
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[520px] text-sm">
               <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2 text-right">Tồn thực đếm (đv gốc)</th><th /></tr></thead>
@@ -68,7 +68,7 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
             <ProductMultiPicker load={load} existingIds={lineIds} onPicked={addProducts} />
           </div>
         </div>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }

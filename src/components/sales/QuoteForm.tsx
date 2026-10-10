@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { Package, UserRound } from "lucide-react";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -79,25 +80,27 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
 
   // Một trang: thông tin chung ở trên, dòng hàng ở dưới.
   return (
-    <NewPage backHref={edit ? `/sales/quotes/${edit.quoteId}` : "/sales/quotes"} backLabel={edit ? `Quay lại báo giá ${edit.code}` : "Quay lại danh sách báo giá"}
-      title={edit ? `Sửa báo giá ${edit.code}` : "Lập báo giá"} submitLabel={edit ? "Lưu thay đổi" : "Lập báo giá"} isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-      <div className="space-y-6">
-        <div className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
+    <NewPage bare backHref={edit ? `/sales/quotes/${edit.quoteId}` : "/sales/quotes"} backLabel={edit ? `Quay lại báo giá ${edit.code}` : "Quay lại danh sách báo giá"}
+      title={edit ? `Sửa báo giá ${edit.code}` : "Lập báo giá"} submitLabel={edit ? "Lưu thay đổi" : "Lập báo giá"} isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
+      footerInfo={<span className="text-sm font-semibold">Tổng báo giá: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>}>
+      <FormCard icon={UserRound} title="Thông tin báo giá">
+        <FormGrid cols={2}>
+          <InlineField id="partnerId" label="Khách hàng" required error={errors.partnerId?.message}>
             <Controller control={control} name="partnerId" render={({ field }) => (
-              <Combobox label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…" error={errors.partnerId?.message}
-                onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
+              <div className={igCombo}><Combobox hideLabel label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…"
+                onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
             )} />
-            <Field id="date" label="Ngày báo giá" required error={errors.date?.message}>
-              <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
-            </Field>
-          </div>
-          <Field id="note" label="Ghi chú" error={errors.note?.message}>
-            <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-          </Field>
-        </div>
-        <div className="space-y-3 border-t border-border pt-5">
-          <h2 className="text-sm font-semibold">Dòng hàng</h2>
+          </InlineField>
+          <InlineField id="date" label="Ngày báo giá" required error={errors.date?.message}>
+            <input id="date" type="date" max={today} {...register("date")} aria-invalid={!!errors.date} className={igInput} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú" multiline error={errors.note?.message} className="md:col-span-2">
+            <textarea id="note" rows={3} {...register("note")} className={igArea} />
+          </InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Package} title="Dòng hàng">
+        <div className="space-y-3">
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[820px] text-sm">
               <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -150,7 +153,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
           </div>
           <p className="text-xs text-fg-muted">Chọn sản phẩm → nhập SL → Enter để sang dòng tiếp theo; dòng trống cuối sẽ bị bỏ khi lập báo giá.</p>
         </div>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }

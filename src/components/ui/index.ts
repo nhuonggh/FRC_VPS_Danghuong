@@ -15,6 +15,8 @@ export { ExportButton } from "./ExportButton";
 export { QuickTimeFilter } from "./QuickTimeFilter";
 export { SearchBox } from "./SearchBox";
 export { Field, inputClass } from "./Field";
+export { igArea, igCombo, igInput, InlineField } from "./InlineField";
+export { FormCard, FormGrid } from "./FormCard";
 export { EditableSection } from "./EditableSection";
 export { ReasonDialog } from "./ReasonDialog";
 export { ToastHost } from "./Toast";

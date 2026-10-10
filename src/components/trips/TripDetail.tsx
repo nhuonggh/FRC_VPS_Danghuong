@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PrintButton } from "@/components/print/PrintButton";
-import { Badge, Field, inputClass, ReasonDialog } from "@/components/ui";
+import { Badge, ReasonDialog, InlineField, igInput, igArea, inputClass } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDateTime, formatQty } from "@/lib/format";
@@ -134,7 +134,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được kết quả."); } finally { setBusy(false); }
   }
   const money = (id: string, label: string, value: string, set: (v: string) => void) => (
-    <Field id={id} label={label}><input id={id} type="number" min={0} step="any" inputMode="decimal" value={value} onChange={(e) => set(e.target.value)} className={`${inputClass()} tabular`} /></Field>
+    <InlineField id={id} label={label}><input id={id} type="number" min={0} step="any" inputMode="decimal" value={value} onChange={(e) => set(e.target.value)} className={`${igInput} tabular`} /></InlineField>
   );
   return (
     <Dialog.Root open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
@@ -142,7 +142,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
         <Dialog.Content className={shell}>
           <Dialog.Title className="text-base font-semibold">Kết quả giao — {stop.orderCode}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">{stop.partnerName}. Giao hết phần còn lại thì phải thu ≈ <strong className="tabular">{formatCurrency(stop.suggestedDue)}</strong> (giá trị đơn − tiền đã thu).</Dialog.Description>
-          <Field id="rs-kind" label="Kết quả" required><select id="rs-kind" value={result} onChange={(e) => pick(e.target.value as (typeof RESULT_KINDS)[number])} className={inputClass()}>{RESULT_KINDS.map((k) => <option key={k} value={k}>{RESULT_LABEL[k]}</option>)}</select></Field>
+          <InlineField id="rs-kind" label="Kết quả" required><select id="rs-kind" value={result} onChange={(e) => pick(e.target.value as (typeof RESULT_KINDS)[number])} className={igInput}>{RESULT_KINDS.map((k) => <option key={k} value={k}>{RESULT_LABEL[k]}</option>)}</select></InlineField>
           {result === "GIAO_MOT_PHAN" && (
             <div className="space-y-2 rounded-sm border border-border p-2">
               <p className="text-xs font-semibold text-fg-secondary">Số lượng thực giao</p>
@@ -155,8 +155,8 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
           {result !== "KHONG_GIAO" && (
             <div className="grid gap-3 sm:grid-cols-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}</div>
           )}
-          {result === "HEN_TRA" && <Field id="rs-promise" label="Ngày khách hẹn trả" required><input id="rs-promise" type="date" value={promise} onChange={(e) => setPromise(e.target.value)} className={inputClass()} /></Field>}
-          <Field id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : "Ghi chú"} required={result === "KHONG_GIAO"}><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+          {result === "HEN_TRA" && <InlineField id="rs-promise" label="Ngày khách hẹn trả" required><input id="rs-promise" type="date" value={promise} onChange={(e) => setPromise(e.target.value)} className={igInput} /></InlineField>}
+          <InlineField id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : "Ghi chú"} required={result === "KHONG_GIAO"} multiline><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Lưu kết quả</button></div>
         </Dialog.Content>
@@ -184,7 +184,7 @@ function SettleDialog({ open, onClose, trip, idemKey, onDone }: { open: boolean;
             <Row label="Phải thu" value={trip.totals.expected} /><Row label="− Tiền mặt" value={trip.totals.cash} /><Row label="− Chuyển khoản" value={trip.totals.transfer} /><Row label="− Ghi nợ / hẹn trả" value={trip.totals.debt} />
             <div className="flex justify-between border-t border-border pt-1 font-semibold"><dt>Chênh lệch</dt><dd className={`tabular ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
           </dl>
-          {diff !== 0 && <Field id="st-reason" label="Lý do chênh lệch" required><textarea id="st-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>}
+          {diff !== 0 && <InlineField id="st-reason" label="Lý do chênh lệch" required multiline><textarea id="st-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>}
           <p className="text-xs text-fg-muted">Đối soát xong chuyến chuyển cho thủ quỹ xác nhận nhận tiền; kết quả các điểm giao bị khoá.</p>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Đối soát</button></div>
@@ -214,8 +214,8 @@ function ConfirmDialog({ open, onClose, trip, accounts, idemKey, onDone }: { ope
         <Dialog.Content className={shell}>
           <Dialog.Title className="text-base font-semibold">Xác nhận nhận tiền — {trip.code}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Thủ quỹ đã nhận: tiền mặt <strong className="tabular">{formatCurrency(trip.totals.cash)}</strong>, chuyển khoản <strong className="tabular">{formatCurrency(trip.totals.transfer)}</strong>. Hệ thống sinh phiếu thu vào quỹ (chờ hậu kiểm); công nợ khách không đổi vì đã ghi lúc nhập kết quả.</Dialog.Description>
-          {needCash && <Field id="cf-cash" label="Tiền mặt vào quỹ" required><select id="cf-cash" value={cashId} onChange={(e) => setCashId(e.target.value ? Number(e.target.value) : "")} className={inputClass()}><option value="">Chọn quỹ…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
-          {needBank && <Field id="cf-bank" label="Chuyển khoản vào tài khoản" required><select id="cf-bank" value={bankId} onChange={(e) => setBankId(e.target.value ? Number(e.target.value) : "")} className={inputClass()}><option value="">Chọn tài khoản…</option>{bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>}
+          {needCash && <InlineField id="cf-cash" label="Tiền mặt vào quỹ" required><select id="cf-cash" value={cashId} onChange={(e) => setCashId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn quỹ…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
+          {needBank && <InlineField id="cf-bank" label="Chuyển khoản vào tài khoản" required><select id="cf-bank" value={bankId} onChange={(e) => setBankId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn tài khoản…</option>{bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Đã nhận tiền</button></div>
         </Dialog.Content>

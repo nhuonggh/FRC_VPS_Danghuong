@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { ArrowLeftRight } from "lucide-react";
+import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 
@@ -28,30 +29,34 @@ export function DebtTransferForm({ today }: { today: string }) {
   const load = (q: string) => apiFetch<ComboOption[]>(`/api/debts/partners?q=${encodeURIComponent(q)}`);
 
   return (
-    <NewPage backHref="/accounting/debt-transfers" backLabel="Quay lại danh sách" title="Gộp / chuyển công nợ" submitLabel={merge ? "Gộp mã" : "Chuyển công nợ"} isDirty={() => Boolean(from || to || amount || note)} onSubmit={submit}>
-      <div className="space-y-5">
-        <Field id="kind" label="Hình thức" required>
-          <select id="kind" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className={inputClass()}>
-            <option value="TRANSFER">Chuyển một phần số dư</option><option value="MERGE">Gộp mã (chuyển toàn bộ, ngừng mã cũ)</option>
-          </select>
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Combobox label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} value={from} loadOptions={load} placeholder="Tìm đối tác…" onChange={setFrom} />
-          <Combobox label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} value={to} loadOptions={load} placeholder="Tìm đối tác…" onChange={setTo} />
+    <NewPage bare backHref="/accounting/debt-transfers" backLabel="Quay lại danh sách" title="Gộp / chuyển công nợ" submitLabel={merge ? "Gộp mã" : "Chuyển công nợ"} isDirty={() => Boolean(from || to || amount || note)} onSubmit={submit}>
+      <FormCard icon={ArrowLeftRight} title="Thông tin chuyển công nợ">
+        <FormGrid cols={2}>
+          <InlineField id="kind" label="Hình thức" required className="md:col-span-2">
+            <select id="kind" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className={`${igInput} cursor-pointer`}>
+              <option value="TRANSFER">Chuyển một phần số dư</option><option value="MERGE">Gộp mã (chuyển toàn bộ, ngừng mã cũ)</option>
+            </select>
+          </InlineField>
+          <InlineField id="from" label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} required labelClass="sm:min-w-44">
+            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} value={from} loadOptions={load} placeholder="Tìm đối tác…" onChange={setFrom} /></div>
+          </InlineField>
+          <InlineField id="to" label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} required labelClass="sm:min-w-44">
+            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} value={to} loadOptions={load} placeholder="Tìm đối tác…" onChange={setTo} /></div>
+          </InlineField>
           {!merge && (
-            <Field id="amount" label="Số tiền" required>
-              <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass()} tabular`} />
-            </Field>
+            <InlineField id="amount" label="Số tiền" required>
+              <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+            </InlineField>
           )}
-          <Field id="date" label="Ngày" required>
-            <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} />
-          </Field>
-        </div>
-        {merge && <p className="text-sm text-fg-secondary">Chứng từ cũ vẫn nằm ở mã cũ để tra cứu; số dư và chiết khấu tích lũy chuyển hết sang mã giữ lại. Mã giữ lại phải có đủ vai trò (khách/NCC) của mã cần gộp.</p>}
-        <Field id="note" label="Ghi chú">
-          <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-      </div>
+          <InlineField id="date" label="Ngày" required>
+            <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2">
+            <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} />
+          </InlineField>
+        </FormGrid>
+        {merge && <p className="mt-3 text-sm text-fg-secondary">Chứng từ cũ vẫn nằm ở mã cũ để tra cứu; số dư và chiết khấu tích lũy chuyển hết sang mã giữ lại. Mã giữ lại phải có đủ vai trò (khách/NCC) của mã cần gộp.</p>}
+      </FormCard>
     </NewPage>
   );
 }

@@ -3,7 +3,7 @@
 import { PrintButton } from "@/components/print/PrintButton";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Field, inputClass } from "@/components/ui";
+import { InlineField, igInput, inputClass } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatDateTime, formatQty } from "@/lib/format";
@@ -51,12 +51,12 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
         <section aria-label="Lập phiếu giao" className="space-y-3 rounded-sm border border-border p-4">
           <h3 className="text-sm font-semibold">Lập phiếu giao</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field id="delivery-date" label="Ngày giao" required>
-              <input id="delivery-date" type="date" max={today} min={ictYmd(order.orderDate)} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} />
-            </Field>
-            <Field id="delivery-note" label="Ghi chú">
-              <input id="delivery-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputClass()} />
-            </Field>
+            <InlineField id="delivery-date" label="Ngày giao" required>
+              <input id="delivery-date" type="date" max={today} min={ictYmd(order.orderDate)} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
+            </InlineField>
+            <InlineField id="delivery-note" label="Ghi chú">
+              <input id="delivery-note" value={note} onChange={(e) => setNote(e.target.value)} className={igInput} />
+            </InlineField>
           </div>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs font-semibold text-fg-secondary"><th className="py-1">Sản phẩm</th><th className="py-1 text-right">Còn phải giao</th><th className="py-1 text-right">Giao lần này</th></tr></thead>

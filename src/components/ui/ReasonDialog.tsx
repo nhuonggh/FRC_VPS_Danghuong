@@ -1,5 +1,6 @@
 "use client";
 
+import { igArea, InlineField } from "./InlineField";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState } from "react";
 
@@ -23,8 +24,9 @@ export function ReasonDialog({ open, title, description, confirmLabel, onClose, 
       <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-raised p-5 shadow-lg">
         <Dialog.Title className="text-base font-semibold">{title}</Dialog.Title>
         {description && <Dialog.Description className="mt-2 text-sm text-fg-secondary">{description}</Dialog.Description>}
-        <label htmlFor="reason-input" className="mt-4 block text-xs text-fg-muted">Lý do</label>
-        <textarea id="reason-input" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} aria-invalid={!!error} className="mt-1 w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
+        <InlineField id="reason-input" label="Lý do" multiline className="mt-4">
+          <textarea id="reason-input" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} aria-invalid={!!error} className={igArea} />
+        </InlineField>
         {error && <p role="alert" className="mt-1 text-xs text-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={() => void submit()} disabled={busy} className="h-11 rounded-sm bg-danger px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">{busy ? "Đang xử lý" : confirmLabel}</button></div>
       </Dialog.Content>

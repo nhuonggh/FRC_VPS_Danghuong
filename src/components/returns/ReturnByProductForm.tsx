@@ -4,8 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { FileText, ListChecks } from "lucide-react";
-import { addPickedLines, Combobox, Field, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { Banknote, Package, Undo2 } from "lucide-react";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -99,25 +99,27 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
 
   return (
-    <NewPage backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
-      <div className="space-y-6">
-        <div className="space-y-5">
-          <p className="text-sm text-fg-secondary">{c.hint}</p>
-          <div className="grid gap-4 sm:grid-cols-2">
+    <NewPage bare backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
+      footerInfo={<span className="text-sm font-semibold">{c.totalLabel}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>}>
+      <FormCard icon={Undo2} title="Thông tin trả hàng">
+        <p className="mb-3 text-sm text-fg-secondary">{c.hint}</p>
+        <FormGrid cols={2}>
+          <InlineField id="partnerId" label={c.partnerLabel} required error={errors.partnerId?.message}>
             <Controller control={control} name="partnerId" render={({ field }) => (
-              <Combobox label={c.partnerLabel} value={field.value ? partner : null} loadOptions={loadPartners} placeholder={c.partnerPlaceholder} error={errors.partnerId?.message}
-                onChange={(o) => { setPartner(o); field.onChange(o ? Number(o.value) : undefined); }} />
+              <div className={igCombo}><Combobox hideLabel label={c.partnerLabel} value={field.value ? partner : null} loadOptions={loadPartners} placeholder={c.partnerPlaceholder}
+                onChange={(o) => { setPartner(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
             )} />
-            <Field id="date" label="Ngày trả" required error={errors.date?.message}>
-              <input id="date" type="date" max={today} {...register("date")} className={inputClass(errors.date)} />
-            </Field>
-          </div>
-          <Field id="note" label="Ghi chú" error={errors.note?.message}>
-            <textarea id="note" rows={3} {...register("note")} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-          </Field>
-        </div>
-        <div className="space-y-3 border-t border-border pt-5">
-          <h2 className="text-sm font-semibold">Dòng hàng trả</h2>
+          </InlineField>
+          <InlineField id="date" label="Ngày trả" required error={errors.date?.message}>
+            <input id="date" type="date" max={today} {...register("date")} aria-invalid={!!errors.date} className={igInput} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú" multiline error={errors.note?.message} className="md:col-span-2">
+            <textarea id="note" rows={3} {...register("note")} className={igArea} />
+          </InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Package} title="Dòng hàng trả">
+        <div className="space-y-3">
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[760px] text-sm">
               <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -165,33 +167,31 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
           {customerMode && (() => {
             const net = Math.round((total - num(dedAmount)) * 100) / 100, refunded = num(cashRefund) + num(bankRefund);
             const sel = (id: string, list: (ComboOption & { type: string })[], value: number | "", set: (v: number | "") => void) => (
-              <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
+              <select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={`${igInput} cursor-pointer`}>
                 <option value="">{list.length ? "— Chọn —" : "Chưa có tài khoản phù hợp"}</option>{list.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             );
             const money = "tabular text-right";
+            const ig = (cls: string) => `${igInput} ${cls}`;
             return (
-              <div className="space-y-3 rounded-sm border border-border p-4">
-                <h3 className="text-sm font-semibold">Xử lý tiền khi khách trả hàng</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field id="ret-ded" label="Khấu trừ (phí vận chuyển, hao hụt…)" hint="Trừ vào tiền khách được nhận lại"><input id="ret-ded" type="number" min={0} step="any" value={dedAmount} placeholder="0" onChange={(e) => setDedAmount(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
-                  <Field id="ret-ded-reason" label="Lý do khấu trừ"><input id="ret-ded-reason" maxLength={200} value={dedReason} onChange={(e) => setDedReason(e.target.value)} className={inputClass()} /></Field>
-                </div>
-                {refundAccounts && (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <Field id="ret-cash" label="Hoàn tiền mặt"><input id="ret-cash" type="number" min={0} step="any" value={cashRefund} placeholder="0" onChange={(e) => setCashRefund(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
-                    <Field id="ret-cash-acc" label="Quỹ tiền mặt">{sel("ret-cash-acc", cashList, cashAcc, setCashAcc)}</Field>
-                    <Field id="ret-bank" label="Hoàn chuyển khoản"><input id="ret-bank" type="number" min={0} step="any" value={bankRefund} placeholder="0" onChange={(e) => setBankRefund(e.target.value)} className={`${inputClass()} ${money}`} /></Field>
-                    <Field id="ret-bank-acc" label="Ngân hàng">{sel("ret-bank-acc", bankList, bankAcc, setBankAcc)}</Field>
-                  </div>
-                )}
-                <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <FormCard icon={Banknote} title="Xử lý tiền khi khách trả hàng">
+                <FormGrid cols={2}>
+                  <InlineField id="ret-ded" label="Khấu trừ" labelClass="sm:min-w-40" hint="Phí vận chuyển, hao hụt… trừ vào tiền khách được nhận lại"><input id="ret-ded" type="number" min={0} step="any" value={dedAmount} placeholder="0" onChange={(e) => setDedAmount(e.target.value)} className={ig(money)} /></InlineField>
+                  <InlineField id="ret-ded-reason" label="Lý do khấu trừ" labelClass="sm:min-w-40"><input id="ret-ded-reason" maxLength={200} value={dedReason} onChange={(e) => setDedReason(e.target.value)} className={igInput} /></InlineField>
+                  {refundAccounts && (<>
+                    <InlineField id="ret-cash" label="Hoàn tiền mặt" labelClass="sm:min-w-40"><input id="ret-cash" type="number" min={0} step="any" value={cashRefund} placeholder="0" onChange={(e) => setCashRefund(e.target.value)} className={ig(money)} /></InlineField>
+                    <InlineField id="ret-cash-acc" label="Quỹ tiền mặt" labelClass="sm:min-w-40">{sel("ret-cash-acc", cashList, cashAcc, setCashAcc)}</InlineField>
+                    <InlineField id="ret-bank" label="Hoàn chuyển khoản" labelClass="sm:min-w-40"><input id="ret-bank" type="number" min={0} step="any" value={bankRefund} placeholder="0" onChange={(e) => setBankRefund(e.target.value)} className={ig(money)} /></InlineField>
+                    <InlineField id="ret-bank-acc" label="Ngân hàng" labelClass="sm:min-w-40">{sel("ret-bank-acc", bankList, bankAcc, setBankAcc)}</InlineField>
+                  </>)}
+                </FormGrid>
+                <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                   <div className="flex gap-2"><dt className="text-fg-muted">Giá trị hàng trả:</dt><dd className="font-semibold tabular">{formatCurrency(total)}</dd></div>
                   <div className="flex gap-2"><dt className="text-fg-muted">Sau khấu trừ:</dt><dd className="font-semibold tabular">{formatCurrency(net)}</dd></div>
                   <div className="flex gap-2"><dt className="text-fg-muted">Hoàn lại khách:</dt><dd className="font-semibold tabular">{formatCurrency(refunded)}</dd></div>
                   <div className="flex gap-2"><dt className="text-fg-muted">Trừ vào công nợ:</dt><dd className={`font-semibold tabular ${refunded > net ? "text-danger" : ""}`}>{formatCurrency(net - refunded)}</dd></div>
                 </dl>
-              </div>
+              </FormCard>
             );
           })()}
           <div className="flex flex-wrap gap-2">
@@ -199,7 +199,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
             <ProductMultiPicker load={loadProducts} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
           </div>
         </div>
-      </div>
+      </FormCard>
     </NewPage>
   );
 }

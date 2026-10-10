@@ -25,7 +25,7 @@ describe("PartnerNewForm — tab dọc", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent).slice(0, 4)).toEqual(["Thông tin cơ bản", "Công nợ", "Lịch sử mua hàng", "Báo giá & đơn hàng"]);
     expect(tab(/Lịch sử mua hàng/)).toBeDisabled(); expect(tab(/Lịch sử mua hàng/)).toHaveAttribute("title", "Lưu trước để xem");
     expect(screen.getByLabelText(/^Tên/)).toBeVisible();
-    expect(screen.getByLabelText(/Hạn mức nợ/, { selector: "input" })).not.toBeVisible();
+    expect(screen.getByLabelText(/Hạn mức nợ/, { selector: "input" })).toBeVisible();
   });
   it("nhà cung cấp: có tab Lịch sử nhập hàng, không có tab đơn bán", () => {
     render(<PartnerNewForm kind="supplier" groups={groups} owners={[]} canPickOwner={false} />);

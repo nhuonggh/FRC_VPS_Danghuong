@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Combobox, Field, inputClass, NewPage, type ComboOption } from "@/components/ui";
+import { UserRound, Wallet } from "lucide-react";
+import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { PAYMENT_KIND_LABEL, PAYMENT_KINDS, RECEIPT_TYPE_LABEL, RECEIPT_TYPES, type VoucherDoc } from "@/server/cash/schemas";
@@ -60,44 +61,53 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
   const labels: Record<string, string> = receipt ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL;
   const listHref = `/accounting/${URL_KIND[doc]}`;
   return (
-    <NewPage backHref={editing ? `${listHref}/${id}` : listHref} backLabel={editing ? "Quay lại phiếu" : "Quay lại danh sách"}
+    <NewPage bare backHref={editing ? `${listHref}/${id}` : listHref} backLabel={editing ? "Quay lại phiếu" : "Quay lại danh sách"}
       title={editing ? `Sửa ${receipt ? "phiếu thu" : "phiếu chi"} ${code}` : receipt ? "Lập phiếu thu" : "Lập phiếu chi"} submitLabel={editing ? "Lưu thay đổi" : "Lưu phiếu"}
-      isDirty={() => Boolean(amount || note)} onSubmit={submit}>
-      <div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="type" label={receipt ? "Loại phiếu thu" : "Loại phiếu chi"} required>
-            <select id="type" value={type} disabled={editing} onChange={(e) => { setType(e.target.value); setPartner(null); setOrder(""); }} className={inputClass()}>
+      isDirty={() => Boolean(amount || note)} onSubmit={submit}
+      footerInfo={amount ? <span className="text-sm font-semibold">Số tiền: <b className="ml-1 text-lg text-accent tabular">{Number(amount).toLocaleString("vi-VN")}</b></span> : undefined}>
+      <FormCard icon={UserRound} title="Thông tin phiếu">
+        <FormGrid cols={2}>
+          <InlineField id="type" label={receipt ? "Loại phiếu thu" : "Loại phiếu chi"} required>
+            <select id="type" value={type} disabled={editing} onChange={(e) => { setType(e.target.value); setPartner(null); setOrder(""); }} className={`${igInput} cursor-pointer`}>
               {types.map((t) => <option key={t} value={t}>{labels[t]}</option>)}
             </select>
-          </Field>
-          <Field id="date" label="Ngày" required>
-            <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass()} />
-          </Field>
-        </div>
-        {showPartner && <Combobox label={partnerRole === "supplier" ? "Nhà cung cấp" : partnerRole === "customer" ? "Khách hàng" : "Đối tác (tuỳ chọn)"} value={partner} loadOptions={load} placeholder="Tìm theo mã hoặc tên…" onChange={(p) => { setPartner(p); setOrder(""); }} />}
-        {receipt && type === "THU_NO" && (
-          <Field id="order" label="Thu theo đơn (tuỳ chọn)" hint="Chọn đơn để cập nhật trạng thái thanh toán của đơn; bỏ trống = thu nợ chung.">
-            <select id="order" value={order} disabled={!partner} onChange={(e) => setOrder(e.target.value ? Number(e.target.value) : "")} className={inputClass()}>
-              <option value="">Không gắn đơn</option>
-              {orders.map((o) => <option key={o.value} value={o.value}>{o.label}{o.hint ? ` · ${o.hint}` : ""}</option>)}
-            </select>
-          </Field>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="account" label={receipt ? "Vào quỹ / tài khoản" : "Chi từ quỹ / tài khoản"} required>
-            <select id="account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={inputClass()}>
+          </InlineField>
+          <InlineField id="date" label="Ngày" required>
+            <input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
+          </InlineField>
+          {showPartner && (
+            <InlineField id="partner" label={partnerRole === "supplier" ? "Nhà cung cấp" : partnerRole === "customer" ? "Khách hàng" : "Đối tác"} required={needsPartner} className="md:col-span-2">
+              <div className={igCombo}>
+                <Combobox hideLabel label={partnerRole === "supplier" ? "Nhà cung cấp" : partnerRole === "customer" ? "Khách hàng" : "Đối tác (tuỳ chọn)"} value={partner} loadOptions={load} placeholder="Tìm theo mã hoặc tên…" onChange={(p) => { setPartner(p); setOrder(""); }} />
+              </div>
+            </InlineField>
+          )}
+          {receipt && type === "THU_NO" && (
+            <InlineField id="order" label="Thu theo đơn" className="md:col-span-2" hint="Tuỳ chọn: chọn đơn để cập nhật trạng thái thanh toán của đơn; bỏ trống = thu nợ chung.">
+              <select id="order" value={order} disabled={!partner} onChange={(e) => setOrder(e.target.value ? Number(e.target.value) : "")} className={`${igInput} cursor-pointer`}>
+                <option value="">Không gắn đơn</option>
+                {orders.map((o) => <option key={o.value} value={o.value}>{o.label}{o.hint ? ` · ${o.hint}` : ""}</option>)}
+              </select>
+            </InlineField>
+          )}
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Wallet} title="Thanh toán">
+        <FormGrid cols={2}>
+          <InlineField id="account" label={receipt ? "Vào quỹ / tài khoản" : "Chi từ quỹ / tài khoản"} required>
+            <select id="account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={`${igInput} cursor-pointer`}>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.type === "BANK" ? " (ngân hàng)" : ""}</option>)}
             </select>
-          </Field>
-          <Field id="amount" label="Số tiền" required>
-            <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass()} tabular`} />
-          </Field>
-        </div>
-        <Field id="note" label="Ghi chú">
-          <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" />
-        </Field>
-        <p className="text-sm text-fg-secondary">Phiếu được ghi vào sổ quỹ và công nợ ngay; thủ quỹ sẽ kiểm tra sau.</p>
-      </div>
+          </InlineField>
+          <InlineField id="amount" label="Số tiền" required>
+            <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+          </InlineField>
+          <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2">
+            <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} />
+          </InlineField>
+        </FormGrid>
+        <p className="mt-3 text-sm text-fg-secondary">Phiếu được ghi vào sổ quỹ và công nợ ngay; thủ quỹ sẽ kiểm tra sau.</p>
+      </FormCard>
     </NewPage>
   );
 }

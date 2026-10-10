@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PrintButton } from "@/components/print/PrintButton";
-import { Badge, DetailField, ReasonDialog, inputClass, Field } from "@/components/ui";
+import { Badge, DetailField, ReasonDialog, InlineField, igInput, igArea } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -148,14 +148,14 @@ function AdjustDialog({ open, onClose, v, accounts, idemKey, onDone }: { open: b
         <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-lg border border-border bg-raised p-5 shadow-lg">
           <Dialog.Title className="text-base font-semibold">Yêu cầu điều chỉnh {v.code}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Thủ quỹ duyệt xong, hệ thống ghi dòng đảo + dòng mới vào sổ quỹ và công nợ (không sửa dòng đã kiểm tra).</Dialog.Description>
-          <Field id="adj-kind" label="Nội dung"><select id="adj-kind" value={kind} onChange={(e) => setKind(e.target.value as "AMOUNT" | "VOID")} className={inputClass()}><option value="AMOUNT">Đổi số tiền / quỹ</option><option value="VOID">Hủy phiếu</option></select></Field>
+          <InlineField id="adj-kind" label="Nội dung"><select id="adj-kind" value={kind} onChange={(e) => setKind(e.target.value as "AMOUNT" | "VOID")} className={igInput}><option value="AMOUNT">Đổi số tiền / quỹ</option><option value="VOID">Hủy phiếu</option></select></InlineField>
           {kind === "AMOUNT" && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field id="adj-amount" label={`Số tiền mới (hiện ${formatCurrency(v.amount)})`}><input id="adj-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass()} tabular`} /></Field>
-              <Field id="adj-account" label="Quỹ mới"><select id="adj-account" value={accountId} onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : "")} className={inputClass()}><option value="">Giữ nguyên</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+              <InlineField id="adj-amount" label={`Số tiền mới (hiện ${formatCurrency(v.amount)})`}><input id="adj-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+              <InlineField id="adj-account" label="Quỹ mới"><select id="adj-account" value={accountId} onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Giữ nguyên</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>
             </div>
           )}
-          <Field id="adj-reason" label="Lý do" required><textarea id="adj-reason" rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-sm border border-border bg-canvas px-3 py-2 text-sm" /></Field>
+          <InlineField id="adj-reason" label="Lý do" required multiline><textarea id="adj-reason" rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Gửi yêu cầu</button></div>
         </Dialog.Content>

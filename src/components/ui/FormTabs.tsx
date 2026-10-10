@@ -93,9 +93,9 @@ export function FormTabsNav({ tabs, active, errorTabs, onSelect }: NavProps) {
 }
 
 /** Thanh tab ngang cuộn được (<1024px) phía trên nội dung. */
-export function FormTabsBar({ tabs, active, errorTabs, onSelect }: NavProps) {
+export function FormTabsBar({ tabs, active, errorTabs, onSelect, className }: NavProps & { className?: string }) {
   return (
-    <div role="tablist" aria-orientation="horizontal" aria-label="Các nhóm thông tin" className="flex overflow-x-auto border-b border-border px-2 lg:hidden" onKeyDown={(e) => onKeys(e, tabs, active, onSelect)}>
+    <div role="tablist" aria-orientation="horizontal" aria-label="Các nhóm thông tin" className={clsx("flex overflow-x-auto border-b border-border px-2", className ?? "lg:hidden")} onKeyDown={(e) => onKeys(e, tabs, active, onSelect)}>
       {tabs.map((t) => <TabButton key={t.key} tab={t} active={t.key === active} hasError={errorTabs.includes(t.key)} onSelect={onSelect} horizontal />)}
     </div>
   );
