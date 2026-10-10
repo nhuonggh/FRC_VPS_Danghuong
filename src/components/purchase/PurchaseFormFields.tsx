@@ -6,6 +6,7 @@ import { addPickedLines, Combobox, Field, inputClass, ProductMultiPicker, useLin
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
+import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
 import type { PurchaseInput } from "@/server/purchase/schemas";
 import type { ProductOption } from "@/server/products/queries";
 
@@ -43,6 +44,40 @@ export function PurchaseNoteField({ form }: FormProps) {
   </>;
 }
 
+/**
+ * Nhập hàng theo kích thước (tôn mua từ nơi khác về bán): chọn sản phẩm, gõ `7.1*7+6.8*1` (dài*số tấm, nối bằng +) → mỗi số hạng một dòng,
+ * SL = dài × số tấm (md, đơn vị gốc nên kho/FIFO không đổi), ghi chú cuộn ghi `7,1 m × 1,08 × 7 = 53,676 m²`. Giá nhập nhập theo md hoặc theo m² (liên động qua tỷ lệ m²/md, mặc định 1).
+ */
+function PurchaseDimensionEntry({ loadProducts, onAdd }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void }) {
+  const [product, setProduct] = useState<ProductOption | null>(null);
+  const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [error, setError] = useState(""), [key, setKey] = useState(0);
+  const r = Number(ratio.replace(",", ".")) || 0;
+  const submit = () => {
+    if (!product) { setError("Chọn sản phẩm trước."); return; }
+    const parsed = parseLengthExpr(len);
+    if ("error" in parsed) { setError(parsed.error); return; }
+    if (!(r > 0)) { setError("Tỷ lệ m²/md phải lớn hơn 0."); return; }
+    const price = Number(perMd);
+    if (perMd.trim() === "" || !(price >= 0)) { setError("Nhập giá nhập."); return; }
+    onAdd(product, parsed.terms.map((t) => ({ productId: product.value, unit: product.baseUnit, factor: 1, qty: termQty(t), purchasePrice: price, rollInfo: termNote(t, r) })) as PurchaseInput["lines"]);
+    setProduct(null); setLen(""); setPerMd(""); setError(""); setKey((k) => k + 1);
+  };
+  const enter = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
+  const small = `${inputClass()} tabular text-right`;
+  return <div className="rounded-sm border border-dashed border-border p-3">
+    <h3 className="text-sm font-semibold">Nhập theo kích thước</h3>
+    <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="xl:col-span-2"><Combobox key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setError(""); }} /></div>
+      <Field id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={inputClass()} /></Field>
+      <Field id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></Field>
+      <Field id="pd-price" label="Giá nhập/md"><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => setPerMd(e.target.value)} onKeyDown={enter} className={small} /></Field>
+      <Field id="pd-m2" label="Giá nhập/m²" hint="liên động với giá/md"><input id="pd-m2" type="number" min={0} step="any" value={perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : ""} onChange={(e) => setPerMd(e.target.value === "" || r <= 0 ? "" : String(pricePerMd(Number(e.target.value), r)))} onKeyDown={enter} className={small} /></Field>
+    </div>
+    {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+    <div className="mt-3 flex justify-end"><button type="button" onClick={submit} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Thêm vào phiếu</button></div>
+  </div>;
+}
+
 /** Bảng dòng hàng + nút thêm dòng / chọn nhiều + tiền hàng. Trên mobile mỗi dòng là một thẻ. */
 export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & { initialProducts?: ProductOption[] }) {
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
@@ -60,7 +95,17 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     setProducts((current) => new Map([...current, ...picked.map((row) => [row.value, row] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyPurchaseLine, productId: p.value, unit: p.baseUnit, factor: 1 }), { update, append: (vs) => append(vs) });
   };
+  /** Dòng từ khối nhập theo kích thước: lấp dòng trống trước, còn lại thêm cuối. */
+  const addDimensionRows = (product: ProductOption, rows: PurchaseInput["lines"]) => {
+    setProducts((current) => new Map(current).set(product.value, product));
+    const current = getValues("lines");
+    const blanks = current.flatMap((l, i) => (l?.productId || asNumber(l?.qty) ? [] : [i]));
+    rows.slice(0, blanks.length).forEach((row, k) => update(blanks[k]!, row));
+    const rest = rows.slice(blanks.length);
+    if (rest.length) append(rest);
+  };
   return <div className="space-y-5">
+    <PurchaseDimensionEntry loadProducts={loadProducts} onAdd={addDimensionRows} />
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[900px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">

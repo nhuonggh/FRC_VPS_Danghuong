@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { createBomVersionSchema } from "@/server/bom/schemas";
-import { createBomVersion, setProcessingRatio } from "@/server/bom/service";
+import { parseListParams } from "@/lib/query-params";
+import { PRODUCT_FILTER_KEYS } from "@/server/products/queries";
+import { bulkSetProcessingLinks, createBomVersion, setProcessingRatio, unlinkProcessingType } from "@/server/bom/service";
 import { getBom } from "@/server/bom/queries";
 import { prisma, resetDb } from "../helpers/db";
 import { makeProcessingType, makeProduct, makeUser } from "../helpers/factories";
@@ -37,5 +39,45 @@ describe("setProcessingRatio", () => {
     await expect(set(manager, 1.23456, false)).rejects.toThrow();
     const other = await makeProduct({ kind: "THANH_PHAM" });
     expect((await prisma.$transaction((db) => setProcessingRatio(db, manager, { productId: other.id, processingTypeId: pt.id, ratio: 1.1, onlyIfMissing: false }))).saved).toBe(true);
+  });
+});
+
+describe("gắn kiểu gia công cho sản phẩm", () => {
+  it("ratio null = chỉ gắn kiểu (dùng mặc định của kiểu); người bán chưa có tỷ lệ vẫn khai báo lần đầu được", async () => {
+    const other = await makeProduct({ kind: "THANH_PHAM" });
+    const link = (actor: Actor, ratio: number | null, onlyIfMissing: boolean) => prisma.$transaction((db) => setProcessingRatio(db, actor, { productId: other.id, processingTypeId: pt.id, ratio, onlyIfMissing }));
+    expect(await link(manager, null, false)).toMatchObject({ saved: true, ratio: null });
+    expect(await prisma.productProcessingRatio.count({ where: { productId: other.id } })).toBe(1);
+    expect(await link(seller, 1.08, true)).toMatchObject({ saved: true, ratio: "1.08" });
+  });
+  it("bỏ kiểu gia công: cần quyền quản lý, có audit; bỏ kiểu chưa gắn thì không lỗi", async () => {
+    await set(manager, 1.08, false);
+    await expect(prisma.$transaction((db) => unlinkProcessingType(db, seller, { productId: fg.id, processingTypeId: pt.id }))).rejects.toThrow();
+    expect(await prisma.$transaction((db) => unlinkProcessingType(db, manager, { productId: fg.id, processingTypeId: pt.id }))).toEqual({ removed: true });
+    expect(await prisma.productProcessingRatio.count({ where: { productId: fg.id } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { action: "product.unlink_processing_type" } })).toBe(1);
+    expect(await prisma.$transaction((db) => unlinkProcessingType(db, manager, { productId: fg.id, processingTypeId: pt.id }))).toEqual({ removed: false });
+  });
+});
+
+describe("gắn / bỏ kiểu gia công hàng loạt", () => {
+  const bulk = (actor: Actor, o: Partial<Parameters<typeof bulkSetProcessingLinks>[2]> & { action: "link" | "unlink" }) => prisma.$transaction((db) => bulkSetProcessingLinks(db, actor, { processingTypeId: pt.id, ratio: null, ...o }));
+  it("gắn cho nhiều SP: SP đã có giữ tỷ lệ riêng; có ratio thì đặt lại cho tất cả; có audit", async () => {
+    const a = await makeProduct({ kind: "THANH_PHAM" }); const b = await makeProduct({ kind: "THANH_PHAM" });
+    await set(manager, 1.2, false); // fg đã có tỷ lệ riêng 1.2
+    expect(await bulk(manager, { action: "link", ids: [fg.id, a.id, b.id] })).toEqual({ selected: 3, changed: 2 });
+    expect(Number((await prisma.productProcessingRatio.findFirstOrThrow({ where: { productId: fg.id } })).ratio)).toBe(1.2);
+    expect((await prisma.productProcessingRatio.findFirstOrThrow({ where: { productId: a.id } })).ratio).toBeNull();
+    expect(await bulk(manager, { action: "link", ids: [fg.id, a.id], ratio: 1.08 })).toEqual({ selected: 2, changed: 2 });
+    expect(Number((await prisma.productProcessingRatio.findFirstOrThrow({ where: { productId: fg.id } })).ratio)).toBe(1.08);
+    expect(await prisma.auditLog.count({ where: { action: "product.bulk_link_processing" } })).toBe(2);
+  });
+  it("bỏ hàng loạt; theo bộ lọc; từ chối người không quản lý và danh sách rỗng", async () => {
+    const a = await makeProduct({ kind: "THANH_PHAM" });
+    await bulk(manager, { action: "link", ids: [fg.id, a.id] });
+    await expect(bulk(seller, { action: "unlink", ids: [fg.id] })).rejects.toThrow();
+    await expect(bulk(manager, { action: "unlink", ids: [] })).rejects.toThrow();
+    expect(await bulk(manager, { action: "unlink", filter: parseListParams({ kind: "THANH_PHAM" }, PRODUCT_FILTER_KEYS) })).toMatchObject({ changed: 2 });
+    expect(await prisma.productProcessingRatio.count()).toBe(0);
   });
 });

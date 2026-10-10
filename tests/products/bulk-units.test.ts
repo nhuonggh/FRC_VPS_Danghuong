@@ -49,7 +49,7 @@ describe("sửa nhanh tỷ trọng sản phẩm", () => {
     expect(bad.failed).toBe(2);
     const buf = await exportProductsXlsx(prisma, parseListParams({}, PRODUCT_FILTER_KEYS));
     const ExcelJS = (await import("exceljs")).default; const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf as unknown as ArrayBuffer);
-    const ws = wb.worksheets[0]!; expect(String(ws.getRow(1).getCell(8).value)).toBe("Tỷ trọng"); expect(ws.rowCount).toBe(4);
+    const ws = wb.worksheets[0]!; expect(String(ws.getRow(1).getCell(9).value)).toBe("Tỷ trọng"); expect(ws.rowCount).toBe(4);
   });
 });
 

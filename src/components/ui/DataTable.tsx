@@ -49,6 +49,8 @@ interface Props<T> {
   /** Cột sort hiện tại ('-name' = giảm dần). */
   sort?: string;
   buildSortHref?: (sort: string | undefined) => string;
+  /** Ô chọn nhiều dòng (thao tác hàng loạt): bỏ trống = không có cột chọn. */
+  selection?: { selected: ReadonlySet<string | number>; onChange: (next: Set<string | number>) => void };
 }
 
 function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -65,7 +67,7 @@ function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
 /** Ô rỗng (null/undefined/false/"") → "—", không bao giờ để trống hay hiện 0 thay cho "chưa có". */
 const isEmptyNode = (n: React.ReactNode) => n === null || n === undefined || n === false || n === "";
 
-export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref }: Props<T>) {
+export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection }: Props<T>) {
   const router = useRouter();
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
@@ -90,6 +92,12 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }
+
+  const keys = rows.map(rowKey);
+  const allOn = !!selection && keys.length > 0 && keys.every((k) => selection.selected.has(k));
+  const toggle = (k: string | number) => { if (!selection) return; const n = new Set(selection.selected); if (n.has(k)) n.delete(k); else n.add(k); selection.onChange(n); };
+  const toggleAll = () => { if (!selection) return; const n = new Set(selection.selected); for (const k of keys) { if (allOn) n.delete(k); else n.add(k); } selection.onChange(n); };
+  const box = "h-4 w-4 cursor-pointer accent-[var(--accent)]";
 
   const actionsCell = (row: T) => {
     const actions = rowActions?.(row) ?? [];
@@ -155,6 +163,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
       <table className="hidden w-full border-collapse text-sm md:table">
         <thead className="sticky top-0 z-header bg-surface">
           <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary">
+            {selection && <th scope="col" className="w-10 px-3 py-2"><input type="checkbox" aria-label="Chọn tất cả dòng trong trang" checked={allOn} onChange={toggleAll} className={box} /></th>}
             {visible.map((c) => {
               const dir = sort === c.key ? "ascending" : sort === `-${c.key}` ? "descending" : "none";
               return (
@@ -182,6 +191,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
                 if (shouldNavigateOnRowClick(e, window.getSelection()?.toString() ?? "")) router.push(rowHref(row));
               } : undefined}
               className={clsx("border-b border-border last:border-b-0 hover:bg-hover", rowHref && "cursor-pointer")}>
+              {selection && <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="Chọn dòng" checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} className={box} /></td>}
               {visible.map((c) => (
                 <td key={c.key} className={clsx("px-3 py-2", c.align === "right" && "tabular text-right")}>
                   {c === primary && rowHref ? (
@@ -199,6 +209,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
       <ul className="divide-y divide-[var(--border-default)] md:hidden">
         {rows.map((row) => (
           <li key={rowKey(row)} className="flex items-start justify-between gap-2 p-3">
+            {selection && <input type="checkbox" aria-label="Chọn dòng" checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} className={`${box} mt-1 shrink-0`} />}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">
                 {rowHref ? <Link href={rowHref(row)}>{cell(primary, row)}</Link> : cell(primary, row)}

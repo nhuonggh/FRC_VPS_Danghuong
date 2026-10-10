@@ -70,7 +70,7 @@ async function main() {
   const productSheet = buildProductRows(data(sheets["Sản phẩm"]).map((r) => r.slice(0, 10)), legacy);
   const pspec = productImportSpec(); const seenP = new Set<string>(); const products: Record<string, unknown>[] = [];
   productSheet.rows.forEach((r, i) => {
-    const p = pspec.parseRow(Object.fromEntries(["code", "name", "kind", "baseUnit", "minStock", "unit", "factor", "isCoil", "stopped", "note"].map((k, j) => [k, r[j] ?? null])), { groups: new Map() });
+    const p = pspec.parseRow(Object.fromEntries(["code", "name", "kind", "baseUnit", "minStock", "unit", "factor", "isCoil", "stopped", "note"].map((k, j) => [k, r[j] ?? null])), { groups: new Map(), types: new Map() });
     if (!p.ok) return fail("Sản phẩm", i + 1, p.errors); if (seenP.has(p.data.code)) return fail("Sản phẩm", i + 1, ["Trùng mã."]); seenP.add(p.data.code);
     const d = p.data; products.push({ code: d.code, name: d.name, kind: d.kind, baseUnit: d.baseUnit, minStock: d.minStock, unit: d.unit, factor: d.factor, isCoil: d.isCoil, isActive: d.isActive, note: d.note });
   });

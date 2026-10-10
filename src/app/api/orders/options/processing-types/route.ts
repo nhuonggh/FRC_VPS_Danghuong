@@ -23,8 +23,8 @@ export const GET = apiHandler(async (req) => {
     prisma.processingType.findMany({ select: { id: true, ratio: true } }),
   ]);
   const withBom = new Set(boms.map((b) => b.processingTypeId));
-  const ratioOf = new Map(ratios.map((r) => [r.processingTypeId, Number(r.ratio)]));
+  const linked = new Map(ratios.map((r) => [r.processingTypeId, r.ratio === null ? null : Number(r.ratio)]));
   const defaultOf = new Map(types.map((t) => [t.id, t.ratio === null ? null : Number(t.ratio)]));
-  // Tỷ lệ riêng của sản phẩm ưu tiên; chưa có thì dùng tỷ lệ mặc định của kiểu gia công; chưa có nữa ⇒ null (form mặc định 1).
-  return all.map((o) => ({ ...o, ratio: ratioOf.get(Number(o.value)) ?? defaultOf.get(Number(o.value)) ?? null, hasBom: withBom.has(Number(o.value)) }));
+  // Chỉ hiện kiểu đã gắn cho sản phẩm (Sản phẩm → tab Gia công). Tỷ lệ riêng ưu tiên; chưa có thì mặc định của kiểu; chưa có nữa ⇒ null (form mặc định 1).
+  return all.filter((o) => linked.has(Number(o.value))).map((o) => ({ ...o, ratio: linked.get(Number(o.value)) ?? defaultOf.get(Number(o.value)) ?? null, hasBom: withBom.has(Number(o.value)) }));
 });

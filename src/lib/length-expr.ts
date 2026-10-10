@@ -33,3 +33,18 @@ export const pricePerM2 = (perMd: number, ratio: number) => (ratio > 0 ? r(perMd
 const fmt = (v: number) => String(v).replace(".", ",");
 /** Ghi chú dòng: "7,1 m × 1,08 × 7 = 53,676 m²". */
 export const termNote = (t: LengthTerm, ratio: number) => `${fmt(t.length)} m × ${fmt(ratio)} × ${t.pieces} = ${fmt(termArea(t, ratio))} m²`;
+
+const DIM_NOTE = /(?: — )?(\d+(?:,\d+)?) m × (\d+(?:,\d+)?) × (\d+) = (\d+(?:,\d+)?) m²$/;
+/**
+ * Dòng bán theo kích thước nhận diện qua ghi chú `7,1 m × 1,08 × 7 = 53,676 m²` (do `termNote` sinh) — không cần cột riêng,
+ * dòng cũ cũng sửa được. `user` là phần ghi chú tự do đứng trước. Người dùng sửa tay làm hỏng mẫu ⇒ thành dòng thường.
+ */
+export function parseDimNote(note: string | null | undefined): { user: string; length: number; ratio: number; pieces: number } | null {
+  const m = (note ?? "").match(DIM_NOTE);
+  if (!m) return null;
+  const length = toNum(m[1]!), ratio = toNum(m[2]!), pieces = Number(m[3]);
+  if (!(length > 0) || !(ratio > 0) || !(pieces > 0)) return null;
+  return { user: (note ?? "").slice(0, m.index).trim(), length, ratio, pieces };
+}
+/** Ghép lại ghi chú dòng: phần tự do + mẫu kích thước (đúng định dạng `parseDimNote` đọc được). */
+export const buildDimNote = (user: string, t: LengthTerm, ratio: number) => [user.trim(), termNote(t, ratio)].filter(Boolean).join(" — ");

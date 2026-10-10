@@ -18,7 +18,7 @@ import type { ProductOption } from "@/server/products/queries";
 import type { SaleFormOptions } from "@/server/sales/form-options";
 import { SALE_MAX_LINES, SALE_PAYMENT_LABELS, SALE_PAYMENT_METHODS, saleOrderSchema, type SaleOrderInput } from "@/server/sales/schemas";
 import type { SalePricingDTO } from "@/server/sales/pricing";
-import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
+import { buildDimNote, parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termArea, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
 
@@ -471,6 +471,17 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
     onExpand(parsed.terms, ratio);
   };
 
+  // Dòng sinh từ chiều dài: sửa Dài / Số tấm / Giá m² ngay tại dòng, SL (md), ghi chú và thành tiền tự tính lại (như màn bán hàng cũ).
+  const dim = typeId ? parseDimNote(line?.note) : null;
+  const setDim = (patch: { length?: number; pieces?: number }) => {
+    if (!dim) return;
+    const t: LengthTerm = { length: patch.length ?? dim.length, pieces: patch.pieces ?? dim.pieces };
+    if (!(t.length > 0) || !Number.isInteger(t.pieces) || t.pieces <= 0) return;
+    setValue(`lines.${index}.qty`, termQty(t), { shouldValidate: true, shouldDirty: true });
+    setValue(`lines.${index}.note`, buildDimNote(dim.user, t, dim.ratio), { shouldDirty: true });
+  };
+  const numIn = (v: string) => { const n = Number(v.replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+
   const cell = "border border-border p-1.5 align-middle"; // ô có viền: bảng dạng lưới như bảng tính
   return (
     <tr className="align-middle">
@@ -534,7 +545,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
                 <input aria-label={`Tỷ lệ m²/md dòng ${index + 1}`} inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} placeholder="1" className={`${inputClass()} w-20 tabular text-right`} />
               </label>
             )}
-            {ratio > 0 && (<>
+            {ratio > 0 && !dim && (<>
               <label className="flex items-center gap-1">Giá/m²
                 <input aria-label={`Đơn giá theo m² dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), ratio) : ""}
                   onChange={(e) => setValue(`lines.${index}.salePrice`, e.target.value === "" ? (undefined as never) : pricePerMd(Number(e.target.value), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass()} w-28 tabular text-right`} />
@@ -549,7 +560,20 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           </div>
         )}
       </td>
-      <td data-label="Ghi chú" className={cell}><input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
+      <td data-label="Ghi chú" className={cell} data-wide={dim ? true : undefined}>
+        {dim ? (<>
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <input aria-label={`Chiều dài (m) dòng ${index + 1}`} inputMode="decimal" defaultValue={String(dim.length).replace(".", ",")} key={`l${dim.length}`} onBlur={(e) => { const v = numIn(e.target.value); if (v > 0 && v !== dim.length) setDim({ length: v }); else e.target.value = String(dim.length).replace(".", ","); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} className={`${inputClass()} w-20 tabular text-right`} />
+            <span>m × {String(dim.ratio).replace(".", ",")} ×</span>
+            <input aria-label={`Số tấm dòng ${index + 1}`} inputMode="numeric" defaultValue={String(dim.pieces)} key={`p${dim.pieces}`} onBlur={(e) => { const v = numIn(e.target.value); if (Number.isInteger(v) && v > 0 && v !== dim.pieces) setDim({ pieces: v }); else e.target.value = String(dim.pieces); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} className={`${inputClass()} w-14 tabular text-right`} />
+            <span className="tabular">= {String(termArea({ length: dim.length, pieces: dim.pieces }, dim.ratio)).replace(".", ",")} m² ×</span>
+            <input aria-label={`Đơn giá theo m² dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), dim.ratio) : ""}
+              onChange={(e) => setValue(`lines.${index}.salePrice`, e.target.value === "" ? (undefined as never) : pricePerMd(Number(e.target.value), dim.ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass()} w-28 tabular text-right`} />
+            <span className="tabular">= {formatCurrency(amount)}</span>
+          </div>
+          <input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={120} placeholder="Ghi chú thêm" value={dim.user} onChange={(e) => setValue(`lines.${index}.note`, buildDimNote(e.target.value, { length: dim.length, pieces: dim.pieces }, dim.ratio), { shouldDirty: true })} className={`${inputClass()} mt-1`} />
+        </>) : <input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={200} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} />}
+      </td>
       <td data-label="Thành tiền" className={cell}><div className="flex h-11 items-center justify-end rounded-sm bg-hover px-2 font-semibold tabular md:h-9">{formatCurrency(amount)}</div></td>
       <td data-action className={`${cell} text-center`}><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={onRemove} disabled={!canRemove} className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9"><Trash2 size={16} aria-hidden /></button></td>
     </tr>

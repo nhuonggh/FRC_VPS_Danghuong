@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PurchaseDetail } from "@/components/purchase/PurchaseDetail";
@@ -28,6 +28,24 @@ describe("PurchaseNewForm — một trang", () => {
     await userEvent.click(screen.getByRole("button", { name: "Lập phiếu" }));
     await waitFor(() => expect(document.querySelectorAll('[aria-invalid="true"]').length).toBeGreaterThan(0));
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+  it("nhập theo kích thước: 7.1*7+6.8*1 + giá/md → 2 dòng, SL = dài × số tấm, ghi chú cuộn ghi diện tích; giá/m² liên động", async () => {
+    const product = { value: 10, label: "TX01 — Tôn xốp", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] };
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [product] : []));
+    render(<PurchaseNewForm today="2026-09-30" />);
+    const box = screen.getByRole("combobox", { name: "Sản phẩm (nhập theo kích thước)" });
+    await userEvent.click(box); await userEvent.type(box, "ton");
+    await userEvent.click((await within(await screen.findByRole("listbox")).findAllByRole("option"))[0]!);
+    await userEvent.type(screen.getByLabelText("Chiều dài"), "7.1*7+6.8*1");
+    await userEvent.clear(screen.getByLabelText("Tỷ lệ m²/md")); await userEvent.type(screen.getByLabelText("Tỷ lệ m²/md"), "1,08");
+    await userEvent.type(screen.getByLabelText("Giá nhập/md"), "162000");
+    expect(screen.getByLabelText("Giá nhập/m²")).toHaveValue(150000);
+    await userEvent.click(screen.getByRole("button", { name: "Thêm vào phiếu" }));
+    await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 2")).toHaveValue(6.8));
+    expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(49.7);
+    expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(162000);
+    expect(screen.getByLabelText("Ghi chú cuộn dòng 1")).toHaveValue("7,1 m × 1,08 × 7 = 53,676 m²");
+    expect(screen.getByLabelText("Ghi chú cuộn dòng 2")).toHaveValue("6,8 m × 1,08 × 1 = 7,344 m²");
   });
 });
 

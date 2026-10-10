@@ -5,6 +5,8 @@ import { ictYmd } from "@/lib/time";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError, FieldConflictError, ValidationError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
+import type { ListParams } from "@/lib/query-params";
+import { productWhere } from "@/server/products/queries";
 import { dateOnly } from "./resolve";
 import { BOM_MATERIAL_KINDS, BOM_TARGET_KINDS, type CreateBomVersionInput } from "./schemas";
 
@@ -127,19 +129,60 @@ const ratioOf = (v: unknown) => {
 };
 
 /**
- * Đặt tỷ lệ m²/md của (sản phẩm × kiểu gia công) — không cần có định mức.
- * `onlyIfMissing` (người bán): chỉ ghi khi chưa có — đã có thì giữ nguyên, việc sửa thuộc về người quản lý (`bom.manage` hoặc `product.manage`).
+ * Gắn kiểu gia công cho sản phẩm và đặt tỷ lệ m²/md của (sản phẩm × kiểu) — không cần có định mức. `ratio` null ⇒ chỉ gắn, dùng tỷ lệ mặc định của kiểu.
+ * `onlyIfMissing` (người bán): chỉ ghi khi chưa có tỷ lệ — đã có thì giữ nguyên, việc sửa thuộc về người quản lý (`bom.manage` hoặc `product.manage`).
  */
-export async function setProcessingRatio(db: Db, actor: Actor, o: { productId: number; processingTypeId: number; ratio: number; onlyIfMissing: boolean }) {
+export async function setProcessingRatio(db: Db, actor: Actor, o: { productId: number; processingTypeId: number; ratio: number | null; onlyIfMissing: boolean }) {
   if (o.onlyIfMissing) assertCan(actor.perms, "order.create");
   else if (!actor.perms.has("bom.manage") && !actor.perms.has("product.manage")) assertCan(actor.perms, "bom.manage");
-  const ratio = ratioOf(o.ratio);
+  const ratio = o.ratio === null ? null : ratioOf(o.ratio);
   const [product, type] = await Promise.all([db.product.findUnique({ where: { id: o.productId }, select: { id: true } }), db.processingType.findUnique({ where: { id: o.processingTypeId }, select: { id: true } })]);
   if (!product || !type) throw new DomainError("Không tìm thấy sản phẩm hoặc kiểu gia công.", 404);
   const key = { productId_processingTypeId: { productId: o.productId, processingTypeId: o.processingTypeId } };
   const cur = await db.productProcessingRatio.findUnique({ where: key });
-  if (o.onlyIfMissing && cur) return { ratio: cur.ratio.toString(), saved: false };
+  if (o.onlyIfMissing && cur?.ratio) return { ratio: cur.ratio.toString(), saved: false };
   await db.productProcessingRatio.upsert({ where: key, create: { productId: o.productId, processingTypeId: o.processingTypeId, ratio, updatedBy: actor.userId }, update: { ratio, updatedBy: actor.userId } });
-  await writeAudit(db, { userId: actor.userId, action: "product.set_processing_ratio", entity: "Product", entityId: o.productId, before: { processingTypeId: o.processingTypeId, ratio: cur?.ratio.toString() ?? null }, after: { processingTypeId: o.processingTypeId, ratio: ratio.toString() } });
-  return { ratio: ratio.toString(), saved: true };
+  await writeAudit(db, { userId: actor.userId, action: "product.set_processing_ratio", entity: "Product", entityId: o.productId, before: { processingTypeId: o.processingTypeId, linked: !!cur, ratio: cur?.ratio?.toString() ?? null }, after: { processingTypeId: o.processingTypeId, linked: true, ratio: ratio?.toString() ?? null } });
+  return { ratio: ratio?.toString() ?? null, saved: true };
+}
+
+/** Bỏ kiểu gia công khỏi sản phẩm (không đụng định mức/đơn đã lập). */
+export async function unlinkProcessingType(db: Db, actor: Actor, o: { productId: number; processingTypeId: number }) {
+  if (!actor.perms.has("bom.manage") && !actor.perms.has("product.manage")) assertCan(actor.perms, "bom.manage");
+  const cur = await db.productProcessingRatio.findFirst({ where: o });
+  if (!cur) return { removed: false };
+  await db.productProcessingRatio.delete({ where: { id: cur.id } });
+  await writeAudit(db, { userId: actor.userId, action: "product.unlink_processing_type", entity: "Product", entityId: o.productId, before: { processingTypeId: o.processingTypeId, ratio: cur.ratio?.toString() ?? null } });
+  return { removed: true };
+}
+
+const BULK_LIMIT = 5000;
+
+/**
+ * Gắn / bỏ một kiểu gia công cho nhiều sản phẩm một lần (một giao dịch). Danh sách lấy từ `ids` hoặc từ bộ lọc danh sách sản phẩm (`filter`, chọn "tất cả kết quả").
+ * Gắn: sản phẩm đã có kiểu thì giữ nguyên tỷ lệ riêng, trừ khi truyền `ratio` (khi đó đặt lại cho mọi sản phẩm được chọn). Bỏ: xoá liên kết (không đụng định mức / đơn đã lập).
+ */
+export async function bulkSetProcessingLinks(db: Db, actor: Actor, o: { action: "link" | "unlink"; processingTypeId: number; ratio: number | null; ids?: number[]; filter?: ListParams }) {
+  if (!actor.perms.has("bom.manage") && !actor.perms.has("product.manage")) assertCan(actor.perms, "bom.manage");
+  const type = await db.processingType.findUnique({ where: { id: o.processingTypeId }, select: { id: true, name: true } });
+  if (!type) throw new DomainError("Không tìm thấy kiểu gia công.", 404);
+  const ratio = o.action === "link" && o.ratio !== null ? ratioOf(o.ratio) : null;
+  let ids: number[];
+  if (o.ids) ids = [...new Set(o.ids)];
+  else if (o.filter) ids = (await db.product.findMany({ where: productWhere(o.filter), select: { id: true }, take: BULK_LIMIT + 1 })).map((p) => p.id);
+  else throw new ValidationError("Chưa chọn sản phẩm nào.");
+  if (ids.length === 0) throw new ValidationError("Chưa chọn sản phẩm nào.");
+  if (ids.length > BULK_LIMIT) throw new ValidationError(`Tối đa ${BULK_LIMIT} sản phẩm mỗi lần — thu hẹp bộ lọc rồi thử lại.`);
+  let changed: number;
+  if (o.action === "link") {
+    const existing = await db.product.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    const valid = existing.map((p) => p.id);
+    const created = await db.productProcessingRatio.createMany({ data: valid.map((productId) => ({ productId, processingTypeId: type.id, ratio, updatedBy: actor.userId })), skipDuplicates: true });
+    if (ratio) await db.productProcessingRatio.updateMany({ where: { processingTypeId: type.id, productId: { in: valid } }, data: { ratio, updatedBy: actor.userId } });
+    changed = ratio ? valid.length : created.count;
+  } else {
+    changed = (await db.productProcessingRatio.deleteMany({ where: { processingTypeId: type.id, productId: { in: ids } } })).count;
+  }
+  await writeAudit(db, { userId: actor.userId, action: o.action === "link" ? "product.bulk_link_processing" : "product.bulk_unlink_processing", entity: "Product", entityId: null, after: { processingType: type.name, selected: ids.length, changed, ratio: ratio?.toString() ?? null } });
+  return { selected: ids.length, changed };
 }

@@ -106,7 +106,8 @@ model ProductProcessingRatio {
   id               Int      @id @default(autoincrement())
   productId        Int
   processingTypeId Int
-  ratio            Decimal  @db.Decimal(18, 4)
+  /// Có dòng = sản phẩm có kiểu gia công này; null = dùng tỷ lệ mặc định của kiểu.
+  ratio            Decimal? @db.Decimal(18, 4)
   updatedBy        Int
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
