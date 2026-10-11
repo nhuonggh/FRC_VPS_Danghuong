@@ -8,7 +8,7 @@ type Db = Prisma.TransactionClient | PrismaClient;
 
 /**
  * Giá bán gần nhất TRÊN MỘT ĐƠN VỊ GỐC (đơn giá dòng × hệ số: 1 đơn vị gốc = `factorUsed` đơn vị dòng).
- * `processingTypeId` ⇒ chỉ xét các dòng cùng kiểu gia công (giá tôn xốp khác giá tôn phẳng). `forPartner` = của khách này; không có thì lấy của bất kỳ khách (spec mục 31). Bỏ qua đơn đã hủy.
+ * `processingTypeId` ⇒ chỉ xét các dòng cùng kiểu gia công (giá tôn xốp khác giá tôn phẳng). `forPartner` = của khách này; không có thì lấy của bất kỳ khách (spec mục 31); chưa từng bán thì dùng giá xuất mặc định của sản phẩm. Bỏ qua đơn đã hủy.
  */
 export async function lastSalePricePerBase(db: Db, productId: number, partnerId: number, processingTypeId?: number | null): Promise<{ perBase: Prisma.Decimal; forPartner: boolean } | null> {
   const pick = { salePrice: true, factorUsed: true } as const;
@@ -16,7 +16,11 @@ export async function lastSalePricePerBase(db: Db, productId: number, partnerId:
   const own = await db.saleOrderLine.findFirst({ where: { productId, ...type, order: { partnerId, isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
   if (own) return { perBase: own.salePrice.times(own.factorUsed), forPartner: true };
   const any = await db.saleOrderLine.findFirst({ where: { productId, ...type, order: { isCancelled: false, isDraft: false } }, orderBy: [{ at: "desc" }, { id: "desc" }], select: pick });
-  return any ? { perBase: any.salePrice.times(any.factorUsed), forPartner: false } : null;
+  if (any) return { perBase: any.salePrice.times(any.factorUsed), forPartner: false };
+  // Chưa từng bán (và không lọc theo kiểu gia công): lấy giá xuất mặc định khai ở sản phẩm.
+  if (processingTypeId) return null;
+  const def = await db.product.findUnique({ where: { id: productId }, select: { salePrice: true } });
+  return def?.salePrice ? { perBase: def.salePrice, forPartner: false } : null;
 }
 
 /** Giá gợi ý theo đơn vị của dòng (factor = số đơn vị dòng trên một đơn vị gốc), làm tròn 2 số. */

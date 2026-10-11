@@ -4,9 +4,10 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { inputClass } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
+import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
-interface Row { processingTypeId: number; name: string; linked: boolean; ratio: string | null; defaultRatio: string | null }
+interface Row { processingTypeId: number; name: string; linked: boolean; ratio: string | null; defaultRatio: string | null; /** undefined = không có quyền xem giá; null = chưa từng bán kiểu này. */ stats?: { min: string | null; avg: string | null; max: string | null } | null }
 
 const trim = (v: string | null) => v?.replace(/\.?0+$/, "") ?? "";
 
@@ -47,6 +48,8 @@ export function ProcessingRatiosTab({ productId, canManage }: { productId: numbe
   if (!rows) return <p className="text-sm text-fg-muted">Đang tải…</p>;
   const linked = rows.filter((r) => r.linked);
   const rest = rows.filter((r) => !r.linked);
+  const showStats = linked.some((r) => r.stats !== undefined);
+  const money = (v: string | null | undefined) => (v ? formatCurrency(v) : "—");
   return (
     <div className="space-y-3">
       <p className="text-sm text-fg-secondary">Kiểu gia công của sản phẩm này. Chỉ các kiểu dưới đây mới hiện ở màn bán hàng; chưa có kiểu nào thì sản phẩm bán như hàng thường. Tỷ lệ m²/md để trống thì dùng tỷ lệ mặc định của kiểu.</p>
@@ -60,10 +63,10 @@ export function ProcessingRatiosTab({ productId, canManage }: { productId: numbe
         </div>
       )}
       <div className="overflow-x-auto rounded-sm border border-border">
-        <table className="w-full min-w-[480px] text-sm">
-          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Kiểu gia công</th><th className="px-3 py-2 text-right">Tỷ lệ m²/md</th><th className="px-3 py-2" /></tr></thead>
+        <table className="w-full min-w-[640px] text-sm">
+          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Kiểu gia công</th><th className="px-3 py-2 text-right">Tỷ lệ m²/md</th>{showStats && <><th className="px-3 py-2 text-right">Giá bán thấp nhất</th><th className="px-3 py-2 text-right">Trung bình</th><th className="px-3 py-2 text-right">Cao nhất</th></>}<th className="px-3 py-2" /></tr></thead>
           <tbody>
-            {linked.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-fg-muted">Chưa gắn kiểu gia công nào.</td></tr>}
+            {linked.length === 0 && <tr><td colSpan={showStats ? 6 : 3} className="px-3 py-4 text-center text-fg-muted">Chưa gắn kiểu gia công nào.</td></tr>}
             {linked.map((r) => (
               <tr key={r.processingTypeId} className="border-t border-border">
                 <td className="px-3 py-2">{r.name}</td>

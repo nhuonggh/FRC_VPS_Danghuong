@@ -121,7 +121,10 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "products", label: "Sản phẩm",
         functions: [
-          { key: "product-list", label: "Danh mục sản phẩm", desc: "~1.300 mã, đơn vị tính & quy đổi", icon: "package", view: "table", path: "/inventory/products", codes: ["11", "12"], perm: "product.view" },
+          { key: "product-group-list", label: "Nhóm sản phẩm", desc: "Nhóm hàng của sản phẩm", icon: "layers", view: "table", path: "/inventory/product-groups", codes: ["8a"], perm: "catalog.manage" },
+          { key: "product-list", label: "Danh sách sản phẩm", desc: "~1.300 mã, đơn vị tính & quy đổi", icon: "package", view: "table", path: "/inventory/products", codes: ["11", "12"], perm: "product.view" },
+          { key: "product-unit-list", label: "Đơn vị tính", desc: "Danh mục đơn vị tính của sản phẩm", icon: "ruler", view: "table", path: "/inventory/units", codes: ["11"], perm: "catalog.manage" },
+          { key: "product-processing-list", label: "Kiểu gia công hệ thống", desc: "Danh sách kiểu gia công & tỷ lệ mặc định", icon: "hammer", view: "table", path: "/inventory/processing-types", codes: ["13"], perm: "catalog.manage" },
         ],
       },
     ],

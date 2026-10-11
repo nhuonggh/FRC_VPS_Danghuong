@@ -35,6 +35,15 @@ model ProductGroup {
   @@map("product_groups")
 }
 
+/// Danh mục đơn vị tính (chọn nhanh ở form sản phẩm). Sản phẩm vẫn lưu tên đơn vị dạng chữ, không FK.
+model Unit {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  @@map("units")
+}
+
 model Partner {
   id           Int      @id @default(autoincrement())
   code         String   @unique
@@ -103,6 +112,12 @@ model Product {
   note        String?
   imageUrl    String? // ảnh minh hoạ (https hoặc /uploads/…), hiện ở form bán hàng
   groupId     Int? // nhóm hàng (tuỳ chọn)
+  purchasePrice Decimal? @db.Decimal(18, 2) // giá nhập mặc định / đơn vị gốc (tham khảo, không phải giá vốn FIFO)
+  salePrice     Decimal? @db.Decimal(18, 2) // giá xuất (bán) mặc định / đơn vị gốc
+  importUnit    String? // đơn vị tính nhập hiển thị (trống = đơn vị gốc)
+  exportUnit    String? // đơn vị tính xuất hiển thị (trống = đơn vị gốc)
+  bundleQty     Decimal? @db.Decimal(18, 3) // số cây / bó
+  qtyLabel      String? // tên số lượng
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

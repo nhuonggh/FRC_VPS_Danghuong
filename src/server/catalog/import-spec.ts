@@ -8,7 +8,7 @@ import { delegate } from "./adapters";
 export interface CatalogImportRow { key: string; data: Record<string, string | boolean | null> }
 
 const str = (value: unknown) => (value == null ? "" : String(value).trim());
-const SAMPLES: Record<string, string> = { "partner-groups": "Khách lẻ", "product-groups": "Tấm alu", warehouses: "Kho chính", vehicles: "51C-123.45", drivers: "Nguyễn Văn A", routes: "Quận 12", "expense-types": "Tiền điện", "cash-accounts": "Tiền mặt", "processing-types": "Tôn xốp" };
+const SAMPLES: Record<string, string> = { "partner-groups": "Khách lẻ", "product-groups": "Tấm alu", units: "cây", warehouses: "Kho chính", vehicles: "51C-123.45", drivers: "Nguyễn Văn A", routes: "Quận 12", "expense-types": "Tiền điện", "cash-accounts": "Tiền mặt", "processing-types": "Tôn xốp" };
 const STATUS_COLUMN: ImportColumn = { key: "status", header: "Trạng thái", sample: "Đang dùng" };
 
 /** Ô trống = giữ nguyên (null); Đang dùng/Có ⇒ bật, Đã tắt/Ngừng/Không ⇒ tắt. */
