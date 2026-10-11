@@ -13,6 +13,7 @@ function sheets_() {
   var yn = ['Có', 'Không'];
   return [
     { name: 'Nhóm khách hàng', note: 'Liệt kê các nhóm khách (vd: Khách lẻ, Đại lý, Thầu). Trang Khách hàng/NCC sẽ chọn từ danh sách này.', help: 'Nhập ở Hệ thống → Cài đặt danh mục → Nhóm khách hàng.', cols: [{ h: 'Tên nhóm', s: 'Khách lẻ', r: 1, w: 220 }] },
+    { name: 'Đơn vị tính', help: 'Đơn vị tính của sản phẩm (vd: cây, m, kg, cái). Cài đặt danh mục → Đơn vị tính.', cols: [{ h: 'Tên đơn vị', s: 'cây', r: 1, w: 160 }] },
     { name: 'Nhóm hàng', help: 'Nhóm sản phẩm (vd: Tôn, Hộp mạ kẽm, Inox). Cài đặt danh mục → Nhóm hàng; cột Nhóm hàng ở sheet Sản phẩm chọn từ danh sách này.', cols: [{ h: 'Tên nhóm hàng', s: 'Tôn', r: 1, w: 220 }] },
     { name: 'Kho', help: 'Cài đặt danh mục → Kho.', cols: [{ h: 'Tên kho', s: 'Kho chính', r: 1, w: 220 }] },
     { name: 'Xe', help: 'Cài đặt danh mục → Xe.', cols: [{ h: 'Biển số', s: '51C-123.45', r: 1, w: 180 }] },
