@@ -26,6 +26,16 @@ describe("đồng bộ danh mục sản phẩm theo file khách", () => {
     expect(await prisma.unit.count()).toBe(d.units.length);
   });
 
+  it("đã có liên kết gia công nhập tay: vẫn nạp bù, giữ nguyên liên kết cũ", async () => {
+    const d = bundle(); const target = d.products.find((p) => p.processing.length > 1)!; const user = await prisma.user.findFirstOrThrow();
+    const product = await prisma.product.findUniqueOrThrow({ where: { code: target.code } });
+    const type = await prisma.processingType.findFirstOrThrow({ where: { name: target.processing[0]! } });
+    await prisma.productProcessingRatio.create({ data: { productId: product.id, processingTypeId: type.id, ratio: 2, updatedBy: user.id } });
+    expect(await seedProductSync(prisma)).toBe(true);
+    expect(Number((await prisma.productProcessingRatio.findFirstOrThrow({ where: { productId: product.id, processingTypeId: type.id } })).ratio)).toBe(2);
+    expect(await prisma.productProcessingRatio.count()).toBe(d.products.reduce((n, p) => n + p.processing.length, 0));
+  });
+
   it("chỉ chạy một lần: sửa tay sau đó không bị nạp lại", async () => {
     expect(await seedProductSync(prisma)).toBe(true);
     await prisma.productProcessingRatio.deleteMany({ where: { product: { code: bundle().products.find((p) => p.processing.length)!.code } } });

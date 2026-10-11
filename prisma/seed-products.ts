@@ -11,6 +11,7 @@ export interface ProductSync {
   processingTypes: { name: string; ratio: number | null; stockRatio: number | null; unit: string | null }[];
   products: { code: string; name: string; group: string | null; baseUnit: string | null; qtyLabel: string | null; kind: "HANG" | "NVL" | "THANH_PHAM" | "PHU_KIEN"; weight: string | null; processing: string[] }[];
 }
+const SYNC_ACTION = "seed.product_sync";
 export const DEFAULT_SYNC_FILE = path.join(process.cwd(), "prisma", "data", "product-sync.json");
 
 /**
@@ -23,7 +24,7 @@ export async function seedProductSync(prisma: PrismaClient, opts: { file?: strin
   if (!existsSync(file)) { log("Đồng bộ sản phẩm: không có file — bỏ qua"); return false; }
   const data = JSON.parse(readFileSync(file, "utf8")) as ProductSync;
   if (data.version !== 1) throw new Error(`product-sync.json: phiên bản ${String(data.version)} không hỗ trợ`);
-  if ((await prisma.productProcessingRatio.count()) > 0) { log("Đồng bộ sản phẩm: đã đồng bộ trước đó — bỏ qua"); return false; }
+  if ((await prisma.auditLog.count({ where: { action: SYNC_ACTION } })) > 0) { log("Đồng bộ sản phẩm: đã đồng bộ trước đó — bỏ qua"); return false; }
   const user = await prisma.user.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
   if (!user) { log("Đồng bộ sản phẩm: chưa có người dùng — bỏ qua"); return false; }
 
@@ -39,7 +40,7 @@ export async function seedProductSync(prisma: PrismaClient, opts: { file?: strin
       else existingTypes.set(normalizeSearch(t.name), (await tx.processingType.create({ data: { name: t.name, ...fields } })).id);
     }
 
-    const products = new Map((await tx.product.findMany({ select: { id: true, code: true, kind: true, _count: { select: { units: true } } } })).map((p) => [p.code, p]));
+    const products = new Map((await tx.product.findMany({ select: { id: true, code: true, kind: true, groupId: true, qtyLabel: true, _count: { select: { units: true } } } })).map((p) => [p.code, p]));
     const groups = new Map((await tx.productGroup.findMany()).map((g) => [g.name, g.id]));
     const byGroup = new Map<number, number[]>(); const byLabel = new Map<string, number[]>(); const byKind = new Map<string, number[]>();
     const push = <K>(m: Map<K, number[]>, k: K, id: number) => m.set(k, [...(m.get(k) ?? []), id]);
@@ -47,9 +48,9 @@ export async function seedProductSync(prisma: PrismaClient, opts: { file?: strin
     let missing = 0, unknownType = 0;
     for (const p of data.products) {
       const row = products.get(p.code); if (!row) { missing++; continue; }
-      const gid = p.group ? groups.get(p.group) : undefined; if (gid) push(byGroup, gid, row.id);
-      if (p.qtyLabel) push(byLabel, p.qtyLabel, row.id);
-      if (p.kind !== row.kind) push(byKind, p.kind, row.id);
+      const gid = p.group ? groups.get(p.group) : undefined; if (gid && row.groupId === null) push(byGroup, gid, row.id);
+      if (p.qtyLabel && row.qtyLabel === null) push(byLabel, p.qtyLabel, row.id);
+      if (p.kind !== row.kind && row.kind === "HANG") push(byKind, p.kind, row.id);
       if (p.weight && row._count.units === 0) {
         const w = Number(p.weight); const base = (p.baseUnit ?? "").toLowerCase();
         // Tỷ trọng = kg trên 1 đơn vị gốc; hàng bán theo kg thì ngược lại: số cây trên 1 kg.
@@ -62,6 +63,7 @@ export async function seedProductSync(prisma: PrismaClient, opts: { file?: strin
     for (const [kind, ids] of byKind) await tx.product.updateMany({ where: { id: { in: ids } }, data: { kind: kind as "HANG" | "NVL" | "THANH_PHAM" | "PHU_KIEN" } });
     await tx.productUnit.createMany({ data: convs, skipDuplicates: true });
     await tx.productProcessingRatio.createMany({ data: links, skipDuplicates: true });
+    await tx.auditLog.create({ data: { userId: null, action: SYNC_ACTION, entity: "Seed", entityId: "product-sync-v1", afterJson: { products: data.products.length, links: links.length, units: convs.length } } });
     log(`Đồng bộ sản phẩm: ${data.processingTypes.length} kiểu gia công, ${convs.length} tỷ trọng, ${links.length} liên kết sản phẩm × kiểu gia công, ${[...byGroup.values()].flat().length} gán nhóm${missing ? `, ${missing} mã không có trong DB` : ""}${unknownType ? `, ${unknownType} kiểu lạ` : ""}`);
   }, { timeout: 120_000 });
   return true;
