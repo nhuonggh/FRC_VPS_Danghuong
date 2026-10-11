@@ -55,6 +55,7 @@ interface PreparedLine {
   purchasePrice: Prisma.Decimal;
   purchaseAmount: Prisma.Decimal;
   rollInfo: string | null;
+  processingTypeId: number | null;
 }
 interface CostedLine extends PreparedLine {
   allocatedFreight: Prisma.Decimal;
@@ -67,7 +68,10 @@ async function prepareLines(tx: Tx, lines: PurchaseInput["lines"], keepInactive:
     include: { units: true },
   });
   const productsById = new Map(products.map((product) => [product.id, product]));
+  const typeIds = sortedUnique(lines.flatMap((line) => (line.processingTypeId ? [line.processingTypeId] : [])));
+  const types = new Set((await tx.processingType.findMany({ where: { id: { in: typeIds } }, select: { id: true } })).map((t) => t.id));
   return lines.map((line, index) => {
+    if (line.processingTypeId && !types.has(line.processingTypeId)) throw new DomainError(`Dòng ${index + 1}: kiểu gia công không tồn tại.`, 400);
     const product = productsById.get(line.productId);
     if (!product) throw new DomainError(`Dòng ${index + 1}: sản phẩm không tồn tại.`, 400);
     if (!product.isActive && !keepInactive.has(product.id)) {
@@ -92,6 +96,7 @@ async function prepareLines(tx: Tx, lines: PurchaseInput["lines"], keepInactive:
       purchasePrice: D(line.purchasePrice),
       purchaseAmount: round2(qty.times(line.purchasePrice)),
       rollInfo: line.rollInfo || null,
+      processingTypeId: line.processingTypeId ?? null,
     };
   });
 }
@@ -117,6 +122,7 @@ const lineData = (line: CostedLine) => ({
   purchaseAmount: line.purchaseAmount,
   allocatedFreight: line.allocatedFreight,
   rollInfo: line.rollInfo,
+  processingTypeId: line.processingTypeId,
   rollSearch: normalizeSearch(line.rollInfo ?? ""),
 });
 

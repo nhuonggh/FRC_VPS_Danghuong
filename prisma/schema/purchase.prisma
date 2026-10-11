@@ -46,12 +46,15 @@ model PurchaseLine {
   purchaseAmount   Decimal  @db.Decimal(18, 2)
   allocatedFreight Decimal  @default(0) @db.Decimal(18, 2)
   rollInfo         String?
+  /// Kiểu gia công của hàng nhập (tuỳ chọn, chỉ để ghi nhận — kho/FIFO vẫn theo đơn vị gốc).
+  processingTypeId Int?
   rollSearch       String   @default("")
   seq              BigInt?
   createdAt        DateTime @default(now())
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  processingType ProcessingType? @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
 
   @@index([purchaseId])
   @@index([productId])

@@ -1,7 +1,7 @@
 "use client";
 
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
@@ -11,6 +11,20 @@ import type { PurchaseInput } from "@/server/purchase/schemas";
 import type { ProductOption } from "@/server/products/queries";
 
 export const emptyPurchaseLine = { productId: undefined, qty: undefined, unit: "", factor: 1, purchasePrice: undefined, rollInfo: "" } as unknown as PurchaseInput["lines"][number];
+/** Kiểu gia công đã gắn cho sản phẩm (Sản phẩm → tab Gia công); `ratio` = tỷ lệ m²/md đã lưu, null = chưa khai báo. */
+export type ProcessingOption = { value: number | string; label: string; ratio: number | null };
+type TypeOptions = ReadonlyMap<number, ProcessingOption[]>;
+/** Nạp (một lần mỗi sản phẩm) danh sách kiểu gia công của sản phẩm để dòng nhập chọn. */
+function useProcessingOptions() {
+  const [options, setOptions] = useState<TypeOptions>(new Map());
+  const asked = useRef(new Set<number>());
+  const ensure = useCallback((productId: number | undefined) => {
+    if (!productId || asked.current.has(productId)) return;
+    asked.current.add(productId);
+    apiFetch<ProcessingOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((rows) => setOptions((m) => new Map(m).set(productId, rows))).catch(() => asked.current.delete(productId));
+  }, []);
+  return { options, ensure };
+}
 const asNumber = (value: unknown) => Number(value) || 0;
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
 
@@ -51,8 +65,10 @@ export function PurchaseNoteField({ form }: FormProps) {
  * Nhập hàng theo kích thước (tôn mua từ nơi khác về bán): chọn sản phẩm, gõ `7.1*7+6.8*1` (dài*số tấm, nối bằng +) → mỗi số hạng một dòng,
  * SL = dài × số tấm (md, đơn vị gốc nên kho/FIFO không đổi), ghi chú cuộn ghi `7,1 m × 1,08 × 7 = 53,676 m²`. Giá nhập nhập theo md hoặc theo m² (liên động qua tỷ lệ m²/md, mặc định 1).
  */
-function PurchaseDimensionEntry({ loadProducts, onAdd }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void }) {
+function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: TypeOptions; ensureTypes: (productId: number | undefined) => void }) {
   const [product, setProduct] = useState<ProductOption | null>(null);
+  const [typeId, setTypeId] = useState("");
+  const types = product ? (typeOptions.get(product.value) ?? []) : [];
   const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [error, setError] = useState(""), [key, setKey] = useState(0);
   const r = Number(ratio.replace(",", ".")) || 0;
   const submit = () => {
@@ -62,15 +78,16 @@ function PurchaseDimensionEntry({ loadProducts, onAdd }: { loadProducts: (q: str
     if (!(r > 0)) { setError("Tỷ lệ m²/md phải lớn hơn 0."); return; }
     const price = Number(perMd);
     if (perMd.trim() === "" || !(price >= 0)) { setError("Nhập giá nhập."); return; }
-    onAdd(product, parsed.terms.map((t) => ({ productId: product.value, unit: product.baseUnit, factor: 1, qty: termQty(t), purchasePrice: price, rollInfo: termNote(t, r) })) as PurchaseInput["lines"]);
-    setProduct(null); setLen(""); setPerMd(""); setError(""); setKey((k) => k + 1);
+    onAdd(product, parsed.terms.map((t) => ({ productId: product.value, unit: product.baseUnit, factor: 1, qty: termQty(t), purchasePrice: price, rollInfo: termNote(t, r), processingTypeId: typeId ? Number(typeId) : null })) as PurchaseInput["lines"]);
+    setProduct(null); setTypeId(""); setLen(""); setPerMd(""); setError(""); setKey((k) => k + 1);
   };
   const enter = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
   const small = `${igInput} tabular text-right`;
   return <div className="rounded-sm border border-dashed border-border p-3">
     <h3 className="text-sm font-semibold">Nhập theo kích thước</h3>
     <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <InlineField id="pd-product" label="Sản phẩm" className="xl:col-span-2"><div className={igCombo}><Combobox hideLabel key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setError(""); }} /></div></InlineField>
+      <InlineField id="pd-product" label="Sản phẩm" className="xl:col-span-2"><div className={igCombo}><Combobox hideLabel key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setTypeId(""); setError(""); ensureTypes(o ? Number(o.value) : undefined); }} /></div></InlineField>
+      {types.length > 0 && <InlineField id="pd-type" label="Kiểu gia công" hint="tuỳ chọn — tự điền tỷ lệ m²/md"><select id="pd-type" value={typeId} onChange={(e) => { setTypeId(e.target.value); const picked = types.find((t) => String(t.value) === e.target.value); if (picked) setRatio(String(picked.ratio ?? 1).replace(".", ",")); }} className={`${igInput} cursor-pointer`}><option value="">Không</option>{types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></InlineField>}
       <InlineField id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} /></InlineField>
       <InlineField id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
       <InlineField id="pd-price" label="Giá nhập/md"><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => setPerMd(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
@@ -86,6 +103,9 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
   const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
+  const { options: typeOptions, ensure: ensureTypes } = useProcessingOptions();
+  const productKey = lines.map((l) => l?.productId ?? 0).join(",");
+  useEffect(() => { for (const id of new Set(productKey.split(",").map(Number))) ensureTypes(id || undefined); }, [productKey, ensureTypes]);
   const [products, setProducts] = useState(() => new Map(initialProducts.map((product) => [product.value, product])));
   const loadProducts = async (q: string) => {
     const result = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
@@ -108,11 +128,11 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     if (rest.length) append(rest);
   };
   return <div className="space-y-5">
-    <PurchaseDimensionEntry loadProducts={loadProducts} onAdd={addDimensionRows} />
+    <PurchaseDimensionEntry loadProducts={loadProducts} onAdd={addDimensionRows} typeOptions={typeOptions} ensureTypes={ensureTypes} />
     <div className="overflow-x-auto rounded-sm border border-border">
-      <table className="line-table w-full min-w-[900px] text-sm">
+      <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th>
+          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th>
           <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú cuộn</th><th aria-label="Thao tác" />
         </tr></thead>
         <tbody>{fields.map((field, index) => {
@@ -128,10 +148,13 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
                   if (selected) setProducts((current) => new Map(current).set(selected.value, selected));
                   setValue(`lines.${index}.unit`, selected?.baseUnit ?? "", { shouldValidate: true });
                   setValue(`lines.${index}.factor`, 1, { shouldValidate: true });
+                  setValue(`lines.${index}.processingTypeId`, null, { shouldDirty: true });
+                  ensureTypes(selected ? Number(selected.value) : undefined);
                   if (selected) entry.onProductPicked(index);
                 }} />} />
               {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
             </td>
+            <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(line.productId) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line.processingTypeId ?? ""} onChange={(event) => setValue(`lines.${index}.processingTypeId`, event.target.value ? Number(event.target.value) : null, { shouldDirty: true })} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
             <td className="px-2 py-2" data-label="Số lượng"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} /></td>
             <td className="px-2 py-2" data-label="Tỷ trọng"><input aria-label={`Tỷ trọng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.factor`, { valueAsNumber: true })} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
@@ -142,7 +165,7 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
             <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>
           </tr>;
         })}</tbody>
-        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={6} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot>
+        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={7} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot>
       </table>
     </div>
     <div className="flex flex-wrap gap-2">

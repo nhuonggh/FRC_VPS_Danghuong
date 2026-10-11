@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ForbiddenError } from "@/lib/permissions/guard";
 import { requireActorApi } from "@/server/auth/session";
 import { listActiveOptions } from "@/server/catalog/queries";
 import { apiHandler } from "@/server/http/handler";
@@ -6,12 +7,13 @@ import { apiHandler } from "@/server/http/handler";
 export const dynamic = "force-dynamic";
 
 /**
- * Kiểu gia công cho dòng bán (tôn xốp…): người bán không cần quyền quản trị danh mục.
+ * Kiểu gia công cho dòng bán / dòng nhập (tôn xốp…): người bán, người nhập hàng không cần quyền quản trị danh mục.
  * `?productId=` ⇒ kèm `ratio` (tỷ lệ m²/md đã lưu cho sản phẩm × kiểu này, null = chưa khai báo ⇒ form mặc định 1) và
  * `hasBom` (có định mức hiệu lực ⇒ xuất NVL theo định mức; không có ⇒ bán như hàng thường, kiểu gia công chỉ ghi trên dòng).
  */
 export const GET = apiHandler(async (req) => {
-  await requireActorApi("order.create");
+  const actor = await requireActorApi();
+  if (!actor.perms.has("order.create") && !actor.perms.has("purchase.create")) throw new ForbiddenError("order.create");
   const all = await listActiveOptions(prisma, "processing-types");
   const raw = new URL(req.url).searchParams.get("productId");
   if (raw === null) return all;

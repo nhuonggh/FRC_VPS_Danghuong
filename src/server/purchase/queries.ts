@@ -38,6 +38,8 @@ export interface PurchaseLineDTO {
   factorUsed: string;
   qtyBase: string;
   rollInfo: string | null;
+  processingTypeId: number | null;
+  processingTypeName: string | null;
   purchasePrice?: string;
   purchaseAmount?: string;
   allocatedFreight?: string;
@@ -119,7 +121,7 @@ export async function getPurchase(db: Db, actor: Actor, id: number): Promise<Pur
     where: { id },
     include: {
       partner: { select: { code: true, name: true } },
-      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } } } },
+      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true } } } },
     },
   });
   if (!purchase) throw new DomainError("Không tìm thấy phiếu nhập.", 404);
@@ -133,7 +135,7 @@ export async function getPurchase(db: Db, actor: Actor, id: number): Promise<Pur
     lines: purchase.lines.map((line) => ({
       id: line.id, productId: line.productId, productCode: line.product.code, productName: line.product.name,
       baseUnit: line.product.baseUnit, qty: line.qty.toString(), unit: line.unit,
-      factorUsed: line.factorUsed.toString(), qtyBase: line.qtyBase.toString(), rollInfo: line.rollInfo,
+      factorUsed: line.factorUsed.toString(), qtyBase: line.qtyBase.toString(), rollInfo: line.rollInfo, processingTypeId: line.processingTypeId, processingTypeName: line.processingType?.name ?? null,
       purchasePrice: line.purchasePrice.toString(), purchaseAmount: line.purchaseAmount.toString(),
       allocatedFreight: line.allocatedFreight.toString(),
       unitCost: unitCostOf(line.purchaseAmount.plus(line.allocatedFreight), line.qtyBase).toString(),

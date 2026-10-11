@@ -239,6 +239,7 @@ model ProcessingType {
   boms      Bom[]
   ratios    ProductProcessingRatio[]
   saleLines SaleOrderLine[]
+  purchaseLines PurchaseLine[]
 
   @@map("processing_types")
 }

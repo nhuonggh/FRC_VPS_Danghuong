@@ -11,6 +11,8 @@ export const purchaseLineSchema = z.object({
   factor: num("Nhập tỷ trọng.").gt(0, "Tỷ trọng phải lớn hơn 0.").max(1_000_000, "Tỷ trọng quá lớn."),
   purchasePrice: num("Nhập đơn giá.").min(0, "Đơn giá không được âm.").max(9_999_999_999, "Đơn giá quá lớn."),
   rollInfo: z.string().trim().max(200, "Ghi chú cuộn tối đa 200 ký tự."),
+  /** Kiểu gia công của hàng nhập (tuỳ chọn; null/thiếu = không). */
+  processingTypeId: z.number().int().positive().nullable().optional(),
 });
 
 /** Khoản trả NCC ngay khi lập phiếu (tiền mặt / chuyển khoản vào quỹ tương ứng). Phần còn lại ghi nợ NCC. */
