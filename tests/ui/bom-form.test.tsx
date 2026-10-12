@@ -70,7 +70,7 @@ describe("BomNewForm (/production/bom/new)", () => {
     render(<BomNewForm today="2026-09-29" defaults={prefilled()} />);
     await submit();
     expect(await screen.findByText("Đã có phiên bản cùng ngày hiệu lực.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Định mức dòng 1")).toHaveValue(1.25);
+    expect(screen.getByLabelText("Định mức dòng 1")).toHaveValue("1,25");
     expect(replace).not.toHaveBeenCalled();
   });
 

@@ -57,7 +57,7 @@ describe("TripDetail — nhập kết quả (40)", () => {
     render(<TripDetail trip={trip()} perms={allPerms} accounts={accounts} />);
     expect(screen.getByRole("button", { name: "Xuất phát" })).toBeInTheDocument(); expect(screen.getByRole("button", { name: "Hủy chuyến" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
-    expect(screen.getByLabelText("Tiền mặt")).toHaveValue(200000);
+    expect(screen.getByLabelText("Tiền mặt")).toHaveValue("200.000");
     await userEvent.click(screen.getByRole("button", { name: "Lưu kết quả" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/result", expect.objectContaining({ json: { orderId: 11, result: "GIAO_DU", lines: [], cashAmount: 200000, transferAmount: 0, debtAmount: 0, promiseDate: null, note: "" }, idempotencyKey: expect.any(String) })));
     expect(refresh).toHaveBeenCalled();

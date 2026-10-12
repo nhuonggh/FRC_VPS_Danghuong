@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ClipboardList, Undo2 } from "lucide-react";
-import { FormCard, FormGrid, igArea, igInput, InlineField, inputClass, NewPage } from "@/components/ui";
+import { FormCard, FormGrid, igArea, igInput, InlineField, inputClass, NewPage, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDate, formatQty } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -53,8 +53,8 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
                   <td className="px-3 py-2 text-right tabular">{formatQty(l.returned)}</td>
                   <td className="px-3 py-2 text-right tabular">{formatQty(l.remaining)}</td>
                   <td className="px-3 py-2 text-right">
-                    <input aria-label={`SL trả dòng ${i + 1}`} type="number" min={0} step="any" disabled={!l.returnable || Number(l.remaining) <= 0} value={qty[l.id] ?? ""}
-                      onChange={(e) => setQty((m) => ({ ...m, [l.id]: e.target.value }))} className={`${inputClass()} min-w-24 tabular text-right`} />
+                    <NumberInput maxFrac={3} aria-label={`SL trả dòng ${i + 1}`} disabled={!l.returnable || Number(l.remaining) <= 0} value={qty[l.id] ?? ""}
+                      onValueChange={(val) => setQty((m) => ({ ...m, [l.id]: val }))} className={`${inputClass()} min-w-24 tabular text-right`} />
                   </td>
                 </tr>
               ))}

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { ClipboardCheck, Package } from "lucide-react";
-import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
+import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry, RhfNumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
 import { stocktakeSchema, type StocktakeInput } from "@/server/stocktake/schemas";
@@ -54,7 +54,7 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
                   return (
                     <tr key={field.id} className="border-t border-border">
                       <td className="px-2 py-2" data-line-product={i} data-label="Sản phẩm" data-wide><Controller control={form.control} name={`lines.${i}.productId`} render={({ field: f }) => <Combobox label={`Sản phẩm dòng ${i + 1}`} value={p ?? null} loadOptions={load} onChange={(o) => { f.onChange(o ? Number(o.value) : undefined); if (o) entry.onProductPicked(i); }} error={e?.productId?.message} />} /></td>
-                      <td className="px-2 py-2" data-label="Tồn thực đếm (đv gốc)"><input aria-label={`Tồn thực đếm dòng ${i + 1}`} type="number" min={0} step="any" {...form.register(`lines.${i}.actualQty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(i)} className={`${inputClass(e?.actualQty)} tabular text-right`} />{p && <span className="block text-right text-xs text-fg-muted">{p.baseUnit}</span>}</td>
+                      <td className="px-2 py-2" data-label="Tồn thực đếm (đv gốc)"><RhfNumberInput aria-label={`Tồn thực đếm dòng ${i + 1}`} maxFrac={3} control={form.control} name={`lines.${i}.actualQty`} onKeyDown={entry.onQtyKeyDown(i)} className={`${inputClass(e?.actualQty)} tabular text-right`} />{p && <span className="block text-right text-xs text-fg-muted">{p.baseUnit}</span>}</td>
                       <td data-action><button type="button" aria-label={`Xóa dòng ${i + 1}`} disabled={fields.length === 1} onClick={() => remove(i)} className="h-11 w-11 text-danger disabled:opacity-40">×</button></td>
                     </tr>
                   );

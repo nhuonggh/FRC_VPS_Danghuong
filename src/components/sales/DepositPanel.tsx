@@ -1,6 +1,6 @@
 "use client";
 
-import { igInput, InlineField } from "@/components/ui";
+import { igInput, InlineField, NumberInput } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-fetch";
@@ -53,7 +53,7 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
           <h3 className="text-sm font-semibold">Thu tiền cọc</h3>
           <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
             <InlineField id="dep-amount" label="Số tiền">
-              <input id="dep-amount" type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+              <NumberInput id="dep-amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} />
             </InlineField>
             <InlineField id="dep-account" label="Quỹ / tài khoản">
               <select id="dep-account" value={cashAccountId} onChange={(e) => setCashAccountId(e.target.value)} className={`${igInput} cursor-pointer`}>

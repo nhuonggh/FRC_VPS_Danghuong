@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Combobox, inputClass, type ComboOption } from "@/components/ui";
+import { Combobox, inputClass, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
@@ -11,7 +11,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import type { SaleOrderInput } from "@/server/sales/schemas";
 
 /** Kiểu gia công của sản phẩm kèm tỷ lệ m²/md (null = chưa khai báo). */
-export type TypeOption = ComboOption & { ratio?: number | null; hasBom?: boolean };
+export type TypeOption = ComboOption & { ratio?: number | null; hasBom?: boolean; priceBasis?: "LENGTH" | "AREA" };
 
 /**
  * Nhập nhanh bán tôn theo kích thước (giống màn "Thêm vào đơn" của hệ thống cũ): chọn SP → kiểu gia công → giá/m² → chiều dài
@@ -94,7 +94,7 @@ export function QuickDimensionEntry({ loadProducts, pricingPartnerId, canEditPri
         {typeId && (<>
           <div>
             <label htmlFor="qd-price" className={lab}>Đơn giá theo m²</label>
-            <input id="qd-price" type="number" min={0} step="any" readOnly={!canEditPrice} value={priceM2} onChange={(e) => setPriceM2(e.target.value)} className={`${inputClass()} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
+            <NumberInput maxFrac={2} id="qd-price" readOnly={!canEditPrice} value={priceM2} onValueChange={setPriceM2} className={`${inputClass()} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
           </div>
           <div className="xl:col-span-2">
             <label htmlFor="qd-len" className={lab}>Chiều dài (dài*số tấm, nối bằng +)</label>

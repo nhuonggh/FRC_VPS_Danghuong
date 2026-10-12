@@ -5,7 +5,7 @@ import { Package, Truck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { FormCard, FormGrid, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
+import { FormCard, FormGrid, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -60,9 +60,9 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts }: { today:
       {payAccounts && (
         <FormCard icon={Wallet} title="Thanh toán nhà cung cấp">
           <FormGrid cols={2}>
-            <InlineField id="pay-cash-amount" label="Trả tiền mặt" labelClass="sm:min-w-40"><input id="pay-cash-amount" type="number" min={0} step="any" value={cashAmount} placeholder="0" onChange={(e) => setCashAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+            <InlineField id="pay-cash-amount" label="Trả tiền mặt" labelClass="sm:min-w-40"><NumberInput id="pay-cash-amount" value={cashAmount} placeholder="0" onValueChange={setCashAmount} className={`${igInput} tabular text-right`} /></InlineField>
             <InlineField id="pay-cash-account" label="Quỹ tiền mặt" labelClass="sm:min-w-40">{accountSelect("pay-cash-account", cashList, cashAccount, setCashAccount)}</InlineField>
-            <InlineField id="pay-bank-amount" label="Trả chuyển khoản" labelClass="sm:min-w-40"><input id="pay-bank-amount" type="number" min={0} step="any" value={bankAmount} placeholder="0" onChange={(e) => setBankAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+            <InlineField id="pay-bank-amount" label="Trả chuyển khoản" labelClass="sm:min-w-40"><NumberInput id="pay-bank-amount" value={bankAmount} placeholder="0" onValueChange={setBankAmount} className={`${igInput} tabular text-right`} /></InlineField>
             <InlineField id="pay-bank-account" label="Ngân hàng" labelClass="sm:min-w-40">{accountSelect("pay-bank-account", bankList, bankAccount, setBankAccount)}</InlineField>
           </FormGrid>
           <p className="mt-3 text-xs text-fg-muted">Phần chưa trả được ghi nợ nhà cung cấp. Cước vận chuyển tính riêng, không nằm trong khoản này.</p>

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserRound, Wallet } from "lucide-react";
-import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
+import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { PAYMENT_KIND_LABEL, PAYMENT_KINDS, RECEIPT_TYPE_LABEL, RECEIPT_TYPES, type VoucherDoc } from "@/server/cash/schemas";
@@ -100,7 +100,7 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
             </select>
           </InlineField>
           <InlineField id="amount" label="Số tiền" required>
-            <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+            <NumberInput id="amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} />
           </InlineField>
           <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2">
             <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} />

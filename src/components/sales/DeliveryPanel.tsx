@@ -3,7 +3,7 @@
 import { PrintButton } from "@/components/print/PrintButton";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { InlineField, igInput, inputClass } from "@/components/ui";
+import { InlineField, igInput, inputClass, NumberInput } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatDateTime, formatQty } from "@/lib/format";
@@ -67,7 +67,7 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
                   <td className="py-2 text-right tabular">{formatQty(remainingOf(l))} {l.unit}</td>
                   <td className="w-40 py-2">
                     <div className="flex items-center justify-end gap-1">
-                      <input aria-label={`Số lượng giao ${l.productName}`} type="number" min={0} step="any" value={qty[l.id] ?? ""} onChange={(e) => setQty((m) => ({ ...m, [l.id]: e.target.value }))} className={`${inputClass()} tabular text-right`} />
+                      <NumberInput maxFrac={3} aria-label={`Số lượng giao ${l.productName}`} value={qty[l.id] ?? ""} onValueChange={(val) => setQty((m) => ({ ...m, [l.id]: val }))} className={`${inputClass()} tabular text-right`} />
                       <button type="button" aria-label={`Giao hết ${l.productName}`} onClick={() => setQty((m) => ({ ...m, [l.id]: String(remainingOf(l)) }))} className="h-9 shrink-0 rounded-sm border border-border px-2 text-xs hover:bg-hover">Hết</button>
                     </div>
                   </td>

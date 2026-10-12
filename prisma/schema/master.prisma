@@ -226,6 +226,11 @@ model ExpenseType {
 }
 
 // Kiểu gia công (tôn xốp, 1 lớp, 6 sóng, 11 sóng — mục 13). Công thức NVL nằm ở BOM (plan 03c).
+enum PriceBasis {
+  LENGTH
+  AREA
+}
+
 model ProcessingType {
   id       Int     @id @default(autoincrement())
   name     String  @unique
@@ -235,6 +240,8 @@ model ProcessingType {
   ratio      Decimal? @db.Decimal(18, 4)
   stockRatio Decimal? @db.Decimal(18, 4)
   unit       String?
+  /// Cách tính giá khi bán/nhập/báo giá: LENGTH = giá/md (đơn vị gốc), AREA = giá/m² (tính ra giá/md bằng tỷ lệ m²/md). Chỉ ảnh hưởng cách nhập/hiển thị; giá lưu vẫn là giá/md.
+  priceBasis PriceBasis @default(LENGTH)
 
   boms      Bom[]
   ratios    ProductProcessingRatio[]

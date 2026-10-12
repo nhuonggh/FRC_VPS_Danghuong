@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { Package, UserRound } from "lucide-react";
-import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
+import { pricePerM2, pricePerMd } from "@/lib/length-expr";
 import { useProcessingOptions } from "@/lib/use-processing-options";
 import type { ProductOption } from "@/server/products/queries";
 import type { SalePricingDTO } from "@/server/sales/pricing";
@@ -141,8 +142,14 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
                           <option value="">—</option>{(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
                         </select>
                       </td>
-                      <td className="px-2 py-2" data-label="Số lượng"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
-                      <td className="px-2 py-2" data-label="Đơn giá"><input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.salePrice`, { valueAsNumber: true })} className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right`} /></td>
+                      <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
+                      <td className="px-2 py-2" data-label="Đơn giá">{(() => {
+                        // Kiểu gia công tính giá theo m²: nhập/hiện giá/m² (giá lưu vẫn là giá/md = giá/m² × tỷ lệ)
+                        const opt = (typeOptions.get(l?.productId ?? 0) ?? []).find((o) => Number(o.value) === l?.processingTypeId);
+                        const ratio = opt?.ratio ?? 1;
+                        if (opt?.priceBasis === "AREA" && ratio > 0 && l?.unit === product?.baseUnit) return <><NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} value={num(l?.salePrice) ? pricePerM2(num(l?.salePrice), ratio) : ""} onValueChange={(val) => setValue(`lines.${index}.salePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right`} /><p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p></>;
+                        return <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} maxFrac={2} control={control} name={`lines.${index}.salePrice`} className={`${inputClass(err?.salePrice)} min-w-28 tabular text-right`} />;
+                      })()}</td>
                       <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(Math.round(num(l?.qty) * num(l?.salePrice) * 100) / 100)}</td>
                       <td className="px-2 py-2" data-label="Ghi chú" data-wide><input aria-label={`Ghi chú dòng ${index + 1}`} {...register(`lines.${index}.note`)} className={inputClass(err?.note)} /></td>
                       <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} disabled={fields.length === 1} className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button></td>

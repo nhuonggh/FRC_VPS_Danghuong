@@ -41,7 +41,7 @@ describe("PartnerNewForm — tab dọc", () => {
     expect(screen.getAllByRole("img", { name: "Tab Thông tin cơ bản có lỗi" }).length).toBeGreaterThan(0);
     expect(apiFetch).not.toHaveBeenCalled();
     await userEvent.click(tab(/Công nợ/));
-    expect(screen.getByLabelText(/Hạn mức nợ/, { selector: "input" })).toHaveValue(5000000);
+    expect(screen.getByLabelText(/Hạn mức nợ/, { selector: "input" })).toHaveValue("5.000.000");
   });
 });
 

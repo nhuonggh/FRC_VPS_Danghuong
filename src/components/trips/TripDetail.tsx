@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PrintButton } from "@/components/print/PrintButton";
-import { Badge, ReasonDialog, InlineField, igInput, igArea, inputClass } from "@/components/ui";
+import { Badge, ReasonDialog, InlineField, igInput, igArea, inputClass, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDateTime, formatQty } from "@/lib/format";
@@ -134,7 +134,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được kết quả."); } finally { setBusy(false); }
   }
   const money = (id: string, label: string, value: string, set: (v: string) => void) => (
-    <InlineField id={id} label={label}><input id={id} type="number" min={0} step="any" inputMode="decimal" value={value} onChange={(e) => set(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+    <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} className={`${igInput} tabular`} /></InlineField>
   );
   return (
     <Dialog.Root open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
@@ -148,7 +148,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
               <p className="text-xs font-semibold text-fg-secondary">Số lượng thực giao</p>
               {stop.lines.filter((l) => Number(l.remaining) > 0).map((l) => (
                 <label key={l.orderLineId} className="flex items-center justify-between gap-2 text-sm"><span>{l.productName}{l.processingTypeName ? <span className="text-fg-secondary"> · {l.processingTypeName}</span> : null}<span className="block text-xs text-fg-muted">còn {formatQty(l.remaining)} {l.unit}</span></span>
-                  <input aria-label={`SL giao ${l.productCode}`} type="number" min={0} step="any" value={qty[l.orderLineId] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [l.orderLineId]: e.target.value }))} className={`${inputClass()} w-28 tabular`} /></label>
+                  <NumberInput maxFrac={3} aria-label={`SL giao ${l.productCode}`} value={qty[l.orderLineId] ?? ""} onValueChange={(val) => setQty((q) => ({ ...q, [l.orderLineId]: val }))} className={`${inputClass()} w-28 tabular`} /></label>
               ))}
             </div>
           )}

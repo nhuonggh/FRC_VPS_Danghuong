@@ -1,3 +1,4 @@
+import { areaRatiosOf } from "@/server/processing/area-ratio";
 import { Prisma, type DeliveryStatus, type PaymentStatus, type PrismaClient } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
@@ -129,6 +130,8 @@ export interface OrderLineDTO {
   id: number; productId: number; productCode: string; productName: string; baseUnit: string;
   qty: string; unit: string; qtyBase: string; processingType: string | null; bomVersionId: number | null;
   isProvisional: boolean; deliveredQty: string;
+  /** Tỷ lệ m²/md khi dòng tính giá theo m² (kiểu gia công AREA); null = hiển thị theo md. Giá lưu vẫn là giá/md. */
+  areaRatio: number | null;
   salePrice?: string; discountNow?: string; discountAccum?: string; lineAmount?: string;
   /** Ghi chú theo dòng hàng. */
   note: string | null;
@@ -159,7 +162,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
       lines: {
         orderBy: { id: "asc" },
         include: {
-          product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true } },
+          product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true, priceBasis: true, ratio: true } },
           bomVersion: { select: { versionNo: true, validFrom: true } },
           issues: { orderBy: { productId: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } } } },
           deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } },
@@ -192,13 +195,14 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     const k = `${r.docLineId}:${r.productId}`, cur = perMaterial.get(k) ?? { cost: D(0), prov: D(0) };
     perMaterial.set(k, { cost: cur.cost.plus(r.qtyOut.times(r.unitCostOut)), prov: cur.prov.plus(r.qtyProvisional) });
   }
-  const lines: OrderLineDTO[] = o.lines.map((l) => {
+  const areaRatios = await areaRatiosOf(db, o.lines.map((l) => ({ productId: l.productId, unit: l.unit, baseUnit: l.product.baseUnit, note: l.note, processingTypeId: l.processingTypeId, type: l.processingType })));
+  const lines: OrderLineDTO[] = o.lines.map((l, lineIdx) => {
     const amount = lineAmountOf(l);
     const profit = l.isProvisional ? null : amount.minus(l.discountAccum).minus(l.unitCostFifo.times(l.qtyBase));
     return {
       id: l.id, note: l.note, productId: l.productId, productCode: l.product.code, productName: l.product.name, baseUnit: l.product.baseUnit,
       qty: l.qty.toString(), unit: l.unit, qtyBase: l.qtyBase.toString(), processingType: l.processingType?.name ?? null, bomVersionId: l.bomVersionId,
-      isProvisional: l.isProvisional, deliveredQty: l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)).toString(),
+      areaRatio: areaRatios[lineIdx] ?? null, isProvisional: l.isProvisional, deliveredQty: l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)).toString(),
       salePrice: l.salePrice.toString(), discountNow: l.discountNow.toString(), discountAccum: l.discountAccum.toString(), lineAmount: amount.toString(),
       unitCostFifo: l.unitCostFifo.toString(), lineProfit: profit ? round2(profit).toString() : null,
       bomVersionLabel: l.bomVersion ? `Định mức v${l.bomVersion.versionNo} · từ ${ymdOf(l.bomVersion.validFrom).split("-").reverse().join("/")}` : null,

@@ -1,3 +1,4 @@
+import { areaRatiosOf } from "@/server/processing/area-ratio";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
 import type { Actor } from "@/lib/permissions/scope";
@@ -40,6 +41,8 @@ export interface PurchaseLineDTO {
   rollInfo: string | null;
   processingTypeId: number | null;
   processingTypeName: string | null;
+  /** Tỷ lệ m²/md khi dòng tính giá theo m² (null = theo md). */
+  areaRatio: number | null;
   purchasePrice?: string;
   purchaseAmount?: string;
   allocatedFreight?: string;
@@ -121,18 +124,20 @@ export async function getPurchase(db: Db, actor: Actor, id: number): Promise<Pur
     where: { id },
     include: {
       partner: { select: { code: true, name: true } },
-      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true } } } },
+      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true, priceBasis: true, ratio: true } } } },
     },
   });
   if (!purchase) throw new DomainError("Không tìm thấy phiếu nhập.", 404);
   const names = await userNames(db, [purchase.createdBy]);
+  const areaRatios = await areaRatiosOf(db, purchase.lines.map((l) => ({ productId: l.productId, unit: l.unit, baseUnit: l.product.baseUnit, note: l.rollInfo, processingTypeId: l.processingTypeId, type: l.processingType })));
   const dto: PurchaseDetailDTO = {
     id: purchase.id, code: purchase.code, at: purchase.at, periodId: purchase.periodId,
     partnerId: purchase.partnerId, partnerCode: purchase.partner.code, partnerName: purchase.partner.name,
     isCancelled: purchase.isCancelled, note: purchase.note, createdByName: names.get(purchase.createdBy) ?? null,
     cancelReason: purchase.cancelReason, cancelledAt: purchase.cancelledAt,
     purchaseTotal: purchase.purchaseTotal.toString(), freightCost: purchase.freightCost.toString(),
-    lines: purchase.lines.map((line) => ({
+    lines: purchase.lines.map((line, lineIdx) => ({
+      areaRatio: areaRatios[lineIdx] ?? null,
       id: line.id, productId: line.productId, productCode: line.product.code, productName: line.product.name,
       baseUnit: line.product.baseUnit, qty: line.qty.toString(), unit: line.unit,
       factorUsed: line.factorUsed.toString(), qtyBase: line.qtyBase.toString(), rollInfo: line.rollInfo, processingTypeId: line.processingTypeId, processingTypeName: line.processingType?.name ?? null,

@@ -20,7 +20,7 @@ function readStatus(cells: Record<string, unknown>, errors: string[]): boolean |
 }
 
 const keyText = (section: CatalogSection, raw: string) => (section.key === "vehicles" ? raw.replace(/\s+/g, "").toUpperCase() : normalizeSearch(raw));
-const SELECT_ALIASES: Record<string, string> = { "tien mat": "CASH", cash: "CASH", "ngan hang": "BANK", bank: "BANK" };
+const SELECT_ALIASES: Record<string, string> = { "tien mat": "CASH", cash: "CASH", "ngan hang": "BANK", bank: "BANK", "met dai": "LENGTH", md: "LENGTH", "met vuong": "AREA", m2: "AREA" };
 
 function columnsOf(section: CatalogSection): ImportColumn[] {
   const cols = section.fields.map((f, i): ImportColumn => ({ key: f.name, header: f.label, required: !!f.required, sample: i === 0 ? SAMPLES[section.key]! : f.sample ?? (f.type === "checkbox" ? "Không" : f.type === "select" ? "Ngân hàng" : "") }));
@@ -33,7 +33,7 @@ function readField(f: CatalogField, section: CatalogSection, cells: Record<strin
   if (f.type === "select") {
     if (!raw) return section.key === "cash-accounts" ? (str(cells.bankNo) ? "BANK" : "CASH") : raw;
     const mapped = SELECT_ALIASES[normalizeSearch(raw)] ?? f.options?.find((o) => o.value === raw.toUpperCase())?.value;
-    if (!mapped) errors.push(`${f.label}: "${raw}" không hợp lệ (Tiền mặt hoặc Ngân hàng).`);
+    if (!mapped) errors.push(`${f.label}: "${raw}" không hợp lệ (${f.options?.map((o) => o.label).join(" hoặc ")}).`);
     return mapped ?? raw;
   }
   if (f.type === "number" && typeof cells[f.name] === "number") return String(cells[f.name]).replace(".", ",");

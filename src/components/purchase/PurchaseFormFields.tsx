@@ -2,12 +2,12 @@
 
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { useEffect, useState } from "react";
-import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput, NumberInput } from "@/components/ui";
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { useProcessingOptions, type ProcessingOptions } from "@/lib/use-processing-options";
 import { formatCurrency, formatQty } from "@/lib/format";
-import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
+import { parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
 import type { PurchaseInput } from "@/server/purchase/schemas";
 import type { ProductOption } from "@/server/products/queries";
 
@@ -38,7 +38,7 @@ export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, su
       </>} />
     </InlineField>
     <InlineField id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} aria-invalid={!!errors.date} className={igInput} /></InlineField>
-    <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><input id="freightCost" type="number" min={0} step="any" {...register("freightCost", { valueAsNumber: true })} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>
+    <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><RhfNumberInput id="freightCost" control={control} name={"freightCost"} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>
   </FormGrid>;
 }
 
@@ -56,6 +56,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [typeId, setTypeId] = useState("");
   const types = product ? (typeOptions.get(product.value) ?? []) : [];
+  const area = types.find((t) => String(t.value) === typeId)?.priceBasis === "AREA"; // kiểu tính giá theo m²: chỉ nhập giá/m², giá/md tính ra
   const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [m2Str, setM2Str] = useState<string | null>(null), [error, setError] = useState(""), [key, setKey] = useState(0);
   const r = Number(ratio.replace(",", ".")) || 0;
   // Giá/m² là ô gốc khi khách gõ ở đó: giữ đúng số đã gõ; đổi tỷ lệ/kiểu gia công thì chỉ giá/md tính lại
@@ -79,8 +80,8 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
       {types.length > 0 && <InlineField id="pd-type" label="Kiểu gia công" hint="tuỳ chọn — tự điền tỷ lệ m²/md"><select id="pd-type" value={typeId} onChange={(e) => { setTypeId(e.target.value); const picked = types.find((t) => String(t.value) === e.target.value); if (picked) setRatio(String(picked.ratio ?? 1).replace(".", ",")); }} className={`${igInput} cursor-pointer`}><option value="">Không</option>{types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></InlineField>}
       <InlineField id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} /></InlineField>
       <InlineField id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
-      <InlineField id="pd-price" label="Giá nhập/md" hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => { setPerMd(e.target.value); setM2Str(null); }} onKeyDown={enter} className={small} /></InlineField>
-      <InlineField id="pd-m2" label="Giá nhập/m²" hint={m2Str !== null ? "ô gốc — giá/md tính theo" : "tính từ giá/md"}><input id="pd-m2" type="number" min={0} step="any" value={m2Str ?? (perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : "")} onChange={(e) => { const v = e.target.value; setM2Str(v); setPerMd(v === "" || r <= 0 ? "" : String(pricePerMd(Number(v), r))); }} onKeyDown={enter} className={small} /></InlineField>
+      {!area && <InlineField id="pd-price" label="Giá nhập/md"><NumberInput maxFrac={2} id="pd-price" value={perMd} onValueChange={(val) => { setPerMd(val); setM2Str(null); }} onKeyDown={enter} className={small} /></InlineField>}
+      {area && <InlineField id="pd-m2" label="Giá nhập/m²"><NumberInput maxFrac={2} id="pd-m2" value={m2Str ?? (perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : "")} onValueChange={(val) => { const v = val; setM2Str(v); setPerMd(v === "" || r <= 0 ? "" : String(pricePerMd(Number(v), r))); }} onKeyDown={enter} className={small} /></InlineField>}
     </div>
     {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     <div className="mt-3 flex justify-end"><button type="button" onClick={submit} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Thêm vào phiếu</button></div>
@@ -145,10 +146,16 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
             </td>
             <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(line.productId) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line.processingTypeId ?? ""} onChange={(event) => setValue(`lines.${index}.processingTypeId`, event.target.value ? Number(event.target.value) : null, { shouldDirty: true })} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
-            <td className="px-2 py-2" data-label="Số lượng"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} /></td>
-            <td className="px-2 py-2" data-label="Tỷ trọng"><input aria-label={`Tỷ trọng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.factor`, { valueAsNumber: true })} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
+            <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} /></td>
+            <td className="px-2 py-2" data-label="Tỷ trọng"><RhfNumberInput aria-label={`Tỷ trọng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.factor`} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
             <td className="px-2 py-2 text-right tabular" data-label="SL gốc">{qtyBase ? formatQty(qtyBase) : "—"}</td>
-            <td className="px-2 py-2" data-label="Đơn giá"><input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.purchasePrice`, { valueAsNumber: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} /></td>
+            <td className="px-2 py-2" data-label="Đơn giá">{(() => {
+              // Kiểu gia công tính giá theo m²: nhập/hiện giá/m² (giá lưu vẫn là giá/md = giá/m² × tỷ lệ)
+              const opt = (typeOptions.get(line.productId) ?? []).find((t) => Number(t.value) === line.processingTypeId);
+              const ratio = parseDimNote(line.rollInfo)?.ratio ?? opt?.ratio ?? 1; // dòng tách theo chiều dài ghi sẵn tỷ lệ trong ghi chú cuộn
+              if (opt?.priceBasis === "AREA" && ratio > 0 && line.unit === product?.baseUnit) return <><NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} value={asNumber(line.purchasePrice) ? pricePerM2(asNumber(line.purchasePrice), ratio) : ""} onValueChange={(val) => setValue(`lines.${index}.purchasePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} /><p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p></>;
+              return <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} maxFrac={2} control={control} name={`lines.${index}.purchasePrice`} className={`${inputClass(error?.purchasePrice)} tabular text-right`} />;
+            })()}</td>
             <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td>
             <td className="px-2 py-2" data-label="Ghi chú cuộn" data-wide><input aria-label={`Ghi chú cuộn dòng ${index + 1}`} {...register(`lines.${index}.rollInfo`)} className={inputClass(error?.rollInfo)} /></td>
             <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>

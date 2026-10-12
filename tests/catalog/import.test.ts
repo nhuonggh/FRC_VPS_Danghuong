@@ -47,6 +47,18 @@ describe("nhập Excel Cài đặt danh mục", () => {
     expect(await prisma.cashAccount.findUniqueOrThrow({ where: { name: "Tiền mặt" } })).toMatchObject({ type: "CASH", bankNo: null });
   });
 
+  it("kiểu gia công: Tính giá theo — bỏ trống = mét dài; nhập Mét vuông/md; ghi đè bỏ trống giữ nguyên; giá trị lạ báo lỗi", async () => {
+    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Tính giá theo"], [["Kiểu A", ""], ["Kiểu B", "Mét vuông"], ["Kiểu C", "m2"]]));
+    const basis = async (name: string) => (await prisma.processingType.findUniqueOrThrow({ where: { name } })).priceBasis;
+    expect([await basis("Kiểu A"), await basis("Kiểu B"), await basis("Kiểu C")]).toEqual(["LENGTH", "AREA", "AREA"]);
+    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Ghi chú"], [["Kiểu B", "x"]]), true);
+    expect(await basis("Kiểu B")).toBe("AREA");
+    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Tính giá theo"], [["Kiểu B", "Mét dài"]]), true);
+    expect(await basis("Kiểu B")).toBe("LENGTH");
+    const pv = await previewImport(prisma, catalogImportSpec("processing-types"), await toXlsx(["Tên kiểu gia công", "Tính giá theo"], [["Kiểu D", "lung tung"]]), { overwrite: false });
+    expect(pv.counts).toMatchObject({ error: 1 });
+  });
+
   it("kiểu gia công: tỷ lệ/trừ kho/ĐVT/trạng thái vào cột riêng; ghi đè không xoá khi ô trống", async () => {
     await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Ghi chú", "Tỷ lệ", "Tỷ lệ trừ kho", "ĐVT"], [["Tôn xốp 6S", "Ghi chú A", 1.185, "1,5", "m2"]]));
     const row = () => prisma.processingType.findUniqueOrThrow({ where: { name: "Tôn xốp 6S" } });

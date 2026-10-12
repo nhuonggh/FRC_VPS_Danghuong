@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { FileText, Package } from "lucide-react";
-import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { BOM_MAX_LINES, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
@@ -133,8 +133,8 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
                         )} />
                       </td>
                       <td className="px-2 py-2" data-label="Định mức / 1 đv thành phẩm">
-                        <input aria-label={`Định mức dòng ${index + 1}`} type="number" min={0} step="0.001"
-                          {...register(`lines.${index}.qtyPerUnit`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qtyPerUnit)} tabular text-right`} />
+                        <RhfNumberInput aria-label={`Định mức dòng ${index + 1}`}
+                          maxFrac={3} control={control} name={`lines.${index}.qtyPerUnit`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qtyPerUnit)} tabular text-right`} />
                         {err?.qtyPerUnit?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.qtyPerUnit.message}</p>}
                       </td>
                       <td className="px-2 py-2 text-fg-secondary" data-label="ĐVT">{selected?.baseUnit ?? "—"}</td>

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Combobox, filterComboOptions, igArea, igCombo, igInput, InlineField, type ComboOption } from "@/components/ui";
+import { Combobox, filterComboOptions, igArea, igCombo, igInput, InlineField, type ComboOption, RhfNumberInput } from "@/components/ui";
 import { PRODUCT_KINDS, type CreateProductInput } from "@/server/products/schemas";
 import { QuickCatalogAdd } from "./QuickCatalogAdd";
 
@@ -32,7 +32,7 @@ export function ProductBasicFields({ form, groups, units, canCatalog, lockBaseUn
         <InlineField id="kind" label="Loại"><select id="kind" {...register("kind")} className={igInput}>{PRODUCT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select></InlineField>
         {unitInput("importUnit", "Đơn vị tính nhập", { placeholder: "Trống = đơn vị gốc" })}
         {unitInput("exportUnit", "Đơn vị tính xuất", { placeholder: "Trống = đơn vị gốc" })}
-        <InlineField id="bundleQty" label="Số cây/bó" error={errors.bundleQty?.message}><input id="bundleQty" type="number" min={0} step="any" {...register("bundleQty", num)} className={`${igInput} tabular text-right`} /></InlineField>
+        <InlineField id="bundleQty" label="Số cây/bó" error={errors.bundleQty?.message}><RhfNumberInput id="bundleQty" maxFrac={3} control={control} name="bundleQty" empty={null} className={`${igInput} tabular text-right`} /></InlineField>
         <InlineField id="qtyLabel" label="Tên số lượng" error={errors.qtyLabel?.message}><input id="qtyLabel" maxLength={30} {...register("qtyLabel")} className={igInput} /></InlineField>
         <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("isCoil")} />Sản phẩm là tôn (tôn cuộn)</label>
       </div>

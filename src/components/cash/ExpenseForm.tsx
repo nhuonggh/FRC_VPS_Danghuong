@@ -3,7 +3,7 @@
 import { Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { FormCard, FormGrid, igArea, igInput, InlineField, NewPage } from "@/components/ui";
+import { FormCard, FormGrid, igArea, igInput, InlineField, NewPage, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 
@@ -43,7 +43,7 @@ export function ExpenseForm({ id, code, today, types, accounts, initial }: { id?
           <InlineField id="account" label="Chi từ quỹ / tài khoản" required>
             <select id="account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={`${igInput} cursor-pointer`}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.type === "BANK" ? " (ngân hàng)" : ""}</option>)}</select>
           </InlineField>
-          <InlineField id="amount" label="Số tiền" required><input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} /></InlineField>
+          <InlineField id="amount" label="Số tiền" required><NumberInput id="amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} /></InlineField>
           <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2"><textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
         </FormGrid>
       </FormCard>

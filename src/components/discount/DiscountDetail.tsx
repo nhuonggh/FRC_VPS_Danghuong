@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Badge, ReasonDialog, InlineField, igInput, igArea } from "@/components/ui";
+import { Badge, ReasonDialog, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -109,7 +109,7 @@ function SettleDialog({ open, onClose, d, accounts, today, idemKey, onDone }: { 
           <Dialog.Title className="text-base font-semibold">Tất toán chiết khấu — {d.partner.name}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Còn lại {formatCurrency(d.balance)}. Chi tiền: sinh phiếu chi (thủ quỹ kiểm sau). Trừ công nợ: giảm số khách đang nợ ({formatCurrency(String(Math.max(debt, 0)))}).</Dialog.Description>
           <InlineField id="st-method" label="Hình thức" required><select id="st-method" value={method} onChange={(e) => { setMethod(e.target.value as "CASH" | "OFFSET"); setError(null); }} className={igInput}><option value="CASH">Chi tiền cho khách</option><option value="OFFSET">Trừ vào công nợ</option></select></InlineField>
-          <InlineField id="st-amount" label={`Số tiền (tối đa ${formatCurrency(String(max))})`} required><input id="st-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+          <InlineField id="st-amount" label={`Số tiền (tối đa ${formatCurrency(String(max))})`} required><NumberInput id="st-amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular`} /></InlineField>
           {method === "CASH" && <InlineField id="st-account" label="Chi từ quỹ / tài khoản" required><select id="st-account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={igInput}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
           <InlineField id="st-date" label="Ngày" required><input id="st-date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
           <InlineField id="st-note" label="Ghi chú" multiline><textarea id="st-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>

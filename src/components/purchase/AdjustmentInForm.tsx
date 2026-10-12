@@ -4,7 +4,7 @@ import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Package, PackagePlus } from "lucide-react";
-import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry } from "@/components/ui";
+import { addPickedLines, Combobox, FormCard, FormGrid, igInput, InlineField, NewPage, ProductMultiPicker, inputClass, useLineEntry, RhfNumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 // Schema thuần Zod: không import barrel service vì Client Component không được kéo engine FIFO vào bundle browser.
@@ -40,8 +40,8 @@ export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetC
          return (
           <tr key={field.id} className="border-t border-border">
            <td className="px-2 py-2" data-line-product={i} data-label="Sản phẩm" data-wide><Controller control={form.control} name={`lines.${i}.productId`} render={({ field: f }) => <Combobox label={`Sản phẩm dòng ${i + 1}`} value={p ?? null} loadOptions={load} onChange={(o) => { f.onChange(o ? Number(o.value) : undefined); if (o) entry.onProductPicked(i); }} error={e?.productId?.message} />} /></td>
-           <td className="px-2 py-2" data-label="Số lượng (đv gốc)"><input aria-label={`Số lượng dòng ${i + 1}`} type="number" min={0} step="any" {...form.register(`lines.${i}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(i)} className={`${inputClass(e?.qty)} tabular text-right`} />{p && <span className="block text-right text-xs text-fg-muted">{p.baseUnit}</span>}</td>
-           {canSetCost && <td className="px-2 py-2" data-label="Đơn giá vốn"><input aria-label={`Đơn giá vốn dòng ${i + 1}`} type="number" min={0} step="any" placeholder="Giá nhập gần nhất" {...form.register(`lines.${i}.unitCost`, { setValueAs: (v) => (v === "" ? null : Number(v)) })} className={`${inputClass(e?.unitCost)} tabular text-right`} /></td>}
+           <td className="px-2 py-2" data-label="Số lượng (đv gốc)"><RhfNumberInput aria-label={`Số lượng dòng ${i + 1}`} maxFrac={3} control={form.control} name={`lines.${i}.qty`} onKeyDown={entry.onQtyKeyDown(i)} className={`${inputClass(e?.qty)} tabular text-right`} />{p && <span className="block text-right text-xs text-fg-muted">{p.baseUnit}</span>}</td>
+           {canSetCost && <td className="px-2 py-2" data-label="Đơn giá vốn"><RhfNumberInput aria-label={`Đơn giá vốn dòng ${i + 1}`} maxFrac={2} placeholder="Giá nhập gần nhất" control={form.control} name={`lines.${i}.unitCost`} empty={null} className={`${inputClass(e?.unitCost)} tabular text-right`} /></td>}
            <td data-action><button type="button" aria-label={`Xóa dòng ${i + 1}`} disabled={fields.length === 1} onClick={() => remove(i)} className="h-11 w-11 text-danger disabled:opacity-40">×</button></td>
           </tr>
          );

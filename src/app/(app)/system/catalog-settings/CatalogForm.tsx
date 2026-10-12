@@ -8,7 +8,7 @@ import { ApiError, apiFetch } from "@/lib/api-fetch";
 import type { CatalogRow } from "@/server/catalog/adapters";
 
 type Values = Record<string, string | boolean>;
-const defaults = (section: CatalogSection, row?: CatalogRow): Values => Object.fromEntries(section.fields.map((f) => [f.name, f.type === "checkbox" ? Boolean(row?.[f.name]) : f.type === "number" ? String(row?.[f.name] ?? "").replace(".", ",") : String(row?.[f.name] ?? "")]));
+const defaults = (section: CatalogSection, row?: CatalogRow): Values => Object.fromEntries(section.fields.map((f) => [f.name, f.type === "checkbox" ? Boolean(row?.[f.name]) : f.type === "number" ? String(row?.[f.name] ?? "").replace(".", ",") : String(row?.[f.name] ?? (!row && f.type === "select" ? f.defaultValue : undefined) ?? "")]));
 
 function Fields({ section, values, setValues, errors }: { section: CatalogSection; values: Values; setValues: (v: Values) => void; errors: Record<string, string> }) {
   return <FormGrid cols={2}>{section.fields.map((field) => {

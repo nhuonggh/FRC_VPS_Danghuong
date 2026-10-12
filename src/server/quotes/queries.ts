@@ -1,3 +1,4 @@
+import { areaRatiosOf } from "@/server/processing/area-ratio";
 import { Prisma, type PrismaClient, type QuoteStatus } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
@@ -21,7 +22,7 @@ export interface QuoteRowDTO {
 }
 export interface QuoteDetailDTO extends Omit<QuoteRowDTO, "lineCount"> {
   note: string | null; createdByName: string | null; convertedOrder: { id: number; code: string } | null;
-  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; note: string | null; processingTypeName: string | null; salePrice?: string; lineAmount?: string }[];
+  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; note: string | null; processingTypeName: string | null; /** Tỷ lệ m²/md khi dòng tính giá theo m² (null = theo md). */ areaRatio: number | null; salePrice?: string; lineAmount?: string }[];
 }
 
 function where(actor: Actor, params: ListParams): Prisma.QuoteWhereInput {
@@ -57,16 +58,18 @@ export async function getQuote(db: Db, actor: Actor, id: number): Promise<QuoteD
     where: { id, partner: partnerScopeWhere(actor) },
     include: {
       partner: { select: { code: true, name: true } }, convertedOrder: { select: { id: true, code: true } },
-      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } } } },
+      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } }, processingType: { select: { name: true, priceBasis: true, ratio: true } } } },
     },
   });
   if (!q) throw new DomainError("Không tìm thấy báo giá.", 404);
   const creator = await db.user.findUnique({ where: { id: q.createdBy }, select: { fullName: true } });
+  const areaRatios = await areaRatiosOf(db, q.lines.map((l) => ({ productId: l.productId, unit: l.unit, baseUnit: l.product.baseUnit, note: l.note, processingTypeId: l.processingTypeId, type: l.processingType })));
   const dto: QuoteDetailDTO = {
     id: q.id, code: q.code, at: q.at, partnerCode: q.partner.code, partnerName: q.partner.name, status: q.status, note: q.note,
     createdByName: creator?.fullName ?? null, convertedOrder: q.convertedOrder,
     quoteTotal: q.lines.reduce((s, l) => s.plus(amountOf(l)), D(0)).toString(),
-    lines: q.lines.map((l) => ({
+    lines: q.lines.map((l, lineIdx) => ({
+      areaRatio: areaRatios[lineIdx] ?? null,
       id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(), note: l.note, processingTypeName: l.processingType?.name ?? null,
       salePrice: l.salePrice.toString(), lineAmount: amountOf(l).toString(),
     })),

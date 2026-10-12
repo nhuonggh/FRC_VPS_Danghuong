@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Combobox, type ComboOption } from "@/components/ui";
+import { Combobox, type ComboOption, NumberInput } from "@/components/ui";
 import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
 import { apiFetch } from "@/lib/api-fetch";
@@ -66,6 +66,10 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   const weightFactor = wUnit ? Number(wUnit.factor) : 0;
   const weightApplies = !!product && weightFactor > 0 && (useLength || unit === product.baseUnit);
   const weightMode = weightApplies && priceMode === "weight";
+  // Kiểu gia công tính giá theo m²: chỉ nhập giá/m² (ô gốc), giá/md tính ra; đơn giá lưu vẫn là giá/md của đơn vị gốc
+  const isArea = currentType?.priceBasis === "AREA";
+  const areaMode = isArea && ratio > 0 && !weightMode && (useLength || !product || unit === product.baseUnit);
+  const perM2 = (v: number | string) => (areaMode ? `${formatCurrency(pricePerM2(Number(v), ratio))}/m²` : null);
 
   // Tồn + giá gần nhất (theo đúng kiểu gia công đang chọn); đổi khách → tải lại
   useEffect(() => {
@@ -130,7 +134,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
       {product && (<>
         <p className={`${info} justify-between`}>
           <span>Giá nhập gần nhất</span>
-          <b className="tabular">{dto?.lastPurchasePrice != null ? formatCurrency(dto.lastPurchasePrice) : "—"}</b>
+          <b className="tabular">{dto?.lastPurchasePrice != null ? (perM2(dto.lastPurchasePrice) ?? formatCurrency(dto.lastPurchasePrice)) : "—"}</b>
         </p>
         <InlineField id="se-type" label="Kiểu gia công" labelClass={LABEL}>
           <select id="se-type" value={typeId ?? ""} onChange={(e) => { setTypeId(e.target.value ? Number(e.target.value) : null); setPriceTouched(false); setError(""); }} className={`${igInput} cursor-pointer`}>
@@ -140,24 +144,24 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
         </InlineField>
         <p className={`${info} justify-between`}>
           <span>Giá bán gần nhất{dto?.lastSalePrice != null ? (dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)") : ""}</span>
-          <b className="tabular">{dto?.lastSalePrice != null ? `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}` : "—"}</b>
+          <b className="tabular">{dto?.lastSalePrice != null ? (perM2(dto.lastSalePrice) ?? `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`) : "—"}</b>
         </p>
 
         <InlineField id="se-len" label="Chiều dài" labelClass={LABEL}>
           <input id="se-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} />
         </InlineField>
         <InlineField id="se-qty" label="Số lượng" labelClass={LABEL}>
-          <input id="se-qty" inputMode="decimal" value={useLength ? "" : qty} disabled={useLength} placeholder={useLength ? "Tính từ chiều dài" : "1"} onChange={(e) => setQty(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
+          <NumberInput id="se-qty" maxFrac={3} value={useLength ? "" : qty} disabled={useLength} placeholder={useLength ? "Tính từ chiều dài" : "1"} onValueChange={setQty} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
           <select aria-label="Đơn vị tính" value={useLength ? product.baseUnit : unit} disabled={useLength} onChange={(e) => { setUnit(e.target.value); setPriceTouched(false); }} className="h-11 shrink-0 cursor-pointer border-l border-border bg-hover px-2 text-sm outline-none disabled:opacity-60 md:h-9">
             {(product.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
           </select>
         </InlineField>
-        <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL} hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}>
-          <input id="se-price" type="number" min={0} step="any" readOnly={!canEditPrice || weightMode} value={price} onChange={(e) => { setPrice(e.target.value); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
-        </InlineField>
+        {!areaMode && <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL} hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}>
+          <NumberInput maxFrac={2} id="se-price" readOnly={!canEditPrice || weightMode} value={price} onValueChange={(val) => { setPrice(val); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
+        </InlineField>}
         {weightApplies && wUnit && (<>
           <InlineField id="se-wprice" label={`Giá/${wUnit.unit} (tỷ trọng)`} labelClass={LABEL}>
-            <input id="se-wprice" type="number" min={0} step="any" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onChange={(e) => { setWeightStr(e.target.value); setPrice(e.target.value === "" ? "" : String(priceFromWeight(Number(e.target.value), weightFactor))); setPriceTouched(true); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"}`} />
+            <NumberInput maxFrac={2} id="se-wprice" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onValueChange={(val) => { setWeightStr(val); setPrice(val === "" ? "" : String(priceFromWeight(Number(val), weightFactor))); setPriceTouched(true); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"}`} />
           </InlineField>
           <div className="flex flex-wrap items-center gap-2 text-sm md:col-span-2 xl:col-span-3">
             <div role="group" aria-label="Cách tính giá" className="inline-flex overflow-hidden rounded-sm border border-border">
@@ -168,12 +172,12 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           </div>
         </>)}
 
-        {typeId && useLength && ratio > 0 && (
-          <InlineField id="se-m2" label="Giá/m²" labelClass={LABEL} hint={m2Str !== null ? "ô gốc — đơn giá/md tính theo" : "tính từ đơn giá/md"}>
-            <input id="se-m2" type="number" min={0} step="any" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onChange={(e) => { const v = e.target.value; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right`} />
+        {areaMode && (
+          <InlineField id="se-m2" label="Đơn giá/m²" labelClass={LABEL}>
+            <NumberInput maxFrac={2} id="se-m2" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onValueChange={(val) => { const v = val; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right`} />
           </InlineField>
         )}
-        {typeId && useLength && !ratioKnown && (
+        {typeId && (useLength || isArea) && !ratioKnown && (
           <InlineField id="se-ratio" label="Tỷ lệ m²/md" labelClass={LABEL}>
             <input id="se-ratio" inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} className={`${igInput} tabular text-right`} />
           </InlineField>

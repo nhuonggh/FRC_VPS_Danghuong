@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, type UseFormReturn } from "react-hook-form";
-import { addPickedLines, Combobox, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput, NumberInput } from "@/components/ui";
 import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import { QuickCustomerDialog, type QuickCustomer } from "@/components/sales/QuickCustomerDialog";
 import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
@@ -376,21 +376,21 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             </InlineField>
           )}
           <InlineField id="shippingFee" label="Phí vận chuyển" error={errors.shippingFee?.message} labelClass={LABEL}>
-            <input id="shippingFee" type="number" min={0} step="any" {...register("shippingFee", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${igInput} tabular text-right`} />
+            <RhfNumberInput id="shippingFee" control={control} name="shippingFee" empty={0} className={`${igInput} tabular text-right`} />
           </InlineField>
 
           {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
             <InlineField id="payAmount" label="Số tiền thu" labelClass={LABEL}>
-              <input id="payAmount" type="number" min={0} step="any" value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setAmountTouched(true); }} className={`${igInput} tabular text-right`} />
+              <NumberInput id="payAmount" value={payAmount} onValueChange={(val) => { setPayAmount(val); setAmountTouched(true); }} className={`${igInput} tabular text-right`} />
               <button type="button" onClick={() => { setPayAmount(total ? String(Math.max(0, round2(total - num(secAmount)))) : ""); setAmountTouched(true); }} className="h-11 shrink-0 border-l border-border bg-hover px-3 text-sm font-medium hover:bg-border md:h-9">Thu đủ</button>
             </InlineField>
             <InlineField id="secAmount" label={payKind === "CASH" ? "Thu thêm bằng chuyển khoản" : "Thu thêm bằng tiền mặt"} labelClass={LABEL}>
-              <input id="secAmount" type="number" min={0} step="any" value={secAmount} placeholder="0"
-                onChange={(e) => { setSecAmount(e.target.value); if (!secAccount && otherAccounts[0]) setSecAccount(Number(otherAccounts[0].value)); if (!amountTouched) setPayAmount(String(Math.max(0, round2(total - num(e.target.value))))); }} className={`${igInput} tabular text-right`} />
+              <NumberInput id="secAmount" value={secAmount} placeholder="0"
+                onValueChange={(val) => { setSecAmount(val); if (!secAccount && otherAccounts[0]) setSecAccount(Number(otherAccounts[0].value)); if (!amountTouched) setPayAmount(String(Math.max(0, round2(total - num(val))))); }} className={`${igInput} tabular text-right`} />
             </InlineField>
           </>)}
           <InlineField id="orderDiscount" label="Chiết khấu cả đơn" error={errors.orderDiscount?.message} labelClass={LABEL}>
-            <input id="orderDiscount" type="number" min={0} step="any" {...register("orderDiscount", { setValueAs: (v) => (v === "" || v == null ? 0 : Number(v)) })} className={`${igInput} tabular text-right`} />
+            <RhfNumberInput id="orderDiscount" control={control} name="orderDiscount" empty={0} className={`${igInput} tabular text-right`} />
           </InlineField>
           {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
             {num(secAmount) > 0 && (
@@ -456,6 +456,8 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const currentType = typeId ? types.find((t) => Number(t.value) === typeId) ?? null : null;
   const ratio = currentType?.ratio ?? (Number(ratioInput.replace(",", ".")) || 0);
   const ratioKnown = !!currentType?.ratio;
+  // Kiểu gia công tính giá theo m²: cột Đơn giá nhập/hiện giá/m² (giá lưu vẫn là giá/md = giá/m² × tỷ lệ)
+  const areaRow = currentType?.priceBasis === "AREA" && ratio > 0 && (!product || line?.unit === product.baseUnit);
   const submitLength = async () => {
     if (!lengthExpr.trim()) return;
     const parsed = parseLengthExpr(lengthExpr);
@@ -473,6 +475,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
 
   // Dòng sinh từ chiều dài: sửa Dài / Số tấm / Giá m² ngay tại dòng, SL (md), ghi chú và thành tiền tự tính lại (như màn bán hàng cũ).
   const dim = typeId ? parseDimNote(line?.note) : null;
+  const rowRatio = dim?.ratio ?? ratio; // dòng tách theo chiều dài ghi sẵn tỷ lệ đã dùng trong ghi chú
   const setDim = (patch: { length?: number; pieces?: number }) => {
     if (!dim) return;
     const t: LengthTerm = { length: patch.length ?? dim.length, pieces: patch.pieces ?? dim.pieces };
@@ -507,8 +510,8 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
                 <p>{product?.groupName && <>Nhóm: {product.groupName}</>}{product?.groupName && dto?.onHand !== undefined && <span className="px-1 text-fg-muted">|</span>}{dto?.onHand !== undefined && <>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</>}</p>
               )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
-              {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}</p>}
-              {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</p>}
+              {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
+              {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastPurchasePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastPurchasePrice)}/${dto.baseUnit}`}</p>}
             </div>
           </div>
         </div>
@@ -521,17 +524,21 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           {(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
         </select>
       </td>
-      <td data-label="Số lượng" className={cell}><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })}
-        onKeyDown={onQtyKeyDown} className={`${inputClass(err?.qty)} tabular text-right`} /></td>
+      <td data-label="Số lượng" className={cell}><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`}
+        onKeyDown={onQtyKeyDown} className={`${inputClass(err?.qty)} tabular text-right`} />{areaRow && num(line?.qty) > 0 && <p className="mt-0.5 text-right text-xs text-fg-muted tabular">= {formatQty(Math.round(num(line?.qty) * rowRatio * 1000) / 1000)} m²</p>}</td>
       <td data-label="Đơn giá" className={cell}>
-        <input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} {...register(`lines.${index}.salePrice`, { valueAsNumber: true })}
-          className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
+        {areaRow ? <>
+        <NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), rowRatio) : ""}
+          onValueChange={(val) => setValue(`lines.${index}.salePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), rowRatio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
+        <p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p>
+        </> : <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} readOnly={!canEditPrice} maxFrac={2} control={control} name={`lines.${index}.salePrice`}
+          className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />}
       </td>
       <td data-label="CK trừ ngay" className={cell}>
-        <input aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountNow`, { valueAsNumber: true })} className={`${inputClass(err?.discountNow)} tabular text-right`} />
+        <RhfNumberInput aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} control={control} name={`lines.${index}.discountNow`} className={`${inputClass(err?.discountNow)} tabular text-right`} />
         {err?.discountNow?.message && <p role="alert" className="mt-1 text-xs text-danger">{err.discountNow.message}</p>}
       </td>
-      <td data-label="CK tích lũy" className={cell}><input aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.discountAccum`, { valueAsNumber: true })} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
+      <td data-label="CK tích lũy" className={cell}><RhfNumberInput aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} control={control} name={`lines.${index}.discountAccum`} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
       <td data-label="Gia công" className={cell}>
         <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError(""); }} className={inputClass()}>
           <option value="">Không</option>
@@ -546,10 +553,6 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
               </label>
             )}
             {ratio > 0 && !dim && (<>
-              <label className="flex items-center gap-1">Giá/m²
-                <input aria-label={`Đơn giá theo m² dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), ratio) : ""}
-                  onChange={(e) => setValue(`lines.${index}.salePrice`, e.target.value === "" ? (undefined as never) : pricePerMd(Number(e.target.value), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass()} w-28 tabular text-right`} />
-              </label>
               <label className="flex items-center gap-1">Chiều dài
                 <input aria-label={`Chiều dài dòng ${index + 1}`} value={lengthExpr} onChange={(e) => { setLengthExpr(e.target.value); setDimError(""); }} onBlur={submitLength}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitLength(); } }} placeholder="7.1*7+6.8*1" className={`${inputClass()} w-32`} />
@@ -564,11 +567,10 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
         {dim ? (<>
           <div className="flex flex-wrap items-center gap-1 text-xs">
             <input aria-label={`Chiều dài (m) dòng ${index + 1}`} inputMode="decimal" defaultValue={String(dim.length).replace(".", ",")} key={`l${dim.length}`} onBlur={(e) => { const v = numIn(e.target.value); if (v > 0 && v !== dim.length) setDim({ length: v }); else e.target.value = String(dim.length).replace(".", ","); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} className={`${inputClass()} w-20 tabular text-right`} />
-            <span>m × {String(dim.ratio).replace(".", ",")} ×</span>
+            <span>{areaRow ? `m × ${String(dim.ratio).replace(".", ",")} ×` : "m ×"}</span>
             <input aria-label={`Số tấm dòng ${index + 1}`} inputMode="numeric" defaultValue={String(dim.pieces)} key={`p${dim.pieces}`} onBlur={(e) => { const v = numIn(e.target.value); if (Number.isInteger(v) && v > 0 && v !== dim.pieces) setDim({ pieces: v }); else e.target.value = String(dim.pieces); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} className={`${inputClass()} w-14 tabular text-right`} />
-            <span className="tabular">= {String(termArea({ length: dim.length, pieces: dim.pieces }, dim.ratio)).replace(".", ",")} m² ×</span>
-            <input aria-label={`Đơn giá theo m² dòng ${index + 1}`} type="number" min={0} step="any" readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), dim.ratio) : ""}
-              onChange={(e) => setValue(`lines.${index}.salePrice`, e.target.value === "" ? (undefined as never) : pricePerMd(Number(e.target.value), dim.ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass()} w-28 tabular text-right`} />
+            <span className="tabular">{areaRow ? `= ${String(termArea({ length: dim.length, pieces: dim.pieces }, dim.ratio)).replace(".", ",")} m² ×` : `= ${String(termQty({ length: dim.length, pieces: dim.pieces })).replace(".", ",")} m ×`}</span>
+            <span className="tabular">{areaRow ? formatCurrency(pricePerM2(num(line?.salePrice), dim.ratio)) : formatCurrency(num(line?.salePrice))}</span>
             <span className="tabular">= {formatCurrency(amount)}</span>
           </div>
           <input aria-label={`Ghi chú dòng ${index + 1}`} maxLength={120} placeholder="Ghi chú thêm" value={dim.user} onChange={(e) => setValue(`lines.${index}.note`, buildDimNote(e.target.value, { length: dim.length, pieces: dim.pieces }, dim.ratio), { shouldDirty: true })} className={`${inputClass()} mt-1`} />

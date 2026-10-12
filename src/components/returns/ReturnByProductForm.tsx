@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { Banknote, Package, Undo2 } from "lucide-react";
-import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
+import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, NumberInput, RhfNumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -152,8 +152,8 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
                           <option value="">—</option>{(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
                         </select>
                       </td>
-                      <td className="px-2 py-2" data-label="Số lượng"><input aria-label={`Số lượng dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.qty`, { valueAsNumber: true })} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
-                      <td className="px-2 py-2" data-label={c.priceLabel}><input aria-label={`Đơn giá dòng ${index + 1}`} type="number" min={0} step="any" {...register(`lines.${index}.unitPrice`, { valueAsNumber: true })} className={`${inputClass(err?.unitPrice)} min-w-28 tabular text-right`} /></td>
+                      <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(err?.qty)} min-w-20 tabular text-right`} /></td>
+                      <td className="px-2 py-2" data-label={c.priceLabel}><RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} maxFrac={2} control={control} name={`lines.${index}.unitPrice`} className={`${inputClass(err?.unitPrice)} min-w-28 tabular text-right`} /></td>
                       <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(amountOf(l))}</td>
                       <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} disabled={fields.length === 1} className="h-11 w-11 text-danger hover:bg-danger-soft disabled:opacity-40 md:h-9 md:w-9">×</button></td>
                     </tr>
@@ -176,12 +176,12 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
             return (
               <FormCard icon={Banknote} title="Xử lý tiền khi khách trả hàng">
                 <FormGrid cols={2}>
-                  <InlineField id="ret-ded" label="Khấu trừ" labelClass="sm:min-w-40" hint="Phí vận chuyển, hao hụt… trừ vào tiền khách được nhận lại"><input id="ret-ded" type="number" min={0} step="any" value={dedAmount} placeholder="0" onChange={(e) => setDedAmount(e.target.value)} className={ig(money)} /></InlineField>
+                  <InlineField id="ret-ded" label="Khấu trừ" labelClass="sm:min-w-40" hint="Phí vận chuyển, hao hụt… trừ vào tiền khách được nhận lại"><NumberInput id="ret-ded" value={dedAmount} placeholder="0" onValueChange={setDedAmount} className={ig(money)} /></InlineField>
                   <InlineField id="ret-ded-reason" label="Lý do khấu trừ" labelClass="sm:min-w-40"><input id="ret-ded-reason" maxLength={200} value={dedReason} onChange={(e) => setDedReason(e.target.value)} className={igInput} /></InlineField>
                   {refundAccounts && (<>
-                    <InlineField id="ret-cash" label="Hoàn tiền mặt" labelClass="sm:min-w-40"><input id="ret-cash" type="number" min={0} step="any" value={cashRefund} placeholder="0" onChange={(e) => setCashRefund(e.target.value)} className={ig(money)} /></InlineField>
+                    <InlineField id="ret-cash" label="Hoàn tiền mặt" labelClass="sm:min-w-40"><NumberInput id="ret-cash" value={cashRefund} placeholder="0" onValueChange={setCashRefund} className={ig(money)} /></InlineField>
                     <InlineField id="ret-cash-acc" label="Quỹ tiền mặt" labelClass="sm:min-w-40">{sel("ret-cash-acc", cashList, cashAcc, setCashAcc)}</InlineField>
-                    <InlineField id="ret-bank" label="Hoàn chuyển khoản" labelClass="sm:min-w-40"><input id="ret-bank" type="number" min={0} step="any" value={bankRefund} placeholder="0" onChange={(e) => setBankRefund(e.target.value)} className={ig(money)} /></InlineField>
+                    <InlineField id="ret-bank" label="Hoàn chuyển khoản" labelClass="sm:min-w-40"><NumberInput id="ret-bank" value={bankRefund} placeholder="0" onValueChange={setBankRefund} className={ig(money)} /></InlineField>
                     <InlineField id="ret-bank-acc" label="Ngân hàng" labelClass="sm:min-w-40">{sel("ret-bank-acc", bankList, bankAcc, setBankAcc)}</InlineField>
                   </>)}
                 </FormGrid>

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { Combobox, filterComboOptions, type ComboOption } from "@/components/ui/Combobox";
 import { FileText, History, ReceiptText, Truck, Wallet } from "lucide-react";
-import { igArea, igCombo, igInput, InlineField, NewPage, tabsWithErrors, type FormTab } from "@/components/ui";
+import { igArea, igCombo, igInput, InlineField, NewPage, tabsWithErrors, type FormTab, RhfNumberInput } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { PartnerKind } from "@/server/partners/codes";
@@ -28,7 +28,7 @@ export function PartnerNewForm({ kind, groups, owners, canPickOwner }: { kind: P
     <InlineField id="deliveryAddress" label="Địa chỉ giao hàng" error={errors.deliveryAddress?.message}><input id="deliveryAddress" {...register("deliveryAddress")} className={igInput} /></InlineField>
     <fieldset className="flex flex-wrap gap-6 md:col-span-2"><legend className="sr-only">Loại đối tác</legend><label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("isCustomer")} />Là khách hàng</label><label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("isSupplier")} />Là nhà cung cấp</label>{errors.isCustomer && <p className="w-full text-xs text-danger">{errors.isCustomer.message}</p>}</fieldset>
   </div><InlineField id="note" label="Ghi chú" error={errors.note?.message} multiline><textarea id="note" rows={3} {...register("note")} className={igArea} /></InlineField></div> },
-    { key: "cong-no", label: "Công nợ", icon: Wallet, fields: ["debtLimit", "allowCredit"], render: () => <div className="space-y-5"><div className="grid gap-x-6 gap-y-3 md:grid-cols-2"><InlineField id="debtLimit" label="Hạn mức nợ (₫)" error={errors.debtLimit?.message}><input id="debtLimit" type="number" inputMode="numeric" min={0} {...register("debtLimit", { valueAsNumber: true })} className={`${igInput} tabular text-right`} /></InlineField><label className="flex min-h-10 items-center gap-2 self-end text-sm"><input type="checkbox" {...register("allowCredit")} />Cho phép ghi nợ</label></div></div> },
+    { key: "cong-no", label: "Công nợ", icon: Wallet, fields: ["debtLimit", "allowCredit"], render: () => <div className="space-y-5"><div className="grid gap-x-6 gap-y-3 md:grid-cols-2"><InlineField id="debtLimit" label="Hạn mức nợ (₫)" error={errors.debtLimit?.message}><RhfNumberInput id="debtLimit" control={control} name={"debtLimit"} className={`${igInput} tabular text-right`} /></InlineField><label className="flex min-h-10 items-center gap-2 self-end text-sm"><input type="checkbox" {...register("allowCredit")} />Cho phép ghi nợ</label></div></div> },
     ...(kind === "customer"
       ? [
           { key: "lich-su-mua", label: "Lịch sử mua hàng", icon: History, disabled: true, disabledHint: "Lưu trước để xem", readOnly: true, render: () => lock("Lịch sử mua hàng") },

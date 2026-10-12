@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
-import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption } from "@/components/ui";
+import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 
@@ -45,7 +45,7 @@ export function DebtTransferForm({ today }: { today: string }) {
           </InlineField>
           {!merge && (
             <InlineField id="amount" label="Số tiền" required>
-              <input id="amount" type="number" min={0} step="any" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular text-right`} />
+              <NumberInput id="amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} />
             </InlineField>
           )}
           <InlineField id="date" label="Ngày" required>

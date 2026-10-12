@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PrintButton } from "@/components/print/PrintButton";
-import { Badge, DetailField, ReasonDialog, InlineField, igInput, igArea } from "@/components/ui";
+import { Badge, DetailField, ReasonDialog, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -151,7 +151,7 @@ function AdjustDialog({ open, onClose, v, accounts, idemKey, onDone }: { open: b
           <InlineField id="adj-kind" label="Nội dung"><select id="adj-kind" value={kind} onChange={(e) => setKind(e.target.value as "AMOUNT" | "VOID")} className={igInput}><option value="AMOUNT">Đổi số tiền / quỹ</option><option value="VOID">Hủy phiếu</option></select></InlineField>
           {kind === "AMOUNT" && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <InlineField id="adj-amount" label={`Số tiền mới (hiện ${formatCurrency(v.amount)})`}><input id="adj-amount" type="number" min={0} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${igInput} tabular`} /></InlineField>
+              <InlineField id="adj-amount" label={`Số tiền mới (hiện ${formatCurrency(v.amount)})`}><NumberInput id="adj-amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular`} /></InlineField>
               <InlineField id="adj-account" label="Quỹ mới"><select id="adj-account" value={accountId} onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Giữ nguyên</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>
             </div>
           )}

@@ -27,7 +27,7 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
   deliveryStatus: "PARTIAL", paymentStatus: "UNPAID", expectedDeliveryDate: "2026-09-20", originalDeliveryDate: "2026-09-20", delayDays: 0,
   hasProvisional: false, isCancelled: false, isDraft: false, deposits: [], depositTotal: "0", quote: null, note: null, cancelReason: null, createdByName: "An", walkInName: null, walkInPhone: null, salesUserName: null, warehouseName: null, paymentMethod: "NONE", orderTotal: "300000", history: [],
   lines: [{ note: null,
-    id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, bomVersionId: null, bomVersionLabel: null,
+    id: 11, productId: 5, productCode: "TX01", productName: "Tôn xốp", baseUnit: "md", qty: "10", unit: "md", qtyBase: "10", processingType: null, areaRatio: null, bomVersionId: null, bomVersionLabel: null,
     isProvisional: false, deliveredQty: "4", salePrice: "30000", discountNow: "0", discountAccum: "0", lineAmount: "300000", issues: [],
   }],
   deliveries: [{ id: 9, code: "PG000009", at: new Date("2026-09-12T03:00:00Z"), isCancelled: false, note: null, lines: [{ orderLineId: 11, productName: "Tôn xốp", unit: "md", qty: "4" }] }],
@@ -84,7 +84,7 @@ describe("DeliveryPanel (tab Giao hàng)", () => {
     view();
     expect(screen.getByText(/6 md/)).toBeInTheDocument(); // 10 − 4
     await userEvent.click(screen.getByRole("button", { name: "Giao hết Tôn xốp" }));
-    expect(screen.getByLabelText("Số lượng giao Tôn xốp")).toHaveValue(6);
+    expect(screen.getByLabelText("Số lượng giao Tôn xốp")).toHaveValue("6");
     await userEvent.click(screen.getByRole("button", { name: "Lập phiếu giao" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalled());
     const [url, init] = apiFetch.mock.calls[0]!;
@@ -103,7 +103,7 @@ describe("DeliveryPanel (tab Giao hàng)", () => {
     await userEvent.type(screen.getByLabelText("Số lượng giao Tôn xốp"), "9");
     await userEvent.click(screen.getByRole("button", { name: "Lập phiếu giao" }));
     expect(await screen.findByText("Dòng 1: chỉ còn 6 md chưa giao.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Số lượng giao Tôn xốp")).toHaveValue(9);
+    expect(screen.getByLabelText("Số lượng giao Tôn xốp")).toHaveValue("9");
   });
 
   it("hủy phiếu giao cần xác nhận rồi POST; từ chối thì không gọi", async () => {

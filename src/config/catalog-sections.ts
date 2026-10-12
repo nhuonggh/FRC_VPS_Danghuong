@@ -2,7 +2,7 @@ import { z } from "zod";
 import { parseViNumber } from "@/lib/parse-number";
 
 export type CatalogKey = "partner-groups" | "product-groups" | "units" | "warehouses" | "vehicles" | "drivers" | "routes" | "expense-types" | "cash-accounts" | "processing-types";
-export interface CatalogField { name: string; label: string; type: "text" | "checkbox" | "select" | "number"; required?: boolean; maxLength?: number; options?: readonly { value: string; label: string }[]; inTable?: boolean; /** Ô mẫu trong file nhập Excel. */ sample?: string }
+export interface CatalogField { name: string; label: string; type: "text" | "checkbox" | "select" | "number"; required?: boolean; maxLength?: number; options?: readonly { value: string; label: string }[]; inTable?: boolean; /** Ô chọn có giá trị mặc định: bỏ trống khi tạo/nhập Excel thì dùng mặc định của DB (giữ nguyên khi sửa). */ optional?: boolean; defaultValue?: string; /** Ô mẫu trong file nhập Excel. */ sample?: string }
 export interface CatalogSection { key: CatalogKey; label: string; singular: string; icon: string; codes: readonly string[]; entity: string; titleField: string; fields: readonly CatalogField[] }
 const name = (label: string, maxLength = 80): CatalogField => ({ name: "name", label, type: "text", required: true, maxLength });
 
@@ -16,7 +16,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
   { key: "routes", label: "Tuyến giao hàng", singular: "tuyến giao hàng", icon: "arrow-left-right", codes: ["16"], entity: "Route", titleField: "name", fields: [name("Tên tuyến")] },
   { key: "expense-types", label: "Loại thu chi", singular: "loại thu chi", icon: "coins", codes: ["17"], entity: "ExpenseType", titleField: "name", fields: [name("Tên loại")] },
   { key: "cash-accounts", label: "Ngân hàng & quỹ", singular: "tài khoản quỹ", icon: "landmark", codes: ["18"], entity: "CashAccount", titleField: "name", fields: [name("Tên tài khoản"), { name: "type", label: "Loại", type: "select", options: [{ value: "CASH", label: "Tiền mặt" }, { value: "BANK", label: "Ngân hàng" }], inTable: true }, { name: "bankNo", label: "Số tài khoản", type: "text", maxLength: 40, inTable: true }] },
-  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }, { name: "ratio", label: "Tỷ lệ", type: "number", inTable: true, sample: "1,08" }, { name: "stockRatio", label: "Tỷ lệ trừ kho", type: "number", inTable: true, sample: "1" }, { name: "unit", label: "ĐVT", type: "text", maxLength: 10, inTable: true, sample: "m2" }] },
+  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }, { name: "ratio", label: "Tỷ lệ", type: "number", inTable: true, sample: "1,08" }, { name: "stockRatio", label: "Tỷ lệ trừ kho", type: "number", inTable: true, sample: "1" }, { name: "unit", label: "ĐVT", type: "text", maxLength: 10, inTable: true, sample: "m2" }, { name: "priceBasis", label: "Tính giá theo", type: "select", options: [{ value: "LENGTH", label: "Mét dài" }, { value: "AREA", label: "Mét vuông" }], optional: true, defaultValue: "LENGTH", inTable: true, sample: "Mét dài" }] },
 ];
 export const getSection = (key: string): CatalogSection | null => CATALOG_SECTIONS.find((x) => x.key === key) ?? null;
 export const resolveSection = (key: string | undefined): CatalogSection => (key ? getSection(key) : null) ?? CATALOG_SECTIONS[0]!;
@@ -28,7 +28,8 @@ export function catalogSchema(section: CatalogSection) {
     else if (f.type === "number") shape[f.name] = z.string().trim().transform((v, ctx) => { const r = parseViNumber(v); if (!r.ok) { ctx.addIssue({ code: "custom", message: `${f.label}: ${r.message}` }); return z.NEVER; } if (r.value !== null && !(Number(r.value) > 0)) { ctx.addIssue({ code: "custom", message: `${f.label} phải lớn hơn 0.` }); return z.NEVER; } return r.value ?? ""; });
     else if (f.type === "select") {
       const values = (f.options ?? []).map((x) => x.value) as [string, ...string[]];
-      shape[f.name] = z.enum(values, { errorMap: () => ({ message: `Chọn ${lower(f.label)}.` }) });
+      const en = z.enum(values, { errorMap: () => ({ message: `Chọn ${lower(f.label)}.` }) });
+      shape[f.name] = f.optional ? z.preprocess((v) => (v === "" ? undefined : v), en.optional()) : en;
     } else {
       const base = z.string({ required_error: `Nhập ${lower(f.label)}.` }).trim().max(f.maxLength ?? 80, `${f.label} quá dài.`);
       shape[f.name] = f.required ? base.min(1, `Nhập ${lower(f.label)}.`) : base;

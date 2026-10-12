@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api-fetch";
 
 /** Kiểu gia công đã gắn cho sản phẩm (Sản phẩm → tab Gia công); `ratio` = tỷ lệ m²/md đã lưu, null = chưa khai báo. */
-export type ProcessingOption = { value: number | string; label: string; ratio: number | null };
+export type ProcessingOption = { value: number | string; label: string; ratio: number | null; priceBasis?: "LENGTH" | "AREA" };
 export type ProcessingOptions = ReadonlyMap<number, ProcessingOption[]>;
 
 /** Nạp (một lần mỗi sản phẩm) danh sách kiểu gia công của sản phẩm để dòng nhập/báo giá chọn. */

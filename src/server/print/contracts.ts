@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Actor } from "@/lib/permissions/scope";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
+import { pricePerM2 } from "@/lib/length-expr";
 import { getDebtDetail } from "@/server/debt/queries";
 import { DomainError } from "@/server/http/errors";
 import { orderPaid } from "@/server/deposits/status";
@@ -15,6 +16,8 @@ import type { ContractBody } from "./types";
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const money = (v: string | undefined | null) => (v === undefined || v === null || v === "" ? "" : formatCurrency(v));
+/** Dòng tính giá theo m² (kiểu gia công AREA): in SL (m²), ĐVT m², đơn giá/m²; giá lưu là giá/md nên thành tiền không đổi. */
+const areaView = (qty: string, unit: string, price: string | undefined, ratio: number | null) => (ratio ? { qty: formatQty(String(Math.round(Number(qty) * ratio * 1000) / 1000)), unit: "m²", price: money(price === undefined ? undefined : String(pricePerM2(Number(price), ratio))) } : { qty: formatQty(qty), unit, price: money(price) });
 const sum = (rows: (string | undefined)[]) => rows.reduce((s, v) => s.plus(v ?? 0), D(0)).toString();
 const partnerOf = async (db: Db, partnerId: number | null) => {
   if (partnerId === null) return null;
@@ -32,7 +35,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       const o = await getOrder(db, actor, docId, now);
       if (o.isDraft) throw new DomainError("Đơn nháp chưa xác nhận — chưa in hóa đơn được.", 409);
       const lines = o.lines.map((l, i) => ({
-        no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.salePrice),
+        no: String(i + 1), code: l.productCode, name: l.productName, ...areaView(l.qty, l.unit, l.salePrice, l.areaRatio),
         discountNow: money(l.discountNow), discountAccum: money(l.discountAccum), amount: money(l.lineAmount), processing: l.processingType ?? "", note: l.note ?? "",
       }));
       const total = o.orderTotal ?? "0"; const deposit = (await orderPaid(db, docId)).toString(); // cọc + thu nợ theo đơn + tiền lái xe đã thu
@@ -49,7 +52,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       return {
         docCode: q.code, partner: await partnerOf(db, partner?.partnerId ?? null),
         doc: { code: q.code, date: formatDate(q.at), note: q.note ?? "", status: q.status, createdBy: q.createdByName ?? "" },
-        lines: q.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.salePrice), amount: money(l.lineAmount), note: l.note ?? "", processing: l.processingTypeName ?? "" })),
+        lines: q.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, ...areaView(l.qty, l.unit, l.salePrice, l.areaRatio), amount: money(l.lineAmount), note: l.note ?? "", processing: l.processingTypeName ?? "" })),
         totals: { total: money(q.quoteTotal) },
       };
     }
@@ -80,7 +83,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       return {
         docCode: p.code, partner: await partnerOf(db, p.partnerId),
         doc: { code: p.code, date: formatDate(p.at), note: p.note ?? "", createdBy: p.createdByName ?? "", status: p.isCancelled ? "ĐÃ HỦY" : "" },
-        lines: p.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.purchasePrice), amount: money(l.purchaseAmount), rollInfo: l.rollInfo ?? "", processing: l.processingTypeName ?? "" })),
+        lines: p.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, ...areaView(l.qty, l.unit, l.purchasePrice, l.areaRatio), amount: money(l.purchaseAmount), rollInfo: l.rollInfo ?? "", processing: l.processingTypeName ?? "" })),
         totals: { freight: money(p.freightCost), total: money(p.purchaseTotal) },
       };
     }

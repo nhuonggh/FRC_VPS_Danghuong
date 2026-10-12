@@ -7,6 +7,7 @@ import { Badge, DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/co
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
+import { pricePerM2 } from "@/lib/length-expr";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { SALE_PAYMENT_LABELS } from "@/server/sales/schemas";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
@@ -95,10 +96,10 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
                 )}
                 {l.isProvisional && <Badge tone="warning">Chưa đủ tồn</Badge>}
               </td>
-              <td className="px-3 py-2 text-right tabular">{formatQty(l.qty)}</td>
+              <td className="px-3 py-2 text-right tabular">{formatQty(l.qty)}{l.areaRatio && <span className="block text-xs text-fg-muted">= {formatQty(Math.round(Number(l.qty) * l.areaRatio * 1000) / 1000)} m²</span>}</td>
               <td className="px-3 py-2">{l.unit}</td>
               {showPrice && <>
-                <td className="px-3 py-2 text-right tabular">{l.salePrice !== undefined && formatCurrency(l.salePrice)}</td>
+                <td className="px-3 py-2 text-right tabular">{l.salePrice !== undefined && (l.areaRatio ? `${formatCurrency(pricePerM2(Number(l.salePrice), l.areaRatio))}/m²` : formatCurrency(l.salePrice))}</td>
                 <td className="px-3 py-2 text-right tabular">{l.discountNow !== undefined && formatCurrency(l.discountNow)}</td>
                 <td className="px-3 py-2 text-right tabular">{l.discountAccum !== undefined && formatCurrency(l.discountAccum)}</td>
                 <td className="px-3 py-2 text-right tabular">{l.lineAmount !== undefined && formatCurrency(l.lineAmount)}</td>
