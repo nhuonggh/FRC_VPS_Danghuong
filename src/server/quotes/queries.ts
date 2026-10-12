@@ -21,7 +21,7 @@ export interface QuoteRowDTO {
 }
 export interface QuoteDetailDTO extends Omit<QuoteRowDTO, "lineCount"> {
   note: string | null; createdByName: string | null; convertedOrder: { id: number; code: string } | null;
-  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; note: string | null; salePrice?: string; lineAmount?: string }[];
+  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; note: string | null; processingTypeName: string | null; salePrice?: string; lineAmount?: string }[];
 }
 
 function where(actor: Actor, params: ListParams): Prisma.QuoteWhereInput {
@@ -57,7 +57,7 @@ export async function getQuote(db: Db, actor: Actor, id: number): Promise<QuoteD
     where: { id, partner: partnerScopeWhere(actor) },
     include: {
       partner: { select: { code: true, name: true } }, convertedOrder: { select: { id: true, code: true } },
-      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } } } },
+      lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } } } },
     },
   });
   if (!q) throw new DomainError("Không tìm thấy báo giá.", 404);
@@ -67,7 +67,7 @@ export async function getQuote(db: Db, actor: Actor, id: number): Promise<QuoteD
     createdByName: creator?.fullName ?? null, convertedOrder: q.convertedOrder,
     quoteTotal: q.lines.reduce((s, l) => s.plus(amountOf(l)), D(0)).toString(),
     lines: q.lines.map((l) => ({
-      id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(), note: l.note,
+      id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(), note: l.note, processingTypeName: l.processingType?.name ?? null,
       salePrice: l.salePrice.toString(), lineAmount: amountOf(l).toString(),
     })),
   };
@@ -81,7 +81,7 @@ export async function getQuoteForEdit(db: Db, actor: Actor, id: number) {
   if (q.status === "CONVERTED" || q.status === "CANCELLED") throw new DomainError("Báo giá đã chốt, không sửa được.", 409);
   const defaults: QuoteInput = {
     partnerId: q.partnerId, date: ictYmd(q.at), note: q.note ?? "",
-    lines: q.lines.map((l) => ({ productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), note: l.note ?? "" })),
+    lines: q.lines.map((l) => ({ productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), note: l.note ?? "", processingTypeId: l.processingTypeId })),
   };
   return { quoteId: q.id, code: q.code, customer: { value: q.partnerId, label: `${q.partner.code} — ${q.partner.name}` }, products: await productOptionsByIds(db, q.lines.map((l) => l.productId)), defaults };
 }

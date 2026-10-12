@@ -53,7 +53,7 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
   };
 }
 
-export interface StopLineDTO { orderLineId: number; productCode: string; productName: string; unit: string; qty: string; delivered: string; remaining: string }
+export interface StopLineDTO { orderLineId: number; productCode: string; productName: string; processingTypeName: string | null; unit: string; qty: string; delivered: string; remaining: string }
 export interface StopDTO {
   id: number; seq: number; orderId: number; orderCode: string; orderTotal: string; partnerId: number; partnerName: string; phone: string | null; address: string | null; allowCredit: boolean; debtLimit: string;
   result: TripResultKind | null; resultLabel: string | null; due: string | null; cash: string; transfer: string; debt: string; promiseDate: string | null; resultNote: string | null; resultAt: Date | null;
@@ -74,7 +74,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     where: { id },
     include: {
       route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } },
-      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } },
+      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } },
     },
   });
   if (!t) throw new DomainError("Không tìm thấy chuyến giao.", 404);
@@ -93,7 +93,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
       result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), debt: s.debtAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
       suggestedDue: suggested.toString(), deliveryNoteId: s.deliveryNoteId, handledNote: s.handledNote,
       canCancelResult: s.result !== null && (t.status === "PLANNED" || t.status === "ON_ROAD" || t.status === "RETURNED"),
-      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: l.qty.minus(done).toString() }; }),
+      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: l.qty.minus(done).toString() }; }),
     });
   }
   const sum = (f: (s: StopDTO) => string | null) => stops.reduce((a, s) => a.plus(f(s) ?? 0), D(0));

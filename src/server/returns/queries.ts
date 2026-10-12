@@ -95,7 +95,7 @@ export async function searchReturnableOrders(db: Db, actor: Actor, q: string) {
 
 export interface ReturnableOrderDTO {
   id: number; code: string; partnerName: string; partnerCode: string; orderDate: Date;
-  lines: { id: number; productCode: string; productName: string; unit: string; delivered: string; returned: string; remaining: string; returnable: boolean }[];
+  lines: { id: number; productCode: string; productName: string; unit: string; delivered: string; returned: string; remaining: string; returnable: boolean; processingTypeName: string | null }[];
 }
 /** Các dòng của một đơn kèm SL đã giao / đã trả / còn trả được (cho form trả theo đơn). */
 export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): Promise<ReturnableOrderDTO> {
@@ -107,6 +107,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): 
         orderBy: { id: "asc" },
         include: {
           product: { select: { code: true, name: true } },
+          processingType: { select: { name: true } },
           deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } },
           returnLines: { where: { goodsReturn: { isCancelled: false } }, select: { qty: true } },
         },
@@ -122,7 +123,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): 
       const returned = l.returnLines.reduce((s, d) => s.plus(d.qty), D(0));
       return {
         id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, delivered: delivered.toString(), returned: returned.toString(),
-        remaining: delivered.minus(returned).toString(), returnable: l.bomVersionId === null,
+        remaining: delivered.minus(returned).toString(), returnable: l.bomVersionId === null, processingTypeName: l.processingType?.name ?? null,
       };
     }),
   };

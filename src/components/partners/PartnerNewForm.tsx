@@ -36,5 +36,5 @@ export function PartnerNewForm({ kind, groups, owners, canPickOwner }: { kind: P
         ]
       : [{ key: "lich-su-nhap", label: "Lịch sử nhập hàng", icon: Truck, disabled: true, disabledHint: "Lưu trước để xem", readOnly: true, render: () => lock("Lịch sử nhập hàng") }]),
   ];
-  return <NewPage backHref={ui.base} backLabel={`Quay lại ${ui.title.toLowerCase()}`} title={`Thêm ${ui.singular}`} isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />;
+  return <NewPage wide backHref={ui.base} backLabel={`Quay lại ${ui.title.toLowerCase()}`} title={`Thêm ${ui.singular}`} isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />;
 }

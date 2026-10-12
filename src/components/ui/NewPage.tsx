@@ -116,7 +116,7 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
           <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError(null)}><X size={16} aria-hidden /></button>
         </div>
       )}
-      <div className={clsx("min-w-0 flex-1 space-y-4", !wide && "mx-auto w-full max-w-5xl")}>
+      <div className={clsx("min-w-0 flex-1 space-y-4", !wide && "mx-auto w-full max-w-7xl")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">{title}</h1>
           {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}

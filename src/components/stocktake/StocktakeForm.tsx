@@ -35,7 +35,7 @@ export function StocktakeForm({ today, initial }: { today: string; initial?: Sto
   const err = form.formState.errors;
   const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
   return (
-    <NewPage bare backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+    <NewPage wide bare backHref="/inventory/stocktakes" backLabel="Quay lại kiểm kho" title={initial ? "Sửa phiếu kiểm kho (nháp)" : "Lập phiếu kiểm kho"} submitLabel="Lưu nháp" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={ClipboardCheck} title="Thông tin kiểm kho">
         <p className="mb-3 text-sm text-fg-secondary">Nhập tồn thực đếm (đơn vị gốc). Lưu nháp chưa đổi kho; khi bấm “Chốt” hệ thống so với tồn sổ sách và tự nhập/xuất phần chênh lệch.</p>
         <FormGrid cols={2}>

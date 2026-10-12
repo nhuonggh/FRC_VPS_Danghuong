@@ -44,7 +44,7 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts }: { today:
     </select>
   );
   return (
-    <NewPage bare backHref="/purchase/orders" backLabel="Quay lại phiếu nhập" title="Lập phiếu nhập" submitLabel="Lập phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { dropEmptyPurchaseLines(form); await submit(); }}
+    <NewPage wide bare backHref="/purchase/orders" backLabel="Quay lại phiếu nhập" title="Lập phiếu nhập" submitLabel="Lập phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { dropEmptyPurchaseLines(form); await submit(); }}
       footerInfo={(
         <>
           <span className="text-sm font-semibold">Tiền hàng: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(goodsTotal)}</b></span>

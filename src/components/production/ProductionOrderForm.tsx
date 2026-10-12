@@ -33,7 +33,7 @@ export function ProductionOrderForm({ today }: { today: string }) {
   const target = meta[form.watch("productId") as number];
   const lineIds = form.watch("materials").flatMap((l) => (l?.productId ? [l.productId as number] : []));
   return (
-    <NewPage bare backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất phụ kiện" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+    <NewPage wide bare backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất phụ kiện" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={Factory} title="Thông tin lệnh sản xuất">
         <p className="mb-3 text-sm text-fg-secondary">Xuất nguyên vật liệu theo FIFO và nhập phụ kiện thành phẩm; giá thành = tổng vốn nguyên vật liệu / số lượng. Chỉ dành cho phụ kiện (nóc, sườn, sối, máng…).</p>
         <FormGrid cols={2}>

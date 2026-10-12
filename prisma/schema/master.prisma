@@ -240,6 +240,7 @@ model ProcessingType {
   ratios    ProductProcessingRatio[]
   saleLines SaleOrderLine[]
   purchaseLines PurchaseLine[]
+  quoteLines    QuoteLine[]
 
   @@map("processing_types")
 }

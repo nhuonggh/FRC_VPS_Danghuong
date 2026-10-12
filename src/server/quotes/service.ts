@@ -24,7 +24,10 @@ function assertWriter(actor: Actor) {
 async function validateLines(tx: Tx, lines: QuoteInput["lines"]) {
   const products = await tx.product.findMany({ where: { id: { in: [...new Set(lines.map((l) => l.productId))] } }, include: { units: true } });
   const byId = new Map(products.map((p) => [p.id, p]));
+  const typeIds = [...new Set(lines.flatMap((l) => (l.processingTypeId ? [l.processingTypeId] : [])))];
+  const types = new Set((await tx.processingType.findMany({ where: { id: { in: typeIds } }, select: { id: true } })).map((t) => t.id));
   lines.forEach((l, i) => {
+    if (l.processingTypeId && !types.has(l.processingTypeId)) throw new DomainError(`Dòng ${i + 1}: kiểu gia công không tồn tại.`, 400);
     const p = byId.get(l.productId);
     if (!p) throw new DomainError(`Dòng ${i + 1}: sản phẩm không tồn tại.`, 400);
     if (!p.isActive) throw new DomainError(`Dòng ${i + 1}: sản phẩm ${p.code} đã ngừng bán.`, 400);
@@ -32,7 +35,7 @@ async function validateLines(tx: Tx, lines: QuoteInput["lines"]) {
   });
 }
 
-const lineRows = (lines: QuoteInput["lines"]) => lines.map((l) => ({ productId: l.productId, qty: D(l.qty), unit: l.unit, salePrice: D(l.salePrice), note: l.note || null }));
+const lineRows = (lines: QuoteInput["lines"]) => lines.map((l) => ({ productId: l.productId, qty: D(l.qty), unit: l.unit, salePrice: D(l.salePrice), note: l.note || null, processingTypeId: l.processingTypeId ?? null }));
 
 async function lockQuote(tx: Tx, actor: Actor, id: number) {
   await tx.$queryRaw`SELECT id FROM quotes WHERE id = ${id} FOR UPDATE`;
@@ -115,7 +118,7 @@ export async function convertQuote(tx: Tx, actor: Actor, id: number, now: Date =
           const factor = resolveFactor(p, l.unit);
           const qtyBase = convertToBase(l.qty, factor);
           if (!qtyBase.gt(0)) throw new DomainError(`Dòng ${i + 1}: số lượng quá nhỏ.`, 400);
-          return { productId: l.productId, qty: l.qty, unit: l.unit, factorUsed: factor, qtyBase, salePrice: l.salePrice, at: now };
+          return { productId: l.productId, qty: l.qty, unit: l.unit, factorUsed: factor, qtyBase, salePrice: l.salePrice, at: now, processingTypeId: l.processingTypeId };
         }),
       },
     },

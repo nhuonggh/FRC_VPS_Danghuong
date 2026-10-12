@@ -39,5 +39,5 @@ export async function exportStockCardXlsx(db: PrismaClient, actor: Actor, produc
 
 export async function exportRollsXlsx(db: PrismaClient, q: string) {
   const rows = await rollLookup(db, q);
-  return buildXlsx("Tra cứu cuộn", [{ header: "Ngày nhập", key: "at" }, { header: "Phiếu nhập", key: "purchaseCode", text: true }, { header: "Mã sản phẩm", key: "productCode", text: true }, { header: "Sản phẩm", key: "productName", width: 32 }, { header: "Số lượng", key: "qty", ...qty }, { header: "Đơn vị", key: "unit" }, { header: "Ghi chú cuộn", key: "rollInfo", width: 36 }], rows.map((row) => ({ ...row })));
+  return buildXlsx("Tra cứu cuộn", [{ header: "Ngày nhập", key: "at" }, { header: "Phiếu nhập", key: "purchaseCode", text: true }, { header: "Mã sản phẩm", key: "productCode", text: true }, { header: "Sản phẩm", key: "productName", width: 32 }, { header: "Số lượng", key: "qty", ...qty }, { header: "Đơn vị", key: "unit" }, { header: "Kiểu gia công", key: "processingTypeName", width: 22 }, { header: "Ghi chú cuộn", key: "rollInfo", width: 36 }], rows.map((row) => ({ ...row })));
 }

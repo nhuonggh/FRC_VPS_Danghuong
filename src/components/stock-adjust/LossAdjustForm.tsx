@@ -30,7 +30,7 @@ export function LossAdjustForm({ today }: { today: string }) {
   const err = form.formState.errors;
   const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
   return (
-    <NewPage bare backHref="/inventory/adjustments" backLabel="Quay lại điều chỉnh hao hụt" title="Điều chỉnh hao hụt / xuất hủy" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+    <NewPage wide bare backHref="/inventory/adjustments" backLabel="Quay lại điều chỉnh hao hụt" title="Điều chỉnh hao hụt / xuất hủy" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={TriangleAlert} title="Thông tin phiếu">
         <p className="mb-3 text-sm text-fg-secondary">Trừ kho phần hao hụt (cắt lỗi…) hoặc hàng hủy theo FIFO; không sinh công nợ. Bắt buộc ghi lý do.</p>
         <FormGrid cols={2}>

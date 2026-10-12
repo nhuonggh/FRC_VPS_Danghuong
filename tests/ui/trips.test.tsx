@@ -40,7 +40,7 @@ describe("TripForm", () => {
   });
 });
 
-const line = { orderLineId: 100, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "4", delivered: "0", remaining: "4" };
+const line = { orderLineId: 100, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "4", delivered: "0", remaining: "4", processingTypeName: "Tôn xốp 6S" };
 const stop = (over: Partial<StopDTO> = {}): StopDTO => ({
   id: 1, seq: 1, orderId: 11, orderCode: "DH000011", orderTotal: "200000", partnerId: 7, partnerName: "Khách Đạt", phone: "0912", address: "Q12", allowCredit: true, debtLimit: "0",
   result: null, resultLabel: null, due: null, cash: "0", transfer: "0", debt: "0", promiseDate: null, resultNote: null, resultAt: null, suggestedDue: "200000", lines: [line], deliveryNoteId: null, handledNote: null, canCancelResult: false, ...over,

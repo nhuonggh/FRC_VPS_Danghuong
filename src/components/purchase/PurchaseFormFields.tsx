@@ -1,30 +1,17 @@
 "use client";
 
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption } from "@/components/ui";
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
+import { useProcessingOptions, type ProcessingOptions } from "@/lib/use-processing-options";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
 import type { PurchaseInput } from "@/server/purchase/schemas";
 import type { ProductOption } from "@/server/products/queries";
 
 export const emptyPurchaseLine = { productId: undefined, qty: undefined, unit: "", factor: 1, purchasePrice: undefined, rollInfo: "" } as unknown as PurchaseInput["lines"][number];
-/** Kiểu gia công đã gắn cho sản phẩm (Sản phẩm → tab Gia công); `ratio` = tỷ lệ m²/md đã lưu, null = chưa khai báo. */
-export type ProcessingOption = { value: number | string; label: string; ratio: number | null };
-type TypeOptions = ReadonlyMap<number, ProcessingOption[]>;
-/** Nạp (một lần mỗi sản phẩm) danh sách kiểu gia công của sản phẩm để dòng nhập chọn. */
-function useProcessingOptions() {
-  const [options, setOptions] = useState<TypeOptions>(new Map());
-  const asked = useRef(new Set<number>());
-  const ensure = useCallback((productId: number | undefined) => {
-    if (!productId || asked.current.has(productId)) return;
-    asked.current.add(productId);
-    apiFetch<ProcessingOption[]>(`/api/orders/options/processing-types?productId=${productId}`).then((rows) => setOptions((m) => new Map(m).set(productId, rows))).catch(() => asked.current.delete(productId));
-  }, []);
-  return { options, ensure };
-}
 const asNumber = (value: unknown) => Number(value) || 0;
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
 
@@ -44,9 +31,9 @@ export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, su
   const supplier = watch("partnerId") ? picked : null;
   const loadSuppliers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/suppliers/search?q=${encodeURIComponent(q)}`);
   return <FormGrid>
-    <InlineField id="supplier" label="Nhà cung cấp" required error={errors.partnerId?.message}>
+    <InlineField id="supplier" label="Nhà cung cấp" required error={errors.partnerId?.message} className="md:col-span-2">
       <Controller control={control} name="partnerId" render={({ field }) => <>
-        <div className={igCombo}><Combobox hideLabel label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => { setPicked(option); field.onChange(option ? Number(option.value) : undefined); }} /></div>
+        <div className={`${igCombo} min-w-40`}><Combobox hideLabel label="Nhà cung cấp" value={supplier} loadOptions={loadSuppliers} placeholder="Tìm nhà cung cấp…" onChange={(option) => { setPicked(option); field.onChange(option ? Number(option.value) : undefined); }} /></div>
         {supplierGroups && <div className="flex items-center border-l border-border px-1"><QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} /></div>}
       </>} />
     </InlineField>
@@ -65,7 +52,7 @@ export function PurchaseNoteField({ form }: FormProps) {
  * Nhập hàng theo kích thước (tôn mua từ nơi khác về bán): chọn sản phẩm, gõ `7.1*7+6.8*1` (dài*số tấm, nối bằng +) → mỗi số hạng một dòng,
  * SL = dài × số tấm (md, đơn vị gốc nên kho/FIFO không đổi), ghi chú cuộn ghi `7,1 m × 1,08 × 7 = 53,676 m²`. Giá nhập nhập theo md hoặc theo m² (liên động qua tỷ lệ m²/md, mặc định 1).
  */
-function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: TypeOptions; ensureTypes: (productId: number | undefined) => void }) {
+function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: ProcessingOptions; ensureTypes: (productId: number | undefined) => void }) {
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [typeId, setTypeId] = useState("");
   const types = product ? (typeOptions.get(product.value) ?? []) : [];

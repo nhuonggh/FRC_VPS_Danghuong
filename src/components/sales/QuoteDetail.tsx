@@ -81,7 +81,7 @@ export function QuoteDetail({ quote, canManage, canConvert, canPrint = false }: 
                 <tbody>
                   {quote.lines.map((l) => (
                     <tr key={l.id} className="border-t border-border">
-                      <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span></td>
+                      <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>{l.processingTypeName && <span className="block text-xs text-fg-secondary">Kiểu gia công: {l.processingTypeName}</span>}</td>
                       <td className="px-3 py-2 text-right tabular">{formatQty(l.qty)}</td><td className="px-3 py-2">{l.unit}</td>
                       {showPrice && <><td className="px-3 py-2 text-right tabular">{l.salePrice !== undefined && formatCurrency(l.salePrice)}</td><td className="px-3 py-2 text-right tabular">{l.lineAmount !== undefined && formatCurrency(l.lineAmount)}</td></>}
                       <td className="px-3 py-2 text-fg-secondary">{l.note}</td>

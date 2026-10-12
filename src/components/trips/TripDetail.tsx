@@ -147,7 +147,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
             <div className="space-y-2 rounded-sm border border-border p-2">
               <p className="text-xs font-semibold text-fg-secondary">Số lượng thực giao</p>
               {stop.lines.filter((l) => Number(l.remaining) > 0).map((l) => (
-                <label key={l.orderLineId} className="flex items-center justify-between gap-2 text-sm"><span>{l.productName}<span className="block text-xs text-fg-muted">còn {formatQty(l.remaining)} {l.unit}</span></span>
+                <label key={l.orderLineId} className="flex items-center justify-between gap-2 text-sm"><span>{l.productName}{l.processingTypeName ? <span className="text-fg-secondary"> · {l.processingTypeName}</span> : null}<span className="block text-xs text-fg-muted">còn {formatQty(l.remaining)} {l.unit}</span></span>
                   <input aria-label={`SL giao ${l.productCode}`} type="number" min={0} step="any" value={qty[l.orderLineId] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [l.orderLineId]: e.target.value }))} className={`${inputClass()} w-28 tabular`} /></label>
               ))}
             </div>

@@ -15,7 +15,7 @@ import { parseListParams } from "@/lib/query-params";
 import { getOrder } from "@/server/sales/queries";
 import { salePricing } from "@/server/sales/pricing";
 import { prisma, resetDb } from "../helpers/db";
-import { makeCashAccount, makePartner } from "../helpers/factories";
+import { makeCashAccount, makePartner, makeProcessingType } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 const NOW = new Date("2026-09-15T03:00:00Z");
@@ -51,6 +51,16 @@ beforeEach(async () => {
 });
 
 describe("báo giá (mục 35)", () => {
+  it("dòng báo giá lưu kiểu gia công, hiện ở chi tiết và mang sang đơn nháp khi chuyển; kiểu không tồn tại bị từ chối", async () => {
+    const type = await makeProcessingType("Tôn xốp");
+    const line = { productId: w.p.id, unit: w.p.baseUnit, qty: 4, salePrice: 50_000, note: "", processingTypeId: type.id };
+    const q = await tx((t) => createQuote(t, actor, qBody({ lines: [line] }), NOW));
+    expect((await getQuote(prisma, actor, q.id)).lines[0]!.processingTypeName).toBe("Tôn xốp");
+    const o = await tx((t) => convertQuote(t, actor, q.id, NOW));
+    expect((await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId: o.orderId } })).processingTypeId).toBe(type.id);
+    await expect(tx((t) => createQuote(t, actor, qBody({ lines: [{ ...line, processingTypeId: 999_999 }] }), NOW))).rejects.toMatchObject({ status: 400 });
+  });
+
   it("tạo báo giá KHÔNG đụng kho, KHÔNG công nợ; mã BG…; có audit không lộ giá", async () => {
     const q = await newQuote();
     expect(q.code).toMatch(/^BG\d{6}$/);

@@ -26,7 +26,7 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
   }
 
   return (
-    <NewPage bare backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={`Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
+    <NewPage wide bare backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={`Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
       <FormCard icon={Undo2} title="Thông tin trả hàng">
         <p className="mb-3 text-sm text-fg-secondary">{order.partnerCode} — {order.partnerName} · đơn ngày {formatDate(order.orderDate)}</p>
         <FormGrid cols={2}>
@@ -47,7 +47,7 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
             <tbody>
               {order.lines.map((l, i) => (
                 <tr key={l.id} className="border-t border-border align-top">
-                  <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>{!l.returnable && <span className="block text-xs text-fg-muted">Hàng gia công theo định mức — không trả theo đơn</span>}</td>
+                  <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>{l.processingTypeName && <span className="block text-xs text-fg-secondary">Kiểu gia công: {l.processingTypeName}</span>}{!l.returnable && <span className="block text-xs text-fg-muted">Hàng gia công theo định mức — không trả theo đơn</span>}</td>
                   <td className="px-3 py-2">{l.unit}</td>
                   <td className="px-3 py-2 text-right tabular">{formatQty(l.delivered)}</td>
                   <td className="px-3 py-2 text-right tabular">{formatQty(l.returned)}</td>

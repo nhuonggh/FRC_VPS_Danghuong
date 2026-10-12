@@ -21,4 +21,4 @@ export function ProductNewForm({ groups = [], units = [], canCatalog = false, ca
     { key: "ton-kho", label: "Tồn kho", icon: Boxes, disabled: true, disabledHint: "Lưu trước để xem", readOnly: true, render: () => lock("Tồn kho") },
     { key: "lich-su", label: "Lịch sử giao dịch", icon: History, disabled: true, disabledHint: "Lưu trước để xem", readOnly: true, render: () => lock("Lịch sử giao dịch") },
   ];
-  return <NewPage backHref="/inventory/products" backLabel="Quay lại danh sách sản phẩm" title="Thêm sản phẩm" submitLabel="Tạo" isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />; }
+  return <NewPage wide backHref="/inventory/products" backLabel="Quay lại danh sách sản phẩm" title="Thêm sản phẩm" submitLabel="Tạo" isDirty={() => isDirty} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />; }

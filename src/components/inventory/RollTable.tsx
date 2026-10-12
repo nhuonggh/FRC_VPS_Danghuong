@@ -11,6 +11,7 @@ export function RollTable({ rows }: { rows: RollRow[] }) {
     { key: "purchaseCode", label: "Phiếu", render: (row) => <span className="font-mono text-xs">{row.purchaseCode}</span> },
     { key: "product", label: "Sản phẩm", primaryOnMobile: true, render: (row) => <><span className="font-mono text-xs">{row.productCode}</span> {row.productName}</> },
     { key: "qty", label: "Số lượng", align: "right", render: (row) => `${formatQty(row.qty)} ${row.unit}` },
+    { key: "processing", label: "Kiểu gia công", render: (row) => row.processingTypeName },
     { key: "rollInfo", label: "Ghi chú cuộn", render: (row) => row.rollInfo },
   ];
   return <DataTable id="roll-lookup" columns={columns} rows={rows} rowKey={(row) => row.id} />;

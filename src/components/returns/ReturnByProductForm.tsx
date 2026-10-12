@@ -99,7 +99,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
 
   return (
-    <NewPage bare backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
+    <NewPage wide bare backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
       footerInfo={<span className="text-sm font-semibold">{c.totalLabel}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>}>
       <FormCard icon={Undo2} title="Thông tin trả hàng">
         <p className="mb-3 text-sm text-fg-secondary">{c.hint}</p>

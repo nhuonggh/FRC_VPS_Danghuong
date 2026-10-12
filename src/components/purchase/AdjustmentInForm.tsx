@@ -21,7 +21,7 @@ export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetC
  const err = form.formState.errors;
  const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
  return (
-  <NewPage bare backHref="/purchase/adjustments-in" backLabel="Quay lại nhập kho không NCC" title="Nhập kho không NCC" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+  <NewPage wide bare backHref="/purchase/adjustments-in" backLabel="Quay lại nhập kho không NCC" title="Nhập kho không NCC" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
    <FormCard icon={PackagePlus} title="Thông tin chung">
     <p className="mb-3 text-sm text-fg-secondary">Cho hàng lệch, hàng dư không theo nhà cung cấp; tạo lô FIFO mới và không sinh công nợ.</p>
     <FormGrid cols={2}>

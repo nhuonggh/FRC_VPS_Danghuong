@@ -49,20 +49,20 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       return {
         docCode: q.code, partner: await partnerOf(db, partner?.partnerId ?? null),
         doc: { code: q.code, date: formatDate(q.at), note: q.note ?? "", status: q.status, createdBy: q.createdByName ?? "" },
-        lines: q.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.salePrice), amount: money(l.lineAmount), note: l.note ?? "" })),
+        lines: q.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.salePrice), amount: money(l.lineAmount), note: l.note ?? "", processing: l.processingTypeName ?? "" })),
         totals: { total: money(q.quoteTotal) },
       };
     }
     case "DELIVERY_NOTE": {
       const n = await db.deliveryNote.findFirst({
         where: { id: docId, order: { partner: partnerScopeWhere(actor) } },
-        include: { order: { select: { code: true, partnerId: true, note: true } }, lines: { include: { orderLine: { include: { product: { select: { code: true, name: true } } } } } } },
+        include: { order: { select: { code: true, partnerId: true, note: true } }, lines: { include: { orderLine: { include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } } } } } } },
       });
       if (!n) throw new DomainError("Không tìm thấy phiếu giao.", 404);
       return {
         docCode: n.code, partner: await partnerOf(db, n.order.partnerId),
         doc: { code: n.code, orderCode: n.order.code, date: formatDateTime(n.at), note: n.note ?? "", status: n.isCancelled ? "ĐÃ HỦY" : "" },
-        lines: n.lines.map((l, i) => ({ no: String(i + 1), code: l.orderLine.product.code, name: l.orderLine.product.name, unit: l.orderLine.unit, qty: formatQty(l.qty.toString()) })),
+        lines: n.lines.map((l, i) => ({ no: String(i + 1), code: l.orderLine.product.code, name: l.orderLine.product.name, unit: l.orderLine.unit, qty: formatQty(l.qty.toString()), processing: l.orderLine.processingType?.name ?? "" })),
         totals: { totalQty: formatQty(n.lines.reduce((s, l) => s.plus(l.qty), D(0)).toString()) },
       };
     }
@@ -80,7 +80,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       return {
         docCode: p.code, partner: await partnerOf(db, p.partnerId),
         doc: { code: p.code, date: formatDate(p.at), note: p.note ?? "", createdBy: p.createdByName ?? "", status: p.isCancelled ? "ĐÃ HỦY" : "" },
-        lines: p.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.purchasePrice), amount: money(l.purchaseAmount), rollInfo: l.rollInfo ?? "" })),
+        lines: p.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(l.purchasePrice), amount: money(l.purchaseAmount), rollInfo: l.rollInfo ?? "", processing: l.processingTypeName ?? "" })),
         totals: { freight: money(p.freightCost), total: money(p.purchaseTotal) },
       };
     }

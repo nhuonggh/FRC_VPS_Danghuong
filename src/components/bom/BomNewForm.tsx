@@ -77,7 +77,7 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
 
   return (
     <NewPage
-      bare backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
+      bare wide backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
       isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={FileText} title="Thông tin định mức">
         <FormGrid>

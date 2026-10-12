@@ -9,11 +9,12 @@ import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput,
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
+import { useProcessingOptions } from "@/lib/use-processing-options";
 import type { ProductOption } from "@/server/products/queries";
 import type { SalePricingDTO } from "@/server/sales/pricing";
 import { quoteSchema, type QuoteInput } from "@/server/quotes/schemas";
 
-const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, note: "" } as unknown as QuoteInput["lines"][number];
+const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, note: "", processingTypeId: null } as unknown as QuoteInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
 
 export interface QuoteEdit { quoteId: number; code: string; customer: ComboOption; products: ProductOption[]; defaults: QuoteInput }
@@ -34,26 +35,29 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const requested = useRef(new Set<string>());
-  const key = (productId: number) => `${partnerId}:${productId}`;
+  const key = (productId: number, typeId?: number | null) => `${partnerId}:${productId}:${typeId ?? 0}`;
+  const { options: typeOptions, ensure: ensureTypes } = useProcessingOptions();
+  useEffect(() => { for (const l of lines) ensureTypes(l?.productId); }, [lines.map((l) => l?.productId).join(","), ensureTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!partnerId) return;
     for (const l of lines) {
       const pid = l?.productId;
-      if (!pid || requested.current.has(key(pid))) continue;
-      requested.current.add(key(pid));
-      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${partnerId}&productId=${pid}`)
-        .then((dto) => setPricing((m) => new Map(m).set(key(pid), dto))).catch(() => requested.current.delete(key(pid)));
+      const k = key(pid ?? 0, l?.processingTypeId);
+      if (!pid || requested.current.has(k)) continue;
+      requested.current.add(k);
+      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${partnerId}&productId=${pid}${l?.processingTypeId ? `&processingTypeId=${l.processingTypeId}` : ""}`)
+        .then((dto) => setPricing((m) => new Map(m).set(k, dto))).catch(() => requested.current.delete(k));
     }
-  }, [partnerId, lines.map((l) => l?.productId).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [partnerId, lines.map((l) => `${l?.productId}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     lines.forEach((l, i) => {
-      const dto = l?.productId && partnerId ? pricing.get(key(l.productId)) : null;
+      const dto = l?.productId && partnerId ? pricing.get(key(l.productId, l.processingTypeId)) : null;
       const suggested = dto?.units.find((u) => u.unit === l.unit)?.suggestedPrice;
       if (suggested != null && !num(getValues(`lines.${i}.salePrice`))) setValue(`lines.${i}.salePrice`, Number(suggested), { shouldValidate: true });
     });
-  }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricing, partnerId, lines.map((l) => `${l?.productId}:${l?.unit}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = handleSubmit(async (value) => {
     if (edit) {
@@ -80,7 +84,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
 
   // Một trang: thông tin chung ở trên, dòng hàng ở dưới.
   return (
-    <NewPage bare backHref={edit ? `/sales/quotes/${edit.quoteId}` : "/sales/quotes"} backLabel={edit ? `Quay lại báo giá ${edit.code}` : "Quay lại danh sách báo giá"}
+    <NewPage wide bare backHref={edit ? `/sales/quotes/${edit.quoteId}` : "/sales/quotes"} backLabel={edit ? `Quay lại báo giá ${edit.code}` : "Quay lại danh sách báo giá"}
       title={edit ? `Sửa báo giá ${edit.code}` : "Lập báo giá"} submitLabel={edit ? "Lưu thay đổi" : "Lập báo giá"} isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
       footerInfo={<span className="text-sm font-semibold">Tổng báo giá: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>}>
       <FormCard icon={UserRound} title="Thông tin báo giá">
@@ -102,9 +106,9 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
       <FormCard icon={Package} title="Dòng hàng">
         <div className="space-y-3">
           <div className="overflow-x-auto rounded-sm border border-border">
-            <table className="line-table w-full min-w-[820px] text-sm">
+            <table className="line-table w-full min-w-[940px] text-sm">
               <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-                <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL</th><th className="px-2 py-2 text-right">Đơn giá</th>
+                <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">ĐVT</th><th className="px-2 py-2 text-right">SL</th><th className="px-2 py-2 text-right">Đơn giá</th>
                 <th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú</th><th aria-label="Thao tác" />
               </tr></thead>
               <tbody>
@@ -123,11 +127,14 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
                               if (p) setProducts((m) => new Map(m).set(p.value, p));
                               setValue(`lines.${index}.unit`, p?.baseUnit ?? "", { shouldValidate: true });
                               setValue(`lines.${index}.salePrice`, undefined as never);
+                              setValue(`lines.${index}.processingTypeId`, null, { shouldDirty: true });
+                              ensureTypes(p ? Number(p.value) : undefined);
                               if (p) entry.onProductPicked(index);
                             }} />
                         )} />
                         {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
                       </td>
+                      <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(l?.productId ?? 0) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={l?.processingTypeId ?? ""} className={`${inputClass()} min-w-28`} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}><option value="">Không</option>{typeOptions.get(l!.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
                       <td className="px-2 py-2" data-label="ĐVT">
                         <select aria-label={`Đơn vị dòng ${index + 1}`} value={l?.unit ?? ""} className={`${inputClass(err?.unit)} min-w-20`}
                           onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}>
@@ -143,7 +150,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
                   );
                 })}
               </tbody>
-              <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={4} className="px-2 py-3 text-right">Tổng báo giá</td><td className="px-2 py-3 text-right tabular">{formatCurrency(total)}</td><td colSpan={2} /></tr></tfoot>
+              <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={5} className="px-2 py-3 text-right">Tổng báo giá</td><td className="px-2 py-3 text-right tabular">{formatCurrency(total)}</td><td colSpan={2} /></tr></tfoot>
             </table>
           </div>
           {errors.lines?.message && <p role="alert" className="text-sm text-danger">{errors.lines.message}</p>}

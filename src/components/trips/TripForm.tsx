@@ -49,7 +49,7 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
     </InlineField>
   );
   return (
-    <NewPage bare backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit}>
+    <NewPage wide bare backHref="/delivery/trips" backLabel="Quay lại danh sách chuyến" title="Xếp chuyến giao" submitLabel="Tạo chuyến" isDirty={() => picked.length > 0 || Boolean(note)} onSubmit={submit}>
       <FormCard icon={FileText} title="Thông tin chuyến">
         <FormGrid>
           <InlineField id="date" label="Ngày chuyến" required><input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>

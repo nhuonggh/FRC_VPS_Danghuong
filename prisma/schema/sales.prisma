@@ -220,9 +220,12 @@ model QuoteLine {
   /// Đơn giá theo `unit`.
   salePrice Decimal @db.Decimal(18, 2)
   note      String?
+  /// Kiểu gia công (tuỳ chọn) — mang sang dòng đơn khi chuyển báo giá thành đơn.
+  processingTypeId Int?
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  processingType ProcessingType? @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
 
   @@index([quoteId])
   @@map("quote_lines")

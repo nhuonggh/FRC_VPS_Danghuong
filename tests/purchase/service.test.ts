@@ -3,7 +3,7 @@ import type { Actor } from "@/lib/permissions/scope";
 import { toIct } from "@/lib/time";
 import { cancelPurchaseTx, createPurchaseIdempotent, updatePurchaseFreightTx, updatePurchaseTx } from "@/server/purchase/service";
 import { prisma, resetDb } from "../helpers/db";
-import { makeCashAccount, makePartner, makePeriod, makeProduct, makeUser } from "../helpers/factories";
+import { makeCashAccount, makePartner, makePeriod, makeProcessingType, makeProduct, makeUser } from "../helpers/factories";
 import { assertLedgerBalanced } from "../inventory/helpers";
 
 const todayIct = () => {
@@ -36,6 +36,13 @@ beforeEach(async () => {
 });
 
 describe("purchase service", () => {
+  it("lưu kiểu gia công của dòng nhập; kiểu không tồn tại bị từ chối", async () => {
+    const type = await makeProcessingType("Tôn xốp");
+    const { id } = await createPurchaseIdempotent(prisma, actor, "pt-1", document({ lines: [{ productId, qty: 10, unit: "md", factor: 1, purchasePrice: 1000, rollInfo: "", processingTypeId: type.id }] }));
+    expect((await prisma.purchaseLine.findFirstOrThrow({ where: { purchaseId: id } })).processingTypeId).toBe(type.id);
+    await expect(createPurchaseIdempotent(prisma, actor, "pt-2", document({ lines: [{ productId, qty: 10, unit: "md", factor: 1, purchasePrice: 1000, rollInfo: "", processingTypeId: 999_999 }] }))).rejects.toMatchObject({ status: 400 });
+  });
+
   it("trả NCC cùng lúc tiền mặt + chuyển khoản khi lập phiếu; phần còn lại ghi nợ; trả vượt thì rollback", async () => {
     const cash = await makeCashAccount({ type: "CASH", name: "Quỹ TM" }), bank = await makeCashAccount({ type: "BANK", name: "NH" });
     const payer: Actor = { userId: actor.userId, perms: new Set([...actor.perms, "payment.manage", "cash.transaction.create"]) };

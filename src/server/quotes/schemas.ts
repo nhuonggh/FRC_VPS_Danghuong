@@ -12,6 +12,8 @@ export const quoteLineSchema = z.object({
   qty: z.number({ invalid_type_error: "Nhập số lượng." }).finite().gt(0, "Số lượng phải lớn hơn 0.").max(999_999_999).refine(decimals(3), "Tối đa 3 chữ số thập phân."),
   salePrice: z.number({ invalid_type_error: "Nhập đơn giá." }).finite().min(0, "Đơn giá không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân."),
   note: z.string().trim().max(200),
+  /** Kiểu gia công (tuỳ chọn; null/thiếu = không). */
+  processingTypeId: z.number().int().positive().nullable().optional(),
 });
 
 export const quoteSchema = z.object({
