@@ -574,6 +574,19 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(screen.queryByLabelText("Đơn giá/m²")).toBeNull();
   });
 
+  it("kiểu bán theo ĐVT riêng (bình): đơn vị dòng tự chọn \"bình\", ẩn Chiều dài và ô m²", async () => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Mủ vỏ", ratio: null, priceBasis: "UNIT", unit: "Bình" }] : base(url, init)));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Tên sản phẩm", "ton");
+    await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công")).getByRole("option", { name: "Mủ vỏ" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công"), "4");
+    expect(screen.queryByLabelText("Chiều dài")).toBeNull();
+    expect(screen.queryByLabelText("Đơn giá/m²")).toBeNull();
+    expect(await screen.findByLabelText("Đơn giá")).toBeInTheDocument();
+  });
+
   it("kiểu gia công chưa có định mức: báo bán như hàng thường, vẫn nhập được", async () => {
     const base = apiFetch.getMockImplementation()!;
     apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: null, hasBom: false, priceBasis: "AREA" }] : base(url, init)));

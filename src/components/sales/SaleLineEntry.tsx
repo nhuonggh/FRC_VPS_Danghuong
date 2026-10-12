@@ -7,6 +7,7 @@ import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatQty } from "@/lib/format";
+import { sameUnit } from "@/lib/price-basis";
 import { priceFromWeight, priceToWeight } from "@/lib/weight-price";
 import { parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
 import type { ProductOption } from "@/server/products/queries";
@@ -68,6 +69,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   const weightMode = weightApplies && priceMode === "weight";
   // Kiểu gia công tính giá theo m²: chỉ nhập giá/m² (ô gốc), giá/md tính ra; đơn giá lưu vẫn là giá/md của đơn vị gốc
   const isArea = currentType?.priceBasis === "AREA";
+  const isUnitBasis = currentType?.priceBasis === "UNIT"; // bán theo ĐVT riêng của kiểu: không có chiều dài / m²
   const areaMode = isArea && ratio > 0 && !weightMode && (useLength || !product || unit === product.baseUnit);
   const perM2 = (v: number | string) => (areaMode ? `${formatCurrency(pricePerM2(Number(v), ratio))}/m²` : null);
 
@@ -137,7 +139,12 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           <b className="tabular">{dto?.lastPurchasePrice != null ? (perM2(dto.lastPurchasePrice) ?? formatCurrency(dto.lastPurchasePrice)) : "—"}</b>
         </p>
         <InlineField id="se-type" label="Kiểu gia công" labelClass={LABEL}>
-          <select id="se-type" value={typeId ?? ""} onChange={(e) => { setTypeId(e.target.value ? Number(e.target.value) : null); setPriceTouched(false); setError(""); }} className={`${igInput} cursor-pointer`}>
+          <select id="se-type" value={typeId ?? ""} onChange={(e) => {
+            const id = e.target.value ? Number(e.target.value) : null; setTypeId(id); setPriceTouched(false); setError("");
+            // Kiểu bán theo ĐVT riêng (kg, bình, cây…): đơn vị dòng tự chọn đúng ĐVT đó
+            const t = id ? types.find((x) => Number(x.value) === id) : null;
+            if (t?.priceBasis === "UNIT" && t.unit) { const u = product?.units?.find((x) => sameUnit(x.unit, t.unit)); if (u) { setUnit(u.unit); setLen(""); } else setError(`Sản phẩm chưa khai đơn vị "${t.unit}" (Sản phẩm → Đơn vị & quy đổi).`); }
+          }} className={`${igInput} cursor-pointer`}>
             <option value="">Không</option>
             {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -147,9 +154,9 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           <b className="tabular">{dto?.lastSalePrice != null ? (perM2(dto.lastSalePrice) ?? `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`) : "—"}</b>
         </p>
 
-        <InlineField id="se-len" label="Chiều dài" labelClass={LABEL}>
+        {!isUnitBasis && <InlineField id="se-len" label="Chiều dài" labelClass={LABEL}>
           <input id="se-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} />
-        </InlineField>
+        </InlineField>}
         <InlineField id="se-qty" label="Số lượng" labelClass={LABEL}>
           <NumberInput id="se-qty" maxFrac={3} value={useLength ? "" : qty} disabled={useLength} placeholder={useLength ? "Tính từ chiều dài" : "1"} onValueChange={setQty} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
           <select aria-label="Đơn vị tính" value={useLength ? product.baseUnit : unit} disabled={useLength} onChange={(e) => { setUnit(e.target.value); setPriceTouched(false); }} className="h-11 shrink-0 cursor-pointer border-l border-border bg-hover px-2 text-sm outline-none disabled:opacity-60 md:h-9">

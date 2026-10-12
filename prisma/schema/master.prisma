@@ -229,6 +229,8 @@ model ExpenseType {
 enum PriceBasis {
   LENGTH
   AREA
+  /// Bán/nhập theo đúng ĐVT riêng của kiểu (kg, bình, cây…): không có tỷ lệ m²/md.
+  UNIT
 }
 
 model ProcessingType {

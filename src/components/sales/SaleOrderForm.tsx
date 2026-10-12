@@ -13,6 +13,7 @@ import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
+import { sameUnit } from "@/lib/price-basis";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { ProductOption } from "@/server/products/queries";
 import type { SaleFormOptions } from "@/server/sales/form-options";
@@ -457,6 +458,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const ratio = currentType?.ratio ?? (Number(ratioInput.replace(",", ".")) || 0);
   const ratioKnown = !!currentType?.ratio;
   // Kiểu gia công tính giá theo m²: cột Đơn giá nhập/hiện giá/m² (giá lưu vẫn là giá/md = giá/m² × tỷ lệ)
+  const isUnitBasis = currentType?.priceBasis === "UNIT"; // bán theo ĐVT riêng của kiểu: không có tỷ lệ m²/md, chiều dài
   const areaRow = currentType?.priceBasis === "AREA" && ratio > 0 && (!product || line?.unit === product.baseUnit);
   const submitLength = async () => {
     if (!lengthExpr.trim()) return;
@@ -540,19 +542,22 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
       </td>
       <td data-label="CK tích lũy" className={cell}><RhfNumberInput aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} control={control} name={`lines.${index}.discountAccum`} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
       <td data-label="Gia công" className={cell}>
-        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError(""); }} className={inputClass()}>
+        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError("");
+          const t = e.target.value ? types.find((x) => Number(x.value) === Number(e.target.value)) : null;
+          if (t?.priceBasis === "UNIT" && t.unit) { const u = product?.units.find((x) => sameUnit(x.unit, t.unit)); if (u) setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); else setDimError(`Sản phẩm chưa khai đơn vị "${t.unit}" (Sản phẩm → Đơn vị & quy đổi).`); }
+        }} className={inputClass()}>
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         {currentType && !currentType.hasBom && <p className="mt-1 text-xs text-fg-muted">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
         {typeId && (
           <div className="mt-2 space-y-1.5 text-xs">
-            {!ratioKnown && (
+            {!isUnitBasis && !ratioKnown && (
               <label className="flex items-center gap-1">Tỷ lệ m²/md
                 <input aria-label={`Tỷ lệ m²/md dòng ${index + 1}`} inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} placeholder="1" className={`${inputClass()} w-20 tabular text-right`} />
               </label>
             )}
-            {ratio > 0 && !dim && (<>
+            {!isUnitBasis && ratio > 0 && !dim && (<>
               <label className="flex items-center gap-1">Chiều dài
                 <input aria-label={`Chiều dài dòng ${index + 1}`} value={lengthExpr} onChange={(e) => { setLengthExpr(e.target.value); setDimError(""); }} onBlur={submitLength}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitLength(); } }} placeholder="7.1*7+6.8*1" className={`${inputClass()} w-32`} />

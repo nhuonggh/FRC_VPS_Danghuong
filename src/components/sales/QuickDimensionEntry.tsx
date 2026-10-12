@@ -11,7 +11,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import type { SaleOrderInput } from "@/server/sales/schemas";
 
 /** Kiểu gia công của sản phẩm kèm tỷ lệ m²/md (null = chưa khai báo). */
-export type TypeOption = ComboOption & { ratio?: number | null; hasBom?: boolean; priceBasis?: "LENGTH" | "AREA" };
+export type TypeOption = ComboOption & { ratio?: number | null; hasBom?: boolean; priceBasis?: "LENGTH" | "AREA" | "UNIT"; unit?: string | null };
 
 /**
  * Nhập nhanh bán tôn theo kích thước (giống màn "Thêm vào đơn" của hệ thống cũ): chọn SP → kiểu gia công → giá/m² → chiều dài

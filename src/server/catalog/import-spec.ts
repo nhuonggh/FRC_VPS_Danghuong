@@ -1,4 +1,5 @@
 import { catalogSchema, getSection, type CatalogField, type CatalogSection } from "@/config/catalog-sections";
+import { resolvePriceBasis } from "@/lib/price-basis";
 import { normalizeSearch } from "@/lib/search";
 import type { ImportColumn, ImportSpec } from "@/server/import/types";
 import { parseYesNo } from "@/server/partners/import-spec";
@@ -51,7 +52,15 @@ export function catalogImportSpec(sectionKey: string): ImportSpec<CatalogImportR
     async loadContext() { return undefined; },
     parseRow(cells) {
       const errors: string[] = []; const raw: Record<string, unknown> = {};
-      for (const f of section.fields) raw[f.name] = readField(f, section, cells, errors);
+      const isProcessing = section.key === "processing-types";
+      for (const f of section.fields) if (!(isProcessing && f.name === "priceBasis")) raw[f.name] = readField(f, section, cells, errors);
+      if (isProcessing) {
+        // ĐVT (cột E) + Tính giá theo (cột F): ĐVT khác mét (kg, bình, cây…) ⇒ bán theo đúng ĐVT; F trống ⇒ suy từ E
+        const r = resolvePriceBasis(str(cells.unit), str(cells.priceBasis));
+        if (r.error) errors.push(r.error);
+        if (r.unit) raw.unit = r.unit;
+        raw.priceBasis = r.basis;
+      }
       const status = readStatus(cells, errors);
       const parsed = schema.safeParse(raw);
       if (!parsed.success) errors.push(...parsed.error.issues.map((i) => i.message));

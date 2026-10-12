@@ -7,6 +7,7 @@ import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { useProcessingOptions, type ProcessingOptions } from "@/lib/use-processing-options";
 import { formatCurrency, formatQty } from "@/lib/format";
+import { sameUnit } from "@/lib/price-basis";
 import { parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termNote, termQty } from "@/lib/length-expr";
 import type { PurchaseInput } from "@/server/purchase/schemas";
 import type { ProductOption } from "@/server/products/queries";
@@ -55,7 +56,7 @@ export function PurchaseNoteField({ form }: FormProps) {
 function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: ProcessingOptions; ensureTypes: (productId: number | undefined) => void }) {
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [typeId, setTypeId] = useState("");
-  const types = product ? (typeOptions.get(product.value) ?? []) : [];
+  const types = product ? (typeOptions.get(product.value) ?? []).filter((t) => t.priceBasis !== "UNIT") : []; // kiểu bán theo ĐVT riêng không dùng khối kích thước
   const area = types.find((t) => String(t.value) === typeId)?.priceBasis === "AREA"; // kiểu tính giá theo m²: chỉ nhập giá/m², giá/md tính ra
   const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [m2Str, setM2Str] = useState<string | null>(null), [error, setError] = useState(""), [key, setKey] = useState(0);
   const r = Number(ratio.replace(",", ".")) || 0;
@@ -153,7 +154,13 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
                 }} />} />
               {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
             </td>
-            <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(line.productId) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line.processingTypeId ?? ""} onChange={(event) => setValue(`lines.${index}.processingTypeId`, event.target.value ? Number(event.target.value) : null, { shouldDirty: true })} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
+            <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(line.productId) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line.processingTypeId ?? ""} onChange={(event) => {
+              setValue(`lines.${index}.processingTypeId`, event.target.value ? Number(event.target.value) : null, { shouldDirty: true });
+              // Kiểu bán theo ĐVT riêng (kg, bình, cây…): đơn vị dòng tự chọn đúng ĐVT đó, tỷ trọng theo đơn vị quy đổi của sản phẩm
+              const t = (typeOptions.get(line.productId) ?? []).find((x) => Number(x.value) === Number(event.target.value));
+              const u = t?.priceBasis === "UNIT" ? units.find((x) => sameUnit(x.unit, t.unit)) : undefined;
+              if (u) { setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.factor`, Number(u.factor), { shouldValidate: true, shouldDirty: true }); }
+            }} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
             <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} />{areaCaption(line)}</td>
             {showFactor && <td className="px-2 py-2" data-label="Tỷ trọng"><RhfNumberInput aria-label={`Tỷ trọng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.factor`} className={`${inputClass(error?.factor)} tabular text-right`} /></td>}

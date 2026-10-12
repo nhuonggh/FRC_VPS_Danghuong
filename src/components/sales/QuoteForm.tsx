@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { pricePerM2, pricePerMd } from "@/lib/length-expr";
+import { sameUnit } from "@/lib/price-basis";
 import { useProcessingOptions } from "@/lib/use-processing-options";
 import type { ProductOption } from "@/server/products/queries";
 import type { SalePricingDTO } from "@/server/sales/pricing";
@@ -135,7 +136,13 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
                         )} />
                         {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
                       </td>
-                      <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(l?.productId ?? 0) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={l?.processingTypeId ?? ""} className={`${inputClass()} min-w-28`} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}><option value="">Không</option>{typeOptions.get(l!.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
+                      <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(l?.productId ?? 0) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={l?.processingTypeId ?? ""} className={`${inputClass()} min-w-28`} onChange={(e) => {
+                          setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never);
+                          // Kiểu bán theo ĐVT riêng (kg, bình, cây…): đơn vị dòng tự chọn đúng ĐVT đó
+                          const t = (typeOptions.get(l!.productId) ?? []).find((x) => Number(x.value) === Number(e.target.value));
+                          const u = t?.priceBasis === "UNIT" ? product?.units.find((x) => sameUnit(x.unit, t.unit)) : undefined;
+                          if (u) setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true });
+                        }}><option value="">Không</option>{typeOptions.get(l!.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
                       <td className="px-2 py-2" data-label="ĐVT">
                         <select aria-label={`Đơn vị dòng ${index + 1}`} value={l?.unit ?? ""} className={`${inputClass(err?.unit)} min-w-20`}
                           onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.salePrice`, undefined as never); }}>

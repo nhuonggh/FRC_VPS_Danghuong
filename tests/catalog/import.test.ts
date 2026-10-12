@@ -55,7 +55,7 @@ describe("nhập Excel Cài đặt danh mục", () => {
     expect(await basis("Kiểu B")).toBe("AREA");
     await commit("processing-types", await toXlsx(["Tên kiểu gia công", "Tính giá theo"], [["Kiểu B", "Mét dài"]]), true);
     expect(await basis("Kiểu B")).toBe("LENGTH");
-    const pv = await previewImport(prisma, catalogImportSpec("processing-types"), await toXlsx(["Tên kiểu gia công", "Tính giá theo"], [["Kiểu D", "lung tung"]]), { overwrite: false });
+    const pv = await previewImport(prisma, catalogImportSpec("processing-types"), await toXlsx(["Tên kiểu gia công", "ĐVT", "Tính giá theo"], [["Kiểu D", "m2", "lung tung"]]), { overwrite: false });
     expect(pv.counts).toMatchObject({ error: 1 });
   });
 
@@ -80,5 +80,19 @@ describe("nhập Excel Cài đặt danh mục", () => {
     const spec = catalogImportSpec("routes"); const idem = { overwrite: false, idempotencyKey: "same" };
     await commitImport(prisma, actor, spec, buf, idem); await commitImport(prisma, actor, spec, buf, idem);
     expect(await prisma.route.count()).toBe(2);
+  });
+});
+
+describe("nhập Excel kiểu gia công — ĐVT quyết định cách tính giá", () => {
+  it("ĐVT kg/bình/cây ⇒ Theo ĐVT (cột E thắng); F ghi thẳng tên đơn vị cũng nhận; F trống suy từ E", async () => {
+    await resetDb(); actor = { userId: (await makeUser()).id, perms: new Set(["data.import", "catalog.manage"]) };
+    await commit("processing-types", await toXlsx(["Tên kiểu gia công", "ĐVT", "Tính giá theo"], [["Lề", "kg", "Mét dài"], ["Mủ vỏ", "", "bình"], ["Nano", "bình", ""], ["Móng", "m", ""], ["Meka", "m2", ""], ["Sườn", "m", "Mét vuông"]]));
+    const row = async (name: string) => { const r = await prisma.processingType.findUniqueOrThrow({ where: { name } }); return [r.priceBasis, r.unit]; };
+    expect(await row("Lề")).toEqual(["UNIT", "kg"]);
+    expect(await row("Mủ vỏ")).toEqual(["UNIT", "bình"]);
+    expect(await row("Nano")).toEqual(["UNIT", "bình"]);
+    expect(await row("Móng")).toEqual(["LENGTH", "m"]);
+    expect(await row("Meka")).toEqual(["AREA", "m2"]);
+    expect(await row("Sườn")).toEqual(["AREA", "m"]);
   });
 });

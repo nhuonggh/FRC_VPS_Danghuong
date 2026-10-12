@@ -16,7 +16,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
   { key: "routes", label: "Tuyến giao hàng", singular: "tuyến giao hàng", icon: "arrow-left-right", codes: ["16"], entity: "Route", titleField: "name", fields: [name("Tên tuyến")] },
   { key: "expense-types", label: "Loại thu chi", singular: "loại thu chi", icon: "coins", codes: ["17"], entity: "ExpenseType", titleField: "name", fields: [name("Tên loại")] },
   { key: "cash-accounts", label: "Ngân hàng & quỹ", singular: "tài khoản quỹ", icon: "landmark", codes: ["18"], entity: "CashAccount", titleField: "name", fields: [name("Tên tài khoản"), { name: "type", label: "Loại", type: "select", options: [{ value: "CASH", label: "Tiền mặt" }, { value: "BANK", label: "Ngân hàng" }], inTable: true }, { name: "bankNo", label: "Số tài khoản", type: "text", maxLength: 40, inTable: true }] },
-  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }, { name: "ratio", label: "Tỷ lệ", type: "number", inTable: true, sample: "1,08" }, { name: "stockRatio", label: "Tỷ lệ trừ kho", type: "number", inTable: true, sample: "1" }, { name: "unit", label: "ĐVT", type: "text", maxLength: 10, inTable: true, sample: "m2" }, { name: "priceBasis", label: "Tính giá theo", type: "select", options: [{ value: "LENGTH", label: "Mét dài" }, { value: "AREA", label: "Mét vuông" }], optional: true, defaultValue: "LENGTH", inTable: true, sample: "Mét dài" }] },
+  { key: "processing-types", label: "Kiểu gia công", singular: "kiểu gia công", icon: "hammer", codes: ["13"], entity: "ProcessingType", titleField: "name", fields: [name("Tên kiểu gia công", 60), { name: "note", label: "Ghi chú", type: "text", maxLength: 200, inTable: true }, { name: "ratio", label: "Tỷ lệ", type: "number", inTable: true, sample: "1,08" }, { name: "stockRatio", label: "Tỷ lệ trừ kho", type: "number", inTable: true, sample: "1" }, { name: "unit", label: "ĐVT", type: "text", maxLength: 10, inTable: true, sample: "m2" }, { name: "priceBasis", label: "Tính giá theo", type: "select", options: [{ value: "LENGTH", label: "Mét dài" }, { value: "AREA", label: "Mét vuông" }, { value: "UNIT", label: "Theo ĐVT" }], optional: true, defaultValue: "LENGTH", inTable: true, sample: "Mét dài" }] },
 ];
 export const getSection = (key: string): CatalogSection | null => CATALOG_SECTIONS.find((x) => x.key === key) ?? null;
 export const resolveSection = (key: string | undefined): CatalogSection => (key ? getSection(key) : null) ?? CATALOG_SECTIONS[0]!;
@@ -35,5 +35,6 @@ export function catalogSchema(section: CatalogSection) {
       shape[f.name] = f.required ? base.min(1, `Nhập ${lower(f.label)}.`) : base;
     }
   }
-  return z.object(shape);
+  const obj = z.object(shape);
+  return section.key === "processing-types" ? obj.refine((v) => v.priceBasis !== "UNIT" || String(v.unit ?? "").trim() !== "", { message: "Tính giá theo ĐVT thì phải nhập ĐVT.", path: ["unit"] }) : obj;
 }
