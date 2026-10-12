@@ -103,6 +103,15 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     return result;
   };
   const goodsTotal = lines.reduce((sum, line) => sum + asNumber(line?.qty) * asNumber(line?.purchasePrice), 0);
+  // Tỷ trọng / SL gốc chỉ hiện khi có dòng quy đổi đơn vị (tỷ trọng khác 1) — còn lại hai cột trùng số lượng, chỉ gây rối
+  const showFactor = lines.some((l) => { const f = asNumber(l?.factor); return f > 0 && f !== 1; });
+  // Dòng tính giá theo m²: số lượng là md nên ghi thêm diện tích để khớp Đơn giá (đ/m²) × m² = Thành tiền
+  const areaCaption = (line: PurchaseInput["lines"][number]) => {
+    const opt = (typeOptions.get(line.productId) ?? []).find((t) => Number(t.value) === line.processingTypeId);
+    const ratio = parseDimNote(line.rollInfo)?.ratio ?? opt?.ratio ?? 1;
+    if (opt?.priceBasis !== "AREA" || !(ratio > 0) || !(asNumber(line.qty) > 0) || line.unit !== products.get(line.productId)?.baseUnit) return null;
+    return <p className="mt-0.5 text-right text-xs text-fg-muted tabular">= {formatQty(round3(asNumber(line.qty) * ratio))} m²</p>;
+  };
   const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyPurchaseLine, qtyLabel: (i) => `Số lượng dòng ${i + 1}` });
   const addProducts = (picked: ProductOption[]) => {
     setProducts((current) => new Map([...current, ...picked.map((row) => [row.value, row] as const)]));
@@ -122,8 +131,8 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
-          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th>
-          <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú cuộn</th><th aria-label="Thao tác" />
+          <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th>{showFactor && <><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th></>}
+          <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú / Kích thước</th><th aria-label="Thao tác" />
         </tr></thead>
         <tbody>{fields.map((field, index) => {
           const line = lines[index] ?? emptyPurchaseLine; const error = errors.lines?.[index]; const product = products.get(line.productId); const units = product?.units ?? [];
@@ -146,9 +155,9 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
             </td>
             <td className="px-2 py-2" data-label="Kiểu gia công">{(typeOptions.get(line.productId) ?? []).length > 0 ? <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line.processingTypeId ?? ""} onChange={(event) => setValue(`lines.${index}.processingTypeId`, event.target.value ? Number(event.target.value) : null, { shouldDirty: true })} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
-            <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} /></td>
-            <td className="px-2 py-2" data-label="Tỷ trọng"><RhfNumberInput aria-label={`Tỷ trọng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.factor`} className={`${inputClass(error?.factor)} tabular text-right`} /></td>
-            <td className="px-2 py-2 text-right tabular" data-label="SL gốc">{qtyBase ? formatQty(qtyBase) : "—"}</td>
+            <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} />{areaCaption(line)}</td>
+            {showFactor && <td className="px-2 py-2" data-label="Tỷ trọng"><RhfNumberInput aria-label={`Tỷ trọng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.factor`} className={`${inputClass(error?.factor)} tabular text-right`} /></td>}
+            {showFactor && <td className="px-2 py-2 text-right tabular" data-label="SL gốc">{qtyBase ? formatQty(qtyBase) : "—"}</td>}
             <td className="px-2 py-2" data-label="Đơn giá">{(() => {
               // Kiểu gia công tính giá theo m²: nhập/hiện giá/m² (giá lưu vẫn là giá/md = giá/m² × tỷ lệ)
               const opt = (typeOptions.get(line.productId) ?? []).find((t) => Number(t.value) === line.processingTypeId);
@@ -161,7 +170,7 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
             <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>
           </tr>;
         })}</tbody>
-        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={7} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot>
+        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={showFactor ? 7 : 5} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot>
       </table>
     </div>
     <div className="flex flex-wrap gap-2">

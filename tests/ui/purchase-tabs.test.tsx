@@ -66,6 +66,8 @@ describe("PurchaseNewForm — một trang", () => {
     await userEvent.click(screen.getByRole("button", { name: "Thêm vào phiếu" }));
     await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue("10"));
     expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue("158.125");
+    expect(screen.getByText("= 12 m²")).toBeInTheDocument(); // 10 md × 1,2: diện tích ghi dưới số lượng
+    expect(screen.queryByLabelText("Tỷ trọng dòng 1")).toBeNull(); // tỷ trọng đều 1 ⇒ ẩn Tỷ trọng / SL gốc
     expect(screen.getAllByText("1.897.500 ₫").length).toBeGreaterThan(0); // 10 md × 189.750 (= 158.125 × 1,2)
   });
 });
