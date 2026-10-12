@@ -56,8 +56,10 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [typeId, setTypeId] = useState("");
   const types = product ? (typeOptions.get(product.value) ?? []) : [];
-  const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [error, setError] = useState(""), [key, setKey] = useState(0);
+  const [len, setLen] = useState(""), [ratio, setRatio] = useState("1"), [perMd, setPerMd] = useState(""), [m2Str, setM2Str] = useState<string | null>(null), [error, setError] = useState(""), [key, setKey] = useState(0);
   const r = Number(ratio.replace(",", ".")) || 0;
+  // Giá/m² là ô gốc khi khách gõ ở đó: giữ đúng số đã gõ; đổi tỷ lệ/kiểu gia công thì chỉ giá/md tính lại
+  useEffect(() => { if (m2Str !== null && m2Str !== "" && r > 0) setPerMd(String(pricePerMd(Number(m2Str), r))); }, [r]); // eslint-disable-line react-hooks/exhaustive-deps
   const submit = () => {
     if (!product) { setError("Chọn sản phẩm trước."); return; }
     const parsed = parseLengthExpr(len);
@@ -66,7 +68,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
     const price = Number(perMd);
     if (perMd.trim() === "" || !(price >= 0)) { setError("Nhập giá nhập."); return; }
     onAdd(product, parsed.terms.map((t) => ({ productId: product.value, unit: product.baseUnit, factor: 1, qty: termQty(t), purchasePrice: price, rollInfo: termNote(t, r), processingTypeId: typeId ? Number(typeId) : null })) as PurchaseInput["lines"]);
-    setProduct(null); setTypeId(""); setLen(""); setPerMd(""); setError(""); setKey((k) => k + 1);
+    setProduct(null); setTypeId(""); setLen(""); setPerMd(""); setM2Str(null); setError(""); setKey((k) => k + 1);
   };
   const enter = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
   const small = `${igInput} tabular text-right`;
@@ -77,8 +79,8 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
       {types.length > 0 && <InlineField id="pd-type" label="Kiểu gia công" hint="tuỳ chọn — tự điền tỷ lệ m²/md"><select id="pd-type" value={typeId} onChange={(e) => { setTypeId(e.target.value); const picked = types.find((t) => String(t.value) === e.target.value); if (picked) setRatio(String(picked.ratio ?? 1).replace(".", ",")); }} className={`${igInput} cursor-pointer`}><option value="">Không</option>{types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></InlineField>}
       <InlineField id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} /></InlineField>
       <InlineField id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
-      <InlineField id="pd-price" label="Giá nhập/md"><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => setPerMd(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
-      <InlineField id="pd-m2" label="Giá nhập/m²" hint="liên động với giá/md"><input id="pd-m2" type="number" min={0} step="any" value={perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : ""} onChange={(e) => setPerMd(e.target.value === "" || r <= 0 ? "" : String(pricePerMd(Number(e.target.value), r)))} onKeyDown={enter} className={small} /></InlineField>
+      <InlineField id="pd-price" label="Giá nhập/md" hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}><input id="pd-price" type="number" min={0} step="any" value={perMd} onChange={(e) => { setPerMd(e.target.value); setM2Str(null); }} onKeyDown={enter} className={small} /></InlineField>
+      <InlineField id="pd-m2" label="Giá nhập/m²" hint={m2Str !== null ? "ô gốc — giá/md tính theo" : "tính từ giá/md"}><input id="pd-m2" type="number" min={0} step="any" value={m2Str ?? (perMd !== "" && r > 0 ? pricePerM2(Number(perMd), r) : "")} onChange={(e) => { const v = e.target.value; setM2Str(v); setPerMd(v === "" || r <= 0 ? "" : String(pricePerMd(Number(v), r))); }} onKeyDown={enter} className={small} /></InlineField>
     </div>
     {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     <div className="mt-3 flex justify-end"><button type="button" onClick={submit} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Thêm vào phiếu</button></div>

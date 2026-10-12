@@ -44,19 +44,22 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   const [priceMode, setPriceMode] = useState<"market" | "weight">(() => { try { return localStorage.getItem("sale-price-mode") === "weight" ? "weight" : "market"; } catch { return "market"; } });
   const [weightUnit, setWeightUnit] = useState("");
   const [weightStr, setWeightStr] = useState<string | null>(null); // đang gõ ở ô giá theo tỷ trọng; null = hiển thị giá trị tính từ đơn giá
-  const chooseMode = (m: "market" | "weight") => { setPriceMode(m); setWeightStr(null); try { localStorage.setItem("sale-price-mode", m); } catch { /* không lưu được thì thôi */ } };
+  const [m2Str, setM2Str] = useState<string | null>(null); // đang gõ ở ô Giá/m² (ô gốc, giữ nguyên số đã gõ); null = giá/md là ô gốc, giá/m² tính ra
+  const chooseMode = (m: "market" | "weight") => { setPriceMode(m); setWeightStr(null); setM2Str(null); try { localStorage.setItem("sale-price-mode", m); } catch { /* không lưu được thì thôi */ } };
 
-  const reset = () => { setProduct(null); setTypes([]); setTypeId(null); setUnit(""); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setPickKey((k) => k + 1); setWeightUnit(""); setWeightStr(null); };
+  const reset = () => { setProduct(null); setTypes([]); setTypeId(null); setUnit(""); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setPickKey((k) => k + 1); setWeightUnit(""); setWeightStr(null); setM2Str(null); };
   const pickProduct = (o: ComboOption | null) => {
     const p = o as ProductOption | null;
     if (!p) { reset(); return; }
-    setProduct(p); setTypes([]); setTypeId(null); setUnit(p.baseUnit); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setWeightUnit(p.units?.[0]?.unit ?? ""); setWeightStr(null);
+    setProduct(p); setTypes([]); setTypeId(null); setUnit(p.baseUnit); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setWeightUnit(p.units?.[0]?.unit ?? ""); setWeightStr(null); setM2Str(null);
     apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${p.value}`).then(setTypes).catch(() => setTypes([]));
   };
 
   const currentType = typeId ? types.find((t) => Number(t.value) === typeId) ?? null : null;
   const ratioKnown = !!currentType?.ratio;
   const ratio = currentType?.ratio ?? (Number(ratioInput.replace(",", ".")) || 0);
+  // Đổi tỷ lệ/kiểu gia công: ô gốc (giá/m² đã gõ) đứng yên, đơn giá/md tính lại
+  useEffect(() => { if (m2Str !== null && m2Str !== "" && ratio > 0) setPrice(String(pricePerMd(Number(m2Str), ratio))); }, [ratio]); // eslint-disable-line react-hooks/exhaustive-deps
   const useLength = len.trim() !== "";
   // Tỷ trọng chỉ áp khi đơn giá đang tính theo đơn vị gốc (dòng chiều dài, hoặc chọn đơn vị gốc) và sản phẩm có đơn vị quy đổi.
   const wUnit = product?.units?.find((u) => u.unit === weightUnit) ?? product?.units?.[0] ?? null;
@@ -76,7 +79,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   useEffect(() => {
     const u = useLength ? product?.baseUnit : unit;
     const s = dto?.units.find((x) => x.unit === u)?.suggestedPrice;
-    if (s != null && (!priceTouched || !canEditPrice)) { setPrice(String(Number(s))); setWeightStr(null); }
+    if (s != null && (!priceTouched || !canEditPrice)) { setPrice(String(Number(s))); setWeightStr(null); setM2Str(null); }
   }, [dto, unit, useLength]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
@@ -149,25 +152,25 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
             {(product.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
           </select>
         </InlineField>
-        <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL}>
-          <input id="se-price" type="number" min={0} step="any" readOnly={!canEditPrice || weightMode} value={price} onChange={(e) => { setPrice(e.target.value); setPriceTouched(true); setWeightStr(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
+        <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL} hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}>
+          <input id="se-price" type="number" min={0} step="any" readOnly={!canEditPrice || weightMode} value={price} onChange={(e) => { setPrice(e.target.value); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
         </InlineField>
         {weightApplies && wUnit && (<>
           <InlineField id="se-wprice" label={`Giá/${wUnit.unit} (tỷ trọng)`} labelClass={LABEL}>
-            <input id="se-wprice" type="number" min={0} step="any" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onChange={(e) => { setWeightStr(e.target.value); setPrice(e.target.value === "" ? "" : String(priceFromWeight(Number(e.target.value), weightFactor))); setPriceTouched(true); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"}`} />
+            <input id="se-wprice" type="number" min={0} step="any" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onChange={(e) => { setWeightStr(e.target.value); setPrice(e.target.value === "" ? "" : String(priceFromWeight(Number(e.target.value), weightFactor))); setPriceTouched(true); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"}`} />
           </InlineField>
           <div className="flex flex-wrap items-center gap-2 text-sm md:col-span-2 xl:col-span-3">
             <div role="group" aria-label="Cách tính giá" className="inline-flex overflow-hidden rounded-sm border border-border">
               {([["market", "Giá thị trường"], ["weight", "Theo tỷ trọng"]] as const).map(([m, label]) => <button key={m} type="button" aria-pressed={priceMode === m} disabled={!canEditPrice} onClick={() => chooseMode(m)} className={`h-9 px-3 font-medium disabled:opacity-50 ${priceMode === m ? "bg-accent text-fg-on-accent" : "bg-canvas hover:bg-hover"}`}>{label}</button>)}
             </div>
-            {(product?.units?.length ?? 0) > 1 && <select aria-label="Đơn vị tỷ trọng" value={wUnit.unit} onChange={(e) => { setWeightUnit(e.target.value); setWeightStr(null); }} className="h-9 cursor-pointer rounded-sm border border-border bg-canvas px-2">{product!.units!.map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}</select>}
+            {(product?.units?.length ?? 0) > 1 && <select aria-label="Đơn vị tỷ trọng" value={wUnit.unit} onChange={(e) => { setWeightUnit(e.target.value); setWeightStr(null); setM2Str(null); }} className="h-9 cursor-pointer rounded-sm border border-border bg-canvas px-2">{product!.units!.map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}</select>}
             <span className="text-xs text-fg-muted">Tỷ trọng {formatQty(wUnit.factor)} {wUnit.unit}/{product!.baseUnit} — {weightMode ? `nhập giá/${wUnit.unit}, đơn giá tự tính` : `nhập đơn giá, giá/${wUnit.unit} tự tính`}.</span>
           </div>
         </>)}
 
         {typeId && useLength && ratio > 0 && (
-          <InlineField id="se-m2" label="Giá/m²" labelClass={LABEL}>
-            <input id="se-m2" type="number" min={0} step="any" readOnly={!canEditPrice} value={num(price) ? pricePerM2(num(price), ratio) : ""} onChange={(e) => { setPrice(e.target.value === "" ? "" : String(pricePerMd(Number(e.target.value), ratio))); setPriceTouched(true); setWeightStr(null); }} className={`${igInput} tabular text-right`} />
+          <InlineField id="se-m2" label="Giá/m²" labelClass={LABEL} hint={m2Str !== null ? "ô gốc — đơn giá/md tính theo" : "tính từ đơn giá/md"}>
+            <input id="se-m2" type="number" min={0} step="any" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onChange={(e) => { const v = e.target.value; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right`} />
           </InlineField>
         )}
         {typeId && useLength && !ratioKnown && (

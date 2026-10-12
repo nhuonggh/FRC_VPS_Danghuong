@@ -47,6 +47,22 @@ describe("PurchaseNewForm — một trang", () => {
     expect(screen.getByLabelText("Ghi chú cuộn dòng 1")).toHaveValue("7,1 m × 1,08 × 7 = 53,676 m²");
     expect(screen.getByLabelText("Ghi chú cuộn dòng 2")).toHaveValue("6,8 m × 1,08 × 1 = 7,344 m²");
   });
+  it("giá/m² là ô gốc khi khách gõ ở đó: giữ nguyên số đã gõ, đổi tỷ lệ chỉ làm giá/md tính lại; gõ giá/md thì quay về ô gốc md", async () => {
+    const product = { value: 10, label: "TX01 — Tôn xốp", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] };
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [product] : []));
+    render(<PurchaseNewForm today="2026-09-30" />);
+    const ratio = screen.getByLabelText("Tỷ lệ m²/md");
+    await userEvent.clear(ratio); await userEvent.type(ratio, "1,12");
+    await userEvent.type(screen.getByLabelText("Giá nhập/m²"), "158125");
+    expect(screen.getByLabelText("Giá nhập/md")).toHaveValue(177100);
+    await userEvent.clear(ratio); await userEvent.type(ratio, "1,2");
+    expect(screen.getByLabelText("Giá nhập/m²")).toHaveValue(158125);
+    expect(screen.getByLabelText("Giá nhập/md")).toHaveValue(189750);
+    await userEvent.clear(screen.getByLabelText("Giá nhập/md")); await userEvent.type(screen.getByLabelText("Giá nhập/md"), "180000");
+    await userEvent.clear(ratio); await userEvent.type(ratio, "1,5");
+    expect(screen.getByLabelText("Giá nhập/md")).toHaveValue(180000);
+    expect(screen.getByLabelText("Giá nhập/m²")).toHaveValue(120000);
+  });
 });
 
 const purchase = { id: 1, code: "PN000001", partnerId: 3, partnerCode: "NCC1", partnerName: "Tôn Phương Nam", at: "2026-09-15T03:00:00.000Z", note: null, isCancelled: false, cancelReason: null, cancelledAt: null, createdByName: "Admin", freightCost: "0", purchaseTotal: "0", lines: [] } as unknown as PurchaseDetailDTO;
