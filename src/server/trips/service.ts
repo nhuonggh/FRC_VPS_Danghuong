@@ -134,7 +134,8 @@ async function revertStop(tx: Tx, actor: Actor, stop: { id: number; orderId: num
     await cancelDeliveryNoteCore(tx, actor, stop.deliveryNoteId);
   }
   await removePartnerLedger(tx, "TRIP_COLLECT", stop.id);
-  await tx.tripOrder.update({ where: { id: stop.id }, data: { result: null, dueAmount: null, cashAmount: 0, transferAmount: 0, debtAmount: 0, promiseDate: null, resultNote: null, resultAt: null, resultBy: null, handledAt: null, handledBy: null, handledNote: null } });
+  await removePartnerLedger(tx, "TRIP_DISCOUNT", stop.id);
+  await tx.tripOrder.update({ where: { id: stop.id }, data: { result: null, dueAmount: null, cashAmount: 0, transferAmount: 0, debtAmount: 0, discountAmount: 0, overAmount: 0, promiseDate: null, resultNote: null, resultAt: null, resultBy: null, handledAt: null, handledBy: null, handledNote: null } });
 }
 
 export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, input: TripResultInput, now: Date = new Date()): Promise<{ stopId: number; due: string }> {
@@ -151,7 +152,7 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   if (order.isCancelled) throw new DomainError("Đơn đã hủy.", 409);
   const at = docTimestamp(ictYmd(now), now);
   const round = (n: number) => D(n).toDecimalPlaces(2);
-  const cash = round(input.cashAmount), transfer = round(input.transferAmount), debt = round(input.debtAmount);
+  const cash = round(input.cashAmount), transfer = round(input.transferAmount), debt = round(input.debtAmount), discount = round(input.discountAmount);
 
   let noteId: number | null = null;
   if (input.result !== "KHONG_GIAO") {
@@ -172,8 +173,12 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   const paid = await orderPaid(tx, order.id, stop.id);
   const due = delivered.minus(paid).gt(0) ? delivered.minus(paid) : D(0);
   const collected = cash.plus(transfer);
-  if (collected.gt(due)) throw new DomainError(`Tiền thu (${collected.toFixed(0)}) vượt số phải thu (${due.toFixed(0)}).`, 400, "COLLECT_EXCEEDS_DUE");
+  if (discount.gt(due)) throw new DomainError(`Tiền bớt (${discount.toFixed(0)}) vượt số phải thu (${due.toFixed(0)}).`, 400, "DISCOUNT_EXCEEDS_DUE");
+  // Thu nhiều hơn phải thu được phép (khách trả nợ cũ / trả dư) nhưng phải ghi lý do; phần vượt đi vào công nợ chung của khách
+  const over = collected.plus(discount).minus(due).gt(0) ? collected.plus(discount).minus(due) : D(0);
+  if (over.gt(0) && !input.note) throw new DomainError(`Tiền thu vượt số phải thu ${over.toFixed(0)} — nhập lý do (VD: khách trả nợ cũ).`, 400, "OVER_NEEDS_NOTE");
   if (collected.gt(0)) await postPartnerLedger(tx, { periodId: t.periodId, partnerId: order.partnerId, side: "credit", amount: collected, docType: "TRIP_COLLECT", docId: stop.id, at, createdBy: actor.userId });
+  if (discount.gt(0)) await postPartnerLedger(tx, { periodId: t.periodId, partnerId: order.partnerId, side: "credit", amount: discount, docType: "TRIP_DISCOUNT", docId: stop.id, at, createdBy: actor.userId });
   if (input.result === "GHI_NO" || (input.result === "GIAO_MOT_PHAN" && debt.gt(0))) {
     if (!order.partner.allowCredit) throw new DomainError(`Khách ${order.partner.name} không được ghi nợ.`, 409, "CREDIT_NOT_ALLOWED");
     const bal = (await partnerBalance(tx, order.partnerId)).balance;
@@ -181,21 +186,21 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   }
   await tx.tripOrder.update({
     where: { id: stop.id },
-    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, debtAmount: debt, promiseDate: input.promiseDate ? new Date(`${input.promiseDate}T00:00:00Z`) : null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
+    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, debtAmount: debt, discountAmount: discount, overAmount: over, promiseDate: input.promiseDate ? new Date(`${input.promiseDate}T00:00:00Z`) : null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
   });
   // Trục giao hàng + thanh toán của đơn
   if (input.result === "KHONG_GIAO") await setDeliveryStatus(tx, order.id, "FAILED");
   else await syncDeliveryStatus(tx, order.id);
   if (input.result !== "KHONG_GIAO") {
     const fresh = await tx.saleOrder.findUniqueOrThrow({ where: { id: order.id }, select: { deliveryStatus: true } });
-    const outstanding = due.minus(collected);
+    const outstanding = due.minus(collected).minus(discount).plus(over);
     const next = outstanding.lte(0) ? (fresh.deliveryStatus === "DELIVERED" ? "PAID" : "PARTIAL") : input.result === "HEN_TRA" ? "PROMISED" : collected.gt(0) ? "PARTIAL" : "DEBT";
     await tx.saleOrder.update({ where: { id: order.id }, data: { paymentStatus: next } });
   }
   // Đủ kết quả ⇒ chuyến “đã về”
   const pending = await tx.tripOrder.count({ where: { tripId, result: null } });
   if (pending === 0 && (t.status === "PLANNED" || t.status === "ON_ROAD")) await tx.trip.update({ where: { id: tripId }, data: { status: "RETURNED", returnedAt: now } });
-  await writeAudit(tx, { userId: actor.userId, action: "trip.result", entity: "Trip", entityId: tripId, after: { orderId: order.id, orderCode: order.code, result: input.result, due: due.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString() } });
+  await writeAudit(tx, { userId: actor.userId, action: "trip.result", entity: "Trip", entityId: tripId, after: { orderId: order.id, orderCode: order.code, result: input.result, due: due.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), discount: discount.toString(), over: over.toString() } });
   return { stopId: stop.id, due: due.toString() };
 }
 
@@ -229,8 +234,9 @@ export async function settleTrip(tx: Tx, actor: Actor, id: number, reason: strin
   if (t.stops.some((s) => s.result === null)) throw new DomainError("Còn điểm giao chưa nhập kết quả.", 409);
   const sum = (f: (s: (typeof t.stops)[number]) => Prisma.Decimal | null) => t.stops.reduce((a, s) => a.plus(f(s) ?? 0), D(0));
   const expected = sum((s) => s.dueAmount), cash = sum((s) => s.cashAmount), transfer = sum((s) => s.transferAmount), debt = sum((s) => s.debtAmount);
-  const diff = expected.minus(cash).minus(transfer).minus(debt);
-  if (!diff.isZero() && !reason) throw new DomainError(`Chênh lệch ${diff.toFixed(0)} giữa số phải thu và tiền mặt + chuyển khoản + ghi nợ — nhập lý do.`, 400, "DIFF_REASON_REQUIRED");
+  // Phải thu + phần thu vượt (đã có lý do ở từng điểm) = mặt + CK + ghi nợ + bớt
+  const diff = expected.plus(sum((s) => s.overAmount)).minus(cash).minus(transfer).minus(debt).minus(sum((s) => s.discountAmount));
+  if (!diff.isZero() && !reason) throw new DomainError(`Chênh lệch ${diff.toFixed(0)} giữa số phải thu và tiền mặt + chuyển khoản + ghi nợ + bớt — nhập lý do.`, 400, "DIFF_REASON_REQUIRED");
   await tx.trip.update({ where: { id }, data: { status: "SETTLED", settledAt: now, settledBy: actor.userId, expectedAmount: expected, cashAmount: cash, transferAmount: transfer, debtAmount: debt, diffAmount: diff, diffReason: diff.isZero() ? null : reason } });
   await writeAudit(tx, { userId: actor.userId, action: "trip.settle", entity: "Trip", entityId: id, after: { code: t.code, expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), diff: diff.toString(), reason } });
   return { diff: diff.toString() };
@@ -260,11 +266,18 @@ export async function confirmTripCash(tx: Tx, actor: Actor, id: number, input: C
   let n = 0;
   for (const s of t.stops) {
     const o = orders.get(s.orderId)!;
-    for (const [amount, accountId, label] of [[s.cashAmount, input.cashAccountId, "tiền mặt"], [s.transferAmount, input.transferAccountId, "chuyển khoản"]] as const) {
+    // Phần thu vượt phải thu (trả nợ cũ/dư) tách thành phiếu thu riêng KHÔNG gắn đơn — lấy từ tiền mặt trước, rồi chuyển khoản
+    const overCash = s.overAmount.lt(s.cashAmount) ? s.overAmount : s.cashAmount;
+    const overBank = s.overAmount.minus(overCash);
+    const parts: [Prisma.Decimal, number | null, string, boolean][] = [
+      [s.cashAmount.minus(overCash), input.cashAccountId, "tiền mặt", false], [s.transferAmount.minus(overBank), input.transferAccountId, "chuyển khoản", false],
+      [overCash, input.cashAccountId, "tiền mặt · thu vượt (nợ cũ/dư)", true], [overBank, input.transferAccountId, "chuyển khoản · thu vượt (nợ cũ/dư)", true],
+    ];
+    for (const [amount, accountId, label, isOver] of parts) {
       if (!amount.gt(0) || accountId === null) continue;
       const rid = await nextDocId(tx, "receipts");
       const code = formatDocCode("PT", rid);
-      await tx.receipt.create({ data: { id: rid, code, periodId: period.id, partnerId: o.partnerId, type: "THU_NO", orderId: o.id, amount, cashAccountId: accountId, at, note: `Chuyến ${t.code} · ${o.code} · ${label}`, tripId: id, createdBy: actor.userId } });
+      await tx.receipt.create({ data: { id: rid, code, periodId: period.id, partnerId: o.partnerId, type: "THU_NO", orderId: isOver ? null : o.id, amount, cashAccountId: accountId, at, note: `Chuyến ${t.code} · ${o.code} · ${label}${isOver && s.resultNote ? ` · ${s.resultNote}` : ""}`, tripId: id, createdBy: actor.userId } });
       await postCashLedger(tx, { periodId: period.id, cashAccountId: accountId, side: "in", amount, docType: "RECEIPT", docId: rid, at, createdBy: actor.userId });
       await addReviewEvent(tx, "RECEIPT", rid, "SUBMIT", actor.userId);
       n++;

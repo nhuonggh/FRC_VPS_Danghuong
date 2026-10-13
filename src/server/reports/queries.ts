@@ -146,6 +146,7 @@ async function debtReconciliation(db: Db): Promise<ReportResult> {
     line("Điều chỉnh công nợ (ròng)", led("DEBT_ADJ", "debit").minus(led("DEBT_ADJ", "credit")), sum(adjs._sum.amount), "Số có dấu: tăng nợ +, giảm nợ −"),
     line("Phiếu giao (ghi nợ khách)", led("DELIVERY", "debit"), null, "Đối chiếu theo từng đơn ở màn Công nợ"),
     line("Tiền lái xe thu (ghi có)", led("TRIP_COLLECT", "credit"), null, "Chuyển thành phiếu thu khi thủ quỹ xác nhận chuyến"),
+    line("Tiền bớt khi giao chuyến (ghi có)", led("TRIP_DISCOUNT", "credit"), null, "Lái xe giao hàng, khách được bớt — không vào quỹ"),
     line("Tất toán chiết khấu trừ nợ (ghi có)", led("DISCOUNT_SETTLE", "credit"), null, ""),
   ];
   const bad = rows.filter((r) => r.diff !== null && !D(r.diff).isZero()).length;

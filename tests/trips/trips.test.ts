@@ -123,7 +123,7 @@ describe("kết quả giao (40)", () => {
     expect(await st(b.id)).toMatchObject({ deliveryStatus: "FAILED" });
     expect(await prisma.deliveryNote.count({ where: { orderId: b.id } })).toBe(0);
     const c = await order(); const t2 = await trip([c.id], { date: "2026-09-17" });
-    expect((await errOf(result(t2.id, c.id, { cashAmount: 250_000 })))?.code).toBe("COLLECT_EXCEEDS_DUE");
+    expect((await errOf(result(t2.id, c.id, { cashAmount: 250_000 })))?.code).toBe("OVER_NEEDS_NOTE"); // thu vượt được phép nhưng phải có lý do
     expect(tripResultSchema.safeParse({ orderId: 1, result: "HEN_TRA", debtAmount: 5 }).success).toBe(false);
     expect(tripResultSchema.safeParse({ orderId: 1, result: "KHONG_GIAO" }).success).toBe(false);
     expect(tripResultSchema.safeParse({ orderId: 1, result: "GHI_NO", cashAmount: 5 }).success).toBe(false);
@@ -166,6 +166,38 @@ describe("đối soát (41) và thủ quỹ xác nhận (D-35)", () => {
     await result(t.id, b.id, { result: "GHI_NO", cashAmount: 100_000, debtAmount: 100_000 });
     return { a, b, t };
   };
+  it("thu vượt phải thu (trả nợ cũ/dư): bắt buộc lý do; công nợ ghi có đủ; phần vượt không tính vào đơn; đối soát khớp; thủ quỹ xác nhận tách phiếu thu không gắn đơn", async () => {
+    const a = await order(); const t = await trip([a.id]);
+    expect((await errOf(result(t.id, a.id, { cashAmount: 250_000 })))?.code).toBe("OVER_NEEDS_NOTE");
+    expect(await prisma.tripOrder.count({ where: { tripId: t.id, result: { not: null } } })).toBe(0);
+    await result(t.id, a.id, { cashAmount: 250_000, note: "Khách trả nợ cũ" });
+    expect(await bal()).toBe("-50000"); // nợ đơn 200.000 − thu 250.000 = khách dư 50.000 (trừ nợ cũ / số dư)
+    expect(await st(a.id)).toEqual({ deliveryStatus: "DELIVERED", paymentStatus: "PAID" });
+    const stop = await prisma.tripOrder.findFirstOrThrow({ where: { tripId: t.id } });
+    expect([String(stop.dueAmount), String(stop.overAmount)]).toEqual(["200000", "50000"]);
+    expect((await tx((x) => settleTrip(x, kt, t.id, "", NOW))).diff).toBe("0");
+    await tx((x) => confirmTripCash(x, tq, t.id, { cashAccountId: cash.id, transferAccountId: null }, NOW));
+    const receipts = await prisma.receipt.findMany({ where: { tripId: t.id }, orderBy: { id: "asc" } });
+    expect(receipts.map((r) => [String(r.amount), r.orderId === a.id ? "đơn" : r.orderId === null ? "không đơn" : "?"])).toEqual([["200000", "đơn"], ["50000", "không đơn"]]);
+    await tx((x) => syncPaymentStatus(x, a.id));
+    expect((await st(a.id)).paymentStatus).toBe("PAID"); // không thành OVERPAID
+  });
+  it("tiền bớt (153.000 → khách đưa 150.000): bắt buộc lý do, ghi có TRIP_DISCOUNT, không vào quỹ; đơn PAID; không bớt quá phải thu; xóa kết quả hoàn lại", async () => {
+    expect(tripResultSchema.safeParse({ orderId: 1, result: "GIAO_DU", cashAmount: 197_000, discountAmount: 3000 }).success).toBe(false);
+    expect(tripResultSchema.safeParse({ orderId: 1, result: "GIAO_DU", cashAmount: 197_000, discountAmount: 3000, note: "Làm tròn" }).success).toBe(true);
+    const a = await order(); const t = await trip([a.id]);
+    expect((await errOf(result(t.id, a.id, { cashAmount: 0, discountAmount: 250_000, note: "x" })))?.code).toBe("DISCOUNT_EXCEEDS_DUE");
+    await result(t.id, a.id, { cashAmount: 197_000, discountAmount: 3000, note: "Làm tròn số tiền" });
+    expect(await bal()).toBe("0");
+    expect((await prisma.partnerLedger.findFirstOrThrow({ where: { docType: "TRIP_DISCOUNT" } })).credit.toString()).toBe("3000");
+    expect(await st(a.id)).toEqual({ deliveryStatus: "DELIVERED", paymentStatus: "PAID" });
+    expect((await tx((x) => settleTrip(x, kt, t.id, "", NOW))).diff).toBe("0");
+    expect((await cashBalance(prisma, w.periodId, cash.id)).balance.toString()).toBe("0");
+    await prisma.trip.update({ where: { id: t.id }, data: { status: "RETURNED", settledAt: null, settledBy: null } });
+    await tx((x) => clearTripResult(x, kt, t.id, a.id));
+    expect(await prisma.partnerLedger.count({ where: { docType: { in: ["TRIP_COLLECT", "TRIP_DISCOUNT"] } } })).toBe(0);
+    expect(await bal()).toBe("0"); // phiếu giao cũng bị hủy cùng kết quả
+  });
   it("tổng chuyến = Σ điểm; khớp thì đối soát không cần lý do; chuyến khoá kết quả sau đối soát", async () => {
     const { a, t } = await twoStops();
     const r = await tx((x) => settleTrip(x, kt, t.id, "", NOW));

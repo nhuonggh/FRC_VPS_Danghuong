@@ -30,14 +30,17 @@ export const tripResultSchema = z.object({
   cashAmount: money0.default(0),
   transferAmount: money0.default(0),
   debtAmount: money0.default(0),
+  /** Tiền bớt cho khách (khách đưa ít hơn phải thu một chút). Bắt buộc ghi lý do. */
+  discountAmount: money0.default(0),
   promiseDate: ymd.nullable().default(null),
   note: z.string().trim().max(300, "Ghi chú tối đa 300 ký tự.").default(""),
 }).superRefine((v, ctx) => {
   const bad = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
   if (v.result === "KHONG_GIAO") {
-    if (v.cashAmount || v.transferAmount || v.debtAmount) bad("cashAmount", "Không giao được thì không có tiền.");
+    if (v.cashAmount || v.transferAmount || v.debtAmount || v.discountAmount) bad("cashAmount", "Không giao được thì không có tiền.");
     if (!v.note) bad("note", "Nhập lý do không giao được.");
   }
+  if (v.discountAmount > 0 && !v.note) bad("note", "Có tiền bớt — nhập lý do bớt.");
   if (v.result === "GIAO_MOT_PHAN" && !v.lines.some((l) => l.qty > 0)) bad("lines", "Nhập số lượng thực giao.");
   if (v.result === "GIAO_DU" && v.debtAmount > 0) bad("debtAmount", "Giao đủ thu đủ không ghi nợ — chọn “Giao đủ, ghi nợ”.");
   if (v.result === "GHI_NO" && !(v.debtAmount > 0)) bad("debtAmount", "Nhập số ghi nợ.");

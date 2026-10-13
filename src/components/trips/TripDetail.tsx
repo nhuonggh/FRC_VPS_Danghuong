@@ -15,6 +15,9 @@ import { RESULT_KINDS, RESULT_LABEL } from "@/server/trips/schemas";
 
 export interface TripPerms { canManage: boolean; canSettle: boolean; canConfirm: boolean; canPrint?: boolean }
 const TONE = { PLANNED: "info", ON_ROAD: "info", RETURNED: "warning", SETTLED: "warning", CONFIRMED: "success", CANCELLED: "neutral" } as const;
+/** Lý do gợi ý để nhập nhanh khi lái xe thu vượt số phải thu / khách được bớt. */
+const OVER_REASONS = ["Khách trả nợ cũ", "Khách trả dư, trừ vào đơn sau", "Khách trả trước cho đơn sau", "Trả nợ cũ + đơn này"];
+const DISCOUNT_REASONS = ["Làm tròn số tiền", "Khách quen, bớt lẻ", "Khách trả tiền mặt, bớt tiền chẵn", "Hàng lỗi/giao thiếu nhẹ, giảm giá", "Chủ/sale đồng ý bớt"];
 const RESULT_TONE = { GIAO_DU: "success", GHI_NO: "warning", HEN_TRA: "warning", KHONG_GIAO: "danger", GIAO_MOT_PHAN: "info" } as const;
 
 export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; perms: TripPerms; accounts: { id: number; name: string; type: "CASH" | "BANK" }[] }) {
@@ -69,7 +72,7 @@ export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; per
               <tr key={s.id} className="border-t border-border align-top">
                 <td className="px-3 py-2 text-fg-muted">{s.seq}</td>
                 <td className="px-3 py-2"><Link href={`/sales/orders/${s.orderId}`} className="font-mono text-xs text-accent hover:underline">{s.orderCode}</Link> · <strong>{s.partnerName}</strong><span className="block text-xs text-fg-muted">{[s.phone, s.address].filter(Boolean).join(" · ")}</span></td>
-                <td className="px-3 py-2">{s.result ? <><Badge tone={RESULT_TONE[s.result]}>{s.resultLabel}</Badge>{s.promiseDate && <span className="block text-xs text-fg-muted">hẹn {s.promiseDate.split("-").reverse().join("/")}</span>}{s.resultNote && <span className="block text-xs text-fg-muted">{s.resultNote}</span>}</> : <span className="text-fg-muted">Chưa có</span>}</td>
+                <td className="px-3 py-2">{s.result ? <><Badge tone={RESULT_TONE[s.result]}>{s.resultLabel}</Badge>{s.promiseDate && <span className="block text-xs text-fg-muted">hẹn {s.promiseDate.split("-").reverse().join("/")}</span>}{Number(s.discount) > 0 && <span className="block text-xs text-fg-muted">bớt {formatCurrency(s.discount)}</span>}{Number(s.over) > 0 && <span className="block text-xs text-fg-muted">thu vượt {formatCurrency(s.over)} (nợ cũ/dư)</span>}{s.resultNote && <span className="block text-xs text-fg-muted">{s.resultNote}</span>}</> : <span className="text-fg-muted">Chưa có</span>}</td>
                 <td className="px-3 py-2 text-right tabular">{s.due !== null ? formatCurrency(s.due) : ""}</td><td className="px-3 py-2 text-right tabular">{s.result ? formatCurrency(s.cash) : ""}</td><td className="px-3 py-2 text-right tabular">{s.result ? formatCurrency(s.transfer) : ""}</td><td className="px-3 py-2 text-right tabular">{s.result ? formatCurrency(s.debt) : ""}</td>
                 <td className="px-3 py-2 text-right">
                   {perms.canManage && open && (
@@ -108,15 +111,20 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
   const [cash, setCash] = useState(stop.result ? stop.cash : stop.suggestedDue);
   const [transfer, setTransfer] = useState(stop.result ? stop.transfer : "0");
   const [debt, setDebt] = useState(stop.result ? stop.debt : "0");
+  const [discount, setDiscount] = useState(stop.result ? stop.discount : "0");
   const [promise, setPromise] = useState(stop.promiseDate ?? "");
   const [note, setNote] = useState(stop.resultNote ?? "");
   const [qty, setQty] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const due = Number(stop.suggestedDue);
+  const bot = Number(discount || 0);
+  const over = Math.max(0, Number(cash || 0) + Number(transfer || 0) + bot - due);
+  const needNote = result === "KHONG_GIAO" || bot > 0 || over > 0;
+  const addReason = (text: string) => setNote((n) => (n.includes(text) ? n : n.trim() ? `${n.trim()}; ${text}` : text));
 
   function pick(next: (typeof RESULT_KINDS)[number]) {
     setResult(next); setError(null);
-    if (next === "KHONG_GIAO") { setCash("0"); setTransfer("0"); setDebt("0"); }
+    if (next === "KHONG_GIAO") { setCash("0"); setTransfer("0"); setDebt("0"); setDiscount("0"); }
     else if (next === "GHI_NO" || next === "HEN_TRA") { setCash("0"); setDebt(String(due)); }
     else if (next === "GIAO_DU") { setCash(String(due)); setDebt("0"); }
   }
@@ -127,9 +135,10 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
       const over = stop.lines.find((l) => Number(qty[l.orderLineId] ?? 0) > Number(l.remaining));
       if (over) { setError(`${over.productName}: chỉ còn ${formatQty(over.remaining)} ${over.unit}.`); return; }
     }
+    if (needNote && result !== "KHONG_GIAO" && !note.trim()) { setError(bot > 0 ? "Có tiền bớt — nhập lý do bớt." : "Thu vượt số phải thu — nhập lý do (VD: khách trả nợ cũ)."); return; }
     setBusy(true); setError(null);
     try {
-      await apiFetch(`/api/trips/${tripId}/result`, { method: "POST", json: { orderId: stop.orderId, result, lines: result === "GIAO_MOT_PHAN" ? lines : [], cashAmount: Number(cash || 0), transferAmount: Number(transfer || 0), debtAmount: Number(debt || 0), promiseDate: result === "HEN_TRA" ? promise || null : null, note }, idempotencyKey: `${idemKey}-${stop.id}` });
+      await apiFetch(`/api/trips/${tripId}/result`, { method: "POST", json: { orderId: stop.orderId, result, lines: result === "GIAO_MOT_PHAN" ? lines : [], cashAmount: Number(cash || 0), transferAmount: Number(transfer || 0), debtAmount: Number(debt || 0), discountAmount: Number(discount || 0), promiseDate: result === "HEN_TRA" ? promise || null : null, note }, idempotencyKey: `${idemKey}-${stop.id}` });
       onDone(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được kết quả."); } finally { setBusy(false); }
   }
@@ -141,7 +150,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
         <Dialog.Content className={shell}>
           <Dialog.Title className="text-base font-semibold">Kết quả giao — {stop.orderCode}</Dialog.Title>
-          <Dialog.Description className="text-sm text-fg-secondary">{stop.partnerName}. Giao hết phần còn lại thì phải thu ≈ <strong className="tabular">{formatCurrency(stop.suggestedDue)}</strong> (giá trị đơn − tiền đã thu).</Dialog.Description>
+          <Dialog.Description className="text-sm text-fg-secondary">{stop.partnerName}. Giao hết phần còn lại thì phải thu ≈ <strong className="tabular">{formatCurrency(stop.suggestedDue)}</strong> (giá trị đơn − tiền đã thu). Khách đưa nhiều hơn (trả nợ cũ/trả dư) hoặc ít hơn (được bớt) đều nhập được, kèm lý do.</Dialog.Description>
           <InlineField id="rs-kind" label="Kết quả" required><select id="rs-kind" value={result} onChange={(e) => pick(e.target.value as (typeof RESULT_KINDS)[number])} className={igInput}>{RESULT_KINDS.map((k) => <option key={k} value={k}>{RESULT_LABEL[k]}</option>)}</select></InlineField>
           {result === "GIAO_MOT_PHAN" && (
             <div className="space-y-2 rounded-sm border border-border p-2">
@@ -153,10 +162,19 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
             </div>
           )}
           {result !== "KHONG_GIAO" && (
-            <div className="grid gap-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}</div>
+            <div className="grid gap-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}{money("rs-discount", "Bớt cho khách", discount, setDiscount)}</div>
           )}
+          {result !== "KHONG_GIAO" && over > 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft px-3 py-2 text-xs">Thu vượt phải thu <strong className="tabular">{formatCurrency(over)}</strong> — phần này trừ vào công nợ cũ / thành số dư của khách (không tính vào đơn này). Nhập lý do bên dưới.</p>}
+          {result !== "KHONG_GIAO" && bot > 0 && <p role="status" className="rounded-sm border border-border bg-hover px-3 py-2 text-xs">Tiền bớt <strong className="tabular">{formatCurrency(bot)}</strong> ghi giảm công nợ của khách, không vào quỹ.</p>}
           {result === "HEN_TRA" && <InlineField id="rs-promise" label="Ngày khách hẹn trả" required><input id="rs-promise" type="date" value={promise} onChange={(e) => setPromise(e.target.value)} className={igInput} /></InlineField>}
-          <InlineField id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : "Ghi chú"} required={result === "KHONG_GIAO"} multiline><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
+          <InlineField id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : bot > 0 || over > 0 ? "Lý do bớt / thu vượt" : "Ghi chú"} required={needNote} multiline><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
+          {result !== "KHONG_GIAO" && (bot > 0 || over > 0) && (
+            <div className="flex flex-wrap gap-1.5" aria-label="Lý do gợi ý">
+              {[...(bot > 0 ? DISCOUNT_REASONS : []), ...(over > 0 ? OVER_REASONS : [])].map((r) => (
+                <button key={r} type="button" onClick={() => addReason(r)} className="h-8 rounded-full border border-border px-3 text-xs hover:bg-hover">{r}</button>
+              ))}
+            </div>
+          )}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Lưu kết quả</button></div>
         </Dialog.Content>
@@ -182,6 +200,7 @@ function SettleDialog({ open, onClose, trip, idemKey, onDone }: { open: boolean;
           <Dialog.Title className="text-base font-semibold">Đối soát lái xe — {trip.code}</Dialog.Title>
           <dl className="space-y-1 text-sm">
             <Row label="Phải thu" value={trip.totals.expected} /><Row label="− Tiền mặt" value={trip.totals.cash} /><Row label="− Chuyển khoản" value={trip.totals.transfer} /><Row label="− Ghi nợ / hẹn trả" value={trip.totals.debt} />
+            {Number(trip.totals.discount) > 0 && <Row label="− Tiền bớt cho khách" value={trip.totals.discount} />}{Number(trip.totals.over) > 0 && <Row label="+ Thu vượt (nợ cũ/dư, đã có lý do)" value={trip.totals.over} />}
             <div className="flex justify-between border-t border-border pt-1 font-semibold"><dt>Chênh lệch</dt><dd className={`tabular ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
           </dl>
           {diff !== 0 && <InlineField id="st-reason" label="Lý do chênh lệch" required multiline><textarea id="st-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>}

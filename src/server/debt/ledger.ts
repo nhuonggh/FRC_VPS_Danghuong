@@ -4,7 +4,7 @@ type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
 /** Loại chứng từ được phép ghi vào sổ công nợ. Thêm loại mới ⇒ thêm vào đây (một chỗ duy nhất). */
-export type LedgerDocType = "DELIVERY" | "RECEIPT" | "RETURN" | "PURCHASE" | "DEBT_ADJ" | "DEBT_TRANSFER" | "PAYMENT" | "CASH_ADJ" | "DISCOUNT_SETTLE" | "TRIP_COLLECT";
+export type LedgerDocType = "DELIVERY" | "RECEIPT" | "RETURN" | "PURCHASE" | "DEBT_ADJ" | "DEBT_TRANSFER" | "PAYMENT" | "CASH_ADJ" | "DISCOUNT_SETTLE" | "TRIP_COLLECT" | "TRIP_DISCOUNT";
 
 /**
  * CỬA DUY NHẤT ghi `partner_ledger` (mọi module gọi qua đây; test kiến trúc cấm `partnerLedger.create/update/delete…`

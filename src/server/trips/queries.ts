@@ -56,14 +56,14 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
 export interface StopLineDTO { orderLineId: number; productCode: string; productName: string; processingTypeName: string | null; unit: string; qty: string; delivered: string; remaining: string }
 export interface StopDTO {
   id: number; seq: number; orderId: number; orderCode: string; orderTotal: string; partnerId: number; partnerName: string; phone: string | null; address: string | null; allowCredit: boolean; debtLimit: string;
-  result: TripResultKind | null; resultLabel: string | null; due: string | null; cash: string; transfer: string; debt: string; promiseDate: string | null; resultNote: string | null; resultAt: Date | null;
+  result: TripResultKind | null; resultLabel: string | null; due: string | null; cash: string; transfer: string; debt: string; discount: string; over: string; promiseDate: string | null; resultNote: string | null; resultAt: Date | null;
   /** Gợi ý phải thu nếu giao hết phần còn lại = giá trị đơn − tiền đã thu (chưa tính điểm này). */
   suggestedDue: string; lines: StopLineDTO[]; deliveryNoteId: number | null; handledNote: string | null; canCancelResult: boolean;
 }
 export interface TripDetailDTO {
   id: number; code: string; date: string; status: TripStatus; statusLabel: string; note: string | null; routeName: string | null; vehiclePlate: string; driverName: string; assistantName: string | null;
   departedAt: Date | null; returnedAt: Date | null; createdByName: string | null;
-  totals: { expected: string; cash: string; transfer: string; debt: string; diff: string };
+  totals: { expected: string; cash: string; transfer: string; debt: string; discount: string; over: string; diff: string };
   settled: { at: Date; byName: string | null; diffReason: string | null } | null; confirmed: { at: Date; byName: string | null; cashAccountName: string | null; transferAccountName: string | null } | null; cancelReason: string | null;
   stops: StopDTO[]; receipts: { id: number; code: string; amount: string; accountName: string }[];
 }
@@ -90,18 +90,18 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     const suggested = total.minus(paid).gt(0) ? total.minus(paid) : D(0);
     stops.push({
       id: s.id, seq: s.seq, orderId: o.id, orderCode: o.code, orderTotal: total.toString(), partnerId: o.partner.id, partnerName: o.partner.name, phone: o.partner.phone, address: o.partner.address, allowCredit: o.partner.allowCredit, debtLimit: o.partner.debtLimit.toString(),
-      result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), debt: s.debtAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
+      result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), debt: s.debtAmount.toString(), discount: s.discountAmount.toString(), over: s.overAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
       suggestedDue: suggested.toString(), deliveryNoteId: s.deliveryNoteId, handledNote: s.handledNote,
       canCancelResult: s.result !== null && (t.status === "PLANNED" || t.status === "ON_ROAD" || t.status === "RETURNED"),
       lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: l.qty.minus(done).toString() }; }),
     });
   }
   const sum = (f: (s: StopDTO) => string | null) => stops.reduce((a, s) => a.plus(f(s) ?? 0), D(0));
-  const expected = sum((s) => s.due), cash = sum((s) => s.cash), transfer = sum((s) => s.transfer), debt = sum((s) => s.debt);
+  const expected = sum((s) => s.due), cash = sum((s) => s.cash), transfer = sum((s) => s.transfer), debt = sum((s) => s.debt), discount = sum((s) => s.discount), over = sum((s) => s.over);
   return {
     id: t.id, code: t.code, date: ymd(t.tripDate), status: t.status, statusLabel: TRIP_STATUS_LABEL[t.status], note: t.note, routeName: t.route?.name ?? null, vehiclePlate: t.vehicle.plate, driverName: t.driver.name, assistantName: t.assistant?.name ?? null,
     departedAt: t.departedAt, returnedAt: t.returnedAt, createdByName: names.get(t.createdBy) ?? null,
-    totals: { expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), diff: expected.minus(cash).minus(transfer).minus(debt).toString() },
+    totals: { expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), discount: discount.toString(), over: over.toString(), diff: expected.plus(over).minus(cash).minus(transfer).minus(debt).minus(discount).toString() },
     settled: t.settledAt ? { at: t.settledAt, byName: t.settledBy ? (names.get(t.settledBy) ?? null) : null, diffReason: t.diffReason } : null,
     confirmed: t.confirmedAt ? { at: t.confirmedAt, byName: t.confirmedBy ? (names.get(t.confirmedBy) ?? null) : null, cashAccountName: t.cashAccountId ? (accName.get(t.cashAccountId) ?? null) : null, transferAccountName: t.transferAccountId ? (accName.get(t.transferAccountId) ?? null) : null } : null,
     cancelReason: t.cancelReason, stops, receipts: receipts.map((r) => ({ id: r.id, code: r.code, amount: r.amount.toString(), accountName: r.cashAccount.name })),

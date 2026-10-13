@@ -14,9 +14,10 @@ const DEPOSIT_DRIVEN: readonly PaymentStatus[] = ["UNPAID", "DEPOSITED", "PAID",
 export async function orderPaid(tx: Tx, orderId: number, exceptStopId?: number): Promise<Prisma.Decimal> {
   const [receipts, stops] = await Promise.all([
     tx.receipt.aggregate({ where: { orderId, isCancelled: false, type: { in: ["COC", "THU_NO"] } }, _sum: { amount: true } }),
-    tx.tripOrder.aggregate({ where: { orderId, result: { not: null }, ...(exceptStopId ? { id: { not: exceptStopId } } : {}), trip: { status: { in: ["PLANNED", "ON_ROAD", "RETURNED", "SETTLED"] } } }, _sum: { cashAmount: true, transferAmount: true } }),
+    tx.tripOrder.aggregate({ where: { orderId, result: { not: null }, ...(exceptStopId ? { id: { not: exceptStopId } } : {}), trip: { status: { in: ["PLANNED", "ON_ROAD", "RETURNED", "SETTLED"] } } }, _sum: { cashAmount: true, transferAmount: true, discountAmount: true, overAmount: true } }),
   ]);
-  return (receipts._sum.amount ?? D(0)).plus(stops._sum.cashAmount ?? 0).plus(stops._sum.transferAmount ?? 0);
+  // Tiền bớt coi như đã trả đủ phần đó; phần thu vượt (trả nợ cũ/dư) không thuộc đơn này
+  return (receipts._sum.amount ?? D(0)).plus(stops._sum.cashAmount ?? 0).plus(stops._sum.transferAmount ?? 0).plus(stops._sum.discountAmount ?? 0).minus(stops._sum.overAmount ?? 0);
 }
 
 /** Đặt lại trục thanh toán theo tổng tiền thu (cọc + thu nợ theo đơn) còn hiệu lực gắn với đơn so với tiền phải thu của đơn. */

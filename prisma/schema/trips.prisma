@@ -81,6 +81,11 @@ model TripOrder {
   cashAmount     Decimal         @default(0) @db.Decimal(18, 2)
   transferAmount Decimal         @default(0) @db.Decimal(18, 2)
   debtAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  /// Tiền bớt cho khách tại điểm giao (VD đơn 153.000 khách đưa 150.000): ghi có công nợ (docType TRIP_DISCOUNT), không vào quỹ.
+  discountAmount Decimal         @default(0) @db.Decimal(18, 2)
+  /// Phần tiền thu VƯỢT phải thu (trả nợ cũ / trả dư) = max(0, mặt + CK + bớt − phải thu). Không tính là tiền đã trả của đơn;
+  /// khi thủ quỹ xác nhận thành phiếu thu riêng không gắn đơn.
+  overAmount     Decimal         @default(0) @db.Decimal(18, 2)
   promiseDate    DateTime?
   resultNote     String?
   deliveryNoteId Int?            @unique
