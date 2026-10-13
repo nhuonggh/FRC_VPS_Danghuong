@@ -185,10 +185,10 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     const list = options.cashAccounts.filter((a) => (k === "CASH" ? a.type === "CASH" : a.type === "BANK"));
     setPayAccount(k === "CASH" || k === "TRANSFER" ? (list[0] ? Number(list[0].value) : null) : null);
     setSecAmount(""); setSecAccount(null);
-    if (k === "CASH" || k === "TRANSFER") { if (!amountTouched) setPayAmount(total ? String(total) : ""); } else { setPayAmount(""); setAmountTouched(false); }
+    if (k === "CASH" || k === "TRANSFER") { if (!amountTouched && walkIn) setPayAmount(total ? String(total) : ""); } else { setPayAmount(""); setAmountTouched(false); }
   };
   // Chưa chỉnh tay số tiền thì số thu bám theo tiền phải thu (thu đủ)
-  useEffect(() => { if (canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && !amountTouched) setPayAmount(total ? String(total) : ""); }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (canCheckout && walkIn && (payKind === "CASH" || payKind === "TRANSFER") && !amountTouched) setPayAmount(total ? String(total) : ""); }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleWalkIn = (on: boolean) => {
     setWalkIn(on); setCustomer(null);
     setValue("partnerId", on ? 1 : (undefined as never), { shouldDirty: true });
@@ -381,7 +381,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           </InlineField>
 
           {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
-            <InlineField id="payAmount" label="Số tiền thu" labelClass={LABEL}>
+            <InlineField id="payAmount" label={walkIn ? "Số tiền thu" : "Tiền cọc / thu trước"} labelClass={LABEL} hint={walkIn ? undefined : "Lưu thành phiếu cọc của đơn, hiện ở Đã thanh toán / Còn lại khi in hóa đơn."}>
               <NumberInput id="payAmount" value={payAmount} onValueChange={(val) => { setPayAmount(val); setAmountTouched(true); }} className={`${igInput} tabular text-right`} />
               <button type="button" onClick={() => { setPayAmount(total ? String(Math.max(0, round2(total - num(secAmount)))) : ""); setAmountTouched(true); }} className="h-11 shrink-0 border-l border-border bg-hover px-3 text-sm font-medium hover:bg-border md:h-9">Thu đủ</button>
             </InlineField>

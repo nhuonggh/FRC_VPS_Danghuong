@@ -182,7 +182,7 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ### BÀN GIAO HIỆN TẠI — cập nhật 01/10/2026 (ưu tiên hơn các ghi chú lịch sử bên dưới)
 
-**13/10/2026 — sửa lỗi UI (chưa deploy):** (1) Phiếu cọc không chọn được quỹ: API trả `{value,label}` nhưng form đọc `{id,name}` → đã sửa, tải quỹ ngay khi mở. (2) Tab "Tiền cọc" đổi thành "Thanh toán & tiền cọc" (ô thu cọc 1 hàng, summary hiện "Đã cọc"); hóa đơn in thêm `totals.deposit`. (3) Dialog "Kết quả giao" (danh sách chuyến) ô tiền bị bóp hẹp → xếp 1 cột. (4) Danh sách đơn: thêm cột + bộ lọc "Người tạo" (`filters.creator`, `listOrderCreators`). CHƯA làm: ô cọc ngay trong form lập đơn mới; template in chưa hiển thị dòng `deposit` riêng.
+**13/10/2026 — sửa lỗi UI (chưa deploy):** (1) Phiếu cọc không chọn được quỹ: API trả `{value,label}` nhưng form đọc `{id,name}` → đã sửa, tải quỹ ngay khi mở. (2) Tab "Tiền cọc" đổi thành "Thanh toán & tiền cọc" (ô thu cọc 1 hàng, summary hiện "Đã cọc"); hóa đơn in thêm `totals.deposit`. (3) Dialog "Kết quả giao" (danh sách chuyến) ô tiền bị bóp hẹp → xếp 1 cột. (4) Danh sách đơn: thêm cột + bộ lọc "Người tạo" (`filters.creator`, `listOrderCreators`). (5) Form lập đơn mới: ô thu trước của khách thường đổi nhãn "Tiền cọc / thu trước" (lưu thành phiếu COC qua checkout; chỉ khách lẻ mới tự điền đủ tiền). CHƯA làm: template in (dịch vụ ngoài repo) hiển thị dòng `totals.deposit` riêng.
 
 **BÁO CÁO TRẠNG THÁI — 03/10/2026 (mới nhất, ưu tiên hơn mọi ghi chú bên dưới)**
 
