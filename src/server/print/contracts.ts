@@ -43,7 +43,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
         docCode: o.code, partner: await partnerOf(db, o.partnerId),
         doc: { code: o.code, date: formatDate(o.orderDate), expectedDelivery: formatDate(o.expectedDeliveryDate), note: o.note ?? "", createdBy: o.createdByName ?? "", status: o.isCancelled ? "ĐÃ HỦY" : "" },
         lines,
-        totals: { shippingFee: money(o.shippingFee ?? "0"), orderDiscount: money(o.orderDiscount ?? "0"), discountNow: money(sum(o.lines.map((l) => l.discountNow))), discountAccum: money(sum(o.lines.map((l) => l.discountAccum))), total: money(total), paid: money(deposit), remaining: money(D(total).minus(deposit).toString()) },
+        totals: { shippingFee: money(o.shippingFee ?? "0"), orderDiscount: money(o.orderDiscount ?? "0"), discountNow: money(sum(o.lines.map((l) => l.discountNow))), discountAccum: money(sum(o.lines.map((l) => l.discountAccum))), total: money(total), deposit: money(o.depositTotal), paid: money(deposit), remaining: money(D(total).minus(deposit).toString()) },
       };
     }
     case "QUOTE": {

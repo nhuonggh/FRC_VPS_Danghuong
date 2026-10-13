@@ -2,14 +2,14 @@
 
 import { igInput, InlineField, NumberInput } from "@/components/ui";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-fetch";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { DepositActions } from "./DepositActions";
 
-interface CashOption { id: number; name: string }
+interface CashOption { value: number; label: string }
 
 /** Tab Tiền cọc (mã 34c/34b): thu cọc trước khi giao, chuyển cọc thành số dư, hủy phiếu nhập nhầm. */
 export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailDTO; today: string; canDeposit: boolean }) {
@@ -24,13 +24,13 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   const [error, setError] = useState<string | null>(null);
   const canCreate = canDeposit && !order.isCancelled;
 
-  // Quỹ chỉ tải khi người dùng bắt đầu nhập (panel nằm cùng màn hình với các phần khác nên không tải sẵn)
-  const [loaded, setLoaded] = useState(false);
-  const loadOptions = () => {
-    if (loaded || !canCreate) return;
-    setLoaded(true);
-    Promise.resolve(apiFetch<CashOption[]>("/api/deposits/options/cash-accounts")).then((o) => { const list = o ?? []; setOptions(list); setCashAccountId((c) => c || String(list[0]?.id ?? "")); }).catch(() => setOptions([]));
-  };
+  // Quỹ tải khi mở màn (API trả { value, label })
+  useEffect(() => {
+    if (!canCreate) return;
+    let alive = true;
+    Promise.resolve(apiFetch<CashOption[]>("/api/deposits/options/cash-accounts")).then((o) => { if (!alive) return; const list = o ?? []; setOptions(list); setCashAccountId((c) => c || String(list[0]?.value ?? "")); }).catch(() => { if (alive) setOptions([]); });
+    return () => { alive = false; };
+  }, [canCreate]);
 
   async function create() {
     if (busy) return;
@@ -49,15 +49,15 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   return (
     <div className="space-y-6">
       {canCreate && (
-        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4" onFocusCapture={loadOptions} onPointerDownCapture={loadOptions}>
-          <h3 className="text-sm font-semibold">Thu tiền cọc</h3>
-          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4">
+          <h3 className="text-sm font-semibold">Thu tiền cọc <span className="font-normal text-fg-muted">— tự vào hóa đơn khi in (Đã thanh toán / Còn lại)</span></h3>
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
             <InlineField id="dep-amount" label="Số tiền">
               <NumberInput id="dep-amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} />
             </InlineField>
             <InlineField id="dep-account" label="Quỹ / tài khoản">
               <select id="dep-account" value={cashAccountId} onChange={(e) => setCashAccountId(e.target.value)} className={`${igInput} cursor-pointer`}>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                <option value="">— Chọn —</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </InlineField>
             <InlineField id="dep-date" label="Ngày thu">

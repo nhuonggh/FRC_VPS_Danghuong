@@ -5,7 +5,7 @@ import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickT
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
-import { advanceExpectedDeliveryDates, listOrders, ORDER_FILTER_KEYS } from "@/server/sales/queries";
+import { advanceExpectedDeliveryDates, listOrderCreators, listOrders, ORDER_FILTER_KEYS } from "@/server/sales/queries";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +17,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const params = parseListParams(await searchParams, ORDER_FILTER_KEYS);
   const now = new Date();
   await advanceExpectedDeliveryDates(prisma, now); // ngày giao quá hạn tự dời về hôm nay (lần đầu trong ngày)
-  const { rows, total, stats } = await listOrders(prisma, actor, params, now);
+  const [{ rows, total, stats }, creators] = await Promise.all([listOrders(prisma, actor, params, now), listOrderCreators(prisma)]);
   const href = (patch: Parameters<typeof buildListHref>[2]) => buildListHref(BASE, params, patch);
   const pending = params.filters.pending?.[0] === "1", late = params.filters.late?.[0] === "1";
   const canCreate = actor.perms.has("order.create") && actor.perms.has("sale_price.view");
-  const filtered = !!(params.q || params.filters.delivery || params.filters.payment || pending || late || params.timePreset);
+  const filtered = !!(params.q || params.filters.delivery || params.filters.payment || params.filters.creator || pending || late || params.timePreset);
 
   return (
     <ListPageLayout
@@ -38,6 +38,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <div className="flex flex-wrap items-end gap-2">
           <SearchBox basePath={BASE} params={params} placeholder="Tìm mã đơn, khách hàng…" />
           <QuickTimeFilter basePath={BASE} params={params} />
+          <MultiSelectFilter label="Người tạo" paramKey="creator" basePath={BASE} params={params} options={creators} />
           <MultiSelectFilter label="Giao hàng" paramKey="delivery" basePath={BASE} params={params}
             options={DELIVERY_OPTIONS.map((v) => ({ value: v, label: DELIVERY_LABEL[v].label }))} />
           <MultiSelectFilter label="Thanh toán" paramKey="payment" basePath={BASE} params={params}

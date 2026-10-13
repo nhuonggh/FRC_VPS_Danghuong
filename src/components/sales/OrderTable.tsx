@@ -13,6 +13,7 @@ export function OrderTable({ rows, params }: { rows: OrderRowDTO[]; params: List
     { key: "code", label: "Mã đơn", sortable: true, primaryOnMobile: true, render: (o) => <><span className="font-mono text-xs">{o.code}</span>{o.isDraft && <> <Badge tone="warning">Nháp</Badge></>}</> },
     { key: "orderDate", label: "Ngày", sortable: true, render: (o) => formatDate(o.orderDate) },
     { key: "partnerName", label: "Khách hàng", render: (o) => <><strong>{o.partnerName}</strong><span className="block text-xs text-fg-muted">{o.partnerCode}</span></> },
+    { key: "createdByName", label: "Người tạo", render: (o) => o.createdByName ?? "—" },
     { key: "lineCount", label: "Số dòng", align: "right", render: (o) => o.lineCount },
     ...(rows.some((o) => o.orderTotal !== undefined)
       ? [{ key: "orderTotal", label: "Phải thu", align: "right" as const, render: (o: OrderRowDTO) => (o.orderTotal === undefined ? null : formatCurrency(o.orderTotal)) }]

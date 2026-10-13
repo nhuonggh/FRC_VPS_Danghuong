@@ -17,12 +17,14 @@ const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_
 export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) =>
   round2(l.qty.times(l.salePrice)).minus(l.discountNow);
 
-export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late"] as const;
+export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;
 const PAYMENT_VALUES = ["UNPAID", "DEPOSITED", "PARTIAL", "PAID", "DEBT", "PROMISED", "OVERPAID"] as const;
 
 export interface OrderRowDTO {
   id: number;
+  /** Người lập đơn (kế toán lọc/theo dõi đơn của mình). */
+  createdByName: string | null;
   code: string;
   orderDate: Date;
   partnerId: number;
@@ -73,6 +75,8 @@ export function orderWhere(actor: Actor, params: ListParams, now: Date): Prisma.
   ];
   const pay = (params.filters.payment ?? []).filter((v): v is PaymentStatus => (PAYMENT_VALUES as readonly string[]).includes(v));
   if (pay.length) and.push({ paymentStatus: { in: pay } });
+  const creators = (params.filters.creator ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (creators.length) and.push({ createdBy: { in: creators } });
   if (params.filters.pending?.[0] === "1") and.push({ lines: { some: { isProvisional: true } } });
   if (params.filters.late?.[0] === "1") and.push(lateWhere(now));
   const range = listTimeRange(params, now);
@@ -111,11 +115,12 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
     db.saleOrder.count({ where: { AND: [scope, { lines: { some: { isProvisional: true } } }] } }),
     db.saleOrder.count({ where: { AND: [scope, lateWhere(now)] } }),
   ]);
+  const creatorNames = new Map((await db.user.findMany({ where: { id: { in: [...new Set(rows.map((o) => o.createdBy))] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
   const oldDebts = actor.perms.has("debt.view") ? await oldDebtBefore(db, rows) : null;
   const out: OrderRowDTO[] = rows.map((o) => {
     const hasProvisional = o.lines.some((l) => l.isProvisional);
     return {
-      id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
+      id: o.id, code: o.code, createdByName: creatorNames.get(o.createdBy) ?? null, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
       expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
       orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).toString(),
@@ -321,4 +326,11 @@ export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams
     orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
   }));
   return { rows: redactDeep(out, actor.perms), total };
+}
+
+/** Người đã lập đơn (cho bộ lọc "Người tạo" của danh sách đơn). */
+export async function listOrderCreators(db: Db): Promise<{ value: string; label: string }[]> {
+  const ids = (await db.saleOrder.findMany({ distinct: ["createdBy"], select: { createdBy: true } })).map((r) => r.createdBy);
+  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } });
+  return users.map((u) => ({ value: String(u.id), label: u.fullName }));
 }

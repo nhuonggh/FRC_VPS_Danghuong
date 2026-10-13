@@ -134,7 +134,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được kết quả."); } finally { setBusy(false); }
   }
   const money = (id: string, label: string, value: string, set: (v: string) => void) => (
-    <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} className={`${igInput} tabular`} /></InlineField>
+    <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} className={`${igInput} tabular text-right`} /></InlineField>
   );
   return (
     <Dialog.Root open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
@@ -153,7 +153,7 @@ function ResultDialog({ stop, tripId, onClose, onDone, idemKey }: { stop: StopDT
             </div>
           )}
           {result !== "KHONG_GIAO" && (
-            <div className="grid gap-3 sm:grid-cols-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}</div>
+            <div className="grid gap-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}</div>
           )}
           {result === "HEN_TRA" && <InlineField id="rs-promise" label="Ngày khách hẹn trả" required><input id="rs-promise" type="date" value={promise} onChange={(e) => setPromise(e.target.value)} className={igInput} /></InlineField>}
           <InlineField id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : "Ghi chú"} required={result === "KHONG_GIAO"} multiline><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>

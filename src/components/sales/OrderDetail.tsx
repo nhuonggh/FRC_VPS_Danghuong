@@ -171,14 +171,14 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       summary={{
         title: order.partnerName, code: order.code,
         badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : order.isDraft ? [{ label: "Nháp", tone: "warning" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
-        facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : [])],
+        facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : []), ...(Number(order.depositTotal) > 0 ? [{ label: "Đã cọc", value: formatCurrency(order.depositTotal) }] : [])],
       }}
       stacked
       tabs={[
         { key: "info", label: "Thông tin cơ bản", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
         { key: "delivery", label: "Giao hàng", count: order.deliveries.filter((d) => !d.isCancelled).length, render: () => <DeliveryPanel order={order} today={today} canDeliver={perms.canEdit && !order.isDraft} canPrint={!!perms.canPrint} /> },
-        { key: "deposits", label: "Tiền cọc", count: order.deposits.length, render: () => <DepositPanel order={order} today={today} canDeposit={perms.canDeposit} /> },
+        { key: "deposits", label: "Thanh toán & tiền cọc", count: order.deposits.length, render: () => <DepositPanel order={order} today={today} canDeposit={perms.canDeposit} /> },
         { key: "history", label: "Lịch sử", count: order.history.length, render: () => history() },
       ]}
       {...nav}
