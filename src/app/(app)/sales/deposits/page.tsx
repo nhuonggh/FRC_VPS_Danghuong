@@ -41,7 +41,7 @@ export default async function DepositsPage({ searchParams }: { searchParams: Pro
                   <td className="px-3 py-2 font-mono text-xs">{r.orderCode ? (canOpen ? <Link href={`/sales/orders/${r.orderId}?tab=deposit`} className="text-accent hover:underline">{r.orderCode}</Link> : r.orderCode) : "—"}</td>
                   <td className="px-3 py-2 text-right tabular">{formatCurrency(r.amount)}</td><td className="px-3 py-2">{r.cashAccountName}</td>
                   <td className="px-3 py-2">{r.isCancelled ? <Badge tone="danger">Đã hủy</Badge> : r.orderId === null ? <Badge tone="info">Số dư khách</Badge> : <Badge tone="success">Gắn đơn</Badge>}</td>
-                  <td className="px-3 py-2 text-right">{!r.isCancelled && <DepositActions id={r.id} code={r.code} attached={r.orderId !== null} />}</td>
+                  <td className="px-3 py-2 text-right">{!r.isCancelled && <DepositActions id={r.id} code={r.code} attached={r.orderId !== null} reviewed={r.reviewed} cashAccountName={r.cashAccountName} />}</td>
                 </tr>
               ))}
             </tbody>

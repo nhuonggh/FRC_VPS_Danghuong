@@ -80,7 +80,7 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
                 <tr key={d.id} className="border-t border-border">
                   <td className="px-3 py-2 font-mono text-xs">{d.code}</td><td className="px-3 py-2">{formatDateTime(d.at)}</td><td className="px-3 py-2">{d.cashAccountName}</td>
                   <td className="px-3 py-2 text-right tabular">{formatCurrency(d.amount)}</td>
-                  <td className="px-3 py-2 text-right">{canDeposit && <DepositActions id={d.id} code={d.code} attached />}</td>
+                  <td className="px-3 py-2 text-right">{canDeposit && <DepositActions id={d.id} code={d.code} attached reviewed={d.reviewed} cashAccountName={d.cashAccountName} />}</td>
                 </tr>
               ))}
               <tr className="border-t border-border font-semibold"><td className="px-3 py-2" colSpan={3}>Tổng cọc</td><td className="px-3 py-2 text-right tabular">{formatCurrency(order.depositTotal)}</td><td /></tr>

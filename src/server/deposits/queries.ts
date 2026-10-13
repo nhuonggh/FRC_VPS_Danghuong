@@ -9,7 +9,7 @@ export const DEPOSIT_FILTER_KEYS = ["state"] as const;
 
 export interface DepositRowDTO {
   id: number; code: string; at: Date; partnerName: string; orderId: number | null; orderCode: string | null;
-  amount: string; cashAccountName: string; isCancelled: boolean; note: string | null;
+  amount: string; cashAccountName: string; isCancelled: boolean; note: string | null; reviewed: boolean;
 }
 
 /** Quản lý tiền cọc (mã 36). state: `attached` (đang gắn đơn), `released` (đã thành số dư khách), `cancelled`. */
@@ -33,7 +33,7 @@ export async function listDeposits(db: Db, actor: Actor, params: ListParams) {
   ]);
   const out: DepositRowDTO[] = rows.map((r) => ({
     id: r.id, code: r.code, at: r.at, partnerName: r.partner?.name ?? "", orderId: r.order?.id ?? null, orderCode: r.order?.code ?? null,
-    amount: r.amount.toString(), cashAccountName: r.cashAccount.name, isCancelled: r.isCancelled, note: r.note,
+    amount: r.amount.toString(), cashAccountName: r.cashAccount.name, isCancelled: r.isCancelled, note: r.note, reviewed: r.reviewStatus === "REVIEWED",
   }));
   return { rows: out, total };
 }

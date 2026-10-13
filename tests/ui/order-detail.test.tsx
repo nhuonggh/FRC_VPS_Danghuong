@@ -193,7 +193,7 @@ describe("OrderDetail — đơn nháp & tiền cọc", () => {
   it("tab Tiền cọc: liệt kê phiếu + tổng, có nút chuyển thành số dư / hủy phiếu", () => {
     search = "tab=deposits";
     apiFetch.mockResolvedValue([{ id: 1, name: "Tiền mặt" }]);
-    view(order({ deposits: [{ id: 7, code: "PT000007", at: new Date("2026-09-11T03:00:00Z"), amount: "80000", cashAccountName: "Tiền mặt", note: null }], depositTotal: "80000" }));
+    view(order({ deposits: [{ id: 7, code: "PT000007", at: new Date("2026-09-11T03:00:00Z"), amount: "80000", cashAccountName: "Tiền mặt", note: null, reviewed: false }], depositTotal: "80000" }));
     expect(screen.getByText("PT000007")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Chuyển cọc PT000007 thành số dư" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hủy phiếu cọc PT000007" })).toBeInTheDocument();
