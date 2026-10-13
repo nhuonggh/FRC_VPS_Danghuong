@@ -293,7 +293,9 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     await pick("Sản phẩm dòng 1", "ton");
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "4"); // 4 × 30.000 = 120.000
     await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
-    expect(screen.getByLabelText("Số tiền thu")).toHaveValue("120.000"); // thu đủ mặc định
+    expect(screen.getByLabelText(/Số tiền thu|Tiền cọc/)).toHaveValue(""); // khách thường: cọc để trống, không tự điền đủ
+    await userEvent.click(screen.getByRole("button", { name: "Thu đủ" }));
+    expect(screen.getByLabelText(/Số tiền thu|Tiền cọc/)).toHaveValue("120.000");
     expect(screen.getByLabelText("Quỹ tiền mặt")).toHaveValue("5");
     await userEvent.click(screen.getByLabelText(/Khách tự chở/));
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
@@ -334,8 +336,8 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
     await pick("Sản phẩm dòng 1", "ton");
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
-    await userEvent.clear(screen.getByLabelText("Số tiền thu"));
-    await userEvent.type(screen.getByLabelText("Số tiền thu"), "10000");
+    await userEvent.clear(screen.getByLabelText(/Số tiền thu|Tiền cọc/));
+    await userEvent.type(screen.getByLabelText(/Số tiền thu|Tiền cọc/), "10000");
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     expect(await screen.findByText(/Khách lẻ phải thanh toán đủ/)).toBeInTheDocument();
     expect(posts()).toHaveLength(0);
@@ -348,15 +350,15 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     await pick("Sản phẩm dòng 1", "ton");
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
     await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
-    await userEvent.clear(screen.getByLabelText("Số tiền thu"));
-    await userEvent.type(screen.getByLabelText("Số tiền thu"), "999999");
+    await userEvent.clear(screen.getByLabelText(/Số tiền thu|Tiền cọc/));
+    await userEvent.type(screen.getByLabelText(/Số tiền thu|Tiền cọc/), "999999");
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
     expect(await screen.findByText(/vượt tiền phải thu/)).toBeInTheDocument();
     expect(posts()).toHaveLength(0);
     unmount();
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     expect(screen.queryByRole("button", { name: "Khách lẻ" })).toBeNull();
-    expect(screen.queryByLabelText("Số tiền thu")).toBeNull();
+    expect(screen.queryByLabelText(/Số tiền thu|Tiền cọc/)).toBeNull();
     expect(screen.queryByLabelText(/Khách tự chở/)).toBeNull();
   });
 });
@@ -409,7 +411,8 @@ describe("SaleOrderForm — phí vận chuyển, chiết khấu cả đơn, ghi 
     await userEvent.clear(screen.getByLabelText("Phí vận chuyển"));
     await userEvent.type(screen.getByLabelText("Phí vận chuyển"), "3000");
     await userEvent.selectOptions(screen.getByLabelText("Hình thức thanh toán"), "CASH");
-    expect(screen.getByLabelText("Số tiền thu")).toHaveValue("63.000");
+    await userEvent.click(screen.getByRole("button", { name: "Thu đủ" }));
+    expect(screen.getByLabelText(/Số tiền thu|Tiền cọc/)).toHaveValue("63.000");
   });
 
   it("chế độ bán lẻ: tiêu đề + khách lẻ + giao ngay + thu tiền mặt sẵn, ẩn ngày giao/Thông tin khác, có link về Đơn thường", async () => {

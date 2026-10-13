@@ -2,7 +2,7 @@
 
 import { igInput, InlineField, NumberInput } from "@/components/ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-fetch";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -24,13 +24,13 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   const [error, setError] = useState<string | null>(null);
   const canCreate = canDeposit && !order.isCancelled;
 
-  // Quỹ tải khi mở màn (API trả { value, label })
-  useEffect(() => {
-    if (!canCreate) return;
-    let alive = true;
-    Promise.resolve(apiFetch<CashOption[]>("/api/deposits/options/cash-accounts")).then((o) => { if (!alive) return; const list = o ?? []; setOptions(list); setCashAccountId((c) => c || String(list[0]?.value ?? "")); }).catch(() => { if (alive) setOptions([]); });
-    return () => { alive = false; };
-  }, [canCreate]);
+  // Quỹ tải khi rê chuột/chạm/focus vào khối thu cọc (panel nằm cùng màn hình các phần khác nên không tải sẵn); API trả { value, label }
+  const [loaded, setLoaded] = useState(false);
+  const loadOptions = () => {
+    if (loaded || !canCreate) return;
+    setLoaded(true);
+    Promise.resolve(apiFetch<CashOption[]>("/api/deposits/options/cash-accounts")).then((o) => { const list = Array.isArray(o) ? o : []; setOptions(list); setCashAccountId((c) => c || String(list[0]?.value ?? "")); }).catch(() => setOptions([]));
+  };
 
   async function create() {
     if (busy) return;
@@ -49,7 +49,7 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
   return (
     <div className="space-y-6">
       {canCreate && (
-        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4">
+        <section aria-label="Thu tiền cọc" className="space-y-3 rounded-sm border border-border p-4" onPointerEnter={loadOptions} onFocusCapture={loadOptions} onPointerDownCapture={loadOptions}>
           <h3 className="text-sm font-semibold">Thu tiền cọc <span className="font-normal text-fg-muted">— tự vào hóa đơn khi in (Đã thanh toán / Còn lại)</span></h3>
           <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
             <InlineField id="dep-amount" label="Số tiền">
@@ -57,7 +57,7 @@ export function DepositPanel({ order, today, canDeposit }: { order: OrderDetailD
             </InlineField>
             <InlineField id="dep-account" label="Quỹ / tài khoản">
               <select id="dep-account" value={cashAccountId} onChange={(e) => setCashAccountId(e.target.value)} className={`${igInput} cursor-pointer`}>
-                <option value="">— Chọn —</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <option value="">{loaded && options.length === 0 ? "Chưa có quỹ phù hợp" : "— Chọn —"}</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </InlineField>
             <InlineField id="dep-date" label="Ngày thu">
