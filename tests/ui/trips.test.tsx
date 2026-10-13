@@ -112,7 +112,7 @@ describe("UndeliveredList", () => {
   const row = (over: Partial<UndeliveredRowDTO> = {}): UndeliveredRowDTO => ({ stopId: 9, tripId: 3, tripCode: "CH000003", orderId: 11, orderCode: "DH000011", partnerName: "Khách Đạt", phone: "0912", address: "Q12", result: "KHONG_GIAO", resultLabel: "Không giao được", note: "khách vắng", remainingQty: "4", at: new Date("2026-09-16T03:00:00Z"), handledNote: null, handledAt: null, ...over });
   it("có Giao lại / Trả về kho / Đã xử lý (bắt buộc ghi cách xử lý); đã xử lý thì hiện ghi chú", async () => {
     render(<UndeliveredList canManage rows={[row(), row({ stopId: 10, orderCode: "DH000012", handledAt: new Date(), handledNote: "giao lại thứ 6" })]} />);
-    expect(screen.getByRole("link", { name: "Trả về kho" })).toHaveAttribute("href", "/returns/by-order/new?orderId=11");
+    expect(screen.getByRole("link", { name: "Trả về kho" })).toHaveAttribute("href", "/returns/by-order/new?orderId=11&undelivered=1");
     expect(screen.getByText(/giao lại thứ 6/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Đã xử lý DH000011" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Ghi nhận" }));

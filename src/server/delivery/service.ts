@@ -84,6 +84,8 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
   if (ictYmd(at) < ictYmd(order.orderDate)) throw new DomainError("Ngày giao không được trước ngày đơn.", 400);
 
   const byId = new Map(order.lines.map((l) => [l.id, l]));
+  // Phần đã trả về kho khi chưa giao (hàng không giao được) không còn để giao nữa
+  const backed = new Map((await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false, undelivered: true } }, _sum: { qty: true } })).map((r) => [r.orderLineId, r._sum.qty ?? D(0)]));
   let value = D(0);
   const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
   // giá trị hàng đã giao trước phiếu này (để chia phí vận chuyển luỹ kế)
@@ -92,7 +94,7 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
     const line = byId.get(l.orderLineId);
     if (!line) throw new DomainError(`Dòng ${i + 1}: không thuộc đơn này.`, 400);
     const delivered = deliveredOf(line);
-    const remaining = line.qty.minus(delivered);
+    const remaining = line.qty.minus(delivered).minus(backed.get(line.id) ?? 0);
     if (D(l.qty).gt(remaining)) throw new DomainError(`Dòng ${i + 1}: chỉ còn ${remaining.toString()} ${line.unit} chưa giao.`, 400);
     value = value.plus(deliveredValue(lineAmountOf(line), line.qty, delivered, D(l.qty)));
     return { orderLineId: line.id, qty: D(l.qty) };
@@ -134,7 +136,7 @@ export async function cancelDeliveryNoteCore(tx: Tx, actor: Actor, id: number): 
   if (fresh.periodId !== period.id) throw new PeriodClosedError();
   if (fresh.isCancelled) throw new DomainError("Phiếu giao đã hủy trước đó.", 409);
   // Không để tổng đã giao thấp hơn tổng đã trả: hủy phiếu trả hàng trước
-  const returned = await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false } }, _sum: { qty: true } });
+  const returned = await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false, undelivered: false } }, _sum: { qty: true } });
   if (returned.length) {
     const noteLines = await tx.deliveryLine.findMany({ where: { deliveryNoteId: id }, select: { orderLineId: true, qty: true } });
     for (const r of returned) {

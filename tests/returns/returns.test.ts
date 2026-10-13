@@ -166,6 +166,46 @@ describe("trả theo đơn (43)", () => {
   });
 });
 
+describe("trả hàng chưa giao về kho (hàng không giao được)", () => {
+  const retUndelivered = (orderId: number, orderLineId: number, qty: number) =>
+    createReturnByOrderIdempotent(prisma, actor, `ru-${++n}`, returnByOrderSchema.parse({ orderId, date: "2026-09-15", note: "", undelivered: true, lines: [{ orderLineId, qty }] }), NOW);
+
+  it("nhập lại kho, KHÔNG đụng công nợ/chiết khấu; chỉ trả phần chưa giao; chặn giao phần đã trả về kho", async () => {
+    const o = await deliveredOrder(1); // đặt 4, giao 1 ⇒ chưa giao 3
+    const stock0 = await onHand();
+    const debt0 = await balance(customer.id);
+    const dto = await getOrderForReturn(prisma, actor, o.id, true);
+    expect(dto.undelivered).toBe(true);
+    expect(dto.lines[0]).toMatchObject({ ordered: "4", delivered: "1", returned: "0", remaining: "3" });
+
+    await expect(retUndelivered(o.id, o.lineId, 3.001)).rejects.toMatchObject({ status: 400 });
+    const r = await retUndelivered(o.id, o.lineId, 2);
+    expect(Number(await onHand())).toBe(Number(stock0) + 2);
+    expect(await balance(customer.id)).toBe(debt0);
+    expect(await prisma.discountLedger.count({ where: { docType: "RETURN", docId: r.id } })).toBe(0);
+    expect(await prisma.goodsReturn.findUniqueOrThrow({ where: { id: r.id } })).toMatchObject({ undelivered: true, totalAmount: new Prisma.Decimal(0) });
+
+    // còn lại 1; trả hàng đã giao không bị ảnh hưởng (vẫn tối đa 1 đã giao)
+    expect((await getOrderForReturn(prisma, actor, o.id, true)).lines[0].remaining).toBe("1");
+    expect((await getOrderForReturn(prisma, actor, o.id, false)).lines[0]).toMatchObject({ delivered: "1", returned: "0", remaining: "1" });
+    await expect(retUndelivered(o.id, o.lineId, 1.5)).rejects.toMatchObject({ status: 400 });
+    // phần đã trả về kho không giao được nữa (chỉ còn 1)
+    await expect(tx((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: [{ orderLineId: o.lineId, qty: 2 }] }), NOW))).rejects.toMatchObject({ status: 400 });
+    await tx((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: [{ orderLineId: o.lineId, qty: 1 }] }), NOW));
+  });
+
+  it("hủy phiếu trả hàng chưa giao: gỡ kho, công nợ vẫn nguyên", async () => {
+    const o = await deliveredOrder(0);
+    const stock0 = await onHand();
+    const debt0 = await balance(customer.id);
+    const r = await retUndelivered(o.id, o.lineId, 4);
+    expect(Number(await onHand())).toBe(Number(stock0) + 4);
+    await cancelReturnTx(prisma, actor, r.id, "nhầm");
+    expect(await onHand()).toBe(stock0);
+    expect(await balance(customer.id)).toBe(debt0);
+  });
+});
+
 describe("trả theo sản phẩm (45)", () => {
   it("chưa từng bán cho khách ⇒ vốn = giá nhập gần nhất; công nợ giảm theo giá nhập tay", async () => {
     await tx((t) => t.partnerLedger.create({ data: { periodId: w.periodId, partnerId: customer.id, debit: 500_000, docType: "DELIVERY", docId: 999, at: NOW, createdBy: w.userId } }));

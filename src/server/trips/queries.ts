@@ -119,7 +119,7 @@ export async function searchTripOrders(db: Db, actor: Actor, q: string): Promise
       AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] })),
     },
     orderBy: [{ expectedDeliveryDate: "asc" }, { id: "asc" }], take: 200,
-    select: { id: true, code: true, orderDate: true, expectedDeliveryDate: true, note: true, partner: { select: { name: true, address: true, phone: true } }, lines: { select: { qty: true, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } },
+    select: { id: true, code: true, orderDate: true, expectedDeliveryDate: true, note: true, partner: { select: { name: true, address: true, phone: true } }, lines: { select: { qty: true, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } },
   });
   return rows.map((o) => ({ ...o, remaining: o.lines.reduce((s, l) => s.plus(l.qty).minus(l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0))), D(0)) })).filter((o) => o.remaining.gt(0)).slice(0, 40).map((o) => ({
     id: o.id, code: o.code, partnerName: o.partner.name, address: o.partner.address, phone: o.partner.phone, orderDate: ymd(o.orderDate), expectedDate: o.expectedDeliveryDate ? ymd(o.expectedDeliveryDate) : null, remainingQty: o.remaining.toString(), note: o.note,
@@ -147,8 +147,8 @@ export async function listUndelivered(db: Db, actor: Actor, params: ListParams):
     result: { in: results.length ? results : ["KHONG_GIAO", "GIAO_MOT_PHAN"] }, handledAt: handled ? { not: null } : null, order: { isCancelled: false }, trip: { status: { not: "CANCELLED" } },
     AND: terms.map((t) => ({ OR: [{ order: { code: { contains: escapeLike(t.toUpperCase()) } } }, { order: { partner: { searchText: { contains: escapeLike(t) } } } }] })),
   };
-  const all = await db.tripOrder.findMany({ where, orderBy: [{ resultAt: "desc" }, { id: "desc" }], include: { trip: { select: { code: true } }, order: { select: { code: true, partner: { select: { name: true, phone: true, address: true } }, lines: { select: { qty: true, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } });
-  const rows = all.map((s) => ({ s, remaining: s.order.lines.reduce((a, l) => a.plus(l.qty).minus(l.deliveryLines.reduce((x, d) => x.plus(d.qty), D(0))), D(0)) })).filter((x) => x.remaining.gt(0));
+  const all = await db.tripOrder.findMany({ where, orderBy: [{ resultAt: "desc" }, { id: "desc" }], include: { trip: { select: { code: true } }, order: { select: { code: true, partner: { select: { name: true, phone: true, address: true } }, lines: { select: { qty: true, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } });
+  const rows = all.map((s) => ({ s, remaining: s.order.lines.reduce((a, l) => a.plus(l.qty).minus(l.deliveryLines.reduce((x, d) => x.plus(d.qty), D(0))).minus(l.returnLines.reduce((x, d) => x.plus(d.qty), D(0))), D(0)) })).filter((x) => x.remaining.gt(0));
   return {
     total: rows.length,
     rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize).map(({ s, remaining }) => ({

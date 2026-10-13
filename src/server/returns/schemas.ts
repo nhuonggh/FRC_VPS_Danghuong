@@ -14,6 +14,8 @@ export const returnByOrderSchema = z.object({
   orderId: z.number({ invalid_type_error: "Chọn đơn hàng." }).int().positive("Chọn đơn hàng."),
   date: ymd,
   note: z.string().trim().max(500),
+  /** Trả về kho phần hàng CHƯA GIAO (hàng không giao được): chỉ nhập kho, không đụng công nợ. */
+  undelivered: z.boolean().optional(),
   lines: z.array(z.object({ orderLineId: z.number().int().positive(), qty })).min(1, "Nhập số lượng trả cho ít nhất một dòng.").max(RETURN_MAX_LINES),
 });
 

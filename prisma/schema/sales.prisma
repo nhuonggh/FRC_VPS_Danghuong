@@ -301,6 +301,8 @@ model GoodsReturn {
   /// Khoản khấu trừ khi khách trả hàng (phí vận chuyển/khác): công nợ khách chỉ giảm `totalAmount − deductionAmount`.
   deductionAmount Decimal @default(0) @db.Decimal(18, 2)
   deductionNote   String?
+  /// Trả về kho phần HÀNG CHƯA GIAO (hàng không giao được): chỉ nhập lại kho, không ghi công nợ/chiết khấu (công nợ chỉ ghi khi giao).
+  undelivered  Boolean    @default(false)
   isCancelled  Boolean    @default(false)
   cancelledAt  DateTime?
   cancelledBy  Int?

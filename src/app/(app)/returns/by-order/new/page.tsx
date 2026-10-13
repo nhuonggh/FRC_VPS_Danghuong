@@ -19,7 +19,7 @@ export default async function NewReturnByOrderPage({ searchParams }: { searchPar
   const rawId = first(sp.orderId);
   if (rawId) {
     if (!/^\d{1,10}$/.test(rawId) || Number(rawId) <= 0 || Number(rawId) > 2_147_483_647) notFound();
-    const order = await getOrderForReturn(prisma, actor, Number(rawId)).catch((e) => {
+    const order = await getOrderForReturn(prisma, actor, Number(rawId), first(sp.undelivered) === "1").catch((e) => {
       if (e instanceof DomainError && e.status === 404) notFound();
       throw e;
     });

@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { formatDateTime, formatQty } from "@/lib/format";
 import type { UndeliveredRowDTO } from "@/server/trips/queries";
 
-/** Hàng không giao được (42): giao cho người bán xử lý — giao lại (xếp chuyến mới), hủy đơn, hoặc trả về kho bằng “Trả theo đơn”. */
+/** Hàng không giao được (42): giao cho người bán xử lý — giao lại (xếp chuyến mới), hủy đơn, hoặc trả về kho (phiếu trả hàng chưa giao: chỉ nhập lại kho, không đụng công nợ). */
 export function UndeliveredList({ rows, canManage }: { rows: UndeliveredRowDTO[]; canManage: boolean }) {
   const router = useRouter();
   const [row, setRow] = useState<UndeliveredRowDTO | null>(null);
@@ -28,7 +28,7 @@ export function UndeliveredList({ rows, canManage }: { rows: UndeliveredRowDTO[]
                 {r.handledAt ? <span className="text-xs text-fg-secondary">Đã xử lý: {r.handledNote}</span> : canManage ? (
                   <div className="flex flex-wrap gap-2">
                     <Link href="/delivery/trips/new" className="flex h-9 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover">Giao lại</Link>
-                    <Link href={`/returns/by-order/new?orderId=${r.orderId}`} className="flex h-9 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover">Trả về kho</Link>
+                    <Link href={`/returns/by-order/new?orderId=${r.orderId}&undelivered=1`} className="flex h-9 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover">Trả về kho</Link>
                     <button type="button" onClick={() => setRow(r)} aria-label={`Đã xử lý ${r.orderCode}`} className="h-9 rounded-sm bg-accent px-3 text-sm font-medium text-fg-on-accent">Đã xử lý</button>
                   </div>
                 ) : null}

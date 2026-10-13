@@ -30,7 +30,11 @@ function assertWriter(actor: Actor, kind: "BY_ORDER" | "BY_PRODUCT" | "SUPPLIER"
   if (kind === "SUPPLIER") assertCan(actor.perms, "purchase_price.view"); // giá thỏa thuận với NCC là giá nhập
 }
 
-const qtyReturned = (l: { returnLines: { qty: Prisma.Decimal }[] }) => l.returnLines.reduce((s, r) => s.plus(r.qty), D(0));
+type RetLine = { qty: Prisma.Decimal; goodsReturn: { undelivered: boolean } };
+/** SL khách đã trả (hàng đã giao) — không tính phiếu trả hàng chưa giao. */
+const qtyReturned = (l: { returnLines: RetLine[] }) => l.returnLines.filter((r) => !r.goodsReturn.undelivered).reduce((s, r) => s.plus(r.qty), D(0));
+/** SL đã trả về kho khi chưa giao (hàng không giao được). */
+const qtyUndeliveredBack = (l: { returnLines: RetLine[] }) => l.returnLines.filter((r) => r.goodsReturn.undelivered).reduce((s, r) => s.plus(r.qty), D(0));
 const qtyDelivered = (l: { deliveryLines: { qty: Prisma.Decimal }[] }) => l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0));
 
 /** Khoá đơn (tuần tự hoá với giao/sửa/hủy/trả cùng đơn) và nạp lượng đã giao / đã trả còn hiệu lực theo dòng. */
@@ -43,7 +47,7 @@ async function lockOrderForReturn(tx: Tx, actor: Actor, orderId: number) {
         orderBy: { id: "asc" },
         include: {
           deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } },
-          returnLines: { where: { goodsReturn: { isCancelled: false } }, select: { qty: true } },
+          returnLines: { where: { goodsReturn: { isCancelled: false } }, select: { qty: true, goodsReturn: { select: { undelivered: true } } } },
         },
       },
     },
@@ -70,6 +74,11 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
   if (order.isCancelled || order.isDraft) throw new DomainError("Đơn đã hủy hoặc còn là nháp, không trả hàng được.", 409);
   const at = docTimestamp(input.date, now);
   if (ictYmd(at) < ictYmd(order.orderDate)) throw new DomainError("Ngày trả không được trước ngày đơn.", 400);
+  const undelivered = input.undelivered === true;
+  if (undelivered) {
+    const onRoad = await tx.tripOrder.findFirst({ where: { orderId: order.id, result: null, trip: { status: { in: ["PLANNED", "ON_ROAD"] } } }, select: { trip: { select: { code: true } } } });
+    if (onRoad) throw new DomainError(`Đơn đang nằm trong chuyến ${onRoad.trip.code} chưa nhập kết quả — nhập kết quả giao trước khi trả về kho.`, 409);
+  }
 
   const byId = new Map(order.lines.map((l) => [l.id, l]));
   const seen = new Set<number>();
@@ -83,24 +92,31 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     if (!ctx.locked.has(line.productId)) throw new DomainError("Đơn vừa được người khác sửa, hãy tải lại trang rồi thử lại.", 409);
     const delivered = qtyDelivered(line);
     const returned = qtyReturned(line);
-    const remaining = delivered.minus(returned);
-    if (D(l.qty).gt(remaining)) throw new DomainError(`Dòng ${i + 1}: chỉ còn ${remaining.toString()} ${line.unit} có thể trả (đã giao ${delivered.toString()}, đã trả ${returned.toString()}).`, 400);
+    if (undelivered) {
+      const backed = qtyUndeliveredBack(line);
+      const left = line.qty.minus(delivered).minus(backed);
+      if (D(l.qty).gt(left)) throw new DomainError(`Dòng ${i + 1}: chỉ còn ${left.toString()} ${line.unit} chưa giao có thể trả về kho (đặt ${line.qty.toString()}, đã giao ${delivered.toString()}, đã trả về kho ${backed.toString()}).`, 400);
+    } else {
+      const remaining = delivered.minus(returned);
+      if (D(l.qty).gt(remaining)) throw new DomainError(`Dòng ${i + 1}: chỉ còn ${remaining.toString()} ${line.unit} có thể trả (đã giao ${delivered.toString()}, đã trả ${returned.toString()}).`, 400);
+    }
     const qty = D(l.qty);
-    const amount = deliveredValue(lineAmountOf(line), line.qty, returned, qty);
-    const discount = deliveredValue(line.discountAccum, line.qty, returned, qty);
+    // Hàng chưa giao chưa ghi nợ khách (D-26) ⇒ không có tiền/chiết khấu để đảo.
+    const amount = undelivered ? D(0) : deliveredValue(lineAmountOf(line), line.qty, returned, qty);
+    const discount = undelivered ? D(0) : deliveredValue(line.discountAccum, line.qty, returned, qty);
     total = total.plus(amount);
     return { line, qty, qtyBase: convertToBase(qty, line.factorUsed), amount, discount };
   });
 
   const { id, code } = await nextCode(tx, "BY_ORDER");
   await tx.goodsReturn.create({
-    data: { id, code, periodId: ctx.period.id, kind: "BY_ORDER", partnerId: order.partnerId, orderId: order.id, at, note: input.note || null, totalAmount: total, createdBy: actor.userId },
+    data: { id, code, periodId: ctx.period.id, kind: "BY_ORDER", partnerId: order.partnerId, orderId: order.id, at, note: input.note || (undelivered ? "Hàng không giao được — trả về kho" : null), totalAmount: total, undelivered, createdBy: actor.userId },
   });
   for (const r of rows) {
     const row = await tx.goodsReturnLine.create({
       data: {
         returnId: id, productId: r.line.productId, orderLineId: r.line.id, qty: r.qty, unit: r.line.unit, factorUsed: r.line.factorUsed, qtyBase: r.qtyBase,
-        unitPrice: round2(r.amount.div(r.qty)), amount: r.amount, discountAccumReversed: r.discount, at,
+        unitPrice: r.amount.gt(0) ? round2(r.amount.div(r.qty)) : D(0), amount: r.amount, discountAccumReversed: r.discount, at,
       },
     });
     const { seq } = await postReceipt(ctx, {
@@ -112,8 +128,8 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
       await tx.discountLedger.create({ data: { periodId: ctx.period.id, partnerId: order.partnerId, orderLineId: r.line.id, amountOut: r.discount, docType: "RETURN", docId: id, at, createdBy: actor.userId } });
     }
   }
-  await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: order.partnerId, side: "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
-  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: "BY_ORDER", orderCode: order.code, lineCount: rows.length } });
+  if (!undelivered) await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: order.partnerId, side: "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
+  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: "BY_ORDER", undelivered, orderCode: order.code, lineCount: rows.length } });
   return { id, code };
 }
 

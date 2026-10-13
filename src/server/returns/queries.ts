@@ -95,10 +95,12 @@ export async function searchReturnableOrders(db: Db, actor: Actor, q: string) {
 
 export interface ReturnableOrderDTO {
   id: number; code: string; partnerName: string; partnerCode: string; orderDate: Date;
-  lines: { id: number; productCode: string; productName: string; unit: string; delivered: string; returned: string; remaining: string; returnable: boolean; processingTypeName: string | null }[];
+  /** true: trả về kho phần HÀNG CHƯA GIAO (hàng không giao được). */
+  undelivered: boolean;
+  lines: { id: number; productCode: string; productName: string; unit: string; ordered: string; delivered: string; returned: string; remaining: string; returnable: boolean; processingTypeName: string | null }[];
 }
 /** Các dòng của một đơn kèm SL đã giao / đã trả / còn trả được (cho form trả theo đơn). */
-export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): Promise<ReturnableOrderDTO> {
+export async function getOrderForReturn(db: Db, actor: Actor, orderId: number, undelivered = false): Promise<ReturnableOrderDTO> {
   const o = await db.saleOrder.findFirst({
     where: { id: orderId, partner: partnerScopeWhere(actor) },
     include: {
@@ -109,7 +111,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): 
           product: { select: { code: true, name: true } },
           processingType: { select: { name: true } },
           deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } },
-          returnLines: { where: { goodsReturn: { isCancelled: false } }, select: { qty: true } },
+          returnLines: { where: { goodsReturn: { isCancelled: false } }, select: { qty: true, goodsReturn: { select: { undelivered: true } } } },
         },
       },
     },
@@ -117,13 +119,15 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number): 
   if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
   if (o.isCancelled || o.isDraft) throw new DomainError("Đơn đã hủy hoặc còn là nháp, không trả hàng được.", 409);
   return {
-    id: o.id, code: o.code, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate,
+    id: o.id, code: o.code, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate, undelivered,
     lines: o.lines.map((l) => {
       const delivered = l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0));
-      const returned = l.returnLines.reduce((s, d) => s.plus(d.qty), D(0));
+      const returned = l.returnLines.filter((d) => d.goodsReturn.undelivered === undelivered).reduce((s, d) => s.plus(d.qty), D(0));
+      // Trả hàng chưa giao: còn lại = đặt − đã giao − đã trả về kho. Trả hàng đã giao: đã giao − đã trả.
+      const remaining = undelivered ? l.qty.minus(delivered).minus(returned) : delivered.minus(returned);
       return {
-        id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, delivered: delivered.toString(), returned: returned.toString(),
-        remaining: delivered.minus(returned).toString(), returnable: l.bomVersionId === null, processingTypeName: l.processingType?.name ?? null,
+        id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, ordered: l.qty.toString(), delivered: delivered.toString(), returned: returned.toString(),
+        remaining: remaining.toString(), returnable: l.bomVersionId === null, processingTypeName: l.processingType?.name ?? null,
       };
     }),
   };
