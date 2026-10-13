@@ -49,7 +49,13 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
     <div className="space-y-6">
       {canCreate && (
         <section aria-label="Lập phiếu giao" className="space-y-3 rounded-sm border border-border p-4">
-          <h3 className="text-sm font-semibold">Lập phiếu giao</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Giao hàng cho khách</h3>
+              <p className="text-xs text-fg-muted">Nhập số lượng giao lần này (hoặc bấm “Hết”), rồi bấm “Lập phiếu giao”. Giao nhiều lần được — hàng còn lại sẽ hiện lại ở đây.</p>
+            </div>
+            <button type="button" onClick={() => setQty(Object.fromEntries(open.map((l) => [l.id, String(remainingOf(l))])))} className="h-9 rounded-sm border border-border px-3 text-xs font-medium hover:bg-hover">Giao hết tất cả</button>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <InlineField id="delivery-date" label="Ngày giao" required>
               <input id="delivery-date" type="date" max={today} min={ictYmd(order.orderDate)} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} />
@@ -59,12 +65,13 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
             </InlineField>
           </div>
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs font-semibold text-fg-secondary"><th className="py-1">Sản phẩm</th><th className="py-1 text-right">Còn phải giao</th><th className="py-1 text-right">Giao lần này</th></tr></thead>
+            <thead><tr className="text-left text-xs font-semibold text-fg-secondary"><th className="py-1">Sản phẩm</th><th className="py-1 text-right">Đã giao / Đặt</th><th className="py-1 text-right">Còn phải giao</th><th className="py-1 text-right">Giao lần này</th></tr></thead>
             <tbody>
               {open.map((l) => (
                 <tr key={l.id} className="border-t border-border">
-                  <td className="py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span></td>
-                  <td className="py-2 text-right tabular">{formatQty(remainingOf(l))} {l.unit}</td>
+                  <td className="py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>{l.isProvisional && <span className="block text-xs text-warning">Kho chưa đủ hàng — nhập thêm hàng trước khi giao</span>}</td>
+                  <td className="py-2 text-right tabular text-fg-muted">{formatQty(l.deliveredQty)} / {formatQty(l.qty)}</td>
+                  <td className="py-2 text-right tabular font-medium">{formatQty(remainingOf(l))} {l.unit}</td>
                   <td className="w-40 py-2">
                     <div className="flex items-center justify-end gap-1">
                       <NumberInput maxFrac={3} aria-label={`Số lượng giao ${l.productName}`} value={qty[l.id] ?? ""} onValueChange={(val) => setQty((m) => ({ ...m, [l.id]: val }))} className={`${inputClass()} tabular text-right`} />
@@ -83,11 +90,13 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
       {order.deliveries.length === 0 ? (
         <p className="rounded-sm border border-dashed border-border p-6 text-center text-sm text-fg-muted">Chưa có phiếu giao nào.</p>
       ) : (
+        <div className="space-y-2">
+        <h3 className="text-sm font-semibold">Các lần đã giao</h3>
         <ul className="space-y-3">
           {order.deliveries.map((d) => (
             <li key={d.id} className={`rounded-sm border border-border p-3 ${d.isCancelled ? "opacity-60" : ""}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span><strong className="font-mono text-xs">{d.code}</strong> · {formatDateTime(d.at)}{d.isCancelled && <span className="ml-2 text-xs font-medium text-danger">Đã hủy</span>}</span>
+                <span><strong className="font-mono text-xs">{d.code}</strong> · {formatDateTime(d.at)}{d.isCancelled && <span className="ml-2 text-xs font-medium text-danger">Đã hủy — không tính là đã giao</span>}</span>
                 {canPrint && !d.isCancelled && <PrintButton docType="DELIVERY_NOTE" docId={d.id} label="In phiếu giao" className="flex h-9 items-center gap-2 rounded-sm border border-border px-3 text-sm hover:bg-hover disabled:opacity-60" />}
                 {canDeliver && !d.isCancelled && (
                   <button type="button" onClick={() => cancel(d.id, d.code)} aria-label={`Hủy phiếu giao ${d.code}`} className="h-9 rounded-sm border border-danger px-3 text-sm text-danger hover:bg-danger-soft">Hủy phiếu</button>
@@ -98,6 +107,7 @@ export function DeliveryPanel({ order, today, canDeliver, canPrint = false }: { 
             </li>
           ))}
         </ul>
+        </div>
       )}
     </div>
   );
