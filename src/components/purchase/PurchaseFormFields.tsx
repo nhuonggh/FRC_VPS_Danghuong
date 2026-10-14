@@ -54,7 +54,7 @@ export function PurchaseNoteField({ form }: FormProps) {
  * Nhập hàng theo kích thước (tôn mua từ nơi khác về bán): chọn sản phẩm, gõ `7.1*7+6.8*1` (dài*số tấm, nối bằng +) → mỗi số hạng một dòng,
  * SL = dài × số tấm (md, đơn vị gốc nên kho/FIFO không đổi), ghi chú cuộn ghi `7,1 m × 1,08 × 7 = 53,676 m²`. Giá nhập nhập theo md hoặc theo m² (liên động qua tỷ lệ m²/md, mặc định 1).
  */
-function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes }: { loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: ProcessingOptions; ensureTypes: (productId: number | undefined) => void }) {
+function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes, quickProduct }: { quickProduct?: QuickProductConfig; loadProducts: (q: string) => Promise<ProductOption[]>; onAdd: (product: ProductOption, rows: PurchaseInput["lines"]) => void; typeOptions: ProcessingOptions; ensureTypes: (productId: number | undefined) => void }) {
   const [product, setProduct] = useState<ProductOption | null>(null);
   const [typeId, setTypeId] = useState("");
   const types = product ? (typeOptions.get(product.value) ?? []).filter((t) => t.priceBasis !== "UNIT") : []; // kiểu bán theo ĐVT riêng không dùng khối kích thước
@@ -78,7 +78,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
   return <div className="rounded-sm border border-dashed border-border p-3">
     <h3 className="text-sm font-semibold">Nhập theo kích thước</h3>
     <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <InlineField id="pd-product" label="Sản phẩm" className="xl:col-span-2"><div className={igCombo}><Combobox hideLabel key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setTypeId(""); setError(""); ensureTypes(o ? Number(o.value) : undefined); }} /></div></InlineField>
+      <InlineField id="pd-product" label="Sản phẩm" className="xl:col-span-2"><div className={igCombo}><Combobox hideLabel key={key} label="Sản phẩm (nhập theo kích thước)" value={product} loadOptions={loadProducts} placeholder="Tìm mã, tên…" onChange={(o) => { setProduct(o as ProductOption | null); setTypeId(""); setError(""); ensureTypes(o ? Number(o.value) : undefined); }} /></div>{quickProduct && <div className="flex items-center border-l border-border px-1"><QuickProductDialog config={quickProduct} onCreated={(p) => { setProduct(p); setTypeId(""); setError(""); setKey((k) => k + 1); ensureTypes(p.value); }} /></div>}</InlineField>
       {types.length > 0 && <InlineField id="pd-type" label="Kiểu gia công" hint="tuỳ chọn — tự điền tỷ lệ m²/md"><select id="pd-type" value={typeId} onChange={(e) => { setTypeId(e.target.value); const picked = types.find((t) => String(t.value) === e.target.value); if (picked) setRatio(String(picked.ratio ?? 1).replace(".", ",")); }} className={`${igInput} cursor-pointer`}><option value="">Không</option>{types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></InlineField>}
       <InlineField id="pd-len" label="Chiều dài" hint="dài*số tấm, nối bằng +"><input id="pd-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={enter} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} /></InlineField>
       <InlineField id="pd-ratio" label="Tỷ lệ m²/md"><input id="pd-ratio" inputMode="decimal" value={ratio} onChange={(e) => setRatio(e.target.value)} onKeyDown={enter} className={small} /></InlineField>
@@ -129,7 +129,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }
     if (rest.length) append(rest);
   };
   return <div className="space-y-5">
-    <PurchaseDimensionEntry loadProducts={loadProducts} onAdd={addDimensionRows} typeOptions={typeOptions} ensureTypes={ensureTypes} />
+    <PurchaseDimensionEntry quickProduct={quickProduct} loadProducts={loadProducts} onAdd={addDimensionRows} typeOptions={typeOptions} ensureTypes={ensureTypes} />
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -184,7 +184,6 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }
     <div className="flex flex-wrap gap-2">
       <button type="button" onClick={() => append(emptyPurchaseLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
       <ProductMultiPicker load={loadProducts} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
-      {quickProduct && <QuickProductDialog config={quickProduct} onCreated={(p) => addProducts([p])} />}
     </div>
   </div>;
 }
