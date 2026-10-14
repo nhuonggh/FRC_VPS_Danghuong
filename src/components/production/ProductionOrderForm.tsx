@@ -10,10 +10,11 @@ import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 // Schema thuần Zod: không import service (kéo engine FIFO vào bundle browser).
 import { productionOrderSchema, type ProductionOrderInput } from "@/server/production/schemas";
 import type { ProductOption } from "@/server/products/queries";
+import { QuickProductDialog, type QuickProductConfig } from "@/components/products/QuickProductDialog";
 
 const blank = { productId: undefined, qty: undefined } as unknown as ProductionOrderInput["materials"][number];
 
-export function ProductionOrderForm({ today }: { today: string }) {
+export function ProductionOrderForm({ today, quickProduct }: { today: string; quickProduct?: QuickProductConfig }) {
   const router = useRouter(), idem = useIdempotencyKey();
   const [meta, setMeta] = useState<Record<number, ProductOption>>({});
   const form = useForm<ProductionOrderInput>({ resolver: zodResolver(productionOrderSchema), defaultValues: { date: today, note: "", materials: [blank] } });
@@ -41,6 +42,10 @@ export function ProductionOrderForm({ today }: { today: string }) {
           <InlineField id="note" label="Ghi chú" labelClass="sm:min-w-40"><input id="note" {...form.register("note")} className={igInput} /></InlineField>
           <InlineField id="productId" label="Phụ kiện" required error={err.productId?.message} labelClass="sm:min-w-40">
             <Controller control={form.control} name="productId" render={({ field }) => <div className={igCombo}><Combobox hideLabel label="Phụ kiện" value={target ?? null} loadOptions={load("PHU_KIEN")} onChange={(o) => field.onChange(o ? Number(o.value) : undefined)} /></div>} />
+            {quickProduct && <div className="flex shrink-0 items-center border-l border-border px-1"><QuickProductDialog config={quickProduct} defaultKind="PHU_KIEN" triggerLabel="Thêm phụ kiện" onCreated={(p) => {
+              setMeta((current) => ({ ...current, [p.value]: p }));
+              form.setValue("productId", p.value, { shouldDirty: true, shouldValidate: true });
+            }} /></div>}
           </InlineField>
           <InlineField id="qty" label={`Số lượng thành phẩm${target ? ` (${target.baseUnit})` : ""}`} required error={err.qty?.message} labelClass="sm:min-w-40"><RhfNumberInput id="qty" maxFrac={3} control={form.control} name={"qty"} aria-invalid={!!err.qty} className={`${igInput} tabular text-right`} /></InlineField>
         </FormGrid>

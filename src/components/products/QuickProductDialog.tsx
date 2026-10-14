@@ -15,10 +15,10 @@ const EMPTY = { code: "", name: "", baseUnit: "", kind: "HANG", groupId: "", min
 const LABEL = "sm:min-w-40";
 
 /** Hộp thoại thêm sản phẩm ngay trong phiếu nhập (cùng kiểu hộp thoại thêm nhà cung cấp). Cần quyền `product.manage`. Đơn vị quy đổi/kiểu gia công bổ sung sau ở chi tiết sản phẩm. */
-export function QuickProductDialog({ config, onCreated }: { config: QuickProductConfig; onCreated: (p: ProductOption) => void }) {
+export function QuickProductDialog({ config, onCreated, defaultKind = "HANG", triggerLabel = "Thêm sản phẩm" }: { config: QuickProductConfig; onCreated: (p: ProductOption) => void; defaultKind?: (typeof PRODUCT_KINDS)[number]["value"]; triggerLabel?: string }) {
   const idem = useIdempotencyKey();
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState(EMPTY);
+  const [v, setV] = useState({ ...EMPTY, kind: defaultKind });
   const [isCoil, setIsCoil] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function QuickProductDialog({ config, onCreated }: { config: QuickProduct
       idem.reset();
       const baseUnit = v.baseUnit.trim();
       onCreated({ value: r.id, label: `${v.code.trim()} — ${v.name.trim()}`, hint: baseUnit, baseUnit, units: [{ unit: baseUnit, factor: "1" }] });
-      setOpen(false); setV(EMPTY); setIsCoil(false);
+      setOpen(false); setV({ ...EMPTY, kind: defaultKind }); setIsCoil(false);
     } catch (e) {
       if (e instanceof ApiError && e.fields && Object.keys(e.fields).length) { setFieldErrors(e.fields); setError(e.message); }
       else setError(e instanceof Error ? e.message : "Không tạo được sản phẩm.");
@@ -66,7 +66,7 @@ export function QuickProductDialog({ config, onCreated }: { config: QuickProduct
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setError(null); setFieldErrors({}); } }}>
       <Dialog.Trigger asChild>
-        <button type="button" className="inline-flex h-11 shrink-0 items-center gap-1 rounded-sm border border-accent px-4 text-sm font-medium text-accent hover:bg-accent-soft md:h-10"><PackagePlus size={16} aria-hidden /> Thêm sản phẩm</button>
+        <button type="button" className="inline-flex h-11 shrink-0 items-center gap-1 rounded-sm border border-accent px-4 text-sm font-medium text-accent hover:bg-accent-soft md:h-10"><PackagePlus size={16} aria-hidden /> {triggerLabel}</button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
