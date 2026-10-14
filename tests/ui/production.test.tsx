@@ -49,7 +49,7 @@ describe("ProductionOrderForm", () => {
     await userEvent.type(screen.getByLabelText(/Tên sản phẩm/), "Nóc mới");
     await userEvent.type(screen.getByLabelText(/Mã sản phẩm/), "PK99");
     await userEvent.type(screen.getByLabelText(/Đơn vị gốc/), "cái");
-    await userEvent.click(screen.getByRole("button", { name: "Thêm mới", exact: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/products", expect.objectContaining({ method: "POST", json: expect.objectContaining({ kind: "PHU_KIEN", code: "PK99" }) })));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByRole("combobox", { name: "Phụ kiện" })).toHaveValue("PK99 — Nóc mới");
