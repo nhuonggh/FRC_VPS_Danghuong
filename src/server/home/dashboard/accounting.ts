@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/permissions/scope";
 import { getOpenPeriod } from "@/server/period/guard";
 import { byDay, byMonth, canAny, cell, daysOf, MONTH_LABELS, num, partnerBalances, pctDelta, sqlDay, sqlMonth, topSlices, yearBounds, yearOfRange, type Db, type DashRange } from "./common";
 import type { Dashboard, Kpi, Widget } from "./types";
+import { bankRangeQuery, loadBankReceipts } from "./bank-receipts";
 
 /** Tổng `_sum.amount` của một aggregate; không có quyền → 0 (widget tương ứng không được dựng). */
 const sumOf = async (enabled: boolean, p: Promise<{ _sum: { amount: Prisma.Decimal | null } }>) => (enabled ? num((await p)._sum.amount) : 0);
@@ -14,7 +15,7 @@ const PAYMENT_KIND_SQL = Prisma.sql`CASE WHEN p.kind::text = 'CHI_PHI' THEN COAL
   WHEN p.kind::text = 'TRA_NCC' THEN 'Trả nhà cung cấp' WHEN p.kind::text = 'HOAN_KHACH' THEN 'Hoàn tiền khách'
   WHEN p.kind::text = 'TAT_TOAN_CK' THEN 'Tất toán chiết khấu' ELSE 'Chi khác' END`;
 
-export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Promise<Dashboard> {
+export async function loadAccounting(db: Db, actor: Actor, range: DashRange, bankAccount?: string): Promise<Dashboard> {
   const cash = canAny(actor, ["cashbook.view", "receipt.manage", "payment.manage"]);
   const debt = can(actor.perms, "debt.view");
   const book = can(actor.perms, "cashbook.view");
@@ -24,7 +25,7 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Pr
   const rc = (from: Date, to: Date) => ({ isCancelled: false, at: { gte: from, lt: to } });
 
   const empty = Promise.resolve([] as never[]);
-  const [thu, prevThu, chi, prevChi, monthlyIn, monthlyOut, dailyIn, dailyOut, thuMix, chiMix, rcReview, pmReview, rcCancel, pmCancel, openingCash, ledger, accounts, balances] = await Promise.all([
+  const [thu, prevThu, chi, prevChi, monthlyIn, monthlyOut, dailyIn, dailyOut, thuMix, chiMix, rcReview, pmReview, rcCancel, pmCancel, openingCash, ledger, accounts, balances, bankReceipts] = await Promise.all([
     sumOf(cash, db.receipt.aggregate({ where: rc(range.start, range.end), _sum: { amount: true } })),
     sumOf(cash, db.receipt.aggregate({ where: rc(range.prevStart, range.prevEnd), _sum: { amount: true } })),
     sumOf(cash, db.payment.aggregate({ where: rc(range.start, range.end), _sum: { amount: true } })),
@@ -46,6 +47,7 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Pr
     book ? db.cashLedger.groupBy({ by: ["cashAccountId"], where: { periodId: period.id }, _sum: { amountIn: true, amountOut: true } }) : empty,
     book ? db.cashAccount.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }) : empty,
     debt ? partnerBalances(db, actor, period.id) : Promise.resolve([]),
+    loadBankReceipts(db, actor, range, bankAccount),
   ]);
 
   const totalIn = thu, totalOut = chi;
@@ -58,15 +60,16 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Pr
   const sumAbs = (rows: { balance: number }[]) => rows.reduce((s, r) => s + Math.abs(r.balance), 0);
 
   const kpis: Kpi[] = [];
+  const drill = (path: string) => `${path}?${bankRangeQuery(range)}`;
   if (cash) {
-    kpis.push({ key: "in", label: "Tổng thu", value: totalIn, format: "currency", icon: "wallet", tone: "accent", delta: pctDelta(totalIn, prevThu), href: "/accounting/receipts" });
-    kpis.push({ key: "out", label: "Tổng chi", value: totalOut, format: "currency", icon: "banknote", tone: "warning", delta: pctDelta(totalOut, prevChi), deltaInverted: true, href: "/accounting/payments" });
+    kpis.push({ key: "in", label: "Tổng thu", value: totalIn, format: "currency", icon: "wallet", tone: "accent", delta: pctDelta(totalIn, prevThu), href: can(actor.perms, "receipt.manage") ? drill("/accounting/receipts") : undefined });
+    kpis.push({ key: "out", label: "Tổng chi", value: totalOut, format: "currency", icon: "banknote", tone: "warning", delta: pctDelta(totalOut, prevChi), deltaInverted: true, href: can(actor.perms, "payment.manage") ? drill("/accounting/payments") : undefined });
     kpis.push({ key: "net", label: "Chênh lệch thu − chi", value: totalIn - totalOut, format: "currency", icon: "scale", tone: totalIn - totalOut >= 0 ? "success" : "danger", caption: "Trong kỳ đang xem" });
   }
   if (book) kpis.push({ key: "cash", label: "Số dư quỹ hiện tại", value: cashTotal, format: "currency", icon: "landmark", tone: "info", href: "/accounting/cashbook", caption: "Tiền mặt + ngân hàng" });
   if (debt) {
-    kpis.push({ key: "receivable", label: "Công nợ phải thu", value: sumAbs(receivable), format: "currency", icon: "hand-coins", tone: "danger", href: "/accounting/debts", deltaInverted: true, caption: `${receivable.length} khách còn nợ` });
-    kpis.push({ key: "payable", label: "Công nợ phải trả", value: sumAbs(payable), format: "currency", icon: "coins", tone: "neutral", href: "/accounting/debts", caption: `${payable.length} nhà cung cấp` });
+    kpis.push({ key: "receivable", label: "Công nợ phải thu", value: sumAbs(receivable), format: "currency", icon: "hand-coins", tone: "danger", href: "/accounting/debts", deltaInverted: true, caption: `Hiện tại · ${receivable.length} đối tác còn nợ` });
+    kpis.push({ key: "payable", label: "Công nợ phải trả", value: sumAbs(payable), format: "currency", icon: "coins", tone: "neutral", href: "/accounting/debts", caption: `Hiện tại · ${payable.length} đối tác` });
   }
 
   const widgets: Widget[] = [];
@@ -107,7 +110,7 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Pr
   if (cash) {
     const review = (s: string) => [...rcReview, ...pmReview].filter((r) => r.reviewStatus === s).reduce((t, r) => t + r._count._all, 0);
     widgets.push({
-      key: "review", kind: "status", title: "Tình hình hậu kiểm chứng từ", span: cash && days ? 5 : 12, moreHref: "/accounting/cash-review",
+      key: "review", kind: "status", title: "Tình hình hậu kiểm chứng từ", span: cash && days ? 5 : 12, moreHref: can(actor.perms, "cash.review") ? drill("/accounting/cash-review") : undefined,
       items: [
         { label: "Đã hậu kiểm", value: review("REVIEWED"), tone: "success", icon: "list-checks" },
         { label: "Chờ hậu kiểm", value: review("PENDING_REVIEW"), tone: "warning", icon: "calendar-check" },
@@ -123,5 +126,5 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange): Pr
       rows: accountBalances.map((a) => [cell(a.name), cell(a.type === "CASH" ? "Tiền mặt" : "Ngân hàng"), cell(formatCurrency(a.balance), { align: "right", tone: a.balance < 0 ? "danger" : undefined })]),
     });
   }
-  return { kpis, widgets, notes: ["Chưa tính lợi nhuận gộp, tỷ suất lợi nhuận và công nợ theo hạn vì sổ chưa có hạn thanh toán/giá vốn tổng hợp theo kỳ."] };
+  return { kpis, widgets, bankReceipts };
 }

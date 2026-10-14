@@ -100,11 +100,11 @@ function WidgetBody({ w }: { w: Widget }) {
 }
 
 /** Một dashboard (KPI + lưới widget 12 cột). Server component: không JS phía client, drill-down bằng <Link>. */
-export function DashboardView({ data }: { data: Dashboard }) {
+export function DashboardView({ data, kpiColumns }: { data: Dashboard; kpiColumns?: 3 }) {
   return (
     <div className="space-y-4">
       {data.kpis.length > 0 && (
-        <section aria-label="Chỉ số chính" className={clsx("grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3", KPI_COLS[Math.min(data.kpis.length, 6)])}>
+        <section aria-label="Chỉ số chính" className={clsx("grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3", KPI_COLS[kpiColumns ?? Math.min(data.kpis.length, 6)])}>
           {data.kpis.map((k) => <KpiCard key={k.key} kpi={k} />)}
         </section>
       )}

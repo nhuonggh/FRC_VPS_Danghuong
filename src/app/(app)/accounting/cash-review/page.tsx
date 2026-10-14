@@ -1,4 +1,5 @@
 import { ReviewQueue } from "@/components/cash/ReviewQueue";
+import Link from "next/link";
 import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
@@ -21,6 +22,7 @@ export default async function CashReviewPage({ searchParams }: { searchParams: P
         <MultiSelectFilter label="Loại" paramKey="kind" basePath={BASE} params={params} options={[{ value: "RECEIPT", label: "Phiếu thu" }, { value: "PAYMENT", label: "Phiếu chi" }, { value: "ADJUSTMENT", label: "Điều chỉnh" }]} />
         <MultiSelectFilter label="Trạng thái" paramKey="status" basePath={BASE} params={params} options={[{ value: "PENDING_REVIEW", label: "Chờ kiểm tra" }, { value: "RETURNED", label: "Bị trả lại" }, { value: "ADJUST_REQUESTED", label: "Chờ duyệt điều chỉnh" }]} />
         <QuickTimeFilter basePath={BASE} params={params} />
+        {(params.filters.cashType || params.filters.account) && <span className="flex flex-wrap items-center gap-2 text-xs text-fg-secondary">{params.filters.cashType?.[0] === "BANK" ? "Phiếu qua ngân hàng" : "Đang lọc tài khoản"}<Link href={buildListHref(BASE, params, { filters: { account: [], cashType: [] } })} className="inline-flex min-h-11 items-center font-medium text-accent">Xóa lọc tài khoản</Link></span>}
       </div>}
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => buildListHref(BASE, params, page)} />}
     >

@@ -32,6 +32,7 @@ export function VoucherList({ doc, rows, total, stats, params, canCreate }: { do
         <MultiSelectFilter label="Trạng thái" paramKey="status" basePath={base} params={params} options={STATUS_OPTIONS} />
         <MultiSelectFilter label="Loại" paramKey="type" basePath={base} params={params} options={typeKeys.map((k) => ({ value: k, label: labels[k]! }))} />
         <QuickTimeFilter basePath={base} params={params} />
+        {(params.filters.cashType || params.filters.account) && <span className="flex flex-wrap items-center gap-2 text-xs text-fg-secondary">{params.filters.cashType?.[0] === "BANK" ? "Phiếu qua ngân hàng" : "Đang lọc tài khoản"}{params.filters.account && rows[0] ? ` · ${rows[0].cashAccountName}` : ""}<Link href={href({ filters: { account: [], cashType: [] } })} className="inline-flex min-h-11 items-center font-medium text-accent">Xóa lọc tài khoản</Link></span>}
         {Number(stats.pendingAmount) > 0 && <span className="text-sm text-fg-secondary">Chưa kiểm tra: <strong className="tabular">{formatCurrency(stats.pendingAmount)}</strong></span>}
       </div>}
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => href(page)} />}

@@ -41,9 +41,9 @@ export const isDashTabKey = (v: string | undefined): v is DashTabKey => DASH_TAB
 
 export async function loadDashboard(
   db: Db, actor: Actor, tab: DashTabKey,
-  query: { preset?: TimePreset | undefined; start?: string | undefined; end?: string | undefined }, now: Date,
+  query: { preset?: TimePreset | undefined; start?: string | undefined; end?: string | undefined; bankAccount?: string }, now: Date,
 ): Promise<Dashboard> {
-  const range = dashRange(query.preset, { start: query.start, end: query.end }, now);
+  const range = dashRange(query.preset ?? (tab === "accounting" ? "today" : undefined), { start: query.start, end: query.end }, now);
   switch (tab) {
     case "sales": return loadSales(db, actor, range);
     case "delivery": return loadDelivery(db, actor, range, now);
@@ -51,6 +51,6 @@ export async function loadDashboard(
     case "inventory": return loadInventory(db, actor, range);
     case "returns": return loadReturns(db, actor, range);
     case "production": return loadProduction(db, actor, range);
-    case "accounting": return loadAccounting(db, actor, range);
+    case "accounting": return loadAccounting(db, actor, range, query.bankAccount);
   }
 }

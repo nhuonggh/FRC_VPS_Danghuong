@@ -10,11 +10,14 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { CashBookDTO } from "@/server/cash/queries";
 import { REVIEW_LABEL } from "@/server/cash/labels";
+import { buildListHref, type ListParams } from "@/lib/query-params";
+import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
 
 const TONE = { PENDING_REVIEW: "warning", REVIEWED: "success", RETURNED: "danger" } as const;
 
 /** Sổ quỹ tiền mặt (60) / sổ tiền gửi ngân hàng (61): số dư vận hành = đã kiểm tra + chờ kiểm tra, chi tiết có số dư chạy, chốt quỹ. */
-export function CashBook({ book, type, base, canClose, canReopen, nowIso }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; nowIso: string }) {
+export function CashBook({ book, type, base, canClose, canReopen, nowIso, params }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; nowIso: string; params?: ListParams }) {
   const router = useRouter();
   const s = book.selected;
   const [closing, setClosing] = useState(false);
@@ -27,7 +30,7 @@ export function CashBook({ book, type, base, canClose, canReopen, nowIso }: { bo
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{title}</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {s && <a href={`/api/cash/book/export?type=${type}&account=${s.id}`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">Xuất Excel</a>}
+          {s && <a href={`/api/cash/book/export?type=${type}&account=${s.id}`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">{params?.timePreset ? "Xuất sổ cả kỳ" : "Xuất Excel"}</a>}
           {s && canClose && <button type="button" onClick={() => setClosing(true)} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Chốt quỹ</button>}
         </div>
       </div>
@@ -35,11 +38,12 @@ export function CashBook({ book, type, base, canClose, canReopen, nowIso }: { bo
         <>
           <nav aria-label="Chọn quỹ" className="flex flex-wrap gap-2">
             {book.accounts.map((a) => (
-              <Link key={a.id} href={`${base}?account=${a.id}`} aria-current={a.id === s?.id ? "true" : undefined} className={`rounded-sm border px-3 py-2 text-sm ${a.id === s?.id ? "border-accent bg-accent-soft" : "border-border hover:bg-hover"}`}>
+              <Link key={a.id} href={params ? buildListHref(`${base}?account=${a.id}`, params, { page: 1 }) : `${base}?account=${a.id}`} aria-current={a.id === s?.id ? "true" : undefined} className={`rounded-sm border px-3 py-2 text-sm ${a.id === s?.id ? "border-accent bg-accent-soft" : "border-border hover:bg-hover"}`}>
                 <strong>{a.name}</strong>{a.bankNo ? <span className="text-fg-muted"> · {a.bankNo}</span> : null}<span className="block tabular text-xs text-fg-secondary">{formatCurrency(a.balance)}</span>
               </Link>
             ))}
           </nav>
+          {s && params && <div className="space-y-2"><QuickTimeFilter basePath={`${base}?account=${s.id}`} params={params} /><p className="text-xs text-fg-secondary">Phát sinh trong kỳ {book.periodName}, theo khoảng ngày đã chọn. Các số dư phía dưới là số hiện tại của kỳ.</p></div>}
           {s && (
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Số dư vận hành" value={s.balance} hint={`Đầu kỳ ${formatCurrency(s.opening)} + thu ${formatCurrency(s.in)} − chi ${formatCurrency(s.out)}`} />
@@ -66,7 +70,7 @@ export function CashBook({ book, type, base, canClose, canReopen, nowIso }: { bo
                   </tbody>
                 </table>
               )}
-              {book.total > book.entries.length && <p className="border-t border-border p-2 text-xs text-fg-muted">Hiển thị {book.entries.length}/{book.total} dòng mới nhất — xuất Excel để xem đủ.</p>}
+              {params ? <PaginationFooter total={book.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(`${base}?account=${s.id}`, params, patch)} /> : book.total > book.entries.length && <p className="border-t border-border p-2 text-xs text-fg-muted">Hiển thị {book.entries.length}/{book.total} dòng mới nhất — xuất Excel để xem đủ.</p>}
             </div>
           )}
           {s && book.closes.length > 0 && (

@@ -10,8 +10,16 @@ import { cashBalance } from "./balance";
 import { PAYMENT_KIND_LABEL, RECEIPT_TYPE_LABEL, type VoucherDoc } from "./schemas";
 
 type Db = Prisma.TransactionClient | PrismaClient;
-export const VOUCHER_FILTER_KEYS = ["status", "type"] as const;
-export const QUEUE_FILTER_KEYS = ["kind", "status"] as const;
+export const VOUCHER_FILTER_KEYS = ["status", "type", "account", "cashType"] as const;
+export const QUEUE_FILTER_KEYS = ["kind", "status", "account", "cashType"] as const;
+
+function accountScope(params: ListParams): { cashAccountId?: number; cashAccount?: { type: "BANK" | "CASH" } } {
+  const account = params.filters.account?.[0], type = params.filters.cashType?.[0];
+  return {
+    ...(account && /^\d{1,9}$/.test(account) ? { cashAccountId: Number(account) } : {}),
+    ...(type === "BANK" || type === "CASH" ? { cashAccount: { type } } : {}),
+  };
+}
 
 import { EVENT_LABEL, REVIEW_LABEL } from "./labels";
 export { EVENT_LABEL, REVIEW_LABEL };
@@ -32,16 +40,17 @@ export async function listVouchers(db: Db, actor: Actor, doc: VoucherDoc, params
   const statuses = params.filters.status ?? []; const types = params.filters.type ?? [];
   const cancelled = statuses.includes("CANCELLED"); const live = statuses.filter((s) => s !== "CANCELLED") as CashReviewStatus[];
   const stateWhere = statuses.length === 0 ? {} : { OR: [...(cancelled ? [{ isCancelled: true }] : []), ...(live.length ? [{ isCancelled: false, reviewStatus: { in: live } }] : [])] };
+  const scoped = { ...accountScope(params), ...(range ? { at: timeRangeWhere(range) } : {}) };
   const common = {
-    ...stateWhere, ...(range ? { at: timeRangeWhere(range) } : {}),
+    ...stateWhere, ...scoped,
     AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] })),
   };
   const page = { orderBy: [{ at: "desc" as const }, { id: "desc" as const }], skip: (params.page - 1) * params.pageSize, take: params.pageSize };
-  const count = (status: CashReviewStatus) => (doc === "RECEIPT" ? db.receipt.count({ where: { isCancelled: false, reviewStatus: status } }) : db.payment.count({ where: { isCancelled: false, reviewStatus: status } }));
+  const count = (status: CashReviewStatus) => (doc === "RECEIPT" ? db.receipt.count({ where: { ...scoped, isCancelled: false, reviewStatus: status } }) : db.payment.count({ where: { ...scoped, isCancelled: false, reviewStatus: status } }));
   const [pending, returned, reviewed] = await Promise.all([count("PENDING_REVIEW"), count("RETURNED"), count("REVIEWED")]);
   const pendSum = doc === "RECEIPT"
-    ? await db.receipt.aggregate({ where: { isCancelled: false, reviewStatus: { not: "REVIEWED" } }, _sum: { amount: true } })
-    : await db.payment.aggregate({ where: { isCancelled: false, reviewStatus: { not: "REVIEWED" } }, _sum: { amount: true } });
+    ? await db.receipt.aggregate({ where: { ...scoped, isCancelled: false, reviewStatus: { not: "REVIEWED" } }, _sum: { amount: true } })
+    : await db.payment.aggregate({ where: { ...scoped, isCancelled: false, reviewStatus: { not: "REVIEWED" } }, _sum: { amount: true } });
   let rows: VoucherRowDTO[]; let total: number;
   if (doc === "RECEIPT") {
     const where: Prisma.ReceiptWhereInput = { ...common, ...(types.length ? { type: { in: types as never } } : {}) };
@@ -108,18 +117,18 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams):
   const wantStatus = (s: string) => statuses.length === 0 || statuses.includes(s);
   const statusIn = (["PENDING_REVIEW", "RETURNED"] as CashReviewStatus[]).filter(wantStatus);
   const textWhere = terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] }));
-  const common = { isCancelled: false, ...(range ? { at: timeRangeWhere(range) } : {}), AND: textWhere };
+  const common = { ...accountScope(params), isCancelled: false, ...(range ? { at: timeRangeWhere(range) } : {}), AND: textWhere };
   const [receipts, payments, adjs] = await Promise.all([
     want("RECEIPT") && statusIn.length ? db.receipt.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } }, take: 500 }) : [],
     want("PAYMENT") && statusIn.length ? db.payment.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } }, take: 500 }) : [],
     want("ADJUSTMENT") && wantStatus("ADJUST_REQUESTED") ? db.cashAdjustment.findMany({ where: { status: "REQUESTED", ...(range ? { requestedAt: timeRangeWhere(range) } : {}) }, take: 500 }) : [],
   ]);
-  const adjVouchers = await Promise.all(adjs.map((a) => (a.docType === "RECEIPT" ? db.receipt.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } } } }) : db.payment.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } } } }))));
+  const adjVouchers = await Promise.all(adjs.map((a) => (a.docType === "RECEIPT" ? db.receipt.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } }, cashAccount: { select: { type: true } } } }) : db.payment.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } }, cashAccount: { select: { type: true } } } }))));
   const names = await fullName(db, [...receipts.map((r) => r.createdBy), ...payments.map((r) => r.createdBy), ...adjs.map((a) => a.requestedBy)]);
   const rows: QueueRowDTO[] = [
     ...receipts.map((r) => ({ key: `R${r.id}`, kind: "RECEIPT" as const, id: r.id, doc: "RECEIPT" as const, code: r.code, at: r.at, label: `Thu — ${RECEIPT_TYPE_LABEL[r.type] ?? r.type}`, partnerName: r.partner?.name ?? null, amount: r.amount.toString(), status: r.reviewStatus, statusLabel: REVIEW_LABEL[r.reviewStatus], createdByName: names.get(r.createdBy) ?? null, detail: r.note, adjustmentId: null })),
     ...payments.map((r) => ({ key: `P${r.id}`, kind: "PAYMENT" as const, id: r.id, doc: "PAYMENT" as const, code: r.code, at: r.at, label: `Chi — ${PAYMENT_KIND_LABEL[r.kind] ?? r.kind}`, partnerName: r.partner?.name ?? null, amount: r.amount.toString(), status: r.reviewStatus, statusLabel: REVIEW_LABEL[r.reviewStatus], createdByName: names.get(r.createdBy) ?? null, detail: r.note, adjustmentId: null })),
-    ...adjs.flatMap((a, i) => { const v = adjVouchers[i]; if (!v) return []; const doc = a.docType as VoucherDoc; return [{ key: `A${a.id}`, kind: "ADJUSTMENT" as const, id: a.docId, doc, code: v.code, at: a.requestedAt, label: a.kind === "VOID" ? "Điều chỉnh — hủy phiếu" : "Điều chỉnh — đổi số tiền/quỹ", partnerName: v.partner?.name ?? null, amount: (a.newAmount ?? v.amount).toString(), status: "ADJUST_REQUESTED" as const, statusLabel: "Chờ duyệt điều chỉnh", createdByName: names.get(a.requestedBy) ?? null, detail: a.reason, adjustmentId: a.id }]; }),
+    ...adjs.flatMap((a, i) => { const v = adjVouchers[i]; const scope = accountScope(params); if (!v || (scope.cashAccountId !== undefined && v.cashAccountId !== scope.cashAccountId) || (scope.cashAccount && v.cashAccount.type !== scope.cashAccount.type)) return []; const doc = a.docType as VoucherDoc; return [{ key: `A${a.id}`, kind: "ADJUSTMENT" as const, id: a.docId, doc, code: v.code, at: a.requestedAt, label: a.kind === "VOID" ? "Điều chỉnh — hủy phiếu" : "Điều chỉnh — đổi số tiền/quỹ", partnerName: v.partner?.name ?? null, amount: (a.newAmount ?? v.amount).toString(), status: "ADJUST_REQUESTED" as const, statusLabel: "Chờ duyệt điều chỉnh", createdByName: names.get(a.requestedBy) ?? null, detail: a.reason, adjustmentId: a.id }]; }),
   ].sort((x, y) => y.at.getTime() - x.at.getTime());
   return { total: rows.length, rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize) };
 }
@@ -135,7 +144,7 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   assertCan(actor.perms, "cashbook.view");
   const period = await getOpenPeriod(db);
   const periodRow = await db.period.findUniqueOrThrow({ where: { id: period.id }, select: { name: true } });
-  const list = await db.cashAccount.findMany({ where: { type, isActive: true }, orderBy: { name: "asc" } });
+  const list = await db.cashAccount.findMany({ where: { type, OR: [{ isActive: true }, ...(accountId ? [{ id: accountId }] : [])] }, orderBy: { name: "asc" } });
   const accounts: CashAccountSummaryDTO[] = [];
   for (const a of list) {
     const b = await cashBalance(db, period.id, a.id);
@@ -146,7 +155,10 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   const rows = await db.cashLedger.findMany({ where: { periodId: period.id, cashAccountId: selected.id }, orderBy: [{ at: "asc" }, { id: "asc" }] });
   let run = new Prisma.Decimal(selected.opening);
   const withRun = rows.map((r) => { run = run.plus(r.amountIn).minus(r.amountOut); return { r, running: run }; });
-  const pageRows = withRun.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
+  const range = params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
+  // Calculate running balances BEFORE filtering, retaining earlier movements.
+  const filtered = withRun.filter(({ r }) => !range || (r.at >= range.start && r.at < range.end));
+  const pageRows = filtered.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
   const idsOf = (t: string) => pageRows.filter((x) => x.r.docType === t).map((x) => x.r.docId);
   const [receipts, payments, adjs, closes] = await Promise.all([
     db.receipt.findMany({ where: { id: { in: idsOf("RECEIPT") } }, select: { id: true, code: true, reviewStatus: true } }),
@@ -161,7 +173,7 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   adjs.forEach((a, i) => { const d = adjDocs[i]; if (d) info.set(`CASH_ADJ:${a.id}`, { code: d.code, href: `/accounting/${a.docType === "RECEIPT" ? "receipts" : "payments"}/${d.id}`, status: "REVIEWED" }); });
   const names = await fullName(db, closes.map((c) => c.createdBy));
   return {
-    accounts, selected, total: rows.length, periodName: periodRow.name,
+    accounts, selected, total: filtered.length, periodName: periodRow.name,
     entries: pageRows.map(({ r, running }) => { const i = info.get(`${r.docType}:${r.docId}`); return { id: r.id, at: r.at, docType: r.docType, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: i?.code ?? null, docHref: i?.href ?? null, reviewStatus: i?.status ?? null, amountIn: r.amountIn.toString(), amountOut: r.amountOut.toString(), running: running.toString() }; }),
     closes: closes.map((c) => ({ id: c.id, closeAt: c.closeAt, expected: c.expected.toString(), actual: c.actual.toString(), diff: c.diff.toString(), reason: c.reason, createdByName: names.get(c.createdBy) ?? null, createdAt: c.createdAt, voided: c.voidedAt !== null, voidReason: c.voidReason })),
   };

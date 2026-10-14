@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import HomePage from "@/app/(app)/page";
 import { DashboardView } from "@/components/home/dashboard/DashboardView";
 import type { SessionActor } from "@/server/auth/actor";
@@ -9,9 +10,10 @@ import type { Dashboard } from "@/server/home/dashboard/types";
 
 const requireActor = vi.fn();
 const loadDashboard = vi.fn();
+const push = vi.fn();
 vi.mock("@/server/auth/session", () => ({ requireActor: (...a: unknown[]) => requireActor(...a) }));
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
 vi.mock("@/server/home/dashboard", async (orig) => ({ ...(await orig<typeof import("@/server/home/dashboard")>()), loadDashboard: (...a: unknown[]) => loadDashboard(...a) }));
 vi.mock("@/server/home/queries", async (orig) => ({ ...(await orig<typeof import("@/server/home/queries")>()), loadWidget: async () => ({ ok: true, value: 1 }) }));
 
@@ -19,7 +21,7 @@ const actor = (perms: string[]): SessionActor =>
   ({ userId: 1, username: "an", fullName: "An", perms: new Set(perms), mustChangePassword: false, authMethod: "password" });
 const render_ = async (search: Record<string, string>) => render(await HomePage({ searchParams: Promise.resolve(search) }));
 
-afterEach(() => { cleanup(); requireActor.mockReset(); loadDashboard.mockReset(); });
+afterEach(() => { cleanup(); requireActor.mockReset(); loadDashboard.mockReset(); push.mockReset(); });
 
 const SAMPLE: Dashboard = {
   kpis: [
@@ -52,6 +54,27 @@ describe("DashboardView", () => {
 });
 
 describe("Trang chủ — tab ngang tổng quan", () => {
+  it("Kế toán mặc định hôm nay, phân biệt hậu kiểm với sao kê và mở đúng phiếu cần xử lý", async () => {
+    requireActor.mockResolvedValue(actor(["cashbook.view", "receipt.manage"]));
+    loadDashboard.mockResolvedValue({ ...SAMPLE, bankReceipts: {
+      accounts: [{ id: 1, name: "MB", bankNo: "1234", recorded: "5000000", reviewed: 1, pending: 1, returned: 0, bookHref: "/accounting/bankbook?account=1" }],
+      selectedAccount: null, recorded: "5000000", reviewed: 1, pending: 1, returned: 0,
+      tasks: [{ id: 2, code: "PT002", at: "2026-10-14T03:00:00Z", partnerName: "Khách An", accountName: "MB", amount: "2000000", status: "PENDING_REVIEW", href: "/accounting/receipts/2" }],
+      tasksHref: "/accounting/receipts?cashType=BANK", bookHref: "/accounting/bankbook",
+    } });
+    await render_({ tab: "accounting" });
+    expect(screen.getByRole("combobox", { name: "Lọc nhanh theo thời gian" })).toHaveValue("today");
+    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", { preset: "today", start: undefined, end: undefined, bankAccount: undefined }, expect.any(Date));
+    const bank = screen.getByRole("region", { name: "Kiểm tra tiền nhận ngân hàng" });
+    expect(within(bank).getAllByText("Chưa có sao kê").length).toBeGreaterThan(0);
+    expect(within(bank).getByText("Chưa xác nhận khớp với sao kê")).toBeInTheDocument();
+    expect(within(bank).getByText("Khách An")).toBeInTheDocument();
+    expect(within(bank).getByRole("link", { name: "PT002" })).toHaveAttribute("href", "/accounting/receipts/2");
+    expect(bank.compareDocumentPosition(screen.getByRole("heading", { name: "Thu chi và công nợ" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(screen.getByRole("combobox", { name: "Tài khoản nhận tiền" }));
+    await userEvent.click(await screen.findByRole("option", { name: /MB/ }));
+    expect(push).toHaveBeenCalledWith("/?tab=accounting&bankAccount=1&timePreset=today");
+  });
   it("không có quyền tab nào → chỉ 'Chức năng', không thanh tab; ?tab= trái quyền rơi về Chức năng", async () => {
     requireActor.mockResolvedValue(actor(["user.view"]));
     await render_({ tab: "sales" });

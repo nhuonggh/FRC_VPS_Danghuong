@@ -1,4 +1,7 @@
 import { DashboardView } from "@/components/home/dashboard/DashboardView";
+import { BankReceiptsOverview } from "@/components/home/dashboard/BankReceiptsOverview";
+import { RefreshDashboard } from "@/components/home/dashboard/RefreshDashboard";
+import { formatDateTime } from "@/lib/format";
 import { HomeTabs } from "@/components/home/HomeTabs";
 import { HomeView } from "@/components/home/HomeView";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
@@ -23,7 +26,7 @@ const TITLES: Record<string, { title: string; desc: string }> = {
   inventory: { title: "Tổng quan kho", desc: "Tồn kho hiện tại theo mặt hàng, nhóm hàng, định mức và biến động nhập – xuất" },
   returns: { title: "Tổng quan trả hàng", desc: "Theo dõi hàng khách trả, trả nhà cung cấp và các sản phẩm bị trả nhiều" },
   production: { title: "Tổng quan sản xuất", desc: "Theo dõi lệnh sản xuất, thành phẩm, nguyên vật liệu tiêu hao và kiểm kho" },
-  accounting: { title: "Tổng quan kế toán", desc: "Cập nhật tình hình thu chi, quỹ, công nợ và hậu kiểm chứng từ" },
+  accounting: { title: "Tổng quan kế toán", desc: "Kiểm tra tiền nhận ngân hàng, xử lý phiếu thu và theo dõi thu chi, công nợ" },
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,11 +58,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   }
 
   const def = DASH_TABS.find((t) => t.key === tab)!;
-  const params = parseListParams(sp);
-  const effective = { ...params, timePreset: params.timePreset ?? ("thisMonth" as const) };
+  const params = parseListParams(sp, tab === "accounting" ? ["bankAccount"] : []);
+  const effective = { ...params, timePreset: params.timePreset ?? (tab === "accounting" ? "today" as const : "thisMonth" as const) };
   let data: Dashboard | null = null;
   try {
-    data = await withTimeout(loadDashboard(prisma, actor, tab, { preset: effective.timePreset, start: params.timeStart, end: params.timeEnd }, now), DASH_TIMEOUT_MS);
+    data = await withTimeout(loadDashboard(prisma, actor, tab, { preset: effective.timePreset, start: params.timeStart, end: params.timeEnd, ...(tab === "accounting" ? { bankAccount: params.filters.bankAccount?.[0] } : {}) }, now), DASH_TIMEOUT_MS);
   } catch (error) {
     console.error(`[home] dashboard ${tab} lỗi:`, error);
   }
@@ -72,10 +75,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <h1 className="text-xl font-semibold">{t.title}</h1>
           <p className="text-sm text-fg-secondary">{t.desc}</p>
         </div>
-        {!def.snapshot && <QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} />}
+        {!def.snapshot && <div className="flex flex-wrap items-center gap-2"><QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} now={now} />{tab === "accounting" && <RefreshDashboard />}</div>}
       </div>
       {data ? (
-        <DashboardView data={data} />
+        <>
+          {tab === "accounting" && data.bankReceipts && <BankReceiptsOverview data={data.bankReceipts} params={effective} />}
+          {tab === "accounting" && <div className="flex flex-wrap items-end justify-between gap-2 border-t border-border pt-4"><div><h2 className="text-base font-semibold">Thu chi và công nợ</h2><p className="text-sm text-fg-secondary">Thu chi trong khoảng đã chọn trên tất cả tài khoản; số dư và công nợ là số hiện tại.</p></div><span className="text-xs text-fg-secondary">Cập nhật: {formatDateTime(now)}</span></div>}
+          <DashboardView data={data} kpiColumns={tab === "accounting" ? 3 : undefined} />
+        </>
       ) : (
         <div role="alert" className="rounded-md border border-border bg-surface p-6 text-center">
           <p className="text-danger">Chưa tải được số liệu của mục này.</p>

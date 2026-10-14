@@ -48,6 +48,20 @@ export interface Dashboard {
   widgets: Widget[];
   /** Ghi chú hiển thị cuối trang (vd phần chưa có dữ liệu). */
   notes?: string[];
+  bankReceipts?: BankReceiptsOverview;
+}
+
+/** Hậu kiểm chứng từ nội bộ; chưa phải kết quả ghép với sao kê ngân hàng. */
+export interface BankReceiptsOverview {
+  accounts: { id: number; name: string; bankNo: string | null; recorded: string; reviewed: number; pending: number; returned: number; bookHref?: string }[];
+  selectedAccount: number | null;
+  recorded: string;
+  reviewed: number;
+  pending: number;
+  returned: number;
+  tasks: { id: number; code: string; at: string; partnerName: string | null; accountName: string; amount: string; status: "PENDING_REVIEW" | "RETURNED"; href?: string }[];
+  tasksHref?: string;
+  bookHref?: string;
 }
 
 export type DashTabKey = "sales" | "delivery" | "purchase" | "inventory" | "returns" | "production" | "accounting";

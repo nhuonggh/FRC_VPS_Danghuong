@@ -8,6 +8,8 @@ import { getVoucher, listCashBook, listPartnerOrders, listReviewQueue, listVouch
 import { adjustmentRequestSchema, paymentSchema, receiptSchema } from "@/server/cash/schemas";
 import { createPayment, createReceipt, returnVoucher, reviewVoucher } from "@/server/cash/vouchers";
 import { getDebtDetail } from "@/server/debt/queries";
+import { loadBankReceipts } from "@/server/home/dashboard/bank-receipts";
+import { dashRange } from "@/server/home/dashboard/common";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner } from "../helpers/factories";
 import { newWorld, type World } from "../inventory/helpers";
@@ -86,6 +88,50 @@ describe("hàng chờ kiểm tra", () => {
 });
 
 describe("sổ quỹ / sổ ngân hàng", () => {
+  it("dashboard tiền nhận: chỉ thu ngân hàng trong ngày, bỏ hủy, tách hậu kiểm và ưu tiên phiếu trả lại", async () => {
+    await rec({ amount: 900_000 }); // tiền mặt không vào tổng ngân hàng
+    const pending = await rec({ cashAccountId: bank.id, amount: 300_000 });
+    const returned = await rec({ cashAccountId: bank.id, amount: 200_000 });
+    const reviewed = await rec({ cashAccountId: bank.id, amount: 100_000 });
+    const cancelled = await rec({ cashAccountId: bank.id, amount: 800_000 });
+    await prisma.receipt.update({ where: { id: cancelled.id }, data: { isCancelled: true } });
+    await tx((t) => returnVoucher(t, tre, "RECEIPT", returned.id, "kiểm tra lại khách hàng"));
+    await tx((t) => reviewVoucher(t, tre, "RECEIPT", reviewed.id));
+    const range = dashRange("today", undefined, NOW);
+    const data = await loadBankReceipts(prisma, tre, range);
+    expect(data).toMatchObject({ recorded: "600000", reviewed: 1, pending: 1, returned: 1, selectedAccount: null });
+    expect(data!.tasks.map((r) => r.id)).toEqual([returned.id, pending.id]);
+    expect(data!.tasks[0]).toMatchObject({ partnerName: "Khách Đạt", status: "RETURNED" });
+    expect(data!.tasksHref).toContain("cashType=BANK");
+    expect(data!.tasksHref).toContain("timeStart=2026-09-15");
+    expect(data!.accounts[0]!.bookHref).toContain(`account=${bank.id}`);
+    expect(await loadBankReceipts(prisma, tre, dashRange("today", undefined, new Date("2026-09-16T03:00:00Z")))).toMatchObject({ recorded: "0", tasks: [] });
+  });
+  it("lọc tài khoản được giữ khi mở danh sách phiếu và hàng chờ; thiếu quyền không lấy dữ liệu ngân hàng", async () => {
+    const otherBank = await makeCashAccount({ type: "BANK", name: "MB" });
+    const wanted = await rec({ cashAccountId: bank.id, amount: 100_000 });
+    await rec({ cashAccountId: otherBank.id, amount: 200_000 }); await rec({ amount: 300_000 });
+    const range = dashRange("today", undefined, NOW);
+    expect(await loadBankReceipts(prisma, acc, range, String(bank.id))).toMatchObject({ recorded: "100000", selectedAccount: bank.id, pending: 1 });
+    expect(await loadBankReceipts(prisma, acc, range, "999999999")).toMatchObject({ recorded: "300000", selectedAccount: null });
+    const search = { account: String(bank.id), cashType: "BANK", timePreset: "custom", timeStart: "2026-09-15", timeEnd: "2026-09-15", kind: "RECEIPT" };
+    const vouchers = await listVouchers(prisma, acc, "RECEIPT", P(search));
+    expect(vouchers.rows.map((r) => r.id)).toEqual([wanted.id]);
+    expect(vouchers.stats).toMatchObject({ pending: 1, pendingAmount: "100000" });
+    expect((await listReviewQueue(prisma, tre, P(search, QUEUE_FILTER_KEYS))).rows.map((r) => r.id)).toEqual([wanted.id]);
+    expect(await loadBankReceipts(prisma, { userId: acc.userId, perms: new Set(["debt.view"]) }, range)).toBeUndefined();
+    const readonly = await loadBankReceipts(prisma, { userId: acc.userId, perms: new Set(["cashbook.view"]) }, range);
+    expect(readonly!.tasksHref).toBeUndefined();
+    expect(readonly!.tasks[0]!.href).toContain("/accounting/bankbook?");
+  });
+  it("lọc ngày sổ ngân hàng không bỏ số dư chạy từ phát sinh trước đó", async () => {
+    const first = await rec({ cashAccountId: bank.id, amount: 300_000 });
+    await prisma.cashLedger.updateMany({ where: { docType: "RECEIPT", docId: first.id }, data: { at: new Date("2026-09-14T03:00:00Z") } });
+    await rec({ cashAccountId: bank.id, amount: 200_000 });
+    const book = await listCashBook(prisma, acc, "BANK", bank.id, P({ timePreset: "custom", timeStart: "2026-09-15", timeEnd: "2026-09-15" }, []));
+    expect(book.total).toBe(1);
+    expect(book.entries[0]).toMatchObject({ amountIn: "200000", running: "500000" });
+  });
   it("số dư chạy đúng, tách đã kiểm/chờ kiểm, tách sổ quỹ với sổ NH, xuất Excel; không có cashbook.view bị chặn", async () => {
     await prisma.openingCash.create({ data: { periodId: w.periodId, cashAccountId: cash.id, amount: 1_000_000 } });
     const r = await rec({ amount: 500_000 }); await pay({ kind: "KHAC", partnerId: null, amount: 200_000 }); await rec({ cashAccountId: bank.id, amount: 300_000 });
