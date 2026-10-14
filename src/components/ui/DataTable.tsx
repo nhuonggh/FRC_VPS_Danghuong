@@ -2,7 +2,7 @@
 
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, Check, Columns3, Eye, Lock, MoreHorizontal, Pencil, Power, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ClipboardCheck, Columns3, Eye, Lock, MoreHorizontal, Pencil, Power, Trash2, Truck, Warehouse } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -26,13 +26,13 @@ export interface Column<T> {
 export interface RowAction {
   key: string;
   label: string;
-  icon: "eye" | "pencil" | "trash" | "lock" | "power";
+  icon: "eye" | "pencil" | "trash" | "lock" | "power" | "truck" | "warehouse" | "clipboard-check";
   href?: string;
   onClick?: () => void;
   danger?: boolean;
 }
 
-const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock, power: Power };
+const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock, power: Power, truck: Truck, warehouse: Warehouse, "clipboard-check": ClipboardCheck };
 const MAX_INLINE_ACTIONS = 3;
 // Chạm ≥44px dưới md (mobile), 32px từ md (PC)
 const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover md:h-8 md:w-8";

@@ -6,7 +6,9 @@ import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { getTrip, listTripOptions, listTrips, listUndelivered, searchTripOrders, TRIP_FILTER_KEYS, UNDELIVERED_FILTER_KEYS } from "@/server/trips/queries";
 import { tripResultSchema, tripSchema } from "@/server/trips/schemas";
-import { createTrip, recordTripResult, settleTrip } from "@/server/trips/service";
+import { createTrip, handleStop, recordTripResult, settleTrip } from "@/server/trips/service";
+import { cancelReturnTx, createReturnByOrderIdempotent } from "@/server/returns/service";
+import { returnByOrderSchema } from "@/server/returns/schemas";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner } from "../helpers/factories";
 import { buy, engine, newWorld, T, useNoopCostOwners, type World } from "../inventory/helpers";
@@ -32,6 +34,35 @@ beforeEach(async () => {
 });
 
 describe("tìm đơn để xếp chuyến", () => {
+  const back = async (orderId: number, qty: number) => {
+    const line = await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId } });
+    return createReturnByOrderIdempotent(prisma, { ...KT, perms: new Set([...KT.perms, "return.manage"]) }, `back-${++n}`, returnByOrderSchema.parse({ orderId, date: "2026-09-15", note: "", undelivered: true, lines: [{ orderLineId: line.id, qty }] }), NOW);
+  };
+  it("trả hết kho thì không còn ở xếp chuyến và API chặn xếp; hủy phiếu trả thì xuất hiện lại", async () => {
+    const o = await order(), t = await trip([o.id]);
+    await result(t.id, o.id, { result: "KHONG_GIAO", cashAmount: 0, note: "khách vắng" });
+    const r = await back(o.id, 4);
+    expect(await searchTripOrders(prisma, KT, o.code)).toEqual([]);
+    await expect(trip([o.id], { date: "2026-09-17" })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("không còn hàng để giao") });
+    expect((await listUndelivered(prisma, KT, P({}, UNDELIVERED_FILTER_KEYS))).total).toBe(0);
+    expect((await listUndelivered(prisma, KT, P({ state: "completed" }, UNDELIVERED_FILTER_KEYS))).rows[0]).toMatchObject({ remainingQty: "0", returnedQty: "4" });
+    await cancelReturnTx(prisma, { ...KT, perms: new Set([...KT.perms, "return.manage"]) }, r.id, "nhập nhầm");
+    expect((await searchTripOrders(prisma, KT, o.code))[0]).toMatchObject({ remainingQty: "4" });
+  });
+  it("trả một phần chỉ xếp/giao đủ số còn lại; ghi nhận hướng xử lý không loại đơn khỏi xếp chuyến", async () => {
+    const o = await order(), t = await trip([o.id]);
+    const failed = await result(t.id, o.id, { result: "KHONG_GIAO", cashAmount: 0, note: "khách vắng" });
+    await back(o.id, 3);
+    await tx((x) => handleStop(x, KT, failed.stopId, "sẽ giao lại", NOW));
+    expect((await searchTripOrders(prisma, KT, o.code))[0]).toMatchObject({ remainingQty: "1" });
+    expect((await listUndelivered(prisma, KT, P({ state: "handled" }, UNDELIVERED_FILTER_KEYS))).rows[0]).toMatchObject({ remainingQty: "1", returnedQty: "3", handledNote: "sẽ giao lại" });
+    const retry = await trip([o.id], { date: "2026-09-17" });
+    expect((await getTrip(prisma, KT, retry.id)).stops[0]!.lines[0]!.remaining).toBe("1");
+    expect((await listUndelivered(prisma, KT, P({ state: "handled" }, UNDELIVERED_FILTER_KEYS))).rows[0]).toMatchObject({ activeTripId: retry.id, activeTripCode: retry.code });
+    await result(retry.id, o.id, { cashAmount: 50_000 });
+    expect(await searchTripOrders(prisma, KT, o.code)).toEqual([]);
+    expect((await listUndelivered(prisma, KT, P({ state: "completed" }, UNDELIVERED_FILTER_KEYS))).rows[0]).toMatchObject({ remainingQty: "0", returnedQty: "3" });
+  });
   it("chỉ đơn còn hàng phải giao, chưa nằm chuyến đang chạy; tìm theo mã/khách; đơn hẹn sớm lên trước", async () => {
     const a = await order(); const b = await order(); const c = await order();
     await trip([a.id]);

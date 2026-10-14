@@ -31,7 +31,7 @@ export function ReturnByOrderForm({ order, today }: { order: ReturnableOrderDTO;
   return (
     <NewPage wide bare backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={order.undelivered ? `Trả hàng chưa giao về kho — đơn ${order.code}` : `Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
       <FormCard icon={Undo2} title="Thông tin trả hàng">
-        {order.undelivered && <p className="mb-3 rounded-sm border border-border bg-hover px-3 py-2 text-sm text-fg-secondary">Trả về kho phần hàng <strong>chưa giao</strong>. Chỉ nhập lại kho theo giá vốn; công nợ của khách không đổi vì chưa ghi nợ phần này.</p>}
+        {order.undelivered && <p className="mb-3 rounded-sm border border-border bg-hover px-3 py-2 text-sm text-fg-secondary">Trả về kho phần hàng <strong>chưa giao</strong>. Sau khi lưu phiếu, số lượng trả kho không còn được xếp giao lại trong đơn này; nếu trả một phần thì chỉ phần còn lại được giao. Chỉ nhập lại kho theo giá vốn; công nợ của khách không đổi vì chưa ghi nợ phần này.</p>}
         <p className="mb-3 text-sm text-fg-secondary">{order.partnerCode} — {order.partnerName} · đơn ngày {formatDate(order.orderDate)}</p>
         <FormGrid cols={2}>
           <InlineField id="date" label="Ngày trả" required>

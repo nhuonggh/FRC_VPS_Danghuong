@@ -16,6 +16,7 @@ import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { lineAmountOf } from "@/server/sales/queries";
 import type { ConfirmTripInput, TripInput, TripResultInput } from "./schemas";
+import { remainingToDeliver as remainingOf } from "./remaining";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -33,7 +34,6 @@ async function assertTripPeriod(tx: Tx, periodId: number) {
   if (periodId !== period.id) throw new PeriodClosedError();
   return period;
 }
-const remainingOf = (l: { qty: Prisma.Decimal; deliveryLines: { qty: Prisma.Decimal }[] }) => l.qty.minus(l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)));
 
 /** Đưa trục giao hàng của đơn về đúng theo số đã giao (NEW/PARTIAL/DELIVERED) — dùng khi gỡ đơn khỏi chuyến. */
 async function resetDeliveryStatus(tx: Tx, orderId: number): Promise<void> {
@@ -77,7 +77,7 @@ export async function createTrip(tx: Tx, actor: Actor, input: TripInput, now: Da
   // Khoá các đơn theo thứ tự id (tránh deadlock) rồi kiểm từng đơn
   const ids = [...input.orderIds].sort((a, b) => a - b);
   await tx.$queryRaw`SELECT id FROM sale_orders WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`;
-  const orders = await tx.saleOrder.findMany({ where: { id: { in: ids } }, include: { lines: { include: { deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } });
+  const orders = await tx.saleOrder.findMany({ where: { id: { in: ids } }, include: { lines: { include: { returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } });
   const byId = new Map(orders.map((o) => [o.id, o]));
   const busy = await tx.tripOrder.findMany({ where: { orderId: { in: ids }, result: null, trip: { status: { in: ["PLANNED", "ON_ROAD"] } } }, select: { orderId: true, trip: { select: { code: true } } } });
   const busyBy = new Map(busy.map((b) => [b.orderId, b.trip.code]));
@@ -87,7 +87,7 @@ export async function createTrip(tx: Tx, actor: Actor, input: TripInput, now: Da
     if (o.isCancelled) throw new DomainError(`Đơn ${o.code} đã hủy.`, 409);
     if (o.isDraft) throw new DomainError(`Đơn ${o.code} còn là nháp (chưa xác nhận).`, 409);
     // Đơn của kỳ đã kết sổ vẫn xếp chuyến giao nốt được (chuyến mang kỳ đang mở) — Plan 07 F1d, spec 4.4
-    if (!o.lines.some((l) => remainingOf(l).gt(0))) throw new DomainError(`Đơn ${o.code} đã giao hết.`, 409);
+    if (!o.lines.some((l) => remainingOf(l).gt(0))) throw new DomainError(`Đơn ${o.code} không còn hàng để giao (đã giao hoặc trả về kho hết).`, 409);
     if (busyBy.has(orderId)) throw new DomainError(`Đơn ${o.code} đang nằm trong chuyến ${busyBy.get(orderId)} chưa có kết quả.`, 409, "ORDER_IN_TRIP");
   }
   const id = await nextDocId(tx, "trips");
@@ -148,7 +148,7 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   await tx.$queryRaw`SELECT id FROM sale_orders WHERE id = ${input.orderId} FOR UPDATE`;
   if (stop.result !== null) await revertStop(tx, actor, stop);
 
-  const order = await tx.saleOrder.findUniqueOrThrow({ where: { id: input.orderId }, include: { partner: { select: { allowCredit: true, debtLimit: true, name: true } }, lines: { orderBy: { id: "asc" }, include: { deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } });
+  const order = await tx.saleOrder.findUniqueOrThrow({ where: { id: input.orderId }, include: { partner: { select: { allowCredit: true, debtLimit: true, name: true } }, lines: { orderBy: { id: "asc" }, include: { returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } });
   if (order.isCancelled) throw new DomainError("Đơn đã hủy.", 409);
   const at = docTimestamp(ictYmd(now), now);
   const round = (n: number) => D(n).toDecimalPlaces(2);
@@ -288,7 +288,7 @@ export async function confirmTripCash(tx: Tx, actor: Actor, id: number, input: C
   return { receipts: n };
 }
 
-/** Hàng không giao được (42): người bán ghi nhận đã xử lý (giao lại / hủy đơn / trả về kho). */
+/** Chỉ lưu hướng xử lý của lần giao thất bại; không đổi kho, đơn hay chuyến. */
 export async function handleStop(tx: Tx, actor: Actor, stopId: number, note: string, now: Date = new Date()): Promise<void> {
   assertCan(actor.perms, "trip.manage");
   const s = await tx.tripOrder.findUnique({ where: { id: stopId }, select: { result: true, handledAt: true, orderId: true } });

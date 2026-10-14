@@ -11,7 +11,7 @@ import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { TripOptionsDTO, TripOrderOptionDTO } from "@/server/trips/queries";
 
 /** Xếp chuyến (38): ngày, tuyến, xe + lái + phụ và danh sách đơn (đơn còn hàng phải giao, chưa nằm chuyến nào đang chạy) theo thứ tự giao. */
-export function TripForm({ today, options }: { today: string; options: TripOptionsDTO }) {
+export function TripForm({ today, options, initialSearch = "" }: { today: string; options: TripOptionsDTO; initialSearch?: string }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const [date, setDate] = useState(today);
@@ -20,7 +20,7 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
   const [driverId, setDriverId] = useState<number | "">(options.drivers[0]?.id ?? "");
   const [assistantId, setAssistantId] = useState<number | "">("");
   const [note, setNote] = useState("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialSearch);
   const [found, setFound] = useState<TripOrderOptionDTO[]>([]);
   const [picked, setPicked] = useState<TripOrderOptionDTO[]>([]);
 
@@ -65,6 +65,7 @@ export function TripForm({ today, options }: { today: string; options: TripOptio
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <h2 className="text-sm font-semibold">Đơn cần giao</h2>
+            <p className="text-xs text-fg-secondary">Chỉ hiện phần còn được giao: số đặt − đã giao − đã trả kho khi chưa giao. Ghi nhận hướng xử lý không loại đơn khỏi danh sách này.</p>
             <input aria-label="Tìm đơn" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm mã đơn, tên khách…" className={inputClass()} />
             <ul className="max-h-80 divide-y divide-border overflow-auto rounded-sm border border-border text-sm">
               {found.filter((o) => !pickedIds.has(o.id)).map((o) => (

@@ -1,44 +1,36 @@
 "use client";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Badge, ReasonDialog } from "@/components/ui";
+import { Badge, DataTable, ReasonDialog, type Column, type RowAction } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDateTime, formatQty } from "@/lib/format";
 import type { UndeliveredRowDTO } from "@/server/trips/queries";
 
-/** Hàng không giao được (42): giao cho người bán xử lý — giao lại (xếp chuyến mới), hủy đơn, hoặc trả về kho (phiếu trả hàng chưa giao: chỉ nhập lại kho, không đụng công nợ). */
-export function UndeliveredList({ rows, canManage }: { rows: UndeliveredRowDTO[]; canManage: boolean }) {
+export function UndeliveredList({ rows, canManage, canReturn = false }: { rows: UndeliveredRowDTO[]; canManage: boolean; canReturn?: boolean }) {
   const router = useRouter();
   const [row, setRow] = useState<UndeliveredRowDTO | null>(null);
-  return (
-    <>
-      <table className="w-full min-w-[860px] text-sm">
-        <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Đơn</th><th className="px-3 py-2">Khách</th><th className="px-3 py-2">Kết quả</th><th className="px-3 py-2 text-right">Còn phải giao</th><th className="px-3 py-2">Chuyến</th><th className="px-3 py-2">Xử lý</th></tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.stopId} className="border-t border-border align-top">
-              <td className="px-3 py-2 font-mono text-xs"><Link href={`/sales/orders/${r.orderId}`} className="text-accent hover:underline">{r.orderCode}</Link></td>
-              <td className="px-3 py-2"><strong>{r.partnerName}</strong><span className="block text-xs text-fg-muted">{[r.phone, r.address].filter(Boolean).join(" · ")}</span></td>
-              <td className="px-3 py-2"><Badge tone={r.result === "KHONG_GIAO" ? "danger" : "info"}>{r.resultLabel}</Badge>{r.note && <span className="block text-xs text-fg-muted">{r.note}</span>}{r.at && <span className="block text-xs text-fg-muted">{formatDateTime(r.at)}</span>}</td>
-              <td className="px-3 py-2 text-right tabular">{formatQty(r.remainingQty)}</td>
-              <td className="px-3 py-2"><Link href={`/delivery/trips/${r.tripId}`} className="font-mono text-xs text-accent hover:underline">{r.tripCode}</Link></td>
-              <td className="px-3 py-2">
-                {r.handledAt ? <span className="text-xs text-fg-secondary">Đã xử lý: {r.handledNote}</span> : canManage ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Link href="/delivery/trips/new" className="flex h-9 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover">Giao lại</Link>
-                    <Link href={`/returns/by-order/new?orderId=${r.orderId}&undelivered=1`} className="flex h-9 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover">Trả về kho</Link>
-                    <button type="button" onClick={() => setRow(r)} aria-label={`Đã xử lý ${r.orderCode}`} className="h-9 rounded-sm bg-accent px-3 text-sm font-medium text-fg-on-accent">Đã xử lý</button>
-                  </div>
-                ) : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <ReasonDialog open={row !== null} onClose={() => setRow(null)} title={row ? `Ghi nhận đã xử lý ${row.orderCode}` : ""} description="Ghi cách xử lý: giao lại ngày nào, đã hủy đơn, hay đã trả về kho. Lý do bên dưới lưu lại làm dấu vết." confirmLabel="Ghi nhận"
-        onConfirm={async (note) => { await apiFetch(`/api/trips/stops/${row!.stopId}/handle`, { method: "POST", json: { note } }); router.refresh(); }} />
-    </>
-  );
+  const columns: Column<UndeliveredRowDTO>[] = [
+    { key: "order", label: "Đơn", primaryOnMobile: true, render: (r) => <Link href={`/sales/orders/${r.orderId}`} className="font-mono text-xs text-accent hover:underline">{r.orderCode}</Link> },
+    { key: "customer", label: "Khách hàng", render: (r) => <><span className="font-medium">{r.partnerName}</span><span className="block text-xs text-fg-secondary">{[r.phone, r.address].filter(Boolean).join(" · ")}</span></> },
+    { key: "result", label: "Lần giao không thành công", render: (r) => <><Badge tone={r.result === "KHONG_GIAO" ? "danger" : "info"}>{r.resultLabel}</Badge><Link href={`/delivery/trips/${r.tripId}`} className="block text-xs text-accent hover:underline">{r.tripCode}</Link>{r.note && <span className="block text-xs text-fg-secondary">{r.note}</span>}{r.at && <span className="block text-xs text-fg-secondary">{formatDateTime(r.at)}</span>}</> },
+    { key: "quantity", label: "Số lượng hiện tại của đơn", render: (r) => <div className="space-y-1 whitespace-normal text-sm"><p>Còn được giao: <strong className="tabular">{formatQty(r.remainingQty)}</strong></p><p className="text-fg-secondary">Đã trả kho (chưa giao): <span className="tabular">{formatQty(r.returnedQty)}</span></p></div> },
+    { key: "state", label: "Tình trạng hiện tại", render: (r) => <div className="space-y-1 whitespace-normal">
+      {Number(r.remainingQty) <= 0 ? <><Badge tone="success">{Number(r.returnedQty) > 0 ? "Đã giao/trả kho hết" : "Đã giao hết"}</Badge><p className="text-xs text-fg-secondary">Không còn hàng để xếp chuyến.</p></> : r.activeTripId ? <><Badge tone="info">Đã xếp chuyến giao lại</Badge><Link href={`/delivery/trips/${r.activeTripId}`} className="block text-xs text-accent">{r.activeTripCode}</Link></> : <><Badge tone="warning">{Number(r.returnedQty) > 0 ? "Đã trả kho một phần" : "Còn hàng chưa giao"}</Badge><p className="text-xs text-fg-secondary">Chỉ phần còn được giao xuất hiện ở Xếp chuyến.</p></>}
+      {r.handledAt && <div className="text-xs text-fg-secondary"><span className="font-medium">Đã ghi nhận hướng xử lý</span><p>{r.handledNote}</p><p>{formatDateTime(r.handledAt)}</p><p>Ghi chú này không thay đổi kho hoặc đơn hàng.</p></div>}
+    </div> },
+  ];
+  const actions = (r: UndeliveredRowDTO): RowAction[] => {
+    if (!canManage || Number(r.remainingQty) <= 0) return [];
+    return [
+      ...(!r.activeTripId ? [{ key: "retry", label: "Xếp chuyến giao lại", icon: "truck" as const, href: `/delivery/trips/new?q=${encodeURIComponent(r.orderCode)}` }] : []),
+      ...(canReturn && !r.activeTripId ? [{ key: "return", label: "Lập phiếu trả kho", icon: "warehouse" as const, href: `/returns/by-order/new?orderId=${r.orderId}&undelivered=1` }] : []),
+      ...(!r.handledAt ? [{ key: "note", label: `Ghi nhận hướng xử lý ${r.orderCode}`, icon: "clipboard-check" as const, onClick: () => setRow(r) }] : []),
+    ];
+  };
+  return <>
+    <DataTable id="undelivered" rows={rows} columns={columns} rowKey={(r) => r.stopId} rowActions={actions} />
+    <ReasonDialog open={row !== null} onClose={() => setRow(null)} title={row ? `Ghi nhận hướng xử lý ${row.orderCode}` : ""} description="Chỉ lưu ghi chú và chuyển mục này sang “Đã ghi nhận”. Không tự nhập kho, hủy đơn hoặc xếp chuyến. Nếu đơn vẫn còn số lượng được giao, đơn vẫn xuất hiện ở Xếp chuyến. Muốn trả kho, cần lập và lưu phiếu trả kho riêng." confirmLabel="Lưu ghi nhận"
+      onConfirm={async (note) => { await apiFetch(`/api/trips/stops/${row!.stopId}/handle`, { method: "POST", json: { note } }); router.refresh(); }} />
+  </>;
 }

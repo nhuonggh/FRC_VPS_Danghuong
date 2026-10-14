@@ -1,3 +1,4 @@
+import { remainingToDeliver } from "./remaining";
 import { Prisma, type PrismaClient, type TripResultKind, type TripStatus } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
@@ -74,7 +75,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     where: { id },
     include: {
       route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } },
-      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } },
+      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } }, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } },
     },
   });
   if (!t) throw new DomainError("Không tìm thấy chuyến giao.", 404);
@@ -93,7 +94,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
       result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), debt: s.debtAmount.toString(), discount: s.discountAmount.toString(), over: s.overAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
       suggestedDue: suggested.toString(), deliveryNoteId: s.deliveryNoteId, handledNote: s.handledNote,
       canCancelResult: s.result !== null && (t.status === "PLANNED" || t.status === "ON_ROAD" || t.status === "RETURNED"),
-      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: l.qty.minus(done).toString() }; }),
+      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: remainingToDeliver(l).toString() }; }),
     });
   }
   const sum = (f: (s: StopDTO) => string | null) => stops.reduce((a, s) => a.plus(f(s) ?? 0), D(0));
@@ -121,7 +122,7 @@ export async function searchTripOrders(db: Db, actor: Actor, q: string): Promise
     orderBy: [{ expectedDeliveryDate: "asc" }, { id: "asc" }], take: 200,
     select: { id: true, code: true, orderDate: true, expectedDeliveryDate: true, note: true, partner: { select: { name: true, address: true, phone: true } }, lines: { select: { qty: true, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } },
   });
-  return rows.map((o) => ({ ...o, remaining: o.lines.reduce((s, l) => s.plus(l.qty).minus(l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0))), D(0)) })).filter((o) => o.remaining.gt(0)).slice(0, 40).map((o) => ({
+  return rows.map((o) => ({ ...o, remaining: o.lines.reduce((s, l) => s.plus(remainingToDeliver(l)), D(0)) })).filter((o) => o.remaining.gt(0)).slice(0, 40).map((o) => ({
     id: o.id, code: o.code, partnerName: o.partner.name, address: o.partner.address, phone: o.partner.phone, orderDate: ymd(o.orderDate), expectedDate: o.expectedDeliveryDate ? ymd(o.expectedDeliveryDate) : null, remainingQty: o.remaining.toString(), note: o.note,
   }));
 }
@@ -137,23 +138,23 @@ export async function listTripOptions(db: Db): Promise<TripOptionsDTO> {
 }
 
 // ── hàng không giao được (42) ────────────────────────────────────────────────────────────────────────────────────────
-export interface UndeliveredRowDTO { stopId: number; tripId: number; tripCode: string; orderId: number; orderCode: string; partnerName: string; phone: string | null; address: string | null; result: TripResultKind; resultLabel: string; note: string | null; remainingQty: string; at: Date | null; handledNote: string | null; handledAt: Date | null }
+export interface UndeliveredRowDTO { stopId: number; tripId: number; tripCode: string; orderId: number; orderCode: string; partnerName: string; phone: string | null; address: string | null; result: TripResultKind; resultLabel: string; note: string | null; remainingQty: string; at: Date | null; handledNote: string | null; handledAt: Date | null; returnedQty: string; activeTripId: number | null; activeTripCode: string | null }
 export async function listUndelivered(db: Db, actor: Actor, params: ListParams): Promise<{ rows: UndeliveredRowDTO[]; total: number }> {
   assertCan(actor.perms, "trip.manage");
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const results = (params.filters.result ?? []).filter((r) => r === "KHONG_GIAO" || r === "GIAO_MOT_PHAN") as TripResultKind[];
-  const handled = params.filters.state?.[0] === "handled";
+  const states = params.filters.state?.length ? params.filters.state : ["pending"];
   const where: Prisma.TripOrderWhereInput = {
-    result: { in: results.length ? results : ["KHONG_GIAO", "GIAO_MOT_PHAN"] }, handledAt: handled ? { not: null } : null, order: { isCancelled: false }, trip: { status: { not: "CANCELLED" } },
+    result: { in: results.length ? results : ["KHONG_GIAO", "GIAO_MOT_PHAN"] }, order: { isCancelled: false }, trip: { status: { not: "CANCELLED" } },
     AND: terms.map((t) => ({ OR: [{ order: { code: { contains: escapeLike(t.toUpperCase()) } } }, { order: { partner: { searchText: { contains: escapeLike(t) } } } }] })),
   };
-  const all = await db.tripOrder.findMany({ where, orderBy: [{ resultAt: "desc" }, { id: "desc" }], include: { trip: { select: { code: true } }, order: { select: { code: true, partner: { select: { name: true, phone: true, address: true } }, lines: { select: { qty: true, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } });
-  const rows = all.map((s) => ({ s, remaining: s.order.lines.reduce((a, l) => a.plus(l.qty).minus(l.deliveryLines.reduce((x, d) => x.plus(d.qty), D(0))).minus(l.returnLines.reduce((x, d) => x.plus(d.qty), D(0))), D(0)) })).filter((x) => x.remaining.gt(0));
+  const all = await db.tripOrder.findMany({ where, orderBy: [{ resultAt: "desc" }, { id: "desc" }], include: { trip: { select: { code: true } }, order: { select: { code: true, tripStops: { where: { result: null, trip: { status: { in: ["PLANNED", "ON_ROAD"] } } }, select: { tripId: true, trip: { select: { code: true } } }, take: 1 }, partner: { select: { name: true, phone: true, address: true } }, lines: { select: { qty: true, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } });
+  const rows = all.map((s) => ({ s, remaining: s.order.lines.reduce((a, l) => a.plus(remainingToDeliver(l)), D(0)), returned: s.order.lines.reduce((a, l) => a.plus(l.returnLines.reduce((x, d) => x.plus(d.qty), D(0))), D(0)) })).filter((x) => states.includes(x.remaining.lte(0) ? "completed" : x.s.handledAt ? "handled" : "pending"));
   return {
     total: rows.length,
-    rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize).map(({ s, remaining }) => ({
+    rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize).map(({ s, remaining, returned }) => ({
       stopId: s.id, tripId: s.tripId, tripCode: s.trip.code, orderId: s.orderId, orderCode: s.order.code, partnerName: s.order.partner.name, phone: s.order.partner.phone, address: s.order.partner.address,
-      result: s.result!, resultLabel: RESULT_LABEL[s.result!], note: s.resultNote, remainingQty: remaining.toString(), at: s.resultAt, handledNote: s.handledNote, handledAt: s.handledAt,
+      result: s.result!, resultLabel: RESULT_LABEL[s.result!], note: s.resultNote, remainingQty: remaining.toString(), at: s.resultAt, handledNote: s.handledNote, handledAt: s.handledAt, returnedQty: returned.toString(), activeTripId: s.order.tripStops[0]?.tripId ?? null, activeTripCode: s.order.tripStops[0]?.trip.code ?? null,
     })),
   };
 }
