@@ -72,6 +72,11 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   const isUnitBasis = currentType?.priceBasis === "UNIT"; // bán theo ĐVT riêng của kiểu: không có chiều dài / m²
   const areaMode = isArea && ratio > 0 && !weightMode && (useLength || !product || unit === product.baseUnit);
   const perM2 = (v: number | string) => (areaMode ? `${formatCurrency(pricePerM2(Number(v), ratio))}/m²` : null);
+  // Đơn giá thấp hơn giá nhập gần nhất (cùng đơn vị gốc) ⇒ báo đỏ để kế toán xem lại
+  const lineFactor = useLength || !product ? 1 : Number(product.units?.find((u) => u.unit === unit)?.factor ?? 1) || 1;
+  const belowCost = dto?.lastPurchasePrice != null && num(price) > 0 && num(price) * lineFactor < Number(dto.lastPurchasePrice) - 0.005;
+  const redInput = belowCost ? "!border-danger !text-danger" : "";
+  const costNote = belowCost && dto?.lastPurchasePrice != null ? <p role="alert" className="text-sm font-medium text-danger md:col-span-2 xl:col-span-3">Đơn giá thấp hơn giá nhập gần nhất ({perM2(dto.lastPurchasePrice) ?? `${formatCurrency(dto.lastPurchasePrice)}/${dto.baseUnit}`}) — kiểm tra lại giá bán.</p> : null;
 
   // Tồn + giá gần nhất (theo đúng kiểu gia công đang chọn); đổi khách → tải lại
   useEffect(() => {
@@ -150,7 +155,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           </select>
         </InlineField>
         <p className={`${info} justify-between`}>
-          <span>Giá bán gần nhất{dto?.lastSalePrice != null ? (dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)") : ""}</span>
+          <span>Giá bán gần nhất{dto?.lastSalePrice != null ? (dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)") : ""}</span>
           <b className="tabular">{dto?.lastSalePrice != null ? (perM2(dto.lastSalePrice) ?? `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`) : "—"}</b>
         </p>
 
@@ -164,11 +169,11 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           </select>
         </InlineField>
         {!areaMode && <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL} hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}>
-          <NumberInput maxFrac={2} id="se-price" readOnly={!canEditPrice || weightMode} value={price} onValueChange={(val) => { setPrice(val); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
+          <NumberInput maxFrac={2} id="se-price" readOnly={!canEditPrice || weightMode} value={price} onValueChange={(val) => { setPrice(val); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${redInput}`} />
         </InlineField>}
         {weightApplies && wUnit && (<>
           <InlineField id="se-wprice" label={`Giá/${wUnit.unit} (tỷ trọng)`} labelClass={LABEL}>
-            <NumberInput maxFrac={2} id="se-wprice" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onValueChange={(val) => { setWeightStr(val); setPrice(val === "" ? "" : String(priceFromWeight(Number(val), weightFactor))); setPriceTouched(true); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"}`} />
+            <NumberInput maxFrac={2} id="se-wprice" readOnly={!canEditPrice || !weightMode} value={weightStr ?? (num(price) ? priceToWeight(num(price), weightFactor) : "")} onValueChange={(val) => { setWeightStr(val); setPrice(val === "" ? "" : String(priceFromWeight(Number(val), weightFactor))); setPriceTouched(true); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${weightMode ? "" : "opacity-70"} ${redInput}`} />
           </InlineField>
           <div className="flex flex-wrap items-center gap-2 text-sm md:col-span-2 xl:col-span-3">
             <div role="group" aria-label="Cách tính giá" className="inline-flex overflow-hidden rounded-sm border border-border">
@@ -181,7 +186,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
 
         {areaMode && (
           <InlineField id="se-m2" label="Đơn giá/m²" labelClass={LABEL}>
-            <NumberInput maxFrac={2} id="se-m2" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onValueChange={(val) => { const v = val; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right`} />
+            <NumberInput maxFrac={2} id="se-m2" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onValueChange={(val) => { const v = val; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right ${redInput}`} />
           </InlineField>
         )}
         {typeId && (useLength || isArea) && !ratioKnown && (
@@ -192,6 +197,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
         {typeId && currentType && !currentType.hasBom && <p className="self-center text-xs text-fg-muted md:col-span-2">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
         {useLength && ratio > 0 && num(price) > 0 && <p className="self-center text-xs text-fg-muted xl:col-span-2">Dài*số tấm, nối bằng +; mỗi số hạng thành một dòng. Tỷ lệ {String(ratio).replace(".", ",")} m²/md. Giá/m² và giá/md liên động qua tỷ lệ.</p>}
 
+        {costNote}
         <InlineField id="se-note" label="Ghi chú" labelClass={LABEL} className="md:col-span-2 xl:col-span-3">
           <input id="se-note" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} className={igInput} />
         </InlineField>

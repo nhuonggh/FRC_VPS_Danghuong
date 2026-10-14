@@ -105,7 +105,7 @@ export function QuickDimensionEntry({ loadProducts, pricingPartnerId, canEditPri
       {product && typeId && dto && (
         <p className="mt-2 text-xs text-fg-secondary">
           {dto.onHand !== undefined && <>Còn tồn: {formatQty(dto.onHand)} {dto.baseUnit}</>}
-          {dto.lastSalePrice != null && <>{dto.onHand !== undefined && " | "}Giá bán gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}{ratio > 0 && <> ≈ {formatCurrency(pricePerM2(Number(dto.lastSalePrice), ratio))}/m²</>}</>}
+          {dto.lastSalePrice != null && <>{dto.onHand !== undefined && " | "}Giá bán gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)"}: {formatCurrency(dto.lastSalePrice)}/{dto.baseUnit}{ratio > 0 && <> ≈ {formatCurrency(pricePerM2(Number(dto.lastSalePrice), ratio))}/m²</>}</>}
           {dto.lastPurchasePrice != null && <> | Giá nhập gần nhất: {formatCurrency(dto.lastPurchasePrice)}/{dto.baseUnit}</>}
         </p>
       )}

@@ -435,6 +435,9 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const factor = num(dto?.units.find((u) => u.unit === line?.unit)?.factor ?? product?.units.find((u) => u.unit === line?.unit)?.factor) || 1;
   const qtyBase = num(line?.qty) / factor;
   const short = dto?.onHand !== undefined && qtyBase > num(dto.onHand);
+  // Đơn giá thấp hơn giá nhập gần nhất (quy về đơn vị gốc) ⇒ báo đỏ
+  const belowCost = dto?.lastPurchasePrice != null && num(line?.salePrice) > 0 && num(line?.salePrice) * factor < num(dto.lastPurchasePrice) - 0.005;
+  const red = belowCost ? "!border-danger !text-danger" : "";
   const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
@@ -512,7 +515,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
                 <p>{product?.groupName && <>Nhóm: {product.groupName}</>}{product?.groupName && dto?.onHand !== undefined && <span className="px-1 text-fg-muted">|</span>}{dto?.onHand !== undefined && <>Tồn: {formatQty(dto.onHand)} {dto.baseUnit}</>}</p>
               )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
-              {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : " (khách khác)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
+              {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
               {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastPurchasePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastPurchasePrice)}/${dto.baseUnit}`}</p>}
             </div>
           </div>
@@ -531,10 +534,11 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
       <td data-label="Đơn giá" className={cell}>
         {areaRow ? <>
         <NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} readOnly={!canEditPrice} value={num(line?.salePrice) ? pricePerM2(num(line?.salePrice), rowRatio) : ""}
-          onValueChange={(val) => setValue(`lines.${index}.salePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), rowRatio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />
+          onValueChange={(val) => setValue(`lines.${index}.salePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), rowRatio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"} ${red}`} />
         <p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p>
         </> : <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} readOnly={!canEditPrice} maxFrac={2} control={control} name={`lines.${index}.salePrice`}
-          className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"}`} />}
+          className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"} ${red}`} />}
+        {belowCost && <p role="alert" className="mt-0.5 text-xs font-medium text-danger">Thấp hơn giá nhập gần nhất</p>}
       </td>
       <td data-label="CK trừ ngay" className={cell}>
         <RhfNumberInput aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} control={control} name={`lines.${index}.discountNow`} className={`${inputClass(err?.discountNow)} tabular text-right`} />

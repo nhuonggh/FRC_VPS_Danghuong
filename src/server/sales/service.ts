@@ -118,7 +118,7 @@ export async function loadCustomer(tx: Db, actor: Actor, partnerId: number) {
   return partner;
 }
 
-/** Không có quyền sửa giá tay → giá phải đúng bằng giá bán gần nhất (khách này, hoặc bất kỳ khách). Kiểm ở SERVER. */
+/** Không có quyền sửa giá tay → giá phải đúng bằng giá bán gần nhất (khách này, hoặc khách cùng nhóm). Kiểm ở SERVER. */
 export async function assertPrices(tx: Db, actor: Actor, partnerId: number, lines: PlannedLine[], unchanged: (l: PlannedLine) => boolean = () => false) {
   if (can(actor.perms, "order.edit_price")) return;
   for (const l of lines) {
