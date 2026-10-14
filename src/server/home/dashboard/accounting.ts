@@ -6,6 +6,7 @@ import { getOpenPeriod } from "@/server/period/guard";
 import { byDay, byMonth, canAny, cell, daysOf, MONTH_LABELS, num, partnerBalances, pctDelta, sqlDay, sqlMonth, topSlices, yearBounds, yearOfRange, type Db, type DashRange } from "./common";
 import type { Dashboard, Kpi, Widget } from "./types";
 import { bankRangeQuery, loadBankReceipts } from "./bank-receipts";
+import type { AccountingSection } from "@/lib/accounting-dashboard";
 
 /** Tổng `_sum.amount` của một aggregate; không có quyền → 0 (widget tương ứng không được dựng). */
 const sumOf = async (enabled: boolean, p: Promise<{ _sum: { amount: Prisma.Decimal | null } }>) => (enabled ? num((await p)._sum.amount) : 0);
@@ -15,10 +16,11 @@ const PAYMENT_KIND_SQL = Prisma.sql`CASE WHEN p.kind::text = 'CHI_PHI' THEN COAL
   WHEN p.kind::text = 'TRA_NCC' THEN 'Trả nhà cung cấp' WHEN p.kind::text = 'HOAN_KHACH' THEN 'Hoàn tiền khách'
   WHEN p.kind::text = 'TAT_TOAN_CK' THEN 'Tất toán chiết khấu' ELSE 'Chi khác' END`;
 
-export async function loadAccounting(db: Db, actor: Actor, range: DashRange, bankAccount?: string): Promise<Dashboard> {
-  const cash = canAny(actor, ["cashbook.view", "receipt.manage", "payment.manage"]);
-  const debt = can(actor.perms, "debt.view");
-  const book = can(actor.perms, "cashbook.view");
+export async function loadAccounting(db: Db, actor: Actor, range: DashRange, bankAccount?: string, section?: AccountingSection): Promise<Dashboard> {
+  if (section === "bank") return { kpis: [], widgets: [], bankReceipts: await loadBankReceipts(db, actor, range, bankAccount) };
+  const cash = (!section || section === "cashflow") && canAny(actor, ["cashbook.view", "receipt.manage", "payment.manage"]);
+  const debt = (!section || section === "debt") && can(actor.perms, "debt.view");
+  const book = (!section || section === "funds") && can(actor.perms, "cashbook.view");
   const period = await getOpenPeriod(db);
   const year = yearOfRange(range), yb = yearBounds(year);
   const days = daysOf(range);
@@ -47,7 +49,7 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange, ban
     book ? db.cashLedger.groupBy({ by: ["cashAccountId"], where: { periodId: period.id }, _sum: { amountIn: true, amountOut: true } }) : empty,
     book ? db.cashAccount.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }) : empty,
     debt ? partnerBalances(db, actor, period.id) : Promise.resolve([]),
-    loadBankReceipts(db, actor, range, bankAccount),
+    !section ? loadBankReceipts(db, actor, range, bankAccount) : Promise.resolve(undefined),
   ]);
 
   const totalIn = thu, totalOut = chi;

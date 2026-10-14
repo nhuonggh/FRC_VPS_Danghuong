@@ -2,6 +2,9 @@ import { DashboardView } from "@/components/home/dashboard/DashboardView";
 import { BankReceiptsOverview } from "@/components/home/dashboard/BankReceiptsOverview";
 import { RefreshDashboard } from "@/components/home/dashboard/RefreshDashboard";
 import { formatDateTime } from "@/lib/format";
+import { resolveAccountingSection } from "@/lib/accounting-dashboard";
+import { AccountingTabs } from "@/components/home/dashboard/AccountingTabs";
+import { buildListHref } from "@/lib/query-params";
 import { HomeTabs } from "@/components/home/HomeTabs";
 import { HomeView } from "@/components/home/HomeView";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
@@ -58,11 +61,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   }
 
   const def = DASH_TABS.find((t) => t.key === tab)!;
-  const params = parseListParams(sp, tab === "accounting" ? ["bankAccount"] : []);
-  const effective = { ...params, timePreset: params.timePreset ?? (tab === "accounting" ? "today" as const : "thisMonth" as const) };
+  const params = parseListParams(sp, tab === "accounting" ? ["bankAccount", "accountingSection"] : []);
+  const accountingSection = tab === "accounting" ? resolveAccountingSection(actor.perms, params.filters.accountingSection?.[0]) : undefined;
+  const effective = { ...params, filters: { ...params.filters, ...(accountingSection ? { accountingSection: [accountingSection.key] } : {}) }, timePreset: params.timePreset ?? (tab === "accounting" ? "today" as const : "thisMonth" as const) };
   let data: Dashboard | null = null;
   try {
-    data = await withTimeout(loadDashboard(prisma, actor, tab, { preset: effective.timePreset, start: params.timeStart, end: params.timeEnd, ...(tab === "accounting" ? { bankAccount: params.filters.bankAccount?.[0] } : {}) }, now), DASH_TIMEOUT_MS);
+    data = await withTimeout(loadDashboard(prisma, actor, tab, { preset: effective.timePreset, start: params.timeStart, end: params.timeEnd, ...(tab === "accounting" ? { bankAccount: params.filters.bankAccount?.[0], accountingSection: accountingSection?.key } : {}) }, now), DASH_TIMEOUT_MS);
   } catch (error) {
     console.error(`[home] dashboard ${tab} lỗi:`, error);
   }
@@ -75,18 +79,18 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <h1 className="text-xl font-semibold">{t.title}</h1>
           <p className="text-sm text-fg-secondary">{t.desc}</p>
         </div>
-        {!def.snapshot && <div className="flex flex-wrap items-center gap-2"><QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} now={now} />{tab === "accounting" && <RefreshDashboard />}</div>}
+        <div className="flex flex-wrap items-center gap-2">{!def.snapshot && !accountingSection?.snapshot && <QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} now={now} />}{tab === "accounting" && <RefreshDashboard />}</div>
       </div>
+      {accountingSection && <><AccountingTabs perms={actor.perms} active={accountingSection.key} params={effective} /><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-fg-secondary">{accountingSection.description}</p><span className="text-xs text-fg-secondary">Cập nhật: {formatDateTime(now)}</span></div></>}
       {data ? (
         <>
-          {tab === "accounting" && data.bankReceipts && <BankReceiptsOverview data={data.bankReceipts} params={effective} />}
-          {tab === "accounting" && <div className="flex flex-wrap items-end justify-between gap-2 border-t border-border pt-4"><div><h2 className="text-base font-semibold">Thu chi và công nợ</h2><p className="text-sm text-fg-secondary">Thu chi trong khoảng đã chọn trên tất cả tài khoản; số dư và công nợ là số hiện tại.</p></div><span className="text-xs text-fg-secondary">Cập nhật: {formatDateTime(now)}</span></div>}
-          <DashboardView data={data} kpiColumns={tab === "accounting" ? 3 : undefined} />
+          {accountingSection?.key === "bank" && data.bankReceipts && <BankReceiptsOverview data={data.bankReceipts} params={effective} />}
+          {accountingSection?.key !== "bank" && <DashboardView data={data} kpiColumns={tab === "accounting" ? 3 : undefined} />}
         </>
       ) : (
         <div role="alert" className="rounded-md border border-border bg-surface p-6 text-center">
           <p className="text-danger">Chưa tải được số liệu của mục này.</p>
-          <a href={`/?tab=${tab}`} className="mt-2 inline-block text-sm font-medium text-accent hover:underline">Thử lại</a>
+          <a href={buildListHref(`/?tab=${tab}`, effective, {})} className="mt-2 inline-block text-sm font-medium text-accent hover:underline">Thử lại</a>
         </div>
       )}
     </div>

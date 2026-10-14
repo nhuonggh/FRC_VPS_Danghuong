@@ -181,4 +181,15 @@ describe("loader dashboard (DB thật)", () => {
     expect(kpi(d, "receivable")!.value).toBe(900);
     expect(kpi(d, "payable")!.value).toBe(0);
   });
+  it.each([
+    { section: "bank", kpis: [], widgets: [] },
+    { section: "cashflow", kpis: ["in", "out", "net"], widgets: ["monthly", "out-mix", "in-mix", "daily", "review"] },
+    { section: "debt", kpis: ["receivable", "payable"], widgets: ["receivable", "payable"] },
+    { section: "funds", kpis: ["cash"], widgets: ["accounts"] },
+  ])("Kế toán/$section chỉ trả số liệu thuộc nhóm đang chọn", async ({ section, kpis, widgets }) => {
+    const d = await loadDashboard(prisma, full(owner), "accounting", { preset: "thisMonth", accountingSection: section }, NOW);
+    expect(d.kpis.map((k) => k.key)).toEqual(kpis);
+    expect(d.widgets.map((w) => w.key)).toEqual(widgets);
+    expect(d.bankReceipts !== undefined).toBe(section === "bank");
+  });
 });

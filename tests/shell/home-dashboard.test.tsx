@@ -64,16 +64,43 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     } });
     await render_({ tab: "accounting" });
     expect(screen.getByRole("combobox", { name: "Lọc nhanh theo thời gian" })).toHaveValue("today");
-    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", { preset: "today", start: undefined, end: undefined, bankAccount: undefined }, expect.any(Date));
+    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", { preset: "today", start: undefined, end: undefined, bankAccount: undefined, accountingSection: "bank" }, expect.any(Date));
     const bank = screen.getByRole("region", { name: "Kiểm tra tiền nhận ngân hàng" });
     expect(within(bank).getAllByText("Chưa có sao kê").length).toBeGreaterThan(0);
     expect(within(bank).getByText("Chưa xác nhận khớp với sao kê")).toBeInTheDocument();
     expect(within(bank).getByText("Khách An")).toBeInTheDocument();
     expect(within(bank).getByRole("link", { name: "PT002" })).toHaveAttribute("href", "/accounting/receipts/2");
-    expect(bank.compareDocumentPosition(screen.getByRole("heading", { name: "Thu chi và công nợ" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Thu chi và công nợ" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Doanh thu bán hàng")).not.toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Nhóm báo cáo kế toán" });
+    expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Kiểm tra tiền ngân hàng", "Thu chi", "Số dư Quỹ"]);
+    expect(within(tabs).getByRole("link", { name: "Kiểm tra tiền ngân hàng" })).toHaveAttribute("aria-current", "page");
     await userEvent.click(screen.getByRole("combobox", { name: "Tài khoản nhận tiền" }));
     await userEvent.click(await screen.findByRole("option", { name: /MB/ }));
-    expect(push).toHaveBeenCalledWith("/?tab=accounting&bankAccount=1&timePreset=today");
+    expect(push).toHaveBeenCalledWith("/?tab=accounting&accountingSection=bank&bankAccount=1&timePreset=today");
+  });
+  it.each(["cashflow", "debt", "funds"])("tab con %s có URL riêng và giữ bộ lọc khi chuyển nhóm", async (section) => {
+    requireActor.mockResolvedValue(actor(["cashbook.view", "receipt.manage", "debt.view"]));
+    loadDashboard.mockResolvedValue({ kpis: [], widgets: [] });
+    await render_({ tab: "accounting", accountingSection: section, bankAccount: "3", timePreset: "custom", timeStart: "2026-10-01", timeEnd: "2026-10-14" });
+    const tabs = screen.getByRole("navigation", { name: "Nhóm báo cáo kế toán" });
+    expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Kiểm tra tiền ngân hàng", "Thu chi", "Công nợ", "Số dư Quỹ"]);
+    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", expect.objectContaining({ accountingSection: section }), expect.any(Date));
+    const bankHref = new URL(within(tabs).getByRole("link", { name: "Kiểm tra tiền ngân hàng" }).getAttribute("href")!, "https://example.test");
+    expect(bankHref.searchParams.get("bankAccount")).toBe("3");
+    expect(bankHref.searchParams.get("timeStart")).toBe("2026-10-01");
+    expect(bankHref.searchParams.get("timeEnd")).toBe("2026-10-14");
+    expect(screen.queryByRole("combobox", { name: "Lọc nhanh theo thời gian" }) !== null).toBe(section === "cashflow");
+    expect(screen.queryByRole("region", { name: "Kiểm tra tiền nhận ngân hàng" })).not.toBeInTheDocument();
+  });
+  it("người chỉ có quyền công nợ được đưa về tab Công nợ khi URL yêu cầu nhóm khác", async () => {
+    requireActor.mockResolvedValue(actor(["debt.view"]));
+    loadDashboard.mockResolvedValue({ kpis: [], widgets: [] });
+    await render_({ tab: "accounting", accountingSection: "bank" });
+    const tabs = screen.getByRole("navigation", { name: "Nhóm báo cáo kế toán" });
+    expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Công nợ"]);
+    expect(within(tabs).getByRole("link", { name: "Công nợ" })).toHaveAttribute("aria-current", "page");
+    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", expect.objectContaining({ accountingSection: "debt" }), expect.any(Date));
   });
   it("không có quyền tab nào → chỉ 'Chức năng', không thanh tab; ?tab= trái quyền rơi về Chức năng", async () => {
     requireActor.mockResolvedValue(actor(["user.view"]));

@@ -2,6 +2,7 @@ import type { PermissionCode } from "@/lib/permissions/catalog";
 import type { Actor } from "@/lib/permissions/scope";
 import { can } from "@/lib/permissions/guard";
 import type { TimePreset } from "@/lib/time-presets";
+import { resolveAccountingSection } from "@/lib/accounting-dashboard";
 import { loadAccounting } from "./accounting";
 import { dashRange, type Db } from "./common";
 import { loadDelivery } from "./delivery";
@@ -41,7 +42,7 @@ export const isDashTabKey = (v: string | undefined): v is DashTabKey => DASH_TAB
 
 export async function loadDashboard(
   db: Db, actor: Actor, tab: DashTabKey,
-  query: { preset?: TimePreset | undefined; start?: string | undefined; end?: string | undefined; bankAccount?: string }, now: Date,
+  query: { preset?: TimePreset | undefined; start?: string | undefined; end?: string | undefined; bankAccount?: string; accountingSection?: string }, now: Date,
 ): Promise<Dashboard> {
   const range = dashRange(query.preset ?? (tab === "accounting" ? "today" : undefined), { start: query.start, end: query.end }, now);
   switch (tab) {
@@ -51,6 +52,6 @@ export async function loadDashboard(
     case "inventory": return loadInventory(db, actor, range);
     case "returns": return loadReturns(db, actor, range);
     case "production": return loadProduction(db, actor, range);
-    case "accounting": return loadAccounting(db, actor, range, query.bankAccount);
+    case "accounting": return loadAccounting(db, actor, range, query.bankAccount, query.accountingSection ? resolveAccountingSection(actor.perms, query.accountingSection)?.key : undefined);
   }
 }
