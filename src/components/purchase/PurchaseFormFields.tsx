@@ -4,6 +4,7 @@ import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput, NumberInput } from "@/components/ui";
 import { QuickCustomerDialog } from "@/components/sales/QuickCustomerDialog";
+import { QuickProductDialog, type QuickProductConfig } from "@/components/products/QuickProductDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { useProcessingOptions, type ProcessingOptions } from "@/lib/use-processing-options";
 import { formatCurrency, formatQty } from "@/lib/format";
@@ -90,7 +91,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes 
 }
 
 /** Bảng dòng hàng + nút thêm dòng / chọn nhiều + tiền hàng. Trên mobile mỗi dòng là một thẻ. */
-export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & { initialProducts?: ProductOption[] }) {
+export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }: FormProps & { initialProducts?: ProductOption[]; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
   const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
@@ -183,6 +184,7 @@ export function PurchaseLinesFields({ form, initialProducts = [] }: FormProps & 
     <div className="flex flex-wrap gap-2">
       <button type="button" onClick={() => append(emptyPurchaseLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
       <ProductMultiPicker load={loadProducts} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
+      {quickProduct && <QuickProductDialog config={quickProduct} onCreated={(p) => addProducts([p])} />}
     </div>
   </div>;
 }

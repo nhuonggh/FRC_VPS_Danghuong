@@ -10,13 +10,14 @@ import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { purchaseInputSchema, type PurchaseInput } from "@/server/purchase/schemas";
+import type { QuickProductConfig } from "@/components/products/QuickProductDialog";
 import { dropEmptyPurchaseLines, emptyPurchaseLine, PurchaseHeaderFields, PurchaseLinesFields, PurchaseNoteField } from "./PurchaseFormFields";
 
 type PayAccount = ComboOption & { type: "CASH" | "BANK" };
 const num = (v: string) => Number(v) || 0;
 
 /** Lập phiếu nhập: một trang — thông tin chung, danh sách sản phẩm, thanh toán NCC (tiền mặt + chuyển khoản, phần còn lại ghi nợ), ghi chú. */
-export function PurchaseNewForm({ today, supplierGroups, payAccounts }: { today: string; supplierGroups?: ComboOption[]; payAccounts?: PayAccount[] }) {
+export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProduct }: { today: string; supplierGroups?: ComboOption[]; payAccounts?: PayAccount[]; quickProduct?: QuickProductConfig }) {
   const router = useRouter(), idem = useIdempotencyKey();
   const form = useForm<PurchaseInput>({ resolver: zodResolver(purchaseInputSchema), defaultValues: { partnerId: undefined, date: today, freightCost: 0, note: "", lines: [emptyPurchaseLine] } });
   const cashList = (payAccounts ?? []).filter((a) => a.type === "CASH"), bankList = (payAccounts ?? []).filter((a) => a.type === "BANK");
@@ -55,7 +56,7 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts }: { today:
         <div className="space-y-3"><PurchaseHeaderFields form={form} maxDate={today} supplierGroups={supplierGroups} /><PurchaseNoteField form={form} /></div>
       </FormCard>
       <FormCard icon={Package} title="Danh sách sản phẩm">
-        <PurchaseLinesFields form={form} />
+        <PurchaseLinesFields form={form} quickProduct={quickProduct} />
       </FormCard>
       {payAccounts && (
         <FormCard icon={Wallet} title="Thanh toán nhà cung cấp">
