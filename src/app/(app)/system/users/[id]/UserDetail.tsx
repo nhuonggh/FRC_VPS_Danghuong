@@ -46,7 +46,7 @@ function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
           <input id="fullName" {...s.form.register("fullName")} aria-invalid={!!s.form.formState.errors.fullName} className={igInput} />
         </InlineField>
       ) : (
-        <dl className="space-y-2">
+        <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
           <DetailField label="Họ tên">{p.user.fullName}</DetailField>
           <DetailField label="Tên đăng nhập">{p.user.username}</DetailField>
           <DetailField label="Tạo lúc">{formatDateTime(p.user.createdAt)}</DetailField>

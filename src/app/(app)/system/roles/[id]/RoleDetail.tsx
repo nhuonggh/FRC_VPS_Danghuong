@@ -49,7 +49,7 @@ function InfoSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
           </InlineField>
         </div>
       ) : (
-        <dl className="space-y-2"><DetailField label="Tên nhóm">{p.role.name}</DetailField><DetailField label="Mô tả">{p.role.description}</DetailField></dl>
+        <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2"><DetailField label="Tên nhóm">{p.role.name}</DetailField><DetailField label="Mô tả">{p.role.description}</DetailField></dl>
       )}
     </DetailSection>
   );

@@ -61,7 +61,7 @@ export function QuoteDetail({ quote, canManage, canConvert, canPrint = false }: 
         {
           key: "info", label: "Thông tin cơ bản",
           render: () => (
-            <dl className="space-y-2">
+            <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
               <DetailField label="Khách hàng">{quote.partnerCode} — {quote.partnerName}</DetailField>
               <DetailField label="Ngày báo giá">{formatDate(quote.at)}</DetailField>
               <DetailField label="Ghi chú">{quote.note}</DetailField>

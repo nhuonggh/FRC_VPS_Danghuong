@@ -89,7 +89,7 @@ function TemplateSection({ ctx, tpl }: { ctx: TabRenderCtx; tpl: PrintTemplateDT
         showCompanyInfo: tpl.showCompanyInfo, footerNote: tpl.footerNote, isActive: tpl.isActive, secretAction: "keep", secret: "",
       }}
       view={
-        <dl className="space-y-2">
+        <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
           <DetailField label="Trạng thái">{tpl.isActive ? <Badge tone="success">Đang bật</Badge> : <Badge tone="neutral">Đang tắt</Badge>}</DetailField>
           <DetailField label="Tiêu đề in">{tpl.title}</DetailField>
           <DetailField label="Người ký">{tpl.signerName}</DetailField>
@@ -130,7 +130,7 @@ export function CompanyDetail({ company, templates }: { company: CompanyDTO; tem
         ctx={ctx} k="info" title="Thông tin công ty" editLabel="Chỉnh sửa thông tin công ty" canEdit schema={companyInfoSchema} save={saveCompany("info")}
         defaults={{ name: company.name, address: company.address, phone: company.phone, taxCode: company.taxCode, logo: company.logo }}
         view={
-          <dl className="space-y-2">
+          <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
             <DetailField label="Tên công ty">{company.name}</DetailField>
             <DetailField label="Địa chỉ">{company.address}</DetailField>
             <DetailField label="Điện thoại">{company.phone}</DetailField>
@@ -162,7 +162,7 @@ export function CompanyDetail({ company, templates }: { company: CompanyDTO; tem
         ctx={ctx} k="bank" title="Ngân hàng" editLabel="Chỉnh sửa thông tin ngân hàng" canEdit schema={companyBankSchema} save={saveCompany("bank")}
         defaults={company.bank}
         view={
-          <dl className="space-y-2">
+          <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
             <DetailField label="Ngân hàng">{company.bank.bankName}</DetailField>
             <DetailField label="Số tài khoản">{company.bank.accountNo}</DetailField>
             <DetailField label="Chủ tài khoản">{company.bank.accountHolder}</DetailField>

@@ -198,10 +198,10 @@ function SettleDialog({ open, onClose, trip, idemKey, onDone }: { open: boolean;
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
         <Dialog.Content className={shell}>
           <Dialog.Title className="text-base font-semibold">Đối soát lái xe — {trip.code}</Dialog.Title>
-          <dl className="space-y-1 text-sm">
+          <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
             <Row label="Phải thu" value={trip.totals.expected} /><Row label="− Tiền mặt" value={trip.totals.cash} /><Row label="− Chuyển khoản" value={trip.totals.transfer} /><Row label="− Ghi nợ / hẹn trả" value={trip.totals.debt} />
             {Number(trip.totals.discount) > 0 && <Row label="− Tiền bớt cho khách" value={trip.totals.discount} />}{Number(trip.totals.over) > 0 && <Row label="+ Thu vượt (nợ cũ/dư, đã có lý do)" value={trip.totals.over} />}
-            <div className="flex justify-between border-t border-border pt-1 font-semibold"><dt>Chênh lệch</dt><dd className={`tabular ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
+            <div className="flex justify-between border-t border-border pt-1 font-semibold sm:col-span-2"><dt>Chênh lệch</dt><dd className={`tabular ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
           </dl>
           {diff !== 0 && <InlineField id="st-reason" label="Lý do chênh lệch" required multiline><textarea id="st-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>}
           <p className="text-xs text-fg-muted">Đối soát xong chuyến chuyển cho thủ quỹ xác nhận nhận tiền; kết quả các điểm giao bị khoá.</p>

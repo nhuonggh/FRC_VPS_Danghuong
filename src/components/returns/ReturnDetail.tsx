@@ -40,7 +40,7 @@ export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canMana
           {
             key: "info", label: "Thông tin cơ bản",
             render: () => (
-              <dl className="space-y-2">
+              <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
                 <DetailField label={supplier ? "Nhà cung cấp" : "Khách hàng"}>{ret.partnerCode} — {ret.partnerName}</DetailField>
                 <DetailField label="Ngày trả">{formatDate(ret.at)}</DetailField>
                 <DetailField label="Đơn hàng gốc">{ret.orderId ? <Link href={`/sales/orders/${ret.orderId}`} className="text-accent hover:underline">{ret.orderCode}</Link> : null}</DetailField>

@@ -46,7 +46,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
   const delivery = DELIVERY_LABEL[order.deliveryStatus], payment = PAYMENT_LABEL[order.paymentStatus];
 
   const info = () => (
-    <dl className="space-y-2">
+    <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
       <DetailField label="Khách hàng">{order.partnerCode} — {order.partnerName}</DetailField>
       {(order.walkInName || order.walkInPhone) && <DetailField label="Khách lẻ">{[order.walkInName, order.walkInPhone].filter(Boolean).join(" · ")}</DetailField>}
       <DetailField label="Ngày đơn">{formatDate(order.orderDate)}</DetailField>

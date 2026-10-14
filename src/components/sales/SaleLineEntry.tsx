@@ -168,6 +168,11 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
             {(product.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
           </select>
         </InlineField>
+        {areaMode && (
+          <InlineField id="se-m2" label="Đơn giá/m²" labelClass={LABEL} className="md:col-start-2 xl:col-start-2">
+            <NumberInput maxFrac={2} id="se-m2" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onValueChange={(val) => { const v = val; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right ${redInput}`} />
+          </InlineField>
+        )}
         {!areaMode && <InlineField id="se-price" label={useLength ? "Đơn giá/md" : "Đơn giá"} labelClass={LABEL} hint={m2Str !== null ? "tính từ giá/m² đã nhập" : undefined}>
           <NumberInput maxFrac={2} id="se-price" readOnly={!canEditPrice || weightMode} value={price} onValueChange={(val) => { setPrice(val); setPriceTouched(true); setWeightStr(null); setM2Str(null); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right ${redInput}`} />
         </InlineField>}
@@ -184,11 +189,6 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
           </div>
         </>)}
 
-        {areaMode && (
-          <InlineField id="se-m2" label="Đơn giá/m²" labelClass={LABEL}>
-            <NumberInput maxFrac={2} id="se-m2" readOnly={!canEditPrice} value={m2Str ?? (num(price) ? pricePerM2(num(price), ratio) : "")} onValueChange={(val) => { const v = val; setPrice(v === "" ? "" : String(pricePerMd(Number(v), ratio))); setPriceTouched(true); setWeightStr(null); setM2Str(v); }} className={`${igInput} tabular text-right ${redInput}`} />
-          </InlineField>
-        )}
         {typeId && (useLength || isArea) && !ratioKnown && (
           <InlineField id="se-ratio" label="Tỷ lệ m²/md" labelClass={LABEL}>
             <input id="se-ratio" inputMode="decimal" value={ratioInput} onChange={(e) => setRatioInput(e.target.value)} className={`${igInput} tabular text-right`} />

@@ -19,7 +19,7 @@ export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO })
         summary={{ title: order.code, code: `${order.productCode} — ${order.productName}`, badges: [{ label: order.isCancelled ? "Đã hủy" : "Hiệu lực", tone: order.isCancelled ? "danger" : "success" }], facts: [{ label: "Ngày", value: formatDate(order.at) }, { label: "Số lượng", value: `${formatQty(order.qty)} ${order.baseUnit}` }, ...(showCost ? [{ label: "Giá thành/đv", value: order.unitCost ? formatCurrency(order.unitCost) : "—" }] : []), { label: "Người lập", value: order.createdByName ?? "—" }] }}
         tabs={[{ key: "info", label: "Thông tin chung", render: () => (
           <div className="space-y-5">
-            <dl><DetailField label="Ghi chú">{order.note}</DetailField><DetailField label="Thời điểm ghi sổ">{formatDateTime(order.at)}</DetailField>{showCost && <DetailField label="Tổng vốn nguyên vật liệu">{order.totalCost ? formatCurrency(order.totalCost) : "—"}</DetailField>}</dl>
+            <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2"><DetailField label="Ghi chú">{order.note}</DetailField><DetailField label="Thời điểm ghi sổ">{formatDateTime(order.at)}</DetailField>{showCost && <DetailField label="Tổng vốn nguyên vật liệu">{order.totalCost ? formatCurrency(order.totalCost) : "—"}</DetailField>}</dl>
           </div>
         ) }, { key: "lines", label: "Nguyên vật liệu", count: order.materials.length, render: () => (
           <div className="space-y-5">
