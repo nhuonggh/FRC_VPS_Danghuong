@@ -42,7 +42,7 @@ describe("ProductDetail — tab Giá và Lịch sử giao dịch", () => {
   });
   it("tab Lịch sử giao dịch: liệt kê nhãn + liên kết; không có stock.view (movements=null) ⇒ không có tab", async () => {
     search = "tab=movements";
-    const { unmount } = render(<ProductDetail product={product} canManage={false} movements={[{ id: 1, at: "2026-09-15T03:00:00.000Z", docType: "SALE", label: "Bán hàng", href: "/sales/orders/2", qtyIn: "0", qtyOut: "3" }]} />);
+    const { unmount } = render(<ProductDetail product={product} canManage={false} movements={[{ id: 1, at: "2026-09-15T03:00:00.000Z", docType: "SALE", label: "Bán hàng", href: "/sales/orders/2", partner: "Khách A", qtyIn: "0", qtyOut: "3" }]} />);
     expect(await screen.findByRole("link", { name: "Bán hàng" })).toHaveAttribute("href", "/sales/orders/2");
     unmount(); search = "";
     render(<ProductDetail product={product} canManage={false} movements={null} />);
