@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, Check, Columns3, Eye, Lock, MoreHorizontal, Pencil,
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ToolbarPortal } from "./ToolbarPortal";
 import { NULL_TEXT } from "@/lib/format";
 import { nextSort } from "@/lib/pagination";
 import { shouldNavigateOnRowClick } from "./row-click";
@@ -39,6 +40,7 @@ const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-
 interface Props<T> {
   /** Khoá lưu cột ẩn/độ rộng vào localStorage. */
   id: string;
+  controlsTargetId?: string;
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string | number;
@@ -67,7 +69,7 @@ function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
 /** Ô rỗng (null/undefined/false/"") → "—", không bao giờ để trống hay hiện 0 thay cho "chưa có". */
 const isEmptyNode = (n: React.ReactNode) => n === null || n === undefined || n === false || n === "";
 
-export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection }: Props<T>) {
+export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection }: Props<T>) {
   const router = useRouter();
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
@@ -138,7 +140,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
   return (
     <div>
       {/* Điều khiển cột */}
-      <div className="flex justify-end border-b border-border px-2 py-1">
+      <ToolbarPortal targetId={controlsTargetId}><div className={controlsTargetId ? "flex" : "flex justify-end border-b border-border px-2 py-1"}>
         <Dropdown.Root>
           <Dropdown.Trigger aria-label="Cột hiển thị" title="Cột hiển thị" className={ICON_BTN}>
             <Columns3 size={16} aria-hidden />
@@ -157,7 +159,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, a
             </Dropdown.Content>
           </Dropdown.Portal>
         </Dropdown.Root>
-      </div>
+      </div></ToolbarPortal>
 
       {/* PC/tablet: bảng */}
       <table className="hidden w-full border-collapse text-sm md:table">
