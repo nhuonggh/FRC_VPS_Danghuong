@@ -63,7 +63,7 @@ describe("Trang chủ — tab ngang tổng quan", () => {
       tasksHref: "/accounting/receipts?cashType=BANK", bookHref: "/accounting/bankbook",
     } });
     await render_({ tab: "accounting" });
-    expect(screen.getByRole("combobox", { name: "Lọc nhanh theo thời gian" })).toHaveValue("today");
+    expect(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" })).toHaveTextContent("Hôm nay");
     expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "accounting", { preset: "today", start: undefined, end: undefined, bankAccount: undefined, accountingSection: "bank" }, expect.any(Date));
     const bank = screen.getByRole("region", { name: "Kiểm tra tiền nhận ngân hàng" });
     expect(within(bank).getAllByText("Chưa có sao kê").length).toBeGreaterThan(0);
@@ -90,7 +90,7 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     expect(bankHref.searchParams.get("bankAccount")).toBe("3");
     expect(bankHref.searchParams.get("timeStart")).toBe("2026-10-01");
     expect(bankHref.searchParams.get("timeEnd")).toBe("2026-10-14");
-    expect(screen.queryByRole("combobox", { name: "Lọc nhanh theo thời gian" }) !== null).toBe(section === "cashflow");
+    expect(screen.queryByRole("button", { name: "Lọc nhanh theo thời gian" }) !== null).toBe(section === "cashflow");
     expect(screen.queryByRole("region", { name: "Kiểm tra tiền nhận ngân hàng" })).not.toBeInTheDocument();
   });
   it("người chỉ có quyền công nợ được đưa về tab Công nợ khi URL yêu cầu nhóm khác", async () => {
@@ -126,8 +126,9 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     await render_({ tab: "sales" });
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tổng quan bán hàng");
     expect(screen.getByRole("link", { name: "Bán hàng" })).toHaveAttribute("aria-current", "page");
-    expect(screen.queryByRole("option", { name: "Mọi thời gian" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Lọc nhanh theo thời gian" })).toHaveValue("thisMonth");
+    expect(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" })).toHaveTextContent("Tháng này");
+    await userEvent.click(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" }));
+    expect(screen.queryByRole("button", { name: "Mọi thời gian" })).not.toBeInTheDocument();
     expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "sales", { preset: "thisMonth", start: undefined, end: undefined }, expect.any(Date));
   });
 
@@ -144,6 +145,6 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     requireActor.mockResolvedValue(actor(["stock.view"]));
     loadDashboard.mockResolvedValue(SAMPLE);
     await render_({ tab: "inventory" });
-    expect(screen.queryByRole("combobox", { name: "Lọc nhanh theo thời gian" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lọc nhanh theo thời gian" })).not.toBeInTheDocument();
   });
 });
