@@ -5,8 +5,9 @@ import { SlidersHorizontal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { buildListHref, type ListParams } from "@/lib/query-params";
-import { resolveTimeRange, TIME_PRESETS, type TimePreset } from "@/lib/time-presets";
+import { resolveTimeRange, TIME_PRESETS } from "@/lib/time-presets";
 import { MultiSelectFilter, QuickTimeFilter } from "@/components/ui";
+import { TimeRangeEditor } from "@/components/ui/QuickTimeFilter";
 
 const STATES = [{ value: "active", label: "Hiệu lực" }, { value: "cancelled", label: "Đã hủy" }];
 const TYPES = [{ value: "LOSS", label: "Hao hụt" }, { value: "WRITE_OFF", label: "Xuất hủy" }];
@@ -43,8 +44,7 @@ export function DailyFilters({ basePath, params, itemKey, now }: { basePath: str
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" /><Dialog.Content className="fixed inset-x-0 bottom-0 z-dialog max-h-[85dvh] overflow-y-auto rounded-t-lg border border-border bg-raised p-4">
         <div className="flex items-center justify-between"><Dialog.Title className="text-lg font-semibold">Lọc báo cáo</Dialog.Title><Dialog.Close aria-label="Đóng bộ lọc" className="flex h-11 w-11 items-center justify-center rounded-sm hover:bg-hover"><X size={20} aria-hidden /></Dialog.Close></div>
         <Dialog.Description className="mb-3 text-sm text-fg-secondary">Chọn khoảng ngày và điều kiện, sau đó bấm Áp dụng.</Dialog.Description>
-        <label className="grid gap-2 text-sm">Khoảng thời gian<select value={draft.timePreset ?? "today"} onChange={(e) => setDraft({ ...draft, timePreset: e.target.value as TimePreset })} className="min-h-11 rounded-sm border border-border bg-canvas px-3">{TIME_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
-        {draft.timePreset === "custom" && <div className="mt-3 grid grid-cols-2 gap-3"><label className="grid gap-2 text-sm">Từ ngày<input type="date" value={draft.timeStart ?? ""} onChange={(e) => setDraft({ ...draft, timeStart: e.target.value })} className="min-h-11 min-w-0 rounded-sm border border-border bg-canvas px-2" /></label><label className="grid gap-2 text-sm">Đến ngày<input type="date" value={draft.timeEnd ?? ""} onChange={(e) => setDraft({ ...draft, timeEnd: e.target.value })} className="min-h-11 min-w-0 rounded-sm border border-border bg-canvas px-2" /></label></div>}
+        <TimeRangeEditor value={draft} now={now} allowAll={false} onChange={(value) => setDraft({ ...draft, ...value })} />
         {groups.map((g) => <fieldset key={g.key} className="mt-4"><legend className="text-sm font-medium">{g.label}</legend><div className="flex flex-wrap gap-3">{g.options.map((o) => <label key={o.value} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={(draft.filters[g.key] ?? g.fallback).includes(o.value)} onChange={() => toggle(g.key, o.value, g.fallback)} />{o.label}</label>)}</div></fieldset>)}
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <button type="button" onClick={apply} disabled={pending} className="mt-4 min-h-11 w-full rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Áp dụng</button>
