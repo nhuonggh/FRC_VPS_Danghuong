@@ -33,7 +33,7 @@ export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO })
         ) }]}
         {...nav}
       />
-      <ReasonDialog open={open} onClose={() => setOpen(false)} title={`Hủy lệnh ${order.code}?`} description="Nguyên vật liệu được hoàn lại kho, phụ kiện thành phẩm bị gỡ. Không hủy được nếu phụ kiện đã bán." confirmLabel="Hủy lệnh" onConfirm={cancel} />
+      <ReasonDialog open={open} onClose={() => setOpen(false)} title={`Hủy lệnh ${order.code}?`} description="Nguyên vật liệu được hoàn lại kho, phụ kiện Tôn thành phẩm bị gỡ. Không hủy được nếu phụ kiện Tôn đã bán." confirmLabel="Hủy lệnh" onConfirm={cancel} />
     </div>
   );
 }

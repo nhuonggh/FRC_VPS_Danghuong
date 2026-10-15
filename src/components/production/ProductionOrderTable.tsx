@@ -9,7 +9,7 @@ export function ProductionOrderTable({ rows, params }: { rows: ProductionRowDTO[
   const columns: Column<ProductionRowDTO>[] = [
     { key: "code", label: "Mã lệnh", sortable: true, primaryOnMobile: true, render: (x) => <span className="font-mono text-xs">{x.code}</span> },
     { key: "at", label: "Ngày", sortable: true, render: (x) => formatDate(x.at) },
-    { key: "product", label: "Phụ kiện", render: (x) => <><span className="font-mono text-xs">{x.productCode}</span> {x.productName}</> },
+    { key: "product", label: "Phụ kiện Tôn", render: (x) => <><span className="font-mono text-xs">{x.productCode}</span> {x.productName}</> },
     { key: "qty", label: "Số lượng", align: "right", render: (x) => `${formatQty(x.qty)} ${x.baseUnit}` },
     { key: "materialCount", label: "Số NVL", align: "right", render: (x) => x.materialCount },
     { key: "status", label: "Trạng thái", render: (x) => x.isCancelled ? <Badge tone="danger">Đã hủy</Badge> : <Badge tone="success">Hiệu lực</Badge> },
