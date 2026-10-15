@@ -21,11 +21,12 @@
  * engine), không phải lúc nạp module.
  */
 import type { StockDocType } from "@prisma/client";
-import { registerCostOwner, type CostOwner } from "./owners";
+import { saleLineCostOwner } from "@/server/sales/cost-owner";
+import { getCostOwner, registerCostOwner, type CostOwner } from "./owners";
 
-/** Danh sách đăng ký trung tâm — plan 03 thêm `["SALE", saleLineCostOwner]` tại đây. */
+/** Danh sách đăng ký trung tâm. */
 const COST_OWNER_REGISTRATIONS = (): readonly (readonly [StockDocType, CostOwner])[] => [
-  // ["SALE", saleLineCostOwner], // plan 03 — dòng đơn bán (sale_order_lines.unit_cost_fifo / is_provisional)
+  ["SALE", saleLineCostOwner], // plan 04 — dòng đơn bán (sale_order_lines.unitCostFifo / isProvisional)
 ];
 
 let registered = false;
@@ -34,5 +35,6 @@ let registered = false;
 export function registerAllCostOwners(): void {
   if (registered) return;
   registered = true;
-  for (const [docType, owner] of COST_OWNER_REGISTRATIONS()) registerCostOwner(docType, owner);
+  // Không ghi đè chủ dòng đã có (test tiêm chủ dòng riêng/rỗng trước khi engine chạy lần đầu)
+  for (const [docType, owner] of COST_OWNER_REGISTRATIONS()) if (!getCostOwner(docType)) registerCostOwner(docType, owner);
 }

@@ -5,14 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/shell/AppShell";
 import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
+import { emptyPrefs } from "@/lib/workspace";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push: vi.fn() }) }));
 afterEach(cleanup);
 
 describe("AppShell", () => {
   it("OfflineBanner nằm ngay dưới Header và trước <main>", () => {
     const nav = buildNav(APP_NAV, new Set(["user.view"]));
-    render(<AppShell nav={nav} user={{ fullName: "An", username: "an" }}><p>nội dung</p></AppShell>);
+    render(<AppShell nav={nav} user={{ fullName: "An", username: "an" }} prefs={emptyPrefs()}><p>nội dung</p></AppShell>);
     const header = screen.getByRole("banner");
     const status = screen.getByRole("status");
     const main = screen.getByRole("main");

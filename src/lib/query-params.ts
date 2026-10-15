@@ -109,7 +109,8 @@ export function buildListHref(basePath: string, current: ListParams, patch: List
   if (next.pageSize !== DEFAULT_PAGE_SIZE) qs.set("pageSize", String(next.pageSize));
   if (next.page > 1) qs.set("page", String(next.page));
   const s = qs.toString(); // dấu phẩy được mã hoá thành %2C
-  return s ? `${basePath}?${s}` : basePath;
+  const join = basePath.includes("?") ? "&" : "?";
+  return s ? `${basePath}${join}${s}` : basePath;
 }
 
 /**

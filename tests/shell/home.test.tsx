@@ -6,13 +6,19 @@ import HomePage from "@/app/(app)/page";
 import type { SessionActor } from "@/server/auth/actor";
 
 const requireActor = vi.fn();
+const loadWidget = vi.fn();
 vi.mock("@/server/auth/session", () => ({ requireActor: (...a: unknown[]) => requireActor(...a) }));
+// Trang chủ không chạm DB trong test này: số liệu widget được kiểm riêng ở tests/home/*
+vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/server/home/queries", async (orig) => ({ ...(await orig<typeof import("@/server/home/queries")>()), loadWidget: (...a: unknown[]) => loadWidget(...a) }));
+const moduleLinks = () => screen.queryAllByRole("link").filter((l) => l.getAttribute("href")?.startsWith("/m/"));
 
 const actor = (perms: string[], fullName = "Trần Văn An"): SessionActor =>
   ({ userId: 1, username: "an", fullName, perms: new Set(perms), mustChangePassword: false, authMethod: "password" });
 
-async function renderHome() {
-  render(await HomePage());
+async function renderHome(search: Record<string, string> = {}) {
+  render(await HomePage({ searchParams: Promise.resolve(search) }));
 }
 
 beforeEach(() => {
@@ -23,14 +29,16 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   requireActor.mockReset();
+  loadWidget.mockReset();
 });
+beforeEach(() => loadWidget.mockResolvedValue({ ok: true, value: 3 }));
 
 describe("Trang chủ — Level 0 (module selector)", () => {
   it("chào theo giờ ICT + tên người dùng; chỉ thẻ module mà actor được vào, link /m/<key>", async () => {
     requireActor.mockResolvedValue(actor(["user.view", "audit.view"]));
     await renderHome();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Chào buổi sáng, Trần Văn An");
-    const links = screen.getAllByRole("link");
+    const links = moduleLinks();
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "/m/system");
     expect(within(links[0]!).getByText("Hệ thống")).toBeInTheDocument();
@@ -38,18 +46,20 @@ describe("Trang chủ — Level 0 (module selector)", () => {
     expect(screen.queryByText("Kế toán")).toBeNull();
   });
 
-  it("module chỉ có chức năng 'planned' (chưa làm) bị ẩn; không có số liệu giả", async () => {
-    requireActor.mockResolvedValue(actor(["order.view", "stock.view", "user.view"]));
+  it("module chỉ có chức năng 'planned' bị ẩn (Hệ thống: user.view chưa có màn); Báo cáo và Kho hiện khi đã có màn thật", async () => {
+    requireActor.mockResolvedValue(actor(["report.view", "stock.view", "user.view"]));
     await renderHome();
-    expect(screen.queryByText("Bán hàng")).toBeNull();
-    expect(screen.queryByText("Kho")).toBeNull();
-    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText("Báo cáo")).toBeInTheDocument();
+    expect(moduleLinks().some((l) => within(l).queryByText("Kho"))).toBe(true); // "Kho" còn xuất hiện ở tab tổng quan nên chỉ xét thẻ module
+    expect(moduleLinks().length).toBeGreaterThanOrEqual(2);
   });
 
   it("không quyền nào → thông báo trống, không có thẻ", async () => {
     requireActor.mockResolvedValue(actor([]));
     await renderHome();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryByRole("region", { name: "Số liệu nhanh" })).toBeNull();
+    expect(loadWidget).not.toHaveBeenCalled();
     expect(screen.getByText(/chưa được cấp quyền vào chức năng nào/)).toBeInTheDocument();
   });
 
@@ -64,5 +74,40 @@ describe("Trang chủ — Level 0 (module selector)", () => {
     requireActor.mockResolvedValue(actor(["user.view"]));
     await renderHome();
     expect(requireActor).toHaveBeenCalledTimes(1);
+  });
+
+  it("thủ kho: thấy widget số lượng dưới định mức, KHÔNG thấy giá trị tồn hay phiếu nhập", async () => {
+    requireActor.mockResolvedValue(actor(["stock.view"]));
+    await renderHome();
+    expect(document.querySelector('[data-widget="low-stock"]')).not.toBeNull();
+    expect(document.querySelector('[data-widget="stock-value"]')).toBeNull();
+    expect(document.querySelector('[data-widget="purchase-today"]')).toBeNull();
+  });
+
+  it("có cost.view + purchase.view: đủ ba widget; link widget là màn đã mở", async () => {
+    requireActor.mockResolvedValue(actor(["stock.view", "cost.view", "purchase.view"]));
+    await renderHome();
+    for (const k of ["low-stock", "stock-value", "purchase-today"]) expect(document.querySelector(`[data-widget="${k}"]`)).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Giá trị tồn kho: xem chi tiết" })).toHaveAttribute("href", "/inventory/stock");
+  });
+
+  it("một widget lỗi chỉ hiện 'Chưa tải được — Thử lại' cục bộ, không số 0 giả; lời chào và module vẫn hiện", async () => {
+    requireActor.mockResolvedValue(actor(["stock.view", "purchase.view"]));
+    loadWidget.mockImplementation(async (_db: unknown, spec: { key: string }) => (spec.key === "low-stock" ? { ok: false } : { ok: true, value: 7 }));
+    await renderHome();
+    const bad = document.querySelector('[data-widget="low-stock"]')!;
+    expect(bad).toHaveTextContent("Chưa tải được");
+    expect(bad.textContent).not.toMatch(/\b0\b/);
+    expect(within(bad as HTMLElement).getByRole("button", { name: /Thử lại/ })).toBeInTheDocument();
+    expect(document.querySelector('[data-widget="purchase-today"]')).toHaveTextContent("7");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Trần Văn An");
+    expect(moduleLinks().length).toBeGreaterThan(0);
+  });
+
+  it("lối tắt đã chuyển lên nút 'Truy cập nhanh' ở header — trang chủ không còn khối chip", async () => {
+    requireActor.mockResolvedValue(actor(["bom.manage", "company.manage", "order.view"]));
+    await renderHome();
+    expect(screen.queryByRole("region", { name: "Truy cập nhanh" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Định mức NVL/ })).toBeNull();
   });
 });

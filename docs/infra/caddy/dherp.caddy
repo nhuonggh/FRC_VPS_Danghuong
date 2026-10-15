@@ -1,6 +1,16 @@
 # Bản tham chiếu. File thật trên VPS: /opt/caddy/sites/dherp.caddy
 # (Caddy chạy trong container `caddy`; /opt/caddy/Caddyfile có `import /etc/caddy/sites/*.caddy`).
 # Upstream = TÊN CONTAINER app trên network pgnet, KHÔNG phải 127.0.0.1 (127.0.0.1 trong container caddy là chính nó).
+# Header bảo mật chỉ áp cho site này (không đụng crm/lms/...). Rate limit đăng nhập nằm trong app
+# (src/server/auth/rate-limit.ts) vì Caddy chuẩn không có module rate limit.
 dherp.sheetapp.store {
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "frame-ancestors 'none'"
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
     reverse_proxy dherp_app:3000
 }

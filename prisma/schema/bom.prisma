@@ -1,0 +1,101 @@
+// GĐ1b-c (plan 03c). BOM bất biến theo phiên bản (D-19); mẫu in là cấu hình, secret chỉ lưu dạng mã hoá (D-21).
+// BOM là dữ liệu master/version nên KHÔNG có periodId (ngoại lệ có chủ ý so với chứng từ D-3; createdBy/createdAt vẫn có).
+
+enum BomVersionStatus {
+  DRAFT
+  ACTIVE
+  CANCELLED
+
+  @@map("bom_version_status")
+}
+
+/// Aggregate định mức theo (thành phẩm, kiểu gia công). Không sửa; mọi thay đổi = BomVersion mới.
+model Bom {
+  id               Int      @id @default(autoincrement())
+  productId        Int
+  processingTypeId Int
+  createdBy        Int
+  createdAt        DateTime @default(now())
+
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  processingType ProcessingType @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+  versions       BomVersion[]
+
+  @@unique([productId, processingTypeId])
+  @@map("boms")
+}
+
+model BomVersion {
+  id        Int              @id @default(autoincrement())
+  bomId     Int
+  versionNo Int
+  /// Ngày ICT bắt đầu hiệu lực (chỉ ngày, không giờ).
+  validFrom DateTime         @db.Date
+  status    BomVersionStatus @default(ACTIVE)
+  note      String?
+  createdBy Int
+  createdAt DateTime         @default(now())
+
+  bom       Bom             @relation(fields: [bomId], references: [id], onDelete: Restrict)
+  lines     BomLine[]
+  saleLines SaleOrderLine[]
+
+  @@unique([bomId, versionNo])
+  @@index([bomId, status, validFrom(sort: Desc)])
+  // Unique (bomId, validFrom) chỉ với bản chưa huỷ: partial index trong migration (Prisma không biểu diễn được).
+  @@map("bom_versions")
+}
+
+model BomLine {
+  id                Int     @id @default(autoincrement())
+  bomVersionId      Int
+  materialProductId Int
+  qtyPerUnit        Decimal @db.Decimal(18, 3)
+  note              String?
+
+  version  BomVersion @relation(fields: [bomVersionId], references: [id], onDelete: Restrict)
+  material Product    @relation(fields: [materialProductId], references: [id], onDelete: Restrict)
+
+  @@unique([bomVersionId, materialProductId])
+  @@index([materialProductId])
+  @@map("bom_lines")
+}
+
+/// Cấu hình mẫu in + webhook (GĐ2 mới gửi). Secret KHÔNG BAO GIỜ trả ra ngoài: chỉ `secretCiphertext` trong DB.
+model PrintTemplate {
+  id               Int      @id @default(autoincrement())
+  docType          String
+  name             String
+  webhookUrl       String?
+  secretCiphertext String?
+  isActive         Boolean  @default(false)
+  title            String?
+  signerName       String?
+  phone            String?
+  qrImage          String?
+  showCompanyInfo  Boolean  @default(true)
+  footerNote       String?
+  createdBy        Int?
+  createdAt        DateTime @default(now())
+  updatedBy        Int?
+  updatedAt        DateTime @updatedAt
+
+  @@unique([docType, name])
+  @@map("print_templates")
+}
+
+/// Bản in đã tạo qua Apps Script: MỖI chứng từ một dòng (in lại ⇒ xoá file cũ trên Drive rồi ghi đè dòng này). Không lưu nội dung in.
+model PrintFile {
+  id         Int      @id @default(autoincrement())
+  docType    String
+  docId      Int
+  templateId Int?
+  fileId     String
+  url        String
+  name       String
+  printedBy  Int
+  printedAt  DateTime @default(now())
+
+  @@unique([docType, docId])
+  @@map("print_files")
+}

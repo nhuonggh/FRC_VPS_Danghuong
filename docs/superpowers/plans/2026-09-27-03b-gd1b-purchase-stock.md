@@ -62,6 +62,8 @@ Lệnh: như 03a (`rtk proxy npx vitest run …`, DB test cổng 5434, không ch
 
 ### Task 9: Schema nhập hàng & nhập không NCC (migration `purchasing`) + tên field nhạy cảm
 
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. Migration `20260927125310_purchasing` đã áp dụng DB dev; test schema/quyền 3 file / 21 test và lint xanh. `npm run db:schema` chưa chạy được cục bộ vì WSL không có `/bin/bash`; không ảnh hưởng Prisma schema/migration hoặc test.
+
 **Mã:** 19, 20, 21 (dữ liệu). **Files:**
 - Create: `prisma/schema/purchase.prisma`, `prisma/migrations/<ts>_purchasing/migration.sql` (sinh + CHECK)
 - Modify: `prisma/schema/master.prisma` (`Partner.purchases`, `Product.purchaseLines/adjustmentLines`), `prisma/schema/period.prisma` (`Period.purchases/stockAdjustments`)
@@ -312,6 +314,8 @@ git commit -m "feat(db): phiếu nhập hàng + nhập không NCC (mã 19–21),
 
 ### Task 10: Cầu nối Idempotency-Key + giao dịch kho
 
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. `withIdempotentInventoryTx` không lồng transaction; chiếm/lưu khoá trong `ctx.tx` của FIFO. Typecheck và 3 file / 17 test idempotency–barrel xanh.
+
 **Mã:** nền cho 19, 21 (và plan 04/05). **Files:**
 - Modify: `src/server/idempotency/with-idempotency.ts` (tách `claimIdempotencyKey` / `saveIdempotencyResult`, hành vi cũ giữ nguyên)
 - Create: `src/server/idempotency/with-inventory-tx.ts`
@@ -481,6 +485,8 @@ git commit -m "feat(idempotency): withIdempotentInventoryTx — ghép Idempotenc
 ---
 
 ### Task 11: Phiếu nhập hàng — backend (tạo / sửa / hủy / cước nhập sau, danh sách, chi tiết, export)
+
+> **Tiến độ 28/09/2026:** CI/deploy xanh (`ac1ea55`, workflow `36355333283`, user xác nhận). Đã tạo `schemas`, `freight`, `codes`, `service`, `queries`, `export` cùng 8 test. Route, menu và UI thuộc Task 12.
 
 **Mã:** 19, 20. **Files:**
 - Create: `src/server/purchase/{schemas,freight,codes,service,queries,export}.ts`
@@ -1541,6 +1547,8 @@ git commit -m "feat(purchase): danh sách/chi tiết/export phiếu nhập — l
 
 ### Task 12: Phiếu nhập hàng — API và giao diện (danh sách, lập phiếu, chi tiết, sửa, hủy, cước nhập sau)
 
+> **Tiến độ 28/09/2026:** Đã commit `ba24d33`, chờ CI/deploy sau khi push: API tạo/sửa/hủy/xuất, danh sách, lập phiếu, chi tiết full-page, sửa nội dung/cước và hủy có lý do. Kiểm cục bộ: 17 test liên quan, lint và typecheck xanh.
+
 **Mã:** 19, 20. **Files:**
 - Modify: `src/lib/time.ts` (thêm `ictYmd`), `tests/lib/time.test.ts`; `src/server/purchase/service.ts` (dùng `ictYmd`); `src/server/products/queries.ts` (thêm `productOptionsByIds`); `src/components/ui/index.ts`
 - Create: `src/components/ui/ReasonDialog.tsx`
@@ -2582,6 +2590,8 @@ git commit -m "feat(purchase): màn Phiếu nhập hàng — lập phiếu (quy 
 
 ### Task 13: Nhập kho không NCC (mã 21)
 
+> **Tiến độ 28/09/2026:** Đã chốt phần nền: `adjustmentInSchema` và `lastPurchaseCost` lấy giá vốn lô mua gần nhất theo `(at, seq)`. Tiếp tục service FIFO idempotent, route, UI, hủy và test mà không chờ deploy Task 12.
+
 **Mã:** 21 (spec 6.10 — khác K1). **Files:**
 - Create: `src/server/purchase/{adjustment-in,last-cost}.ts`
 - Create: `src/app/api/stock-adjustments-in/route.ts`, `src/app/api/stock-adjustments-in/[id]/cancel/route.ts`
@@ -3272,6 +3282,8 @@ git commit -m "feat(purchase): nhập kho không NCC (mã 21) — giá mặc đ�
 ---
 
 ### Task 14: Báo cáo kho — backend (tồn hiện tại, thẻ kho, XNT, tra cứu cuộn, tồn theo SP)
+
+> **Tiến độ 28/09/2026:** Đang triển khai. Đã có `onHandList`, `stockCard`, `xntReport` và trang Tồn hiện tại/XNT; còn tra cứu cuộn hoàn thiện, tồn theo sản phẩm, export, kiểm cân sổ và hiệu năng.
 
 **Mã:** 22, 23, 24, 25, 30. **Files:**
 - Create: `src/server/inventory-reports/{labels,on-hand,stock-card,xnt,rolls,product-stock,export}.ts`
@@ -4166,6 +4178,8 @@ git commit -m "feat(inventory-reports): tồn hiện tại, thẻ kho (số dư 
 ---
 
 ### Task 15: Màn hình kho — giao diện (tồn kho, thẻ kho, XNT, định mức tồn, tra cứu cuộn, tab Tồn kho của sản phẩm) + đóng plan 03b
+
+> **Tiến độ 28/09/2026:** Đang triển khai. Đã có Tồn hiện tại và XNT; Định mức tồn/Tra cứu cuộn đang làm, còn Thẻ kho, export, tab sản phẩm và QA đóng plan.
 
 **Mã:** 22, 23, 24, 25, 30. **Files:**
 - Create: `src/app/api/inventory/{stock,min-stock,xnt,rolls,ledger}/export/route.ts`

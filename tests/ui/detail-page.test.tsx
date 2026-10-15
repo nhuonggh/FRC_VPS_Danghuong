@@ -257,8 +257,10 @@ describe("DetailPage — View mode & bố cục", () => {
       expect(b.className).toContain("shrink-0");
     }
     const aside = container.querySelector("aside")!;
-    expect(aside.className).toContain("lg:sticky");
-    expect(aside.className.split(/\s+/)).not.toContain("sticky");
+    // 2 panel cùng chiều cao hàng grid (aside không h-fit/sticky) + min-height chung → không lệch giữa các tab
+    expect(aside.className.split(/\s+/)).not.toContain("h-fit");
+    expect(aside.className).not.toContain("sticky");
+    expect(container.querySelector(".grid")!.className).toContain("lg:min-h-[calc(100dvh-11rem)]");
     expect(container.querySelector(".grid")!.className).toContain("lg:grid-cols-[248px_minmax(0,1fr)]");
   });
 

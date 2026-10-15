@@ -128,6 +128,19 @@ describe("DataTable", () => {
     expect(await screen.findByRole("menuitem", { name: "Khóa" })).toBeInTheDocument();
   });
 
+  it("actionsVariant=kebab đưa toàn bộ action vào menu Thao tác", async () => {
+    const onToggle = vi.fn();
+    render(<DataTable id="kebab" columns={columns} rows={[rows[0]!]} rowKey={(r) => r.id} actionsVariant="kebab" rowActions={() => [
+      { key: "toggle", label: "Tắt", icon: "power", onClick: onToggle },
+      { key: "edit", label: "Sửa", icon: "pencil", href: "/e" },
+    ]} />);
+    expect(screen.queryByRole("button", { name: "Tắt" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Sửa" })).toBeNull();
+    await userEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Thao tác" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Tắt" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
   it("bấm action trong cột thao tác không kích hoạt điều hướng của dòng", async () => {
     const onDel = vi.fn();
     render(

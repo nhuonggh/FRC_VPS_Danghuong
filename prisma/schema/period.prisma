@@ -9,23 +9,38 @@ enum PeriodStatus {
 // (tương đương partial unique index mà Prisma không mô hình được). CHECK ở migration SQL thô
 // giữ isOpen luôn khớp status.
 model Period {
-  id        Int          @id @default(autoincrement())
-  name      String
-  status    PeriodStatus @default(OPEN)
-  isOpen    Boolean?     @unique
-  openedAt  DateTime     @default(now())
-  closedAt  DateTime?
-  closedBy  Int?
+  id       Int          @id @default(autoincrement())
+  name     String
+  status   PeriodStatus @default(OPEN)
+  isOpen   Boolean?     @unique
+  openedAt DateTime     @default(now())
+  closedAt DateTime?
+  closedBy Int?
 
-  openingStock    OpeningStock[]
-  openingDebt     OpeningDebt[]
-  openingCash     OpeningCash[]
-  openingDiscount OpeningDiscount[]
-  layers          CostLayer[]
-  ledger          StockLedger[]
-  partnerLedger   PartnerLedger[]
-  cashLedger      CashLedger[]
-  discountLedger  DiscountLedger[]
+  openingStock        OpeningStock[]
+  openingDebt         OpeningDebt[]
+  openingCash         OpeningCash[]
+  openingDiscount     OpeningDiscount[]
+  layers              CostLayer[]
+  ledger              StockLedger[]
+  partnerLedger       PartnerLedger[]
+  cashLedger          CashLedger[]
+  discountLedger      DiscountLedger[]
+  purchases           Purchase[]
+  saleOrders          SaleOrder[]
+  deliveryNotes       DeliveryNote[]
+  quotes              Quote[]
+  receipts            Receipt[]
+  payments            Payment[]
+  operatingExpenses   OperatingExpense[]
+  discountSettlements DiscountSettlement[]
+  trips               Trip[]
+  goodsReturns        GoodsReturn[]
+  debtAdjustments     DebtAdjustment[]
+  debtTransfers       DebtTransfer[]
+  stockAdjustments    StockAdjustment[]
+  productionOrders    ProductionOrder[]
+  stocktakes          Stocktake[]
 
   @@map("periods")
 }
@@ -37,6 +52,8 @@ model OpeningStock {
   productId Int
   qty       Decimal @db.Decimal(18, 3)
   unitCost  Decimal @db.Decimal(18, 4)
+  /// Số demo để test (nạp bằng nút "Số liệu demo"); reset xoá các dòng này, nhập Excel ghi đè sẽ gỡ cờ.
+  isDemo    Boolean @default(false)
 
   period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -51,6 +68,8 @@ model OpeningDebt {
   periodId  Int
   partnerId Int
   amount    Decimal @db.Decimal(18, 2)
+  /// Số demo để test (nạp bằng nút "Số liệu demo"); reset xoá các dòng này, nhập Excel ghi đè sẽ gỡ cờ.
+  isDemo    Boolean @default(false)
 
   period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
@@ -65,6 +84,8 @@ model OpeningCash {
   periodId      Int
   cashAccountId Int
   amount        Decimal @db.Decimal(18, 2)
+  /// Số demo để test (nạp bằng nút "Số liệu demo"); reset xoá các dòng này, nhập Excel ghi đè sẽ gỡ cờ.
+  isDemo    Boolean @default(false)
 
   period      Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
   cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
@@ -79,6 +100,8 @@ model OpeningDiscount {
   periodId  Int
   partnerId Int
   amount    Decimal @db.Decimal(18, 2)
+  /// Số demo để test (nạp bằng nút "Số liệu demo"); reset xoá các dòng này, nhập Excel ghi đè sẽ gỡ cờ.
+  isDemo    Boolean @default(false)
 
   period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)

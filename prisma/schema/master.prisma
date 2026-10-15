@@ -15,12 +15,24 @@ enum CashType {
 }
 
 model PartnerGroup {
-  id   Int    @id @default(autoincrement())
-  name String @unique
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
 
   partners Partner[]
 
   @@map("partner_groups")
+}
+
+/// Nhóm hàng của sản phẩm (danh mục cấu hình: Hệ thống → Cài đặt danh mục → Nhóm hàng). Tuỳ chọn — sản phẩm có thể chưa có nhóm.
+model ProductGroup {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  products Product[]
+
+  @@map("product_groups")
 }
 
 model Partner {
@@ -36,20 +48,34 @@ model Partner {
   allowCredit  Boolean  @default(false)
   phone        String?
   address      String?
+  /// Mã số thuế (tuỳ chọn) — hiện ở form bán hàng/hoá đơn.
+  taxCode      String?
+  /// Địa chỉ giao hàng (nếu khác địa chỉ chính).
+  deliveryAddress String?
   note         String?
   isActive     Boolean  @default(true)
   mergedIntoId Int? // sau khi gộp mã (mục 65)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  group         PartnerGroup      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  owner         User?             @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  mergedInto    Partner?          @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedFrom    Partner[]         @relation("PartnerMerge")
-  openingDebts  OpeningDebt[]
-  openingDisc   OpeningDiscount[]
-  partnerLedger PartnerLedger[]
-  discountLedger DiscountLedger[]
+  group               PartnerGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner               User?                @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  mergedInto          Partner?             @relation("PartnerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom          Partner[]            @relation("PartnerMerge")
+  openingDebts        OpeningDebt[]
+  openingDisc         OpeningDiscount[]
+  partnerLedger       PartnerLedger[]
+  discountLedger      DiscountLedger[]
+  purchases           Purchase[]
+  saleOrders          SaleOrder[]
+  quotes              Quote[]
+  receipts            Receipt[]
+  payments            Payment[]
+  discountSettlements DiscountSettlement[]
+  goodsReturns        GoodsReturn[]
+  debtAdjustments     DebtAdjustment[]
+  transfersFrom       DebtTransfer[]       @relation("TransferFrom")
+  transfersTo         DebtTransfer[]       @relation("TransferTo")
 
   @@index([groupId])
   @@index([ownerUserId])
@@ -65,19 +91,35 @@ model Product {
   kind        ProductKind @default(HANG)
   baseUnit    String // đơn vị gốc (thường md); sổ kho & FIFO luôn tính theo đơn vị này
   minStock    Decimal     @default(0) @db.Decimal(18, 3)
+  isCoil      Boolean     @default(false) // tôn cuộn — bật để hiện ở màn Tra cứu cuộn (mã 30). TODO: confirm với khách
   isActive    Boolean     @default(true)
   recomputing Boolean     @default(false) // engine đang tính lại chuỗi nền → chặn xuất mã này
   note        String?
+  imageUrl    String? // ảnh minh hoạ (https hoặc /uploads/…), hiện ở form bán hàng
+  groupId     Int? // nhóm hàng (tuỳ chọn)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  units        ProductUnit[]
-  openingStock OpeningStock[]
-  layers       CostLayer[]
-  ledger       StockLedger[]
+  group               ProductGroup? @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  units               ProductUnit[]
+  openingStock        OpeningStock[]
+  layers              CostLayer[]
+  ledger              StockLedger[]
+  purchaseLines       PurchaseLine[]
+  adjustmentLines     StockAdjustmentLine[]
+  productionOrders    ProductionOrder[]
+  productionMaterials ProductionMaterial[]
+  stocktakeLines      StocktakeLine[]
+  boms                Bom[]
+  bomLines            BomLine[]
+  saleLines           SaleOrderLine[]
+  saleIssues          SaleLineIssue[]
+  quoteLines          QuoteLine[]
+  returnLines         GoodsReturnLine[]
 
   @@index([searchText])
   @@index([kind])
+  @@index([groupId])
   @@map("products")
 }
 
@@ -85,7 +127,7 @@ model ProductUnit {
   id        Int     @id @default(autoincrement())
   productId Int
   unit      String
-  factor    Decimal @db.Decimal(18, 6) // 1 unit = factor × baseUnit (mặc định; sửa được theo từng lần nhập)
+  factor    Decimal @db.Decimal(18, 6) // D-12: SỐ ĐƠN VỊ NHẬP TRÊN 1 ĐƠN VỊ GỐC (kg/md). qtyBase = qty ÷ factor. Sửa được theo từng lần nhập
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -94,8 +136,11 @@ model ProductUnit {
 }
 
 model Warehouse {
-  id   Int    @id @default(autoincrement())
-  name String @unique
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  saleOrders SaleOrder[]
 
   @@map("warehouses")
 }
@@ -109,6 +154,64 @@ model CashAccount {
 
   openingCash OpeningCash[]
   ledger      CashLedger[]
+  receipts    Receipt[]
+  payments    Payment[]
 
   @@map("cash_accounts")
+}
+
+// Danh mục nhỏ (Catalog Settings). Cùng dạng: tên + bật/tắt. isActive=false → ẩn khỏi ô chọn, dữ liệu cũ giữ nguyên.
+model Vehicle {
+  id       Int     @id @default(autoincrement())
+  plate    String  @unique
+  isActive Boolean @default(true)
+
+  trips Trip[]
+
+  @@map("vehicles")
+}
+
+model Driver {
+  id          Int     @id @default(autoincrement())
+  name        String
+  isAssistant Boolean @default(false)
+  isActive    Boolean @default(true)
+
+  driverTrips    Trip[] @relation("TripDriver")
+  assistantTrips Trip[] @relation("TripAssistant")
+
+  @@map("drivers")
+}
+
+model Route {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  trips Trip[]
+
+  @@map("routes")
+}
+
+model ExpenseType {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  expenses OperatingExpense[]
+
+  @@map("expense_types")
+}
+
+// Kiểu gia công (tôn xốp, 1 lớp, 6 sóng, 11 sóng — mục 13). Công thức NVL nằm ở BOM (plan 03c).
+model ProcessingType {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  note     String?
+  isActive Boolean @default(true)
+
+  boms      Bom[]
+  saleLines SaleOrderLine[]
+
+  @@map("processing_types")
 }

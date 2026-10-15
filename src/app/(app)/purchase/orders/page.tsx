@@ -1,0 +1,13 @@
+import { Plus } from "lucide-react";
+import Link from "next/link";
+import { PurchaseTable } from "@/components/purchase/PurchaseTable";
+import { EmptyState, ExportButton, ListPageLayout, MultiSelectFilter, PaginationFooter, SearchBox, StatCard } from "@/components/ui";
+import { prisma } from "@/lib/prisma";
+import { buildExportHref, buildListHref, parseListParams } from "@/lib/query-params";
+import { requireActor } from "@/server/auth/session";
+import { listPurchases, PURCHASE_FILTER_KEYS } from "@/server/purchase/queries";
+const BASE = "/purchase/orders";
+export default async function PurchasesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const actor = await requireActor("purchase.view"), params = parseListParams(await searchParams, PURCHASE_FILTER_KEYS), result = await listPurchases(prisma, actor, params), status = params.filters.status?.[0], href = (p: Parameters<typeof buildListHref>[2]) => buildListHref(BASE, params, p), canCreate = actor.perms.has("purchase.create") && actor.perms.has("purchase_price.view");
+  return <ListPageLayout title="Danh sách phiếu nhập" actions={<><ExportButton href={buildExportHref("/api/purchases/export", params)} />{canCreate && <Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} />Lập phiếu nhập</Link>}</>} stats={<><StatCard label="Tất cả" value={result.stats.all} href={href({ filters: { status: [] } })} active={!status} /><StatCard label="Hiệu lực" value={result.stats.active} tone="success" href={href({ filters: { status: ["active"] } })} active={status === "active"} /><StatCard label="Đã hủy" value={result.stats.cancelled} href={href({ filters: { status: ["cancelled"] } })} active={status === "cancelled"} /></>} filters={<div className="flex flex-wrap gap-2"><SearchBox basePath={BASE} params={params} placeholder="Tìm mã phiếu, nhà cung cấp…" /><MultiSelectFilter label="Trạng thái" paramKey="status" basePath={BASE} params={params} options={[{ value: "active", label: "Hiệu lực" }, { value: "cancelled", label: "Đã hủy" }]} /></div>} footer={<PaginationFooter total={result.total} page={params.page} pageSize={params.pageSize} buildHref={(p) => href(p)} />}>{result.total ? <PurchaseTable rows={result.rows} canEdit={actor.perms.has("purchase.edit") && actor.perms.has("purchase_price.view")} params={params} /> : <EmptyState kind="empty" title="Chưa có phiếu nhập" action={canCreate ? <Link href={`${BASE}/new`} className="text-sm font-medium text-accent">Lập phiếu nhập đầu tiên</Link> : undefined} />}</ListPageLayout>;
+}

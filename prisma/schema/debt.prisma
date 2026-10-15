@@ -1,0 +1,72 @@
+enum DebtAdjustReason {
+  HANG_LOI
+  BEP_MOP
+  CHIET_KHAU
+  KHAC
+
+  @@map("debt_adjust_reason")
+}
+
+enum DebtTransferKind {
+  TRANSFER
+  MERGE
+
+  @@map("debt_transfer_kind")
+}
+
+/// Điều chỉnh công nợ (mã 64): hàng lỗi/bẹp móp, trừ nợ bằng chiết khấu tích lũy, khác. `amount` CÓ DẤU theo số dư:
+/// dương = tăng số dư (debit), âm = giảm số dư (credit). Hủy = gỡ dòng sổ công nợ (chiết khấu đảo bằng dòng điều chỉnh).
+model DebtAdjustment {
+  id           Int              @id @default(autoincrement())
+  periodId     Int
+  code         String           @unique
+  partnerId    Int
+  reason       DebtAdjustReason
+  amount       Decimal          @db.Decimal(18, 2)
+  at           DateTime
+  note         String
+  isCancelled  Boolean          @default(false)
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime         @default(now())
+
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, at])
+  @@index([partnerId])
+  @@map("debt_adjustments")
+}
+
+/// Gộp / chuyển công nợ (mã 65): chuyển `amount` (dương = số dư của bên chuyển giảm, bên nhận tăng) giữa hai đối tác.
+/// MERGE: chuyển TOÀN BỘ số dư + số dư chiết khấu tích lũy rồi đánh dấu bên chuyển `mergedIntoId` = bên nhận.
+model DebtTransfer {
+  id            Int              @id @default(autoincrement())
+  periodId      Int
+  code          String           @unique
+  kind          DebtTransferKind
+  fromPartnerId Int
+  toPartnerId   Int
+  amount        Decimal          @db.Decimal(18, 2)
+  /// Số dư chiết khấu tích lũy chuyển kèm (chỉ MERGE).
+  discountMoved Decimal          @default(0) @db.Decimal(18, 2)
+  at            DateTime
+  note          String?
+  isCancelled   Boolean          @default(false)
+  cancelledAt   DateTime?
+  cancelledBy   Int?
+  cancelReason  String?
+  createdBy     Int
+  createdAt     DateTime         @default(now())
+
+  period Period  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  from   Partner @relation("TransferFrom", fields: [fromPartnerId], references: [id], onDelete: Restrict)
+  to     Partner @relation("TransferTo", fields: [toPartnerId], references: [id], onDelete: Restrict)
+
+  @@index([periodId, at])
+  @@index([fromPartnerId])
+  @@index([toPartnerId])
+  @@map("debt_transfers")
+}

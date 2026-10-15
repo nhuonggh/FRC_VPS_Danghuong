@@ -9,6 +9,24 @@ const pageAuth = withAuth({
   pages: { signIn: "/login" },
 });
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Chống CSRF cho API ghi: request không phải GET/HEAD/OPTIONS mà Origin khác host của chính app → từ chối.
+ * Không có Origin (curl, server-to-server) thì chỉ chặn khi trình duyệt khai `Sec-Fetch-Site: cross-site`.
+ * Host lấy từ header `host` (Caddy giữ nguyên Host của client khi reverse_proxy).
+ */
+export function isCrossSiteWrite(req: NextRequest): boolean {
+  if (SAFE_METHODS.has(req.method)) return false;
+  const origin = req.headers.get("origin");
+  if (!origin) return req.headers.get("sec-fetch-site") === "cross-site";
+  try {
+    return new URL(origin).host !== req.headers.get("host");
+  } catch {
+    return true; // Origin "null" hoặc hỏng
+  }
+}
+
 const isApiPath = (pathname: string) => pathname === "/api" || pathname.startsWith("/api/");
 
 /**
@@ -19,6 +37,9 @@ const isApiPath = (pathname: string) => pathname === "/api" || pathname.startsWi
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   if (!isApiPath(req.nextUrl.pathname)) return pageAuth(req as NextRequestWithAuth, event);
 
+  if (isCrossSiteWrite(req)) {
+    return NextResponse.json({ error: "Yêu cầu bị từ chối (nguồn gửi không hợp lệ)." }, { status: 403 });
+  }
   const secret = process.env.AUTH_SECRET;
   if (!secret) {
     console.error("[middleware] Thiếu AUTH_SECRET — từ chối mọi API (fail closed).");

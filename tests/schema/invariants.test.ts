@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  BOM_REFERENCE_MODELS,
   TRANSACTIONAL_MODELS,
   badDecimalFields,
   bannedBalanceFields,
@@ -13,6 +14,12 @@ import {
 describe("bất biến schema (DMMF thật)", () => {
   it.each(TRANSACTIONAL_MODELS)("%s có periodId, createdBy, createdAt", (name) => {
     expect(missingVoucherFields(findModel(models, name))).toEqual([]);
+  });
+
+  it.each(BOM_REFERENCE_MODELS)("%s (master/version) có createdBy, createdAt, và KHÔNG có periodId", (name) => {
+    const names = findModel(models, name).fields.map((f) => f.name);
+    expect(names).toEqual(expect.arrayContaining(["createdBy", "createdAt"]));
+    expect(names).not.toContain("periodId");
   });
 
   it("KHÔNG có cột số dư chạy ở bất kỳ bảng nào (spec 1.3)", () => {

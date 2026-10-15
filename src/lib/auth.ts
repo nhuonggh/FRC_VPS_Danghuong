@@ -5,6 +5,8 @@ import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import { sameOriginRedirect } from "@/lib/safe-callback";
 import { verifyCredentials } from "@/server/auth/credentials";
+import { normalizeUsername } from "@/server/auth/normalize";
+import { clientIp, loginLimiter } from "@/server/auth/rate-limit";
 import {
   GOOGLE_DENY_REDIRECT, GOOGLE_NOT_ALLOWED, decideGoogleSignIn, isGoogleConfigured, prismaEmailLookup, toAuthMethod,
 } from "@/server/auth/google";
@@ -25,9 +27,17 @@ export function buildAuthOptions(env: Env = process.env, db: PrismaClient = pris
     CredentialsProvider({
       name: "credentials",
       credentials: { username: {}, password: {} },
-      async authorize(creds) {
+      async authorize(creds, req) {
+        const username = normalizeUsername(creds?.username ?? "");
+        const ip = clientIp(req?.headers);
+        // Chặn TRƯỚC khi băm bcrypt: kẻ dò không tốn được CPU của server
+        if (loginLimiter.isBlocked(ip, username)) throw new Error("RATE_LIMITED");
         const r = await verifyCredentials(db, creds?.username ?? "", creds?.password ?? "");
-        if (r.ok) return { id: String(r.user.id), name: r.user.fullName };
+        if (r.ok) {
+          loginLimiter.recordSuccess(ip, username);
+          return { id: String(r.user.id), name: r.user.fullName };
+        }
+        loginLimiter.recordFailure(ip, username);
         if (r.reason === "LOCKED") throw new Error("LOCKED"); // login page đọc ?error=LOCKED
         return null;
       },

@@ -51,22 +51,22 @@ model StockLedger {
 
 // Lớp lô FIFO. Thứ tự tiêu thụ = (at, id) — D-7 (không có cột seq).
 model CostLayer {
-  id            Int          @id @default(autoincrement())
+  id            Int           @id @default(autoincrement())
   periodId      Int
   productId     Int
   sourceDocType StockDocType
   sourceDocId   Int
   sourceLineId  Int
-  ledgerId      Int          @unique // dòng nhập tương ứng trong stock_ledger
-  qtyIn         Decimal      @db.Decimal(18, 3)
-  qtyRemaining  Decimal      @db.Decimal(18, 3)
-  unitCost      Decimal      @db.Decimal(18, 4)
+  ledgerId      Int           @unique // dòng nhập tương ứng trong stock_ledger
+  qtyIn         Decimal       @db.Decimal(18, 3)
+  qtyRemaining  Decimal       @db.Decimal(18, 3)
+  unitCost      Decimal       @db.Decimal(18, 4)
   at            DateTime
   // Lớp có giá vốn PHỤ THUỘC dòng khác (trả hàng = giá vốn dòng bán gốc; thành phẩm SX = tổng vốn NVL)
   costRefType   StockDocType?
   costRefId     Int?
-  costRefQty    Decimal?     @db.Decimal(18, 3)
-  createdAt     DateTime     @default(now())
+  costRefQty    Decimal?      @db.Decimal(18, 3)
+  createdAt     DateTime      @default(now())
 
   period       Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)
   product      Product           @relation(fields: [productId], references: [id], onDelete: Restrict)

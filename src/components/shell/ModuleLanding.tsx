@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, Star } from "lucide-react";
 import { useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { normalizeSearch } from "@/lib/search";
+import { isPinned, togglePin } from "@/lib/workspace";
+import { useWorkspace } from "@/lib/workspace-store";
+import { GuardedLink } from "./GuardedLink";
 import { Icon } from "./icons";
 
 export function ModuleLanding({ module }: { module: NavModule }) {
   const [q, setQ] = useState("");
+  const prefs = useWorkspace((s) => s.prefs);
+  const update = useWorkspace((s) => s.update);
   const needle = normalizeSearch(q);
   return (
     <div>
@@ -38,15 +43,26 @@ export function ModuleLanding({ module }: { module: NavModule }) {
               {c.label}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {fns.map((f) => (
-                <Link key={f.key} href={f.path} className="flex min-h-28 flex-col gap-2 rounded-md border border-border bg-surface p-5 transition-shadow hover:shadow-md">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-md bg-accent-soft text-accent">
-                    <Icon name={f.icon} size={22} />
-                  </span>
-                  <span className="text-base font-semibold">{f.label}</span>
-                  {f.desc && <span className="line-clamp-2 text-sm text-fg-secondary">{f.desc}</span>}
-                </Link>
-              ))}
+              {fns.map((f) => {
+                const pinned = isPinned(prefs, module.key, f.key);
+                return (
+                  // Hai hành động độc lập: bấm card = mở chức năng (tab tạm nếu chưa ghim); bấm ngôi sao = ghim/bỏ ghim.
+                  <div key={f.key} className="relative rounded-md border border-border bg-surface transition-shadow hover:shadow-md">
+                    <GuardedLink href={f.path} className="flex min-h-28 flex-col gap-2 rounded-md p-5 pr-12">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-md bg-accent-soft text-accent">
+                        <Icon name={f.icon} size={22} />
+                      </span>
+                      <span className="text-base font-semibold">{f.label}</span>
+                      {f.desc && <span className="line-clamp-2 text-sm text-fg-secondary">{f.desc}</span>}
+                    </GuardedLink>
+                    <button type="button" aria-pressed={pinned} aria-label={pinned ? `Bỏ yêu thích ${f.label}` : `Thêm ${f.label} vào yêu thích`} title={pinned ? "Bỏ yêu thích" : "Thêm vào yêu thích"}
+                      onClick={() => update((p) => togglePin(p, module.key, f.key))}
+                      className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-sm text-fg-muted hover:bg-hover hover:text-warning focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent md:size-8">
+                      <Star size={18} className={pinned ? "fill-current text-warning" : ""} aria-hidden />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </section>
         );

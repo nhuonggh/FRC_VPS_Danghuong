@@ -74,7 +74,7 @@ Các đầu vào spec ngầm dự tính nhưng không task nào tự kiểm — 
 - Consumes: bảng `partner_groups`, `warehouses`, `products`, `product_units`, `cash_accounts` của GĐ0.
 - Produces: model Prisma `Vehicle`, `Driver`, `Route`, `ExpenseType`, `ProcessingType`; cột `isActive` trên `PartnerGroup`/`Warehouse`; `Product.isCoil`; factory `makeWarehouse`, `makeProcessingType`, `makeVehicle`.
 
-- [ ] **Step 1: Viết test trước (đỏ)** — `tests/db/catalog-foundation.test.ts`
+- [x] **Step 1: Viết test trước (đỏ)** — `tests/db/catalog-foundation.test.ts`
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
@@ -117,12 +117,12 @@ describe("danh mục nền — cột & ràng buộc mới", () => {
 });
 ```
 
-- [ ] **Step 2: Chạy để thấy đỏ**
+- [x] **Step 2: Chạy để thấy đỏ**
 
 Run: `docker compose up -d pgtest` rồi `rtk proxy npx vitest run tests/db/catalog-foundation.test.ts`
 Expected: FAIL — `prisma.vehicle` không tồn tại / cột `isActive`, `isCoil` chưa có.
 
-- [ ] **Step 3: Sửa `prisma/schema/master.prisma`**
+- [x] **Step 3: Sửa `prisma/schema/master.prisma`**
 
 Thêm `isActive` vào `PartnerGroup` và `Warehouse`, `isCoil` vào `Product`, sửa comment `ProductUnit`, thêm 5 model. Các phần khác của file giữ nguyên.
 
@@ -206,7 +206,7 @@ model ProcessingType {
 }
 ```
 
-- [ ] **Step 4: Sinh migration rồi bổ sung CHECK**
+- [x] **Step 4: Sinh migration rồi bổ sung CHECK**
 
 Run: `rtk proxy npx prisma migrate dev --name catalog_foundation --create-only` (DB dev từ `.env`).
 Mở `prisma/migrations/<timestamp>_catalog_foundation/migration.sql`, kiểm có `ALTER TABLE ... ADD COLUMN "isActive"`, `"isCoil"`, 5 `CREATE TABLE`, rồi **thêm cuối file**:
@@ -223,7 +223,7 @@ ALTER TABLE "partners" ADD CONSTRAINT "partners_kind_chk" CHECK ("isCustomer" OR
 Run: `rtk proxy npx prisma migrate dev` (áp dụng lên DB dev), rồi `rtk proxy npx prisma generate`.
 Expected: "Your database is now in sync".
 
-- [ ] **Step 5: Thêm factory** — cuối `tests/helpers/factories.ts`
+- [x] **Step 5: Thêm factory** — cuối `tests/helpers/factories.ts`
 
 ```ts
 export async function makeWarehouse(name = `Kho ${next()}`) {
@@ -239,12 +239,12 @@ export async function makeVehicle(plate = `51C-${next()}`) {
 }
 ```
 
-- [ ] **Step 6: Chạy lại**
+- [x] **Step 6: Chạy lại**
 
 Run: `rtk proxy npx vitest run tests/db/catalog-foundation.test.ts tests/schema/invariants.test.ts`
 Expected: PASS (invariants vẫn xanh: Decimal đúng độ chính xác chuẩn, không có cột số dư).
 
-- [ ] **Step 7: Sinh lại `db/db_schema.sql` và commit**
+- [x] **Step 7: Sinh lại `db/db_schema.sql` và commit**
 
 ```bash
 rtk proxy npm run db:schema
@@ -273,7 +273,7 @@ git commit -m "feat(db): danh mục nền (xe, lái xe, tuyến, loại chi, ki�
   - `countAllCatalogs(db): Promise<Record<CatalogKey, number>>`, `getCatalogItem(db, key, id): Promise<CatalogRow>`, `getLinkedRecords(db, key, id): Promise<LinkedRecord[] | null>`
   - `listActiveOptions(db, key): Promise<{ value: number; label: string }[]>` — cho ô chọn ở module khác (chỉ mục đang bật).
 
-- [ ] **Step 1: Test cấu hình (đỏ)** — `tests/config/catalog-sections.test.ts`
+- [x] **Step 1: Test cấu hình (đỏ)** — `tests/config/catalog-sections.test.ts`
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -317,9 +317,9 @@ describe("CATALOG_SECTIONS", () => {
 });
 ```
 
-- [ ] **Step 2: Chạy → đỏ** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`; module chưa có).
+- [x] **Step 2: Chạy → đỏ** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`; module chưa có).
 
-- [ ] **Step 3: Viết `src/config/catalog-sections.ts`**
+- [x] **Step 3: Viết `src/config/catalog-sections.ts`**
 
 ```ts
 import { z } from "zod";
@@ -406,9 +406,9 @@ export function catalogSchema(section: CatalogSection) {
 }
 ```
 
-- [ ] **Step 4: Chạy → xanh** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`).
+- [x] **Step 4: Chạy → xanh** (`rtk proxy npx vitest run tests/config/catalog-sections.test.ts`).
 
-- [ ] **Step 5: Test service (đỏ)** — `tests/catalog/service.test.ts`
+- [x] **Step 5: Test service (đỏ)** — `tests/catalog/service.test.ts`
 
 ```ts
 import type { Prisma } from "@prisma/client";
@@ -537,9 +537,9 @@ describe("deleteCatalogItem", () => {
 });
 ```
 
-- [ ] **Step 6: Chạy → đỏ** (`rtk proxy npx vitest run tests/catalog/service.test.ts`; module chưa có).
+- [x] **Step 6: Chạy → đỏ** (`rtk proxy npx vitest run tests/catalog/service.test.ts`; module chưa có).
 
-- [ ] **Step 7: Viết `src/server/catalog/adapters.ts`**
+- [x] **Step 7: Viết `src/server/catalog/adapters.ts`**
 
 ```ts
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -576,7 +576,7 @@ const DELEGATES: Record<CatalogKey, (db: Db) => unknown> = {
 export const delegate = (db: Db, key: CatalogKey): Delegate => DELEGATES[key](db) as Delegate;
 ```
 
-- [ ] **Step 8: Viết `src/server/catalog/service.ts`**
+- [x] **Step 8: Viết `src/server/catalog/service.ts`**
 
 ```ts
 import { Prisma } from "@prisma/client";
@@ -694,9 +694,9 @@ export async function deleteCatalogItem(db: Db, actor: Actor, key: string, id: n
 
 Ghi chú thực thi: `mapError` trả `never` nên `row`/`after` được TypeScript coi là đã gán sau `try/catch`. Nếu trình biên dịch phàn nàn "used before assigned", khai báo `let row!: CatalogRow;`.
 
-- [ ] **Step 9: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog/service.test.ts`).
+- [x] **Step 9: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog/service.test.ts`).
 
-- [ ] **Step 10: Test truy vấn (đỏ)** — `tests/catalog/queries.test.ts`
+- [x] **Step 10: Test truy vấn (đỏ)** — `tests/catalog/queries.test.ts`
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
@@ -773,7 +773,7 @@ describe("getLinkedRecords", () => {
 });
 ```
 
-- [ ] **Step 11: Chạy → đỏ**, rồi viết `src/server/catalog/queries.ts`
+- [x] **Step 11: Chạy → đỏ**, rồi viết `src/server/catalog/queries.ts`
 
 ```ts
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -861,9 +861,9 @@ export async function getLinkedRecords(db: Db, key: string, id: number): Promise
 }
 ```
 
-- [ ] **Step 12: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog tests/config/catalog-sections.test.ts`), lint + typecheck.
+- [x] **Step 12: Chạy → xanh** (`rtk proxy npx vitest run tests/catalog tests/config/catalog-sections.test.ts`), lint + typecheck.
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 rtk proxy npm run lint && rtk proxy npm run typecheck
@@ -874,6 +874,10 @@ git commit -m "feat(catalog): Catalog Settings backend — 8 mục danh mục, a
 ---
 
 ### Task 3: Catalog Settings — API, khung bảng kebab, giao diện
+
+**Tiến độ thực hiện 27/09/2026:** Đã code API CRUD/toggle/export, menu kebab, mini-sidebar và các route danh sách/tạo mới/chi tiết cho 8 danh mục; đã bỏ cờ `planned`. Chờ CI deploy xác nhận trước khi đóng task.
+
+**Điều chỉnh UX 27/09/2026:** Vùng nội dung của Catalog Settings phải `flex-1` để dùng hết phần trống sau mini-sidebar; KPI là lưới 3 cột trên desktop; search rộng tối đa vừa phải; khung bảng cao hết vùng làm việc để pagination bám đáy và cân hai biên. Mobile giữ thanh danh mục cuộn ngang và card list của `DataTable`.
 
 **Mã:** 8, 13–18 (màn hình). **Files:**
 - Modify: `src/components/ui/DataTable.tsx` (`actionsVariant`, icon `power`), `tests/ui/data-table.test.tsx`
@@ -1686,6 +1690,8 @@ git commit -m "feat(catalog): màn Cài đặt danh mục — mini-sidebar, bả
 
 ---
 ### Task 4: Khung Import Excel dùng lại được (đọc số Việt Nam, xem trước, ghi, file loại, mẫu)
+
+**Tiến độ thực hiện 27/09/2026:** Đã triển khai và deploy CI xanh khung import dùng chung; commit `113364b`. Các task 5, 7 và dữ liệu đầu kỳ phải dùng khung này, không tự đọc Excel riêng.
 
 **Mã:** nền cho 9, 10, 11 và D1–D2 (plan 05-D8 dùng lại). **Files:**
 - Create: `src/lib/parse-number.ts`
@@ -2683,6 +2689,8 @@ git commit -m "feat(import): khung Import Excel — số kiểu Việt Nam, xem 
 
 ### Task 5: Khách hàng & NCC — backend (mã tự sinh, tìm không dấu, phạm vi "khách của mình")
 
+> **Tiến độ 27/09/2026:** Đã triển khai backend, kiểm thử trọng yếu và deploy CI xanh; commit `ec9fc92`, bản sửa scope người phụ trách `4958808`.
+
 **Mã:** 9, 10. **Files:**
 - Create: `src/server/partners/{schemas,codes,service,queries,import-spec}.ts`
 - Modify: `src/server/audit/*` — không cần; `src/lib/permissions/catalog.ts` — không thêm quyền mới
@@ -3487,6 +3495,10 @@ git commit -m "feat(partners): KH/NCC backend — mã tự sinh, tìm không d�
 ---
 ### Task 6: Khách hàng & NCC — API và giao diện (danh sách, tạo mới, chi tiết, nhập/xuất)
 
+> Tiến độ 27/09: hoàn thành, commit `51640a3`, CI/deploy xanh theo user xác nhận.
+
+> **Tiến độ 27/09/2026:** Đã triển khai API và 6 route giao diện; danh sách responsive, tạo mới idempotent, chi tiết sửa theo section, import/export và phân quyền scope. Kiểm thử `tests/partners` + `tests/config`, typecheck và lint xanh; production build đã compile thành công. Chờ CI/deploy để đóng task.
+
 **Mã:** 9, 10. **Files:**
 - Create: `src/components/ui/Field.tsx`, `src/components/ui/EditableSection.tsx` (+ export ở `src/components/ui/index.ts`)
 - Create: `src/server/partners/kind-param.ts`
@@ -3500,7 +3512,7 @@ git commit -m "feat(partners): KH/NCC backend — mã tự sinh, tìm không d�
 - Consumes: Task 5 (service/queries/import-spec), Task 4 (`ImportExportMenu`, `handleImportPost`, `handleTemplateGet`), Task 2 (`listActiveOptions`).
 - Produces: API `POST /api/partners` (Idempotency-Key) → `{ id, code }`; `PATCH /api/partners/:id/section-update` body `{ section: "profile" | "credit" | "owner" | "status", ... }`; `GET /api/partner-lists/:kind/search?q=` → `ComboOption[]`; `GET …/export`; `POST …/import?mode=`; `GET …/import-template` (`:kind` = `customers` | `suppliers`). Component `Field`, `inputClass`, `EditableSection` (dùng lại ở mọi form/trang chi tiết sau).
 
-- [ ] **Step 1: Bổ sung phần thiếu của Task 5 — người tạo phải thấy được bản ghi của mình.** Nếu người tạo có `partner.manage` nhưng thiếu `partner.view_all` mà để trống "người phụ trách" thì khách vừa tạo nằm ngoài phạm vi của chính họ (biến mất khỏi danh sách). Quy tắc: thiếu `view_all` ⇒ mặc định người phụ trách = chính họ.
+- [x] **Step 1: Bổ sung phần thiếu của Task 5 — người tạo phải thấy được bản ghi của mình.** Đã thực hiện trong commit Task 5: nếu người tạo có `partner.manage` nhưng thiếu `partner.view_all` và để trống "người phụ trách" thì mặc định gán chính họ; người có `partner.view_all` giữ `null` để tạo bản ghi chưa phân công. Có test bảo vệ cả hai nhánh.
 
 Thêm test vào `tests/partners/service.test.ts` (trong `describe("createPartner")`):
 
@@ -4456,6 +4468,8 @@ git commit -m "feat(partners): màn Khách hàng & Nhà cung cấp — danh sác
 
 ### Task 7: Sản phẩm — backend (đơn vị & quy đổi, định mức tồn, tìm không dấu, import D2)
 
+> Tiến độ 27/09: hoàn thành code, CI/deploy xanh theo user xác nhận. Phạm vi: `products/{units,schemas,service,queries,import-spec}`, validation/import smoke test, typecheck và lint.
+
 **Mã:** 11, 12, 25 (cấu hình `minStock`). **Files:**
 - Create: `src/server/products/{schemas,units,service,queries,import-spec}.ts`
 - Test: `tests/products/{units,schemas,service,queries,import}.test.ts`
@@ -5219,6 +5233,8 @@ git commit -m "feat(products): SP backend — đơn vị & quy đổi (D-12), đ
 ---
 
 ### Task 8: Sản phẩm — API & giao diện, đóng plan 03a
+
+> Tiến độ 27/09: hoàn thành code, chờ CI/deploy. Đã mở API và menu Sản phẩm; 3 file / 8 test `tests/products` xanh, typecheck/lint xanh; production build đã compile thành công.
 
 **Mã:** 11, 12, 25 (cấu hình). **Files:**
 - Create: `src/app/api/products/route.ts`, `src/app/api/products/[id]/section-update/route.ts`, `src/app/api/products/{search,export,import,import-template}/route.ts`
