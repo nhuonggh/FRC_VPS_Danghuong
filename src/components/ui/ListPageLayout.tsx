@@ -1,9 +1,10 @@
 import clsx from "clsx";
 
 export function ListPageLayout({
-  title, actions, stats, statsClassName, filters, footer, children,
+  title, description, actions, stats, statsClassName, filters, footer, children,
 }: {
   title: string;
+  description?: string;
   /** Thêm mới / Import / Export — luôn hiển thị cả khi danh sách rỗng. */
   actions?: React.ReactNode;
   stats?: React.ReactNode;
@@ -16,7 +17,7 @@ export function ListPageLayout({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        <div><h1 className="text-xl font-semibold">{title}</h1>{description && <p className="mt-1 text-sm text-fg-secondary">{description}</p>}</div>
         <div className="flex flex-wrap items-center gap-2">{actions}</div>
       </div>
       {stats && <div className={clsx("flex flex-wrap gap-3", statsClassName)}>{stats}</div>}

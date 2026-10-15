@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { CancelDebtButton } from "@/components/debt/CancelDebtButton";
-import { Badge, EmptyState, ListPageLayout, PaginationFooter, SearchBox } from "@/components/ui";
+import { Badge, EmptyState, ListPageLayout, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
@@ -20,7 +20,7 @@ export default async function DebtAdjustmentsPage({ searchParams }: { searchPara
     <ListPageLayout
       title="Điều chỉnh công nợ"
       actions={<Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Lập điều chỉnh</Link>}
-      filters={<SearchBox basePath={BASE} params={params} placeholder="Tìm mã phiếu, đối tác…" />}
+      filters={<div className="flex flex-wrap items-center gap-2"><SearchBox basePath={BASE} params={params} placeholder="Tìm mã phiếu, đối tác…" /><QuickTimeFilter basePath={BASE} params={params} /></div>}
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => buildListHref(BASE, params, page)} />}
     >
       {total === 0 ? <EmptyState kind={params.q ? "no-result" : "empty"} title={params.q ? "Không tìm thấy phiếu phù hợp" : "Chưa có điều chỉnh công nợ"} /> : (

@@ -1,12 +1,15 @@
 import { DashboardView } from "@/components/home/dashboard/DashboardView";
 import { BankReceiptsOverview } from "@/components/home/dashboard/BankReceiptsOverview";
 import { RefreshDashboard } from "@/components/home/dashboard/RefreshDashboard";
+import { ReportExportButton } from "@/components/home/dashboard/ReportExportButton";
 import { formatDateTime } from "@/lib/format";
 import { resolveAccountingSection } from "@/lib/accounting-dashboard";
 import { AccountingTabs } from "@/components/home/dashboard/AccountingTabs";
-import { buildListHref } from "@/lib/query-params";
+import { buildExportHref, buildListHref } from "@/lib/query-params";
 import { HomeTabs } from "@/components/home/HomeTabs";
 import { HomeView } from "@/components/home/HomeView";
+import { DailyCheckView } from "@/components/home/DailyCheckView";
+import { DAILY_FILTER_KEYS, visibleDailyItems } from "@/server/home/daily-config";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
 import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
@@ -47,14 +50,22 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const visible = visibleDashTabs(actor);
   const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
   const tab = isDashTabKey(rawTab) && visible.some((t) => t.key === rawTab) ? rawTab : null;
-  const tabItems = [{ key: "functions", label: "Chức năng" }, ...visible.map((t) => ({ key: t.key, label: t.label }))];
+  const dailyVisible = visibleDailyItems(actor).length > 0;
+  const tabItems = [{ key: "functions", label: "Chức năng" }, ...(dailyVisible ? [{ key: "daily", label: "Kiểm tra hằng ngày" }] : []), ...visible.map((t) => ({ key: t.key, label: t.label }))];
+
+  if (rawTab === "daily" && dailyVisible) {
+    const params = parseListParams(sp, DAILY_FILTER_KEYS);
+    const itemKey = Array.isArray(sp.item) ? sp.item[0] : sp.item;
+    const effective = { ...params, filters: { ...params.filters, ...(itemKey ? { state: params.filters.state ?? ["active"], ...(itemKey === "loss" ? { type: params.filters.type ?? ["LOSS"] } : {}) } : {}) }, timePreset: params.timePreset ?? "today" as const };
+    return <div className="space-y-4"><HomeTabs tabs={tabItems} active="daily" /><DailyCheckView actor={actor} params={effective} itemKey={itemKey} now={now} /></div>;
+  }
 
   if (tab === null) {
     const specs = homeWidgets(nav, actor, now);
     const widgets = await Promise.all(specs.map(async (spec) => ({ spec, state: await loadWidget(prisma, spec) })));
     return (
       <div className="space-y-6">
-        {visible.length > 0 && <HomeTabs tabs={tabItems} active="functions" />}
+        {(visible.length > 0 || dailyVisible) && <HomeTabs tabs={tabItems} active="functions" />}
         <HomeView fullName={actor.fullName} now={now} modules={nav.filter((m) => m.type === "accordion")} widgets={widgets} />
       </div>
     );
@@ -79,7 +90,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <h1 className="text-xl font-semibold">{t.title}</h1>
           <p className="text-sm text-fg-secondary">{t.desc}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">{!def.snapshot && !accountingSection?.snapshot && <QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} now={now} />}{tab === "accounting" && <RefreshDashboard />}</div>
+        <div className="flex flex-wrap items-center gap-2">{!def.snapshot && !accountingSection?.snapshot && <QuickTimeFilter basePath={`/?tab=${tab}`} params={effective} allowAll={false} now={now} />}<RefreshDashboard /><ReportExportButton href={buildExportHref(`/api/home/dashboard/export?tab=${tab}`, effective)} /></div>
       </div>
       {accountingSection && <><AccountingTabs perms={actor.perms} active={accountingSection.key} params={effective} /><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-fg-secondary">{accountingSection.description}</p><span className="text-xs text-fg-secondary">Cập nhật: {formatDateTime(now)}</span></div></>}
       {data ? (

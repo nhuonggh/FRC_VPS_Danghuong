@@ -17,7 +17,7 @@ const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_
 export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) =>
   round2(l.qty.times(l.salePrice)).minus(l.discountNow);
 
-export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator"] as const;
+export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;
 const PAYMENT_VALUES = ["UNPAID", "DEPOSITED", "PARTIAL", "PAID", "DEBT", "PROMISED", "OVERPAID"] as const;
 
@@ -77,6 +77,15 @@ export function orderWhere(actor: Actor, params: ListParams, now: Date): Prisma.
   if (pay.length) and.push({ paymentStatus: { in: pay } });
   const creators = (params.filters.creator ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
   if (creators.length) and.push({ createdBy: { in: creators } });
+  const code = params.filters.code?.[0]?.trim().slice(0, 200);
+  if (code) and.push({ code: { contains: escapeLike(code.toUpperCase()) } });
+  const customer = params.filters.customer?.[0]?.trim().slice(0, 200);
+  if (customer) and.push({ partner: { AND: normalizeSearch(customer).split(" ").filter(Boolean).map((term) => ({ OR: [{ searchText: { contains: escapeLike(term) } }, { code: { contains: escapeLike(term.toUpperCase()) } }] })) } });
+  const groups = (params.filters.group ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (groups.length) and.push({ partner: { groupId: { in: groups } } });
+  // ASSUMPTION: stock confirmation follows isDraft; a confirmed order may still have provisional FIFO issues.
+  if (params.filters.stock?.[0] === "posted") and.push({ isDraft: false });
+  if (params.filters.stock?.[0] === "draft") and.push({ isDraft: true });
   if (params.filters.pending?.[0] === "1") and.push({ lines: { some: { isProvisional: true } } });
   if (params.filters.late?.[0] === "1") and.push(lateWhere(now));
   const range = listTimeRange(params, now);
@@ -104,7 +113,7 @@ async function oldDebtBefore(db: Db, rows: { id: number; partnerId: number; peri
 export async function listOrders(db: Db, actor: Actor, params: ListParams, now: Date = new Date()) {
   const where = orderWhere(actor, params, now);
   const scope: Prisma.SaleOrderWhereInput = { isCancelled: false, partner: partnerScopeWhere(actor) };
-  const [rows, total, all, pending, late] = await Promise.all([
+  const [rows, total, all, pending, late, statuses] = await Promise.all([
     db.saleOrder.findMany({
       where, orderBy: sortToOrderBy(params.sort, ["orderDate", "code", "expectedDeliveryDate"], { orderDate: "desc" }),
       skip: (params.page - 1) * params.pageSize, take: params.pageSize,
@@ -114,6 +123,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
     db.saleOrder.count({ where: scope }),
     db.saleOrder.count({ where: { AND: [scope, { lines: { some: { isProvisional: true } } }] } }),
     db.saleOrder.count({ where: { AND: [scope, lateWhere(now)] } }),
+    db.saleOrder.groupBy({ by: ["deliveryStatus", "paymentStatus"], where: scope, _count: { _all: true } }),
   ]);
   const creatorNames = new Map((await db.user.findMany({ where: { id: { in: [...new Set(rows.map((o) => o.createdBy))] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
   const oldDebts = actor.perms.has("debt.view") ? await oldDebtBefore(db, rows) : null;
@@ -128,7 +138,10 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
     };
   });
-  return { rows: redactDeep(out, actor.perms), total, stats: { all, pending, late } };
+  const delivered = statuses.filter((r) => r.deliveryStatus === "DELIVERED").reduce((s, r) => s + r._count._all, 0);
+  const failed = statuses.filter((r) => r.deliveryStatus === "FAILED").reduce((s, r) => s + r._count._all, 0);
+  const unpaid = statuses.filter((r) => r.paymentStatus === "UNPAID").reduce((s, r) => s + r._count._all, 0);
+  return { rows: redactDeep(out, actor.perms), total, stats: { all, pending, late }, tabCounts: { all, pending, late, delivered, failed, unpaid } };
 }
 
 export interface OrderLineDTO {

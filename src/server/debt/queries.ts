@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
-import type { ListParams } from "@/lib/query-params";
+import { listTimeRange, type ListParams } from "@/lib/query-params";
 import { escapeLike, normalizeSearch } from "@/lib/search";
 import { DomainError } from "@/server/http/errors";
 import { getOpenPeriod } from "@/server/period/guard";
@@ -153,8 +153,10 @@ export interface AdjustmentRowDTO { id: number; code: string; at: Date; partnerI
 export interface TransferRowDTO { id: number; code: string; at: Date; kind: "TRANSFER" | "MERGE"; fromCode: string; fromName: string; toCode: string; toName: string; amount: string; discountMoved: string; note: string | null; isCancelled: boolean }
 
 export async function listAdjustments(db: Db, actor: Actor, params: ListParams) {
+  const range = listTimeRange(params);
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const where: Prisma.DebtAdjustmentWhereInput = {
+    ...(range ? { at: { gte: range.start, lt: range.end } } : {}),
     partner: partnerScopeWhere(actor),
     AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] })),
   };

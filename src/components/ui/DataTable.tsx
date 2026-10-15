@@ -53,6 +53,8 @@ interface Props<T> {
   buildSortHref?: (sort: string | undefined) => string;
   /** Ô chọn nhiều dòng (thao tác hàng loạt): bỏ trống = không có cột chọn. */
   selection?: { selected: ReadonlySet<string | number>; onChange: (next: Set<string | number>) => void };
+  /** Explicit fields for mobile cards when the first desktop columns are not the useful summary. */
+  mobileColumnKeys?: string[];
 }
 
 function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -69,7 +71,7 @@ function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
 /** Ô rỗng (null/undefined/false/"") → "—", không bao giờ để trống hay hiện 0 thay cho "chưa có". */
 const isEmptyNode = (n: React.ReactNode) => n === null || n === undefined || n === false || n === "";
 
-export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection }: Props<T>) {
+export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection, mobileColumnKeys }: Props<T>) {
   const router = useRouter();
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
@@ -217,7 +219,7 @@ export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowH
                 {rowHref ? <Link href={rowHref(row)}>{cell(primary, row)}</Link> : cell(primary, row)}
               </div>
               <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                {visible.filter((c) => c !== primary).slice(0, 4).map((c) => (
+                {(mobileColumnKeys ? mobileColumnKeys.flatMap((key) => visible.filter((c) => c.key === key && c !== primary)) : visible.filter((c) => c !== primary).slice(0, 4)).map((c) => (
                   <div key={c.key} className="min-w-0">
                     <dt className="text-fg-muted">{c.label}</dt>
                     <dd className={clsx("truncate", c.align === "right" && "tabular")}>{cell(c, row)}</dd>
