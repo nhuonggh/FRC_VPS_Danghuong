@@ -2164,3 +2164,104 @@ ALTER TABLE "partners" ADD COLUMN "bankAccount" TEXT;
 ALTER TABLE "partners" ADD COLUMN "representative" TEXT;
 ALTER TABLE "partners" ADD COLUMN "sortOrder" INTEGER;
 ALTER TABLE "partners" ADD COLUMN "isExpense" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261009100000_processing_type_ratio/migration.sql
+-- Kiểu gia công: tỷ lệ m²/md mặc định, tỷ lệ trừ kho, ĐVT thành cột thật (trước đây chỉ là chữ trong Ghi chú).
+ALTER TABLE "processing_types" ADD COLUMN "ratio" DECIMAL(18,4), ADD COLUMN "stockRatio" DECIMAL(18,4), ADD COLUMN "unit" TEXT;
+
+-- Chép số từ Ghi chú dạng "Tỷ lệ 1,08 · Trừ kho 1 · ĐVT m2" (số kiểu VN: phẩy thập phân). Dòng không đọc được giữ nguyên Ghi chú, cột để trống.
+UPDATE "processing_types" SET "ratio" = replace((regexp_match("note", 'Tỷ lệ ([0-9]+(?:,[0-9]+)?)'))[1], ',', '.')::numeric WHERE "note" ~ 'Tỷ lệ [0-9]+(,[0-9]+)?( |$|·|\()' ;
+UPDATE "processing_types" SET "stockRatio" = replace((regexp_match("note", 'Trừ kho ([0-9]+(?:,[0-9]+)?)'))[1], ',', '.')::numeric WHERE "note" ~ 'Trừ kho [0-9]+(,[0-9]+)?( |$|·)';
+UPDATE "processing_types" SET "unit" = (regexp_match("note", 'ĐVT ([^ ·]+)'))[1] WHERE "note" ~ 'ĐVT [^ ·]+';
+UPDATE "processing_types" SET "ratio" = NULL WHERE "ratio" <= 0 OR "ratio" > 1000000;
+UPDATE "processing_types" SET "stockRatio" = NULL WHERE "stockRatio" <= 0 OR "stockRatio" > 1000000;
+
+-- Bỏ phần đã chép khỏi Ghi chú (chỉ khi cột tương ứng đã có giá trị).
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*(—\s*)?Tỷ lệ [0-9]+(,[0-9]+)?( m2| m)?( \(theo sản phẩm đầu tiên dùng kiểu này\))?', ''), E' ·—'), '') WHERE "ratio" IS NOT NULL;
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*·?\s*Trừ kho [0-9]+(,[0-9]+)?', ''), E' ·—'), '') WHERE "stockRatio" IS NOT NULL;
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*·?\s*ĐVT [^ ·]+', ''), E' ·—'), '') WHERE "unit" IS NOT NULL;
+
+ALTER TABLE "processing_types" ADD CONSTRAINT "processing_types_ratio_positive" CHECK ("ratio" IS NULL OR "ratio" > 0), ADD CONSTRAINT "processing_types_stockRatio_positive" CHECK ("stockRatio" IS NULL OR "stockRatio" > 0);
+
+-- >>> prisma/migrations/20261010100000_product_processing_links/migration.sql
+-- Gắn kiểu gia công cho từng sản phẩm: một dòng (sản phẩm × kiểu) = sản phẩm có kiểu đó; ratio NULL = dùng tỷ lệ mặc định của kiểu.
+-- Dòng đang có (tỷ lệ đã khai báo) mặc nhiên là đã gắn.
+ALTER TABLE "product_processing_ratios" ALTER COLUMN "ratio" DROP NOT NULL;
+
+-- >>> prisma/migrations/20261011100000_product_prices_units/migration.sql
+-- Danh mục đơn vị tính (nạp sẵn từ đơn vị đang dùng) + giá/đơn vị/thông tin bổ sung của sản phẩm. Chỉ thêm bảng/cột nullable.
+CREATE TABLE "units" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "units_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "units_name_key" ON "units"("name");
+
+INSERT INTO "units" ("name")
+SELECT DISTINCT TRIM(u) FROM (
+    SELECT "baseUnit" AS u FROM "products"
+    UNION SELECT "unit" FROM "product_units"
+) x WHERE TRIM(u) <> ''
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE "products"
+    ADD COLUMN "purchasePrice" DECIMAL(18,2),
+    ADD COLUMN "salePrice" DECIMAL(18,2),
+    ADD COLUMN "importUnit" TEXT,
+    ADD COLUMN "exportUnit" TEXT,
+    ADD COLUMN "bundleQty" DECIMAL(18,3),
+    ADD COLUMN "qtyLabel" TEXT,
+    ADD CONSTRAINT "products_prices_nonneg" CHECK (("purchasePrice" IS NULL OR "purchasePrice" >= 0) AND ("salePrice" IS NULL OR "salePrice" >= 0) AND ("bundleQty" IS NULL OR "bundleQty" > 0));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "units" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "units_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261011200000_purchase_line_processing/migration.sql
+-- Kiểu gia công của dòng phiếu nhập (tuỳ chọn, chỉ ghi nhận). Chỉ thêm cột nullable + FK.
+ALTER TABLE "purchase_lines" ADD COLUMN "processingTypeId" INTEGER;
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "purchase_lines_processingTypeId_idx" ON "purchase_lines"("processingTypeId");
+
+-- >>> prisma/migrations/20261012100000_quote_line_processing/migration.sql
+-- Kiểu gia công của dòng báo giá (tuỳ chọn). Chỉ thêm cột nullable + FK.
+ALTER TABLE "quote_lines" ADD COLUMN "processingTypeId" INTEGER;
+ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "quote_lines_processingTypeId_idx" ON "quote_lines"("processingTypeId");
+
+-- >>> prisma/migrations/20261012200000_processing_price_basis/migration.sql
+-- Cách tính giá của kiểu gia công: mét dài (mặc định, giữ hành vi cũ) hoặc mét vuông. Chỉ thêm kiểu + cột có DEFAULT.
+CREATE TYPE "PriceBasis" AS ENUM ('LENGTH', 'AREA');
+ALTER TABLE "processing_types" ADD COLUMN "priceBasis" "PriceBasis" NOT NULL DEFAULT 'LENGTH';
+
+-- >>> prisma/migrations/20261012300000_price_basis_unit/migration.sql
+-- Kiểu gia công bán theo đúng ĐVT riêng (kg, bình, cây…). Chỉ thêm giá trị enum, không đụng dữ liệu.
+ALTER TYPE "PriceBasis" ADD VALUE 'UNIT';
+
+-- >>> prisma/migrations/20261013100000_return_undelivered/migration.sql
+-- Phiếu trả hàng chưa giao (hàng không giao được trả về kho): chỉ thêm cột có mặc định.
+ALTER TABLE "goods_returns" ADD COLUMN "undelivered" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261013200000_trip_discount_over/migration.sql
+-- Tiền bớt và phần thu vượt tại điểm giao (chuyến): chỉ thêm cột có mặc định 0.
+ALTER TABLE "trip_orders" ADD COLUMN "discountAmount" DECIMAL(18,2) NOT NULL DEFAULT 0, ADD COLUMN "overAmount" DECIMAL(18,2) NOT NULL DEFAULT 0;
+
+-- >>> prisma/migrations/20261015110000_daily_reviews/migration.sql
+CREATE TABLE "daily_reviews" (
+  "userId" INTEGER NOT NULL,
+  "day" DATE NOT NULL,
+  "itemKey" TEXT NOT NULL,
+  "seenAt" TIMESTAMP(3),
+  "seenVersion" TEXT,
+  "checkedAt" TIMESTAMP(3),
+  "checkedVersion" TEXT,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "daily_reviews_pkey" PRIMARY KEY ("userId", "day", "itemKey"),
+  CONSTRAINT "daily_reviews_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "daily_reviews_item_key_chk" CHECK ("itemKey" IN ('return-order','return-product','return-supplier','undelivered','loss','debt','discount-orders','settlements','receipts','payments','purchases')),
+  CONSTRAINT "daily_reviews_seen_pair_chk" CHECK (("seenAt" IS NULL) = ("seenVersion" IS NULL)),
+  CONSTRAINT "daily_reviews_checked_pair_chk" CHECK (("checkedAt" IS NULL) = ("checkedVersion" IS NULL))
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON "daily_reviews" TO app_rw;
