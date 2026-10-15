@@ -10,3 +10,20 @@ body { font-size: var(--text-base); }
 
 /* focus rõ cho mọi control (a11y) */
 :focus-visible { outline: 2px solid var(--accent-500); outline-offset: 2px; }
+
+/* Bảng dòng hàng trong form: < 768px mỗi dòng thành 1 thẻ 2 cột (td có data-label; data-wide = cả hàng; data-action = nút xoá góc phải). */
+@media (max-width: 767px) {
+  .line-table { display: block; min-width: 0 !important; width: 100%; }
+  .line-table thead { display: none; }
+  .line-table tbody, .line-table tfoot { display: block; }
+  .line-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem 0.75rem; padding: 0.75rem; border-bottom: 1px solid var(--border-default); }
+  .line-table tbody tr:last-child { border-bottom: 0; }
+  .line-table td { display: block; min-width: 0 !important; padding: 0 !important; text-align: left !important; border: 0 !important; }
+  .line-table td[data-stt] { display: none; }
+  .line-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 0.125rem; font-size: 0.75rem; color: var(--text-muted); }
+  .line-table td[data-wide] { grid-column: 1 / -1; }
+  .line-table td[data-action] { grid-column: 1 / -1; justify-self: end; }
+  .line-table td:empty { display: none; }
+  .line-table tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.75rem; }
+  .line-table tfoot td { padding: 0 !important; }
+}

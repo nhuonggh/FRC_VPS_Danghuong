@@ -1,5 +1,6 @@
 "use client";
 
+import { igInput, InlineField } from "@/components/ui";
 import { KeyRound, Lock, Unlock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,15 +42,11 @@ function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
         ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} />
         : <EditButton label="Chỉnh sửa thông tin cơ bản" onClick={() => ctx.beginEdit("profile")} />}>
       {editing ? (
-        <div>
-          <label htmlFor="fullName" className="mb-1 block text-xs text-fg-muted">Họ tên</label>
-          <input id="fullName" {...s.form.register("fullName")} aria-invalid={!!s.form.formState.errors.fullName}
-            aria-describedby={s.form.formState.errors.fullName ? "fullName-error" : undefined}
-            className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${s.form.formState.errors.fullName ? "border-danger" : "border-border"}`} />
-          {s.form.formState.errors.fullName && <p id="fullName-error" className="mt-1 text-xs text-danger">{s.form.formState.errors.fullName.message}</p>}
-        </div>
+        <InlineField id="fullName" label="Họ tên" error={s.form.formState.errors.fullName?.message}>
+          <input id="fullName" {...s.form.register("fullName")} aria-invalid={!!s.form.formState.errors.fullName} className={igInput} />
+        </InlineField>
       ) : (
-        <dl className="space-y-2">
+        <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
           <DetailField label="Họ tên">{p.user.fullName}</DetailField>
           <DetailField label="Tên đăng nhập">{p.user.username}</DetailField>
           <DetailField label="Tạo lúc">{formatDateTime(p.user.createdAt)}</DetailField>
@@ -73,16 +70,9 @@ function EmailSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
         ? <EditActions saving={s.saving} onSave={s.onSave} onCancel={s.onCancel} />
         : <EditButton label="Chỉnh sửa email đăng nhập Google" onClick={() => ctx.beginEdit("email")} />}>
       {editing ? (
-        <div>
-          <label htmlFor="email" className="mb-1 block text-xs text-fg-muted">Email</label>
-          <input id="email" type="email" inputMode="email" autoComplete="off" {...s.form.register("email")} aria-invalid={!!err}
-            aria-describedby={err ? "email-error email-hint" : "email-hint"}
-            className={`h-11 w-full rounded-sm border bg-canvas px-3 text-sm md:h-9 ${err ? "border-danger" : "border-border"}`} />
-          {err && <p id="email-error" className="mt-1 text-xs text-danger">{err.message}</p>}
-          <p id="email-hint" className="mt-1 text-xs text-fg-muted">
-            Tài khoản Google (đã xác minh) có đúng email này sẽ đăng nhập được vào tài khoản này. Để trống = chỉ đăng nhập bằng mật khẩu.
-          </p>
-        </div>
+        <InlineField id="email" label="Email" error={err?.message} hint="Tài khoản Google (đã xác minh) có đúng email này sẽ đăng nhập được vào tài khoản này. Để trống = chỉ đăng nhập bằng mật khẩu.">
+          <input id="email" type="email" inputMode="email" autoComplete="off" {...s.form.register("email")} aria-invalid={!!err} className={igInput} />
+        </InlineField>
       ) : (
         <dl><DetailField label="Email">{p.user.email}</DetailField></dl>
       )}

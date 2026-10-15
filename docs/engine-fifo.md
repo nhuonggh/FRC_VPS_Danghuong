@@ -265,7 +265,7 @@ Tệp test ở `tests/inventory/`. "✔ (engine)" = phần kho/giá vốn đã c
 | 13 | Gia công thuê tôn xốp không trừ tôn cuộn | engine chỉ xuất đúng các dòng được yêu cầu | — | ⏳ plan 06-E3 (quyết định nghiệp vụ) |
 | 14 | Lệnh SX phụ kiện | `PRODUCTION_USE` + `PRODUCTION_OUT` có `costRef`, `propagate` khác mã | `derived.test.ts` › "lệnh sản xuất phụ kiện …"; `ties.test.ts` › "sản xuất + bán lùi ngày CÙNG NGÀY" | ✔ (engine) — màn lệnh SX: plan 06-E1 |
 | 15 | Hủy đơn có chiết khấu tích lũy | — (không thuộc kho) | — | ⏳ plan 05-D3 |
-| 16 | Kết sổ mang lô sang kỳ mới | engine: `postReceipt({ docType: "OPENING" })` ở kỳ mới; kỳ khoá cứng: `PeriodClosedError` | `ports.test.ts` / `ports-guards.test.ts` (kỳ đã kết sổ) | ⏳ plan 07-F1 (kết sổ) |
+| 16 | Kết sổ mang lô sang kỳ mới | `closeOpenPeriod` (`src/server/period/close.ts`) → cổng engine `postOpeningLots` (ghi hàng loạt dòng sổ OPENING + lớp giữ NGUYÊN qty/unitCost từng lô, thứ tự FIFO theo `seq`); kỳ cũ khoá cứng: `PeriodClosedError` | `tests/period/close.test.ts` (bất biến trước = sau, FIFO tiếp tục, rollback, đồng thời, 1.300 SP) + `ports-guards.test.ts` | ✅ plan 07-F1b |
 | + | Engine == mô hình tham chiếu (chèn lùi, sửa, hủy, khôi phục, đổi giá, trả hàng) | `replay.ts` vs `tests/inventory/reference.ts` | `property.test.ts`, `assertChainExact` ở mọi test chuỗi | ✔ |
 | + | Tính lại chạy nền > 2.000 dòng, chặn xuất mã đang tính lại (spec 3.5) | `recompute.ts`, `recompute-jobs.ts` | `recompute.test.ts` | ✔ |
 | + | Hiệu năng (cam kết ≤ 3 s) | `replay.ts`, `unit-of-work.ts` (ghi/lan truyền theo lô) | `performance.test.ts` | ✔ (mục 9) |

@@ -1,0 +1,91 @@
+// Plan 06-E1: lệnh sản xuất PHỤ KIỆN (spec 3.6). NVL xuất PRODUCTION_USE, thành phẩm nhập PRODUCTION_OUT có costRef.
+model ProductionOrder {
+  id           Int       @id @default(autoincrement())
+  periodId     Int
+  code         String    @unique
+  productId    Int
+  /// Số lượng thành phẩm (đơn vị gốc)
+  qty          Decimal   @db.Decimal(18, 3)
+  at           DateTime
+  note         String?
+  outSeq       BigInt?
+  isCancelled  Boolean   @default(false)
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime  @default(now())
+
+  period    Period               @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  materials ProductionMaterial[]
+
+  @@index([periodId, at])
+  @@map("production_orders")
+}
+
+model ProductionMaterial {
+  id                Int     @id @default(autoincrement())
+  orderId           Int
+  materialProductId Int
+  /// Lượng NVL thực dùng (đơn vị gốc của NVL)
+  qty               Decimal @db.Decimal(18, 3)
+  seq               BigInt?
+
+  order           ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  materialProduct Product         @relation(fields: [materialProductId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, materialProductId])
+  @@map("production_materials")
+}
+
+// Plan 06-E4: kiểm kho (spec 2.6, mục 26–27). DRAFT → DONE (chốt: sinh nhập/xuất chênh lệch) | CANCELLED.
+enum StocktakeStatus {
+  DRAFT
+  DONE
+  CANCELLED
+
+  @@map("stocktake_status")
+}
+
+model Stocktake {
+  id           Int             @id @default(autoincrement())
+  periodId     Int
+  code         String          @unique
+  at           DateTime
+  status       StocktakeStatus @default(DRAFT)
+  note         String?
+  confirmedAt  DateTime?
+  confirmedBy  Int?
+  cancelledAt  DateTime?
+  cancelledBy  Int?
+  cancelReason String?
+  createdBy    Int
+  createdAt    DateTime        @default(now())
+
+  period Period          @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  lines  StocktakeLine[]
+
+  @@index([periodId, at])
+  @@index([periodId, status])
+  @@map("stocktakes")
+}
+
+model StocktakeLine {
+  id          Int      @id @default(autoincrement())
+  stocktakeId Int
+  productId   Int
+  /// Tồn thực đếm (đơn vị gốc)
+  actualQty   Decimal  @db.Decimal(18, 3)
+  /// Điền khi chốt: tồn sổ sách tại lúc chốt, chênh lệch = actual − system, giá vốn nhập (chỉ khi thừa)
+  systemQty   Decimal? @db.Decimal(18, 3)
+  diff        Decimal? @db.Decimal(18, 3)
+  unitCost    Decimal? @db.Decimal(18, 4)
+  seq         BigInt?
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([stocktakeId, productId])
+  @@map("stocktake_lines")
+}

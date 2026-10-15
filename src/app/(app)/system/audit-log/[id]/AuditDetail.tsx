@@ -36,7 +36,7 @@ export function AuditDetail({ entry }: { entry: AuditDetailDto }) {
           key: "info", label: "Thông tin",
           render: () => (
             <DetailSection title="Thao tác" action={null}>
-              <dl className="space-y-2">
+              <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
                 <DetailField label="Hành động">{entry.action}</DetailField>
                 <DetailField label="Đối tượng">{entry.entity}</DetailField>
                 <DetailField label="Mã đối tượng">{entry.entityId}</DetailField>

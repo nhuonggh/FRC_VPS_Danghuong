@@ -50,12 +50,23 @@ export async function buildXlsx(
   columns: XlsxColumn[],
   rows: Record<string, unknown>[],
 ): Promise<Buffer> {
+  return buildXlsxSheets([{ name: sheetName, columns, rows }]);
+}
+
+export interface XlsxSheet { name: string; columns: XlsxColumn[]; rows: Record<string, unknown>[] }
+
+/** Multi-sheet reports use the same sanitization and numeric formatting as existing exports. */
+export async function buildXlsxSheets(sheets: XlsxSheet[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(safeSheetName(sheetName));
-  ws.columns = columnDefs(columns);
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-  for (const r of rows) ws.addRow(rowValues(columns, r));
+  for (const [index, sheet] of sheets.entries()) {
+    let name = safeSheetName(sheet.name);
+    if (wb.getWorksheet(name)) name = `${name.slice(0, 26)} ${index + 1}`;
+    const ws = wb.addWorksheet(name);
+    ws.columns = columnDefs(sheet.columns);
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+    for (const r of sheet.rows) ws.addRow(rowValues(sheet.columns, r));
+  }
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 

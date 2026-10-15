@@ -39,6 +39,7 @@ export const PERMISSIONS = [
   { code: "order.view", label: "Xem đơn hàng", group: "Bán hàng" },
   { code: "order.create", label: "Tạo đơn hàng", group: "Bán hàng" },
   { code: "order.edit", label: "Sửa đơn hàng", group: "Bán hàng" },
+  { code: "order.edit_price", label: "Sửa giá bán tay khi lập/sửa đơn (thiếu quyền = chỉ dùng giá gần nhất)", group: "Bán hàng" },
   { code: "order.cancel", label: "Hủy đơn hàng", group: "Bán hàng" },
   { code: "order.restore", label: "Khôi phục đơn đã hủy", group: "Bán hàng" },
   { code: "order.delete_draft", label: "Xóa hẳn đơn nháp/trùng", group: "Bán hàng" },
@@ -57,6 +58,14 @@ export const PERMISSIONS = [
   { code: "receipt.manage", label: "Phiếu thu", group: "Kế toán" },
   { code: "payment.manage", label: "Phiếu chi", group: "Kế toán" },
   { code: "cashbook.view", label: "Sổ quỹ, sổ tiền gửi", group: "Kế toán" },
+  // Quỹ chung hậu kiểm (plan 05 D-34): kế toán lập trước, thủ quỹ kiểm sau
+  { code: "cash.transaction.create", label: "Lập phiếu thu/chi", group: "Quỹ" },
+  { code: "cash.transaction.edit_pending", label: "Sửa/hủy phiếu thu/chi chưa kiểm tra", group: "Quỹ" },
+  { code: "cash.review", label: "Kiểm tra / trả lại phiếu thu-chi", group: "Quỹ", sensitive: true },
+  { code: "cash.adjust.request", label: "Yêu cầu điều chỉnh phiếu đã kiểm tra", group: "Quỹ" },
+  { code: "cash.adjust.approve", label: "Duyệt điều chỉnh phiếu đã kiểm tra", group: "Quỹ", sensitive: true },
+  { code: "cash.close", label: "Chốt quỹ", group: "Quỹ", sensitive: true },
+  { code: "cash.close.reopen", label: "Hủy chốt quỹ", group: "Quỹ", sensitive: true },
   { code: "debt.view", label: "Xem công nợ", group: "Kế toán" },
   { code: "debt.adjust", label: "Điều chỉnh/gộp công nợ", group: "Kế toán" },
   { code: "discount.settle", label: "Tất toán chiết khấu tích lũy", group: "Kế toán" },
@@ -79,6 +88,7 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 // đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   unitCostFifo: "cost.view",
+  materialCost: "cost.view",
   unitCostOut: "cost.view",
   costAmount: "cost.view",
   lineProfit: "profit.view",
@@ -91,8 +101,26 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   grossProfit: "profit.view",
   purchasePrice: "purchase_price.view",
   lastPurchasePrice: "purchase_price.view",
+  purchaseAmount: "purchase_price.view",
+  purchaseTotal: "purchase_price.view",
+  freightCost: "purchase_price.view",
+  allocatedFreight: "purchase_price.view",
+  openingValue: "cost.view",
+  inValue: "cost.view",
+  outValue: "cost.view",
+  closingValue: "cost.view",
   salePrice: "sale_price.view",
   lastSalePrice: "sale_price.view",
+  discountNow: "sale_price.view",
+  discountAccum: "sale_price.view",
+  lineAmount: "sale_price.view",
+  orderTotal: "sale_price.view",
+  oldDebt: "debt.view",
+  totalPayable: "debt.view",
+  quoteTotal: "sale_price.view",
+  returnTotal: "sale_price.view",
+  returnDeduction: "sale_price.view",
+  refundAmount: "sale_price.view",
 };
 
 type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly PermissionCode[] };
@@ -100,19 +128,20 @@ type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly 
 // Phân quyền MẪU (spec 6.6) — khách tự chỉnh được sau. `// TODO: confirm` với khách chi tiết từng vai trò.
 export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   "Giám đốc": "*",
-  "Kế toán": { except: ["period.close", "user.manage", "role.manage"] },
+  "Kế toán": { except: ["period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
   "Thủ kho": {
     allow: ["product.view", "stock.view", "stocktake.manage", "stock_adjust.manage", "order.view", "print.use"],
   },
   "Thủ quỹ": {
     allow: [
       "partner.view", "partner.view_all", "cashbook.view", "receipt.manage", "payment.manage", "trip.confirm_cash",
+      "cash.transaction.create", "cash.transaction.edit_pending", "cash.review", "cash.adjust.request", "cash.adjust.approve", "cash.close",
       "debt.view", "order.view", "sale_price.view", "print.use",
     ],
   },
   "Bán hàng": {
     allow: [
-      "partner.view", "product.view", "order.view", "order.create", "order.edit", "quote.manage", "deposit.manage",
+      "partner.view", "product.view", "order.view", "order.create", "order.edit", "order.edit_price", "quote.manage", "deposit.manage",
       "sale_price.view", "stock.view", "return.manage", "print.use",
     ],
   },

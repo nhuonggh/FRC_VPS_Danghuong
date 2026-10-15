@@ -1,0 +1,106 @@
+enum TripStatus {
+  PLANNED
+  ON_ROAD
+  RETURNED
+  SETTLED
+  CONFIRMED
+  CANCELLED
+
+  @@map("trip_status")
+}
+
+enum TripResultKind {
+  GIAO_DU
+  GHI_NO
+  HEN_TRA
+  KHONG_GIAO
+  GIAO_MOT_PHAN
+
+  @@map("trip_result_kind")
+}
+
+/// Chuyến giao (CH######): gom đơn theo tuyến, gán xe + lái + phụ. PLANNED → ON_ROAD → RETURNED (đủ kết quả) → SETTLED (đối soát)
+/// → CONFIRMED (thủ quỹ xác nhận nhận tiền ⇒ sinh phiếu thu vào quỹ). Tiền lái xe thu là quỹ TẠM cho tới khi thủ quỹ xác nhận (D-35).
+model Trip {
+  id                Int        @id @default(autoincrement())
+  periodId          Int
+  code              String     @unique
+  tripDate          DateTime
+  routeId           Int?
+  vehicleId         Int
+  driverId          Int
+  assistantId       Int?
+  note              String?
+  status            TripStatus @default(PLANNED)
+  departedAt        DateTime?
+  returnedAt        DateTime?
+  // đối soát (41)
+  settledAt         DateTime?
+  settledBy         Int?
+  expectedAmount    Decimal?   @db.Decimal(18, 2)
+  cashAmount        Decimal?   @db.Decimal(18, 2)
+  transferAmount    Decimal?   @db.Decimal(18, 2)
+  debtAmount        Decimal?   @db.Decimal(18, 2)
+  diffAmount        Decimal?   @db.Decimal(18, 2)
+  diffReason        String?
+  // thủ quỹ xác nhận
+  confirmedAt       DateTime?
+  confirmedBy       Int?
+  cashAccountId     Int?
+  transferAccountId Int?
+  cancelledAt       DateTime?
+  cancelledBy       Int?
+  cancelReason      String?
+  createdBy         Int
+  createdAt         DateTime   @default(now())
+
+  period    Period      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  route     Route?      @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  vehicle   Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver    Driver      @relation("TripDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  assistant Driver?     @relation("TripAssistant", fields: [assistantId], references: [id], onDelete: Restrict)
+  stops     TripOrder[]
+  receipts  Receipt[]
+
+  @@index([periodId, tripDate])
+  @@index([status])
+  @@index([vehicleId, tripDate])
+  @@map("trips")
+}
+
+/// Một điểm giao (đơn) của chuyến + kết quả giao (40). Ghi `delivery_notes` cho phần thực giao (D-36), công nợ ghi khi giao;
+/// tiền khách đưa lái xe ghi có công nợ ngay (docType TRIP_COLLECT) nhưng chỉ vào quỹ khi thủ quỹ xác nhận chuyến.
+model TripOrder {
+  id             Int             @id @default(autoincrement())
+  tripId         Int
+  orderId        Int
+  seq            Int
+  result         TripResultKind?
+  /// Phải thu tại điểm giao = giá trị đã giao lũy kế − tiền đã thu của đơn (≥ 0), chốt lúc nhập kết quả.
+  dueAmount      Decimal?        @db.Decimal(18, 2)
+  cashAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  transferAmount Decimal         @default(0) @db.Decimal(18, 2)
+  debtAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  /// Tiền bớt cho khách tại điểm giao (VD đơn 153.000 khách đưa 150.000): ghi có công nợ (docType TRIP_DISCOUNT), không vào quỹ.
+  discountAmount Decimal         @default(0) @db.Decimal(18, 2)
+  /// Phần tiền thu VƯỢT phải thu (trả nợ cũ / trả dư) = max(0, mặt + CK + bớt − phải thu). Không tính là tiền đã trả của đơn;
+  /// khi thủ quỹ xác nhận thành phiếu thu riêng không gắn đơn.
+  overAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  promiseDate    DateTime?
+  resultNote     String?
+  deliveryNoteId Int?            @unique
+  resultAt       DateTime?
+  resultBy       Int?
+  // hàng không giao được (42): người bán đã xử lý
+  handledAt      DateTime?
+  handledBy      Int?
+  handledNote    String?
+
+  trip         Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  order        SaleOrder     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  deliveryNote DeliveryNote? @relation(fields: [deliveryNoteId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, orderId])
+  @@index([orderId])
+  @@map("trip_orders")
+}

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { APP_NAME } from "@/lib/version";
+import { COMPANY_NAME } from "@/lib/version";
 import { isGoogleConfigured } from "@/server/auth/google";
 import { getActor } from "@/server/auth/session";
 import { LoginForm } from "./LoginForm";
@@ -13,18 +13,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await getActor()) redirect("/");
   const { callbackUrl, error } = await searchParams;
   return (
-    <main className="grid min-h-dvh bg-canvas lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <section className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
-          <h1 className="mb-1 text-2xl font-semibold">{APP_NAME}</h1>
-          <p className="mb-6 text-sm text-fg-secondary">Đăng nhập để tiếp tục.</p>
-          {/* googleEnabled chỉ là boolean suy ra ở server — client id/secret không bao giờ rời server */}
-          <LoginForm callbackUrl={first(callbackUrl)} error={first(error)} googleEnabled={isGoogleConfigured()} />
-        </div>
+    <main className="relative flex min-h-dvh items-end justify-center overflow-hidden bg-canvas p-4 pb-10 sm:items-center lg:justify-end lg:pr-[7vw]">
+      {/* Ảnh nền thương hiệu (public/login-bg.webp). Chữ/logo đã nằm trong ảnh nên chỉ để trang trí (alt rỗng). */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/login-bg.webp" alt="" className="absolute inset-0 h-full w-full object-cover object-[28%_top] sm:object-[25%_center]" />
+      <section className="relative z-10 w-full max-w-[440px] rounded-2xl border border-border bg-surface/95 p-7 shadow-xl backdrop-blur sm:p-9">
+        <h1 className="mb-1 text-3xl font-bold">Đăng nhập</h1>
+        <p className="mb-7 text-base text-fg-secondary">Chào mừng bạn quay trở lại</p>
+        {/* googleEnabled chỉ là boolean suy ra ở server — client id/secret không bao giờ rời server */}
+        <LoginForm callbackUrl={first(callbackUrl)} error={first(error)} googleEnabled={isGoogleConfigured()} />
       </section>
-      <aside aria-hidden className="hidden items-end bg-accent p-10 lg:flex">
-        <p className="max-w-md text-2xl font-semibold text-fg-on-accent">Đơn hàng — kho — giao hàng — kế toán trên một hệ thống.</p>
-      </aside>
+      <p className="absolute bottom-4 left-5 z-10 hidden text-xs text-fg-secondary sm:block">© {new Date().getFullYear()} {COMPANY_NAME}. Tất cả quyền được bảo lưu.</p>
     </main>
   );
 }

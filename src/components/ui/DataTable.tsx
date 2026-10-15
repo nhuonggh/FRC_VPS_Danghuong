@@ -2,10 +2,11 @@
 
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, Check, Columns3, Eye, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ClipboardCheck, Columns3, Eye, Lock, MoreHorizontal, Pencil, Power, Trash2, Truck, Warehouse } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ToolbarPortal } from "./ToolbarPortal";
 import { NULL_TEXT } from "@/lib/format";
 import { nextSort } from "@/lib/pagination";
 import { shouldNavigateOnRowClick } from "./row-click";
@@ -25,13 +26,13 @@ export interface Column<T> {
 export interface RowAction {
   key: string;
   label: string;
-  icon: "eye" | "pencil" | "trash" | "lock";
+  icon: "eye" | "pencil" | "trash" | "lock" | "power" | "truck" | "warehouse" | "clipboard-check";
   href?: string;
   onClick?: () => void;
   danger?: boolean;
 }
 
-const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock };
+const ACTION_ICONS = { eye: Eye, pencil: Pencil, trash: Trash2, lock: Lock, power: Power, truck: Truck, warehouse: Warehouse, "clipboard-check": ClipboardCheck };
 const MAX_INLINE_ACTIONS = 3;
 // Chạm ≥44px dưới md (mobile), 32px từ md (PC)
 const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-secondary hover:bg-hover md:h-8 md:w-8";
@@ -39,14 +40,21 @@ const ICON_BTN = "flex h-11 w-11 items-center justify-center rounded-sm text-fg-
 interface Props<T> {
   /** Khoá lưu cột ẩn/độ rộng vào localStorage. */
   id: string;
+  controlsTargetId?: string;
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string | number;
   rowHref?: (row: T) => string;
   rowActions?: (row: T) => RowAction[];
+  /** Danh mục dùng menu kebab để bảng gọn, action vẫn khả dụng trên mobile. */
+  actionsVariant?: "inline" | "kebab";
   /** Cột sort hiện tại ('-name' = giảm dần). */
   sort?: string;
   buildSortHref?: (sort: string | undefined) => string;
+  /** Ô chọn nhiều dòng (thao tác hàng loạt): bỏ trống = không có cột chọn. */
+  selection?: { selected: ReadonlySet<string | number>; onChange: (next: Set<string | number>) => void };
+  /** Explicit fields for mobile cards when the first desktop columns are not the useful summary. */
+  mobileColumnKeys?: string[];
 }
 
 function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -63,7 +71,7 @@ function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
 /** Ô rỗng (null/undefined/false/"") → "—", không bao giờ để trống hay hiện 0 thay cho "chưa có". */
 const isEmptyNode = (n: React.ReactNode) => n === null || n === undefined || n === false || n === "";
 
-export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, sort, buildSortHref }: Props<T>) {
+export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowHref, rowActions, actionsVariant = "inline", sort, buildSortHref, selection, mobileColumnKeys }: Props<T>) {
   const router = useRouter();
   const [hidden, setHidden] = useStored<Record<string, boolean>>(`table:${id}:hidden`,
     Object.fromEntries(columns.filter((c) => c.hiddenByDefault).map((c) => [c.key, true])));
@@ -89,11 +97,17 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
     window.addEventListener("pointerup", up);
   }
 
+  const keys = rows.map(rowKey);
+  const allOn = !!selection && keys.length > 0 && keys.every((k) => selection.selected.has(k));
+  const toggle = (k: string | number) => { if (!selection) return; const n = new Set(selection.selected); if (n.has(k)) n.delete(k); else n.add(k); selection.onChange(n); };
+  const toggleAll = () => { if (!selection) return; const n = new Set(selection.selected); for (const k of keys) { if (allOn) n.delete(k); else n.add(k); } selection.onChange(n); };
+  const box = "h-4 w-4 cursor-pointer accent-[var(--accent)]";
+
   const actionsCell = (row: T) => {
     const actions = rowActions?.(row) ?? [];
     if (actions.length === 0) return null;
-    const inline = actions.length > MAX_INLINE_ACTIONS ? actions.slice(0, MAX_INLINE_ACTIONS) : actions;
-    const rest = actions.length > MAX_INLINE_ACTIONS ? actions.slice(MAX_INLINE_ACTIONS) : [];
+    const inline = actionsVariant === "kebab" ? [] : actions.length > MAX_INLINE_ACTIONS ? actions.slice(0, MAX_INLINE_ACTIONS) : actions;
+    const rest = actionsVariant === "kebab" ? actions : actions.length > MAX_INLINE_ACTIONS ? actions.slice(MAX_INLINE_ACTIONS) : [];
     const iconBtn = ICON_BTN;
     return (
       <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -108,7 +122,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
         })}
         {rest.length > 0 && (
           <Dropdown.Root>
-            <Dropdown.Trigger aria-label="Thêm thao tác" className={iconBtn}><MoreHorizontal size={16} aria-hidden /></Dropdown.Trigger>
+            <Dropdown.Trigger aria-label={actionsVariant === "kebab" ? "Thao tác" : "Thêm thao tác"} title={actionsVariant === "kebab" ? "Thao tác" : "Thêm thao tác"} className={iconBtn}><MoreHorizontal size={16} aria-hidden /></Dropdown.Trigger>
             <Dropdown.Portal>
               <Dropdown.Content align="end" className="z-dropdown min-w-40 rounded-md border border-border bg-raised p-1 shadow-md">
                 {rest.map((a) => (
@@ -128,7 +142,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
   return (
     <div>
       {/* Điều khiển cột */}
-      <div className="flex justify-end border-b border-border px-2 py-1">
+      <ToolbarPortal targetId={controlsTargetId}><div className={controlsTargetId ? "flex" : "flex justify-end border-b border-border px-2 py-1"}>
         <Dropdown.Root>
           <Dropdown.Trigger aria-label="Cột hiển thị" title="Cột hiển thị" className={ICON_BTN}>
             <Columns3 size={16} aria-hidden />
@@ -147,12 +161,13 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
             </Dropdown.Content>
           </Dropdown.Portal>
         </Dropdown.Root>
-      </div>
+      </div></ToolbarPortal>
 
       {/* PC/tablet: bảng */}
       <table className="hidden w-full border-collapse text-sm md:table">
         <thead className="sticky top-0 z-header bg-surface">
           <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary">
+            {selection && <th scope="col" className="w-10 px-3 py-2"><input type="checkbox" aria-label="Chọn tất cả dòng trong trang" checked={allOn} onChange={toggleAll} className={box} /></th>}
             {visible.map((c) => {
               const dir = sort === c.key ? "ascending" : sort === `-${c.key}` ? "descending" : "none";
               return (
@@ -180,6 +195,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
                 if (shouldNavigateOnRowClick(e, window.getSelection()?.toString() ?? "")) router.push(rowHref(row));
               } : undefined}
               className={clsx("border-b border-border last:border-b-0 hover:bg-hover", rowHref && "cursor-pointer")}>
+              {selection && <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="Chọn dòng" checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} className={box} /></td>}
               {visible.map((c) => (
                 <td key={c.key} className={clsx("px-3 py-2", c.align === "right" && "tabular text-right")}>
                   {c === primary && rowHref ? (
@@ -197,12 +213,13 @@ export function DataTable<T>({ id, columns, rows, rowKey, rowHref, rowActions, s
       <ul className="divide-y divide-[var(--border-default)] md:hidden">
         {rows.map((row) => (
           <li key={rowKey(row)} className="flex items-start justify-between gap-2 p-3">
+            {selection && <input type="checkbox" aria-label="Chọn dòng" checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} className={`${box} mt-1 shrink-0`} />}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">
                 {rowHref ? <Link href={rowHref(row)}>{cell(primary, row)}</Link> : cell(primary, row)}
               </div>
               <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                {visible.filter((c) => c !== primary).slice(0, 4).map((c) => (
+                {(mobileColumnKeys ? mobileColumnKeys.flatMap((key) => visible.filter((c) => c.key === key && c !== primary)) : visible.filter((c) => c !== primary).slice(0, 4)).map((c) => (
                   <div key={c.key} className="min-w-0">
                     <dt className="text-fg-muted">{c.label}</dt>
                     <dd className={clsx("truncate", c.align === "right" && "tabular")}>{cell(c, row)}</dd>

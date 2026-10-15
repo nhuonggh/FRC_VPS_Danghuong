@@ -677,3 +677,1591 @@ ADD COLUMN     "tempPasswordExpiresAt" TIMESTAMPTZ(3);
 UPDATE "users" SET "tempPasswordExpiresAt" = now() + interval '72 hours' WHERE "mustChangePassword" = true;
 
 -- Quyền app_rw: GRANT mức bảng (migration foundation) phủ cả cột mới.
+
+-- >>> prisma/migrations/20260927043653_catalog_foundation/migration.sql
+-- AlterTable
+ALTER TABLE "partner_groups" ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true;
+
+-- AlterTable
+ALTER TABLE "products" ADD COLUMN     "isCoil" BOOLEAN NOT NULL DEFAULT false;
+
+-- AlterTable
+ALTER TABLE "warehouses" ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true;
+
+-- CreateTable
+CREATE TABLE "vehicles" (
+    "id" SERIAL NOT NULL,
+    "plate" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "vehicles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "drivers" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isAssistant" BOOLEAN NOT NULL DEFAULT false,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "drivers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "routes" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "routes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "expense_types" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "expense_types_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "processing_types" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "note" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "processing_types_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "vehicles_plate_key" ON "vehicles"("plate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "routes_name_key" ON "routes"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "expense_types_name_key" ON "expense_types"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "processing_types_name_key" ON "processing_types"("name");
+
+-- Ràng buộc mức DB (lớp chặn thứ hai sau zod): dữ liệu sai không bao giờ vào được,
+-- kể cả đi qua import/script.
+ALTER TABLE "product_units" ADD CONSTRAINT "product_units_factor_pos_chk" CHECK ("factor" > 0);
+ALTER TABLE "products" ADD CONSTRAINT "products_min_stock_nonneg_chk" CHECK ("minStock" >= 0);
+ALTER TABLE "partners" ADD CONSTRAINT "partners_debt_limit_nonneg_chk" CHECK ("debtLimit" >= 0);
+ALTER TABLE "partners" ADD CONSTRAINT "partners_kind_chk" CHECK ("isCustomer" OR "isSupplier");
+
+-- >>> prisma/migrations/20260927125310_purchasing/migration.sql
+-- CreateEnum
+CREATE TYPE "stock_adjustment_type" AS ENUM ('IN_NO_SUPPLIER', 'LOSS', 'WRITE_OFF', 'STOCKTAKE');
+
+-- CreateTable
+CREATE TABLE "purchases" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "freightCost" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "purchaseTotal" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "purchases_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "purchase_lines" (
+    "id" SERIAL NOT NULL,
+    "purchaseId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "factorUsed" DECIMAL(18,6) NOT NULL,
+    "qtyBase" DECIMAL(18,3) NOT NULL,
+    "purchasePrice" DECIMAL(18,2) NOT NULL,
+    "purchaseAmount" DECIMAL(18,2) NOT NULL,
+    "allocatedFreight" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "rollInfo" TEXT,
+    "rollSearch" TEXT NOT NULL DEFAULT '',
+    "seq" BIGINT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "purchase_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stock_adjustments" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "type" "stock_adjustment_type" NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "stock_adjustments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stock_adjustment_lines" (
+    "id" SERIAL NOT NULL,
+    "adjustmentId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unitCost" DECIMAL(18,4) NOT NULL,
+    "seq" BIGINT,
+
+    CONSTRAINT "stock_adjustment_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "purchases_code_key" ON "purchases"("code");
+
+-- CreateIndex
+CREATE INDEX "purchases_periodId_at_idx" ON "purchases"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "purchases_partnerId_at_idx" ON "purchases"("partnerId", "at");
+
+-- CreateIndex
+CREATE INDEX "purchase_lines_purchaseId_idx" ON "purchase_lines"("purchaseId");
+
+-- CreateIndex
+CREATE INDEX "purchase_lines_productId_idx" ON "purchase_lines"("productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "stock_adjustments_code_key" ON "stock_adjustments"("code");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustments_periodId_at_idx" ON "stock_adjustments"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustment_lines_adjustmentId_idx" ON "stock_adjustment_lines"("adjustmentId");
+
+-- CreateIndex
+CREATE INDEX "stock_adjustment_lines_productId_idx" ON "stock_adjustment_lines"("productId");
+
+-- AddForeignKey
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_purchaseId_fkey" FOREIGN KEY ("purchaseId") REFERENCES "purchases"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustments" ADD CONSTRAINT "stock_adjustments_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_adjustmentId_fkey" FOREIGN KEY ("adjustmentId") REFERENCES "stock_adjustments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Lớp chặn DB cho dữ liệu phiếu nhập: cả import/script cũng không ghi được số âm/0 sai quy ước.
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_amounts_nonneg_chk"
+  CHECK ("freightCost" >= 0 AND "purchaseTotal" >= 0);
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_values_chk"
+  CHECK ("qty" > 0 AND "factorUsed" > 0 AND "qtyBase" > 0 AND "purchasePrice" >= 0 AND "purchaseAmount" >= 0 AND "allocatedFreight" >= 0);
+ALTER TABLE "stock_adjustment_lines" ADD CONSTRAINT "stock_adjustment_lines_values_chk"
+  CHECK ("qty" > 0 AND "unitCost" >= 0);
+
+-- >>> prisma/migrations/20260929130000_bom_company_home/migration.sql
+-- CreateEnum
+CREATE TYPE "bom_version_status" AS ENUM ('DRAFT', 'ACTIVE', 'CANCELLED');
+
+-- AlterTable
+ALTER TABLE "company_settings" ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "updatedBy" INTEGER;
+
+-- CreateTable
+CREATE TABLE "boms" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "processingTypeId" INTEGER NOT NULL,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "boms_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "bom_versions" (
+    "id" SERIAL NOT NULL,
+    "bomId" INTEGER NOT NULL,
+    "versionNo" INTEGER NOT NULL,
+    "validFrom" DATE NOT NULL,
+    "status" "bom_version_status" NOT NULL DEFAULT 'ACTIVE',
+    "note" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "bom_versions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "bom_lines" (
+    "id" SERIAL NOT NULL,
+    "bomVersionId" INTEGER NOT NULL,
+    "materialProductId" INTEGER NOT NULL,
+    "qtyPerUnit" DECIMAL(18,3) NOT NULL,
+    "note" TEXT,
+
+    CONSTRAINT "bom_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "print_templates" (
+    "id" SERIAL NOT NULL,
+    "docType" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "webhookUrl" TEXT,
+    "secretCiphertext" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "title" TEXT,
+    "signerName" TEXT,
+    "phone" TEXT,
+    "qrImage" TEXT,
+    "showCompanyInfo" BOOLEAN NOT NULL DEFAULT true,
+    "footerNote" TEXT,
+    "createdBy" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedBy" INTEGER,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "print_templates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "boms_productId_processingTypeId_key" ON "boms"("productId", "processingTypeId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "bom_versions_bomId_versionNo_key" ON "bom_versions"("bomId", "versionNo");
+
+-- CreateIndex
+CREATE INDEX "bom_lines_materialProductId_idx" ON "bom_lines"("materialProductId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "bom_lines_bomVersionId_materialProductId_key" ON "bom_lines"("bomVersionId", "materialProductId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "print_templates_docType_name_key" ON "print_templates"("docType", "name");
+
+-- AddForeignKey
+ALTER TABLE "boms" ADD CONSTRAINT "boms_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "boms" ADD CONSTRAINT "boms_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_versions" ADD CONSTRAINT "bom_versions_bomId_fkey" FOREIGN KEY ("bomId") REFERENCES "boms"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_bomVersionId_fkey" FOREIGN KEY ("bomVersionId") REFERENCES "bom_versions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_materialProductId_fkey" FOREIGN KEY ("materialProductId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- ===== Ràng buộc DB (plan 03c Task 16) =====
+
+-- Một ngày hiệu lực chỉ có một phiên bản còn sống cho mỗi BOM (bản đã huỷ nhả ngày ra). Đua ghi → unique violation → service đổi thành 409.
+CREATE UNIQUE INDEX "bom_versions_bomId_validFrom_live_key" ON "bom_versions"("bomId", "validFrom") WHERE "status" <> 'CANCELLED';
+-- Truy vấn resolveBom: bản ACTIVE mới nhất có validFrom <= ngày.
+CREATE INDEX "bom_versions_bomId_status_validFrom_idx" ON "bom_versions"("bomId", "status", "validFrom" DESC);
+
+ALTER TABLE "bom_lines" ADD CONSTRAINT "bom_lines_qty_chk" CHECK ("qtyPerUnit" > 0);
+
+ALTER TABLE "print_templates" ADD CONSTRAINT "print_templates_doctype_chk" CHECK ("docType" ~ '^[A-Z][A-Z0-9_]{1,39}$');
+-- Webhook chỉ https (không cho http/file/... để GĐ2 không bị ép gọi địa chỉ nội bộ).
+ALTER TABLE "print_templates" ADD CONSTRAINT "print_templates_webhook_https_chk" CHECK ("webhookUrl" IS NULL OR "webhookUrl" ~ '^https://');
+
+-- company_settings luôn đúng một hàng id = 1; đảm bảo hàng tồn tại trên DB cũ (seed vẫn upsert idempotent).
+ALTER TABLE "company_settings" ADD CONSTRAINT "company_settings_singleton_chk" CHECK ("id" = 1);
+INSERT INTO "company_settings" ("id", "name") VALUES (1, 'Xưởng tôn Đặng Hương') ON CONFLICT ("id") DO NOTHING;
+
+-- D-19: BOM bất biến. Dòng định mức không bao giờ UPDATE/DELETE; phiên bản chỉ được đổi trạng thái hợp lệ; không xoá.
+CREATE FUNCTION bom_lines_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM "bom_versions" v JOIN "boms" b ON b."id" = v."bomId"
+      WHERE v."id" = NEW."bomVersionId" AND b."productId" = NEW."materialProductId"
+    ) THEN
+      RAISE EXCEPTION 'BOM: nguyên vật liệu không được trùng với chính thành phẩm' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'BOM: dòng định mức bất biến (tạo phiên bản mới thay vì sửa/xoá)' USING ERRCODE = '23514';
+END $$;
+CREATE TRIGGER bom_lines_guard_ins BEFORE INSERT ON "bom_lines" FOR EACH ROW EXECUTE FUNCTION bom_lines_guard();
+CREATE TRIGGER bom_lines_guard_upd BEFORE UPDATE OR DELETE ON "bom_lines" FOR EACH ROW EXECUTE FUNCTION bom_lines_guard();
+
+CREATE FUNCTION bom_versions_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'BOM: không xoá phiên bản (chuyển sang CANCELLED)' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."bomId" IS DISTINCT FROM OLD."bomId" OR NEW."versionNo" IS DISTINCT FROM OLD."versionNo"
+     OR NEW."validFrom" IS DISTINCT FROM OLD."validFrom" OR NEW."note" IS DISTINCT FROM OLD."note"
+     OR NEW."createdBy" IS DISTINCT FROM OLD."createdBy" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt" THEN
+    RAISE EXCEPTION 'BOM: phiên bản bất biến, chỉ được đổi trạng thái' USING ERRCODE = '23514';
+  END IF;
+  IF NOT (NEW."status" = OLD."status"
+          OR (OLD."status" = 'DRAFT' AND NEW."status" IN ('ACTIVE', 'CANCELLED'))
+          OR (OLD."status" = 'ACTIVE' AND NEW."status" = 'CANCELLED')) THEN
+    RAISE EXCEPTION 'BOM: chuyển trạng thái phiên bản không hợp lệ' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER bom_versions_guard_trg BEFORE UPDATE OR DELETE ON "bom_versions" FOR EACH ROW EXECUTE FUNCTION bom_versions_guard();
+
+-- >>> prisma/migrations/20260930090000_sales_orders/migration.sql
+-- CreateEnum
+CREATE TYPE "delivery_status" AS ENUM ('NEW', 'WAITING_STOCK', 'READY', 'LOADED', 'DELIVERING', 'DELIVERED', 'PARTIAL', 'FAILED');
+
+-- CreateEnum
+CREATE TYPE "payment_status" AS ENUM ('UNPAID', 'DEPOSITED', 'PARTIAL', 'PAID', 'DEBT', 'PROMISED', 'OVERPAID');
+
+-- CreateTable
+CREATE TABLE "sale_orders" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "deliveryStatus" "delivery_status" NOT NULL DEFAULT 'NEW',
+    "paymentStatus" "payment_status" NOT NULL DEFAULT 'UNPAID',
+    "orderDate" TIMESTAMP(3) NOT NULL,
+    "expectedDeliveryDate" DATE NOT NULL,
+    "originalDeliveryDate" DATE NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "sale_orders_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "sale_order_lines" (
+    "id" SERIAL NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "factorUsed" DECIMAL(18,6) NOT NULL,
+    "qtyBase" DECIMAL(18,3) NOT NULL,
+    "salePrice" DECIMAL(18,2) NOT NULL,
+    "discountNow" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "discountAccum" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "unitCostFifo" DECIMAL(18,4) NOT NULL DEFAULT 0,
+    "isProvisional" BOOLEAN NOT NULL DEFAULT false,
+    "processingTypeId" INTEGER,
+    "bomVersionId" INTEGER,
+    "at" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "sale_order_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "sale_line_issues" (
+    "id" SERIAL NOT NULL,
+    "orderLineId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qtyBase" DECIMAL(18,3) NOT NULL,
+    "seq" BIGINT,
+
+    CONSTRAINT "sale_line_issues_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "delivery_notes" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "delivery_notes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "delivery_lines" (
+    "id" SERIAL NOT NULL,
+    "deliveryNoteId" INTEGER NOT NULL,
+    "orderLineId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+
+    CONSTRAINT "delivery_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sale_orders_code_key" ON "sale_orders"("code");
+
+-- CreateIndex
+CREATE INDEX "sale_orders_periodId_orderDate_idx" ON "sale_orders"("periodId", "orderDate");
+
+-- CreateIndex
+CREATE INDEX "sale_orders_partnerId_orderDate_idx" ON "sale_orders"("partnerId", "orderDate");
+
+-- CreateIndex
+CREATE INDEX "sale_orders_expectedDeliveryDate_idx" ON "sale_orders"("expectedDeliveryDate");
+
+-- CreateIndex
+CREATE INDEX "sale_order_lines_orderId_idx" ON "sale_order_lines"("orderId");
+
+-- CreateIndex
+CREATE INDEX "sale_order_lines_productId_idx" ON "sale_order_lines"("productId");
+
+-- CreateIndex
+CREATE INDEX "sale_line_issues_productId_idx" ON "sale_line_issues"("productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sale_line_issues_orderLineId_productId_key" ON "sale_line_issues"("orderLineId", "productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "delivery_notes_code_key" ON "delivery_notes"("code");
+
+-- CreateIndex
+CREATE INDEX "delivery_notes_orderId_idx" ON "delivery_notes"("orderId");
+
+-- CreateIndex
+CREATE INDEX "delivery_notes_periodId_at_idx" ON "delivery_notes"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "delivery_lines_deliveryNoteId_idx" ON "delivery_lines"("deliveryNoteId");
+
+-- CreateIndex
+CREATE INDEX "delivery_lines_orderLineId_idx" ON "delivery_lines"("orderLineId");
+
+-- CreateIndex
+CREATE INDEX "discount_ledger_orderLineId_idx" ON "discount_ledger"("orderLineId");
+
+-- AddForeignKey
+ALTER TABLE "discount_ledger" ADD CONSTRAINT "discount_ledger_orderLineId_fkey" FOREIGN KEY ("orderLineId") REFERENCES "sale_order_lines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "sale_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_bomVersionId_fkey" FOREIGN KEY ("bomVersionId") REFERENCES "bom_versions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_line_issues" ADD CONSTRAINT "sale_line_issues_orderLineId_fkey" FOREIGN KEY ("orderLineId") REFERENCES "sale_order_lines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sale_line_issues" ADD CONSTRAINT "sale_line_issues_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "delivery_notes" ADD CONSTRAINT "delivery_notes_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "delivery_notes" ADD CONSTRAINT "delivery_notes_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "sale_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "delivery_lines" ADD CONSTRAINT "delivery_lines_deliveryNoteId_fkey" FOREIGN KEY ("deliveryNoteId") REFERENCES "delivery_notes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "delivery_lines" ADD CONSTRAINT "delivery_lines_orderLineId_fkey" FOREIGN KEY ("orderLineId") REFERENCES "sale_order_lines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- ===== Ràng buộc DB (plan 04 Task C1) =====
+-- Lớp chặn cuối cho import/script: số lượng, giá, chiết khấu không âm; tổng chiết khấu không vượt giá trị dòng.
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_values_chk" CHECK (
+  "qty" > 0 AND "factorUsed" > 0 AND "qtyBase" > 0 AND "salePrice" >= 0
+  AND "discountNow" >= 0 AND "discountAccum" >= 0 AND "unitCostFifo" >= 0
+  AND "discountNow" + "discountAccum" <= "qty" * "salePrice"
+);
+ALTER TABLE "sale_line_issues" ADD CONSTRAINT "sale_line_issues_qty_chk" CHECK ("qtyBase" > 0);
+ALTER TABLE "delivery_lines" ADD CONSTRAINT "delivery_lines_qty_chk" CHECK ("qty" > 0);
+-- Ngày giao dự kiến chỉ được dời về phía sau; original giữ nguyên để tính số ngày trễ.
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_expected_chk" CHECK ("expectedDeliveryDate" >= "originalDeliveryDate");
+
+-- >>> prisma/migrations/20260930120000_sales_quotes_deposits/migration.sql
+-- CreateEnum
+CREATE TYPE "quote_status" AS ENUM ('DRAFT', 'SENT', 'CONVERTED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "receipt_type" AS ENUM ('THU_NO', 'COC', 'KHAC');
+
+-- AlterTable
+ALTER TABLE "sale_orders" ADD COLUMN     "isDraft" BOOLEAN NOT NULL DEFAULT false;
+
+-- CreateTable
+CREATE TABLE "quotes" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "status" "quote_status" NOT NULL DEFAULT 'DRAFT',
+    "note" TEXT,
+    "convertedOrderId" INTEGER,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "quotes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "quote_lines" (
+    "id" SERIAL NOT NULL,
+    "quoteId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "salePrice" DECIMAL(18,2) NOT NULL,
+    "note" TEXT,
+
+    CONSTRAINT "quote_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "receipts" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "type" "receipt_type" NOT NULL,
+    "orderId" INTEGER,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "cashAccountId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "receipts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "quotes_code_key" ON "quotes"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "quotes_convertedOrderId_key" ON "quotes"("convertedOrderId");
+
+-- CreateIndex
+CREATE INDEX "quotes_periodId_at_idx" ON "quotes"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "quotes_partnerId_idx" ON "quotes"("partnerId");
+
+-- CreateIndex
+CREATE INDEX "quote_lines_quoteId_idx" ON "quote_lines"("quoteId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "receipts_code_key" ON "receipts"("code");
+
+-- CreateIndex
+CREATE INDEX "receipts_orderId_idx" ON "receipts"("orderId");
+
+-- CreateIndex
+CREATE INDEX "receipts_periodId_at_idx" ON "receipts"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "receipts_partnerId_idx" ON "receipts"("partnerId");
+
+-- AddForeignKey
+ALTER TABLE "quotes" ADD CONSTRAINT "quotes_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "quotes" ADD CONSTRAINT "quotes_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "quotes" ADD CONSTRAINT "quotes_convertedOrderId_fkey" FOREIGN KEY ("convertedOrderId") REFERENCES "sale_orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_quoteId_fkey" FOREIGN KEY ("quoteId") REFERENCES "quotes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "sale_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_cashAccountId_fkey" FOREIGN KEY ("cashAccountId") REFERENCES "cash_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- ===== Ràng buộc DB (plan 04 Task C5) =====
+ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_values_chk" CHECK ("qty" > 0 AND "salePrice" >= 0);
+-- Tiền thu phải dương; phiếu COC/THU_NO vào quỹ nên luôn có tài khoản (cashAccountId NOT NULL)
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_amount_chk" CHECK ("amount" > 0);
+-- Báo giá đã chuyển thành đơn phải trỏ tới đơn và ngược lại
+ALTER TABLE "quotes" ADD CONSTRAINT "quotes_converted_chk" CHECK (("status" = 'CONVERTED') = ("convertedOrderId" IS NOT NULL));
+
+-- >>> prisma/migrations/20260930150000_goods_returns/migration.sql
+-- CreateEnum
+CREATE TYPE "return_kind" AS ENUM ('BY_ORDER', 'BY_PRODUCT', 'SUPPLIER');
+
+-- CreateTable
+CREATE TABLE "goods_returns" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "kind" "return_kind" NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "orderId" INTEGER,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "totalAmount" DECIMAL(18,2) NOT NULL,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "goods_returns_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "goods_return_lines" (
+    "id" SERIAL NOT NULL,
+    "returnId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "orderLineId" INTEGER,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "factorUsed" DECIMAL(18,6) NOT NULL,
+    "qtyBase" DECIMAL(18,3) NOT NULL,
+    "unitPrice" DECIMAL(18,2) NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "discountAccumReversed" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "at" TIMESTAMP(3) NOT NULL,
+    "seq" BIGINT,
+
+    CONSTRAINT "goods_return_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "goods_returns_code_key" ON "goods_returns"("code");
+
+-- CreateIndex
+CREATE INDEX "goods_returns_periodId_at_idx" ON "goods_returns"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "goods_returns_partnerId_idx" ON "goods_returns"("partnerId");
+
+-- CreateIndex
+CREATE INDEX "goods_returns_orderId_idx" ON "goods_returns"("orderId");
+
+-- CreateIndex
+CREATE INDEX "goods_return_lines_returnId_idx" ON "goods_return_lines"("returnId");
+
+-- CreateIndex
+CREATE INDEX "goods_return_lines_productId_idx" ON "goods_return_lines"("productId");
+
+-- CreateIndex
+CREATE INDEX "goods_return_lines_orderLineId_idx" ON "goods_return_lines"("orderLineId");
+
+-- AddForeignKey
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "sale_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "goods_return_lines" ADD CONSTRAINT "goods_return_lines_returnId_fkey" FOREIGN KEY ("returnId") REFERENCES "goods_returns"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "goods_return_lines" ADD CONSTRAINT "goods_return_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "goods_return_lines" ADD CONSTRAINT "goods_return_lines_orderLineId_fkey" FOREIGN KEY ("orderLineId") REFERENCES "sale_order_lines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- CHECK: số liệu hợp lệ; trả theo đơn phải có đơn + dòng gốc, loại khác thì không
+ALTER TABLE "goods_return_lines" ADD CONSTRAINT "goods_return_lines_values_chk"
+  CHECK ("qty" > 0 AND "qtyBase" > 0 AND "unitPrice" >= 0 AND "amount" >= 0 AND "discountAccumReversed" >= 0);
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_total_chk" CHECK ("totalAmount" >= 0);
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_kind_order_chk"
+  CHECK (("kind" = 'BY_ORDER') = ("orderId" IS NOT NULL));
+
+-- >>> prisma/migrations/20260930180000_debt_adjust_transfer/migration.sql
+-- CreateEnum
+CREATE TYPE "debt_adjust_reason" AS ENUM ('HANG_LOI', 'BEP_MOP', 'CHIET_KHAU', 'KHAC');
+
+-- CreateEnum
+CREATE TYPE "debt_transfer_kind" AS ENUM ('TRANSFER', 'MERGE');
+
+-- CreateTable
+CREATE TABLE "debt_adjustments" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "reason" "debt_adjust_reason" NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT NOT NULL,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "debt_adjustments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "debt_transfers" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "kind" "debt_transfer_kind" NOT NULL,
+    "fromPartnerId" INTEGER NOT NULL,
+    "toPartnerId" INTEGER NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "discountMoved" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "debt_transfers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "debt_adjustments_code_key" ON "debt_adjustments"("code");
+
+-- CreateIndex
+CREATE INDEX "debt_adjustments_periodId_at_idx" ON "debt_adjustments"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "debt_adjustments_partnerId_idx" ON "debt_adjustments"("partnerId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "debt_transfers_code_key" ON "debt_transfers"("code");
+
+-- CreateIndex
+CREATE INDEX "debt_transfers_periodId_at_idx" ON "debt_transfers"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "debt_transfers_fromPartnerId_idx" ON "debt_transfers"("fromPartnerId");
+
+-- CreateIndex
+CREATE INDEX "debt_transfers_toPartnerId_idx" ON "debt_transfers"("toPartnerId");
+
+-- AddForeignKey
+ALTER TABLE "debt_adjustments" ADD CONSTRAINT "debt_adjustments_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "debt_adjustments" ADD CONSTRAINT "debt_adjustments_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_fromPartnerId_fkey" FOREIGN KEY ("fromPartnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_toPartnerId_fkey" FOREIGN KEY ("toPartnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- CHECK: điều chỉnh khác 0; chuyển khác đối tác, khác 0 trừ khi gộp; chiết khấu chuyển kèm chỉ khi gộp
+ALTER TABLE "debt_adjustments" ADD CONSTRAINT "debt_adjustments_amount_chk" CHECK ("amount" <> 0);
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_partners_chk" CHECK ("fromPartnerId" <> "toPartnerId");
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_amount_chk" CHECK ("kind" = 'MERGE' OR "amount" <> 0);
+ALTER TABLE "debt_transfers" ADD CONSTRAINT "debt_transfers_discount_chk" CHECK ("discountMoved" >= 0 AND ("kind" = 'MERGE' OR "discountMoved" = 0));
+
+-- >>> prisma/migrations/20260930200000_grant_sales_debt_permissions/migration.sql
+-- Cấp MỘT LẦN các quyền của plan 04 cho vai trò mẫu đã tồn tại (chỉ THÊM, không gỡ; vai trò/quyền chưa có thì bỏ qua).
+-- Seed chỉ gán quyền mặc định cho vai trò MỚI tạo nên vai trò cũ (Bán hàng, Kế toán) không tự nhận quyền mới.
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id
+FROM "roles" r
+JOIN "permissions" p ON
+  (r.name = 'Bán hàng' AND p.code IN ('order.edit_price', 'quote.manage', 'deposit.manage', 'return.manage'))
+  OR (r.name = 'Kế toán' AND p.code IN ('order.edit_price', 'order.delete_draft', 'quote.manage', 'deposit.manage', 'return.manage', 'debt.view', 'debt.adjust'))
+  OR (r.name = 'Thủ quỹ' AND p.code IN ('debt.view'))
+ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20260930230000_cash_vouchers/migration.sql
+-- CreateEnum
+CREATE TYPE "cash_review_status" AS ENUM ('PENDING_REVIEW', 'REVIEWED', 'RETURNED');
+
+-- CreateEnum
+CREATE TYPE "payment_kind" AS ENUM ('TRA_NCC', 'HOAN_KHACH', 'CHI_PHI', 'TAT_TOAN_CK', 'KHAC');
+
+-- CreateEnum
+CREATE TYPE "cash_adjustment_kind" AS ENUM ('AMOUNT', 'VOID');
+
+-- CreateEnum
+CREATE TYPE "cash_adjustment_status" AS ENUM ('REQUESTED', 'APPROVED', 'REJECTED');
+
+-- AlterTable
+ALTER TABLE "receipts" ADD COLUMN     "reviewStatus" "cash_review_status" NOT NULL DEFAULT 'PENDING_REVIEW',
+ADD COLUMN     "reviewedAt" TIMESTAMP(3),
+ADD COLUMN     "reviewedBy" INTEGER,
+ALTER COLUMN "partnerId" DROP NOT NULL;
+
+-- CreateTable
+CREATE TABLE "payments" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "kind" "payment_kind" NOT NULL,
+    "partnerId" INTEGER,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "cashAccountId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "reviewStatus" "cash_review_status" NOT NULL DEFAULT 'PENDING_REVIEW',
+    "reviewedBy" INTEGER,
+    "reviewedAt" TIMESTAMP(3),
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "payments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cash_review_events" (
+    "id" SERIAL NOT NULL,
+    "docType" TEXT NOT NULL,
+    "docId" INTEGER NOT NULL,
+    "action" TEXT NOT NULL,
+    "reason" TEXT,
+    "userId" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "cash_review_events_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cash_adjustments" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "docType" TEXT NOT NULL,
+    "docId" INTEGER NOT NULL,
+    "kind" "cash_adjustment_kind" NOT NULL,
+    "status" "cash_adjustment_status" NOT NULL DEFAULT 'REQUESTED',
+    "reason" TEXT NOT NULL,
+    "newAmount" DECIMAL(18,2),
+    "newCashAccountId" INTEGER,
+    "oldAmount" DECIMAL(18,2),
+    "oldCashAccountId" INTEGER,
+    "requestedBy" INTEGER NOT NULL,
+    "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decidedBy" INTEGER,
+    "decidedAt" TIMESTAMP(3),
+    "decisionNote" TEXT,
+
+    CONSTRAINT "cash_adjustments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cash_closes" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "cashAccountId" INTEGER NOT NULL,
+    "closeAt" TIMESTAMP(3) NOT NULL,
+    "expected" DECIMAL(18,2) NOT NULL,
+    "actual" DECIMAL(18,2) NOT NULL,
+    "diff" DECIMAL(18,2) NOT NULL,
+    "reason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "voidedAt" TIMESTAMP(3),
+    "voidedBy" INTEGER,
+    "voidReason" TEXT,
+
+    CONSTRAINT "cash_closes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "payments_code_key" ON "payments"("code");
+
+-- CreateIndex
+CREATE INDEX "payments_periodId_at_idx" ON "payments"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "payments_partnerId_idx" ON "payments"("partnerId");
+
+-- CreateIndex
+CREATE INDEX "payments_reviewStatus_idx" ON "payments"("reviewStatus");
+
+-- CreateIndex
+CREATE INDEX "cash_review_events_docType_docId_idx" ON "cash_review_events"("docType", "docId");
+
+-- CreateIndex
+CREATE INDEX "cash_adjustments_docType_docId_idx" ON "cash_adjustments"("docType", "docId");
+
+-- CreateIndex
+CREATE INDEX "cash_adjustments_status_idx" ON "cash_adjustments"("status");
+
+-- CreateIndex
+CREATE INDEX "cash_closes_cashAccountId_closeAt_idx" ON "cash_closes"("cashAccountId", "closeAt");
+
+-- CreateIndex
+CREATE INDEX "receipts_reviewStatus_idx" ON "receipts"("reviewStatus");
+
+-- AddForeignKey
+ALTER TABLE "payments" ADD CONSTRAINT "payments_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "payments" ADD CONSTRAINT "payments_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "payments" ADD CONSTRAINT "payments_cashAccountId_fkey" FOREIGN KEY ("cashAccountId") REFERENCES "cash_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- CHECK số liệu/trạng thái
+ALTER TABLE "payments" ADD CONSTRAINT "payments_amount_chk" CHECK ("amount" > 0);
+ALTER TABLE "payments" ADD CONSTRAINT "payments_partner_chk" CHECK (("kind" IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NOT NULL) OR ("kind" NOT IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NULL));
+ALTER TABLE "payments" ADD CONSTRAINT "payments_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" = 'KHAC');
+ALTER TABLE "cash_review_events" ADD CONSTRAINT "cash_review_events_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT') AND "action" IN ('SUBMIT', 'EDIT', 'RESUBMIT', 'REVIEW', 'RETURN', 'CANCEL'));
+ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT'));
+ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_kind_chk" CHECK (("kind" = 'VOID' AND "newAmount" IS NULL AND "newCashAccountId" IS NULL) OR ("kind" = 'AMOUNT' AND ("newAmount" IS NOT NULL OR "newCashAccountId" IS NOT NULL) AND ("newAmount" IS NULL OR "newAmount" > 0)));
+ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_decided_chk" CHECK (("status" = 'REQUESTED' AND "decidedBy" IS NULL AND "decidedAt" IS NULL) OR ("status" <> 'REQUESTED' AND "decidedBy" IS NOT NULL AND "decidedAt" IS NOT NULL));
+-- Mỗi phiếu chỉ có MỘT yêu cầu điều chỉnh đang chờ
+CREATE UNIQUE INDEX "cash_adjustments_open_uq" ON "cash_adjustments"("docType", "docId") WHERE "status" = 'REQUESTED';
+ALTER TABLE "cash_closes" ADD CONSTRAINT "cash_closes_chk" CHECK ("actual" >= 0 AND "diff" = "actual" - "expected" AND ("diff" = 0 OR "reason" IS NOT NULL));
+
+-- Backfill: phiếu cọc (C5) đã lập trước khi có sổ quỹ → dựng dòng cash_ledger (chạy lại an toàn: bỏ qua phiếu đã có dòng)
+INSERT INTO "cash_ledger" ("periodId", "cashAccountId", "amountIn", "amountOut", "docType", "docId", "at", "createdBy")
+SELECT r."periodId", r."cashAccountId", r."amount", 0, 'RECEIPT', r."id", r."at", r."createdBy"
+FROM "receipts" r
+WHERE NOT r."isCancelled"
+  AND NOT EXISTS (SELECT 1 FROM "cash_ledger" c WHERE c."docType" = 'RECEIPT' AND c."docId" = r."id");
+
+-- Quyền cash.* (D-34): tạo dòng quyền TẠI ĐÂY (seed chạy SAU migrate và chỉ cấp quyền cho Giám đốc khi quyền MỚI tạo,
+-- nên phải cấp cho Giám đốc luôn) rồi cấp cho vai trò mẫu ĐÃ CÓ — chỉ THÊM, không gỡ.
+INSERT INTO "permissions" ("code", "label", "groupName", "isSensitive") VALUES
+  ('cash.transaction.create', 'Lập phiếu thu/chi', 'Quỹ', false),
+  ('cash.transaction.edit_pending', 'Sửa/hủy phiếu thu/chi chưa kiểm tra', 'Quỹ', false),
+  ('cash.review', 'Kiểm tra / trả lại phiếu thu-chi', 'Quỹ', true),
+  ('cash.adjust.request', 'Yêu cầu điều chỉnh phiếu đã kiểm tra', 'Quỹ', false),
+  ('cash.adjust.approve', 'Duyệt điều chỉnh phiếu đã kiểm tra', 'Quỹ', true),
+  ('cash.close', 'Chốt quỹ', 'Quỹ', true),
+  ('cash.close.reopen', 'Hủy chốt quỹ', 'Quỹ', true)
+ON CONFLICT ("code") DO NOTHING;
+
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id
+FROM "roles" r
+JOIN "permissions" p ON
+  (r.name = 'Giám đốc' AND p.code LIKE 'cash.%')
+  OR (r.name = 'Kế toán' AND p.code IN ('cash.transaction.create', 'cash.transaction.edit_pending', 'cash.adjust.request'))
+  OR (r.name = 'Thủ quỹ' AND p.code IN ('cash.transaction.create', 'cash.transaction.edit_pending', 'cash.review', 'cash.adjust.request', 'cash.adjust.approve', 'cash.close'))
+ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20260930235000_operating_expenses/migration.sql
+-- CreateTable
+CREATE TABLE "operating_expenses" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "expenseTypeId" INTEGER NOT NULL,
+    "paymentId" INTEGER NOT NULL,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "operating_expenses_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "operating_expenses_paymentId_key" ON "operating_expenses"("paymentId");
+
+-- CreateIndex
+CREATE INDEX "operating_expenses_periodId_expenseTypeId_idx" ON "operating_expenses"("periodId", "expenseTypeId");
+
+-- AddForeignKey
+ALTER TABLE "operating_expenses" ADD CONSTRAINT "operating_expenses_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "operating_expenses" ADD CONSTRAINT "operating_expenses_expenseTypeId_fkey" FOREIGN KEY ("expenseTypeId") REFERENCES "expense_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "operating_expenses" ADD CONSTRAINT "operating_expenses_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- >>> prisma/migrations/20261001000000_discount_settlements/migration.sql
+-- CreateTable
+CREATE TABLE "discount_settlements" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "method" "discount_settle_method" NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "paymentId" INTEGER,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "discount_settlements_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "discount_settlements_code_key" ON "discount_settlements"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "discount_settlements_paymentId_key" ON "discount_settlements"("paymentId");
+
+-- CreateIndex
+CREATE INDEX "discount_settlements_periodId_at_idx" ON "discount_settlements"("periodId", "at");
+
+-- CreateIndex
+CREATE INDEX "discount_settlements_partnerId_idx" ON "discount_settlements"("partnerId");
+
+-- AddForeignKey
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- CHECK số liệu/trạng thái: tiền mặt ⇔ có phiếu chi; trừ nợ ⇔ không có phiếu chi
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_amount_chk" CHECK ("amount" > 0);
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" = 'OFFSET' AND "paymentId" IS NULL));
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
+
+-- >>> prisma/migrations/20261001030000_trips/migration.sql
+-- CreateEnum
+CREATE TYPE "trip_status" AS ENUM ('PLANNED', 'ON_ROAD', 'RETURNED', 'SETTLED', 'CONFIRMED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "trip_result_kind" AS ENUM ('GIAO_DU', 'GHI_NO', 'HEN_TRA', 'KHONG_GIAO', 'GIAO_MOT_PHAN');
+
+-- AlterTable
+ALTER TABLE "receipts" ADD COLUMN     "tripId" INTEGER;
+
+-- CreateTable
+CREATE TABLE "trips" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "tripDate" TIMESTAMP(3) NOT NULL,
+    "routeId" INTEGER,
+    "vehicleId" INTEGER NOT NULL,
+    "driverId" INTEGER NOT NULL,
+    "assistantId" INTEGER,
+    "note" TEXT,
+    "status" "trip_status" NOT NULL DEFAULT 'PLANNED',
+    "departedAt" TIMESTAMP(3),
+    "returnedAt" TIMESTAMP(3),
+    "settledAt" TIMESTAMP(3),
+    "settledBy" INTEGER,
+    "expectedAmount" DECIMAL(18,2),
+    "cashAmount" DECIMAL(18,2),
+    "transferAmount" DECIMAL(18,2),
+    "debtAmount" DECIMAL(18,2),
+    "diffAmount" DECIMAL(18,2),
+    "diffReason" TEXT,
+    "confirmedAt" TIMESTAMP(3),
+    "confirmedBy" INTEGER,
+    "cashAccountId" INTEGER,
+    "transferAccountId" INTEGER,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "trips_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "trip_orders" (
+    "id" SERIAL NOT NULL,
+    "tripId" INTEGER NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "seq" INTEGER NOT NULL,
+    "result" "trip_result_kind",
+    "dueAmount" DECIMAL(18,2),
+    "cashAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "transferAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "debtAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "promiseDate" TIMESTAMP(3),
+    "resultNote" TEXT,
+    "deliveryNoteId" INTEGER,
+    "resultAt" TIMESTAMP(3),
+    "resultBy" INTEGER,
+    "handledAt" TIMESTAMP(3),
+    "handledBy" INTEGER,
+    "handledNote" TEXT,
+
+    CONSTRAINT "trip_orders_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "trips_code_key" ON "trips"("code");
+
+-- CreateIndex
+CREATE INDEX "trips_periodId_tripDate_idx" ON "trips"("periodId", "tripDate");
+
+-- CreateIndex
+CREATE INDEX "trips_status_idx" ON "trips"("status");
+
+-- CreateIndex
+CREATE INDEX "trips_vehicleId_tripDate_idx" ON "trips"("vehicleId", "tripDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "trip_orders_deliveryNoteId_key" ON "trip_orders"("deliveryNoteId");
+
+-- CreateIndex
+CREATE INDEX "trip_orders_orderId_idx" ON "trip_orders"("orderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "trip_orders_tripId_orderId_key" ON "trip_orders"("tripId", "orderId");
+
+-- AddForeignKey
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "trips"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trips" ADD CONSTRAINT "trips_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trips" ADD CONSTRAINT "trips_routeId_fkey" FOREIGN KEY ("routeId") REFERENCES "routes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trips" ADD CONSTRAINT "trips_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "vehicles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trips" ADD CONSTRAINT "trips_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trips" ADD CONSTRAINT "trips_assistantId_fkey" FOREIGN KEY ("assistantId") REFERENCES "drivers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "trips"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "sale_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_deliveryNoteId_fkey" FOREIGN KEY ("deliveryNoteId") REFERENCES "delivery_notes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- CHECK số liệu/trạng thái
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_amounts_chk" CHECK ("cashAmount" >= 0 AND "transferAmount" >= 0 AND "debtAmount" >= 0 AND ("dueAmount" IS NULL OR "dueAmount" >= 0));
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_result_chk" CHECK (("result" IS NULL AND "resultAt" IS NULL AND "cashAmount" = 0 AND "transferAmount" = 0 AND "debtAmount" = 0) OR ("result" IS NOT NULL AND "resultAt" IS NOT NULL));
+ALTER TABLE "trip_orders" ADD CONSTRAINT "trip_orders_promise_chk" CHECK ("promiseDate" IS NULL OR "result" = 'HEN_TRA');
+ALTER TABLE "trips" ADD CONSTRAINT "trips_cancel_chk" CHECK (("status" = 'CANCELLED' AND "cancelledAt" IS NOT NULL) OR ("status" <> 'CANCELLED' AND "cancelledAt" IS NULL));
+ALTER TABLE "trips" ADD CONSTRAINT "trips_settle_chk" CHECK ("status" NOT IN ('SETTLED', 'CONFIRMED') OR ("settledAt" IS NOT NULL AND "expectedAmount" IS NOT NULL AND "diffAmount" IS NOT NULL AND ("diffAmount" = 0 OR "diffReason" IS NOT NULL)));
+ALTER TABLE "trips" ADD CONSTRAINT "trips_confirm_chk" CHECK ("status" <> 'CONFIRMED' OR ("confirmedAt" IS NOT NULL AND "confirmedBy" IS NOT NULL));
+
+-- Quyền trip.* chưa gán cho vai trò nào ở bản trước → cấp cho vai trò mẫu đã có (chỉ THÊM):
+-- Kế toán có sẵn trip.manage/trip.settle từ danh mục gốc; Thủ quỹ có trip.confirm_cash. Bổ sung Thủ quỹ đối soát (trip.settle).
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id FROM "roles" r JOIN "permissions" p ON r.name = 'Thủ quỹ' AND p.code IN ('trip.settle')
+ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20261001060000_print_files/migration.sql
+-- CreateTable
+CREATE TABLE "print_files" (
+    "id" SERIAL NOT NULL,
+    "docType" TEXT NOT NULL,
+    "docId" INTEGER NOT NULL,
+    "templateId" INTEGER,
+    "fileId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "printedBy" INTEGER NOT NULL,
+    "printedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "print_files_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "print_files_docType_docId_key" ON "print_files"("docType", "docId");
+
+
+-- CHECK: URL bản in phải là https
+ALTER TABLE "print_files" ADD CONSTRAINT "print_files_url_chk" CHECK ("url" LIKE 'https://%');
+
+-- >>> prisma/migrations/20261002000000_production_orders/migration.sql
+-- Plan 06-E1: lệnh sản xuất phụ kiện
+CREATE TABLE "production_orders" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "note" TEXT,
+    "outSeq" BIGINT,
+    "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "production_orders_pkey" PRIMARY KEY ("id")
+);
+-- CreateTable
+CREATE TABLE "production_materials" (
+    "id" SERIAL NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "materialProductId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "seq" BIGINT,
+    CONSTRAINT "production_materials_pkey" PRIMARY KEY ("id")
+);
+-- CreateIndex
+CREATE UNIQUE INDEX "production_orders_code_key" ON "production_orders"("code");
+-- CreateIndex
+CREATE INDEX "production_orders_periodId_at_idx" ON "production_orders"("periodId", "at");
+-- CreateIndex
+CREATE UNIQUE INDEX "production_materials_orderId_materialProductId_key" ON "production_materials"("orderId", "materialProductId");
+-- AddForeignKey
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "production_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_materialProductId_fkey" FOREIGN KEY ("materialProductId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Số liệu hợp lệ
+ALTER TABLE "production_orders" ADD CONSTRAINT "production_orders_qty_chk" CHECK ("qty" > 0);
+ALTER TABLE "production_materials" ADD CONSTRAINT "production_materials_qty_chk" CHECK ("qty" > 0);
+
+-- >>> prisma/migrations/20261002010000_stocktakes/migration.sql
+-- Plan 06-E4: kiểm kho
+-- CreateEnum
+CREATE TYPE "stocktake_status" AS ENUM ('DRAFT', 'DONE', 'CANCELLED');
+-- CreateTable
+CREATE TABLE "stocktakes" (
+    "id" SERIAL NOT NULL,
+    "periodId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "status" "stocktake_status" NOT NULL DEFAULT 'DRAFT',
+    "note" TEXT,
+    "confirmedAt" TIMESTAMP(3),
+    "confirmedBy" INTEGER,
+    "cancelledAt" TIMESTAMP(3),
+    "cancelledBy" INTEGER,
+    "cancelReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "stocktakes_pkey" PRIMARY KEY ("id")
+);
+-- CreateTable
+CREATE TABLE "stocktake_lines" (
+    "id" SERIAL NOT NULL,
+    "stocktakeId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "actualQty" DECIMAL(18,3) NOT NULL,
+    "systemQty" DECIMAL(18,3),
+    "diff" DECIMAL(18,3),
+    "unitCost" DECIMAL(18,4),
+    "seq" BIGINT,
+    CONSTRAINT "stocktake_lines_pkey" PRIMARY KEY ("id")
+);
+-- CreateIndex
+CREATE UNIQUE INDEX "stocktakes_code_key" ON "stocktakes"("code");
+-- CreateIndex
+CREATE INDEX "stocktakes_periodId_at_idx" ON "stocktakes"("periodId", "at");
+-- CreateIndex
+CREATE INDEX "stocktakes_periodId_status_idx" ON "stocktakes"("periodId", "status");
+-- CreateIndex
+CREATE UNIQUE INDEX "stocktake_lines_stocktakeId_productId_key" ON "stocktake_lines"("stocktakeId", "productId");
+-- AddForeignKey
+ALTER TABLE "stocktakes" ADD CONSTRAINT "stocktakes_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_stocktakeId_fkey" FOREIGN KEY ("stocktakeId") REFERENCES "stocktakes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "stocktake_lines" ADD CONSTRAINT "stocktake_lines_actual_chk" CHECK ("actualQty" >= 0);
+-- Đã chốt (DONE) thì phải có đủ số liệu chốt; chưa chốt thì chưa có
+ALTER TABLE "stocktakes" ADD CONSTRAINT "stocktakes_confirm_chk" CHECK (("status" = 'DONE') = ("confirmedAt" IS NOT NULL) OR "status" = 'CANCELLED');
+
+-- >>> prisma/migrations/20261002100000_user_preferences/migration.sql
+-- Cấu hình giao diện theo tài khoản (module tabs). Chỉ thêm bảng, không đụng dữ liệu cũ.
+-- CreateTable
+CREATE TABLE "user_preferences" (
+    "userId" INTEGER NOT NULL,
+    "data" JSONB NOT NULL DEFAULT '{}',
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_preferences_pkey" PRIMARY KEY ("userId")
+);
+
+-- AddForeignKey
+ALTER TABLE "user_preferences" ADD CONSTRAINT "user_preferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- >>> prisma/migrations/20261005000000_sale_order_extras/migration.sql
+-- Đơn bán: người bán, kho xuất, hình thức thanh toán dự kiến; sản phẩm: ảnh minh hoạ. Chỉ thêm cột (nullable/default) — không đụng dữ liệu cũ.
+CREATE TYPE "sale_payment_method" AS ENUM ('NONE', 'CASH', 'TRANSFER', 'COD');
+
+ALTER TABLE "sale_orders" ADD COLUMN "salesUserId" INTEGER,
+ADD COLUMN "warehouseId" INTEGER,
+ADD COLUMN "paymentMethod" "sale_payment_method" NOT NULL DEFAULT 'NONE';
+
+ALTER TABLE "products" ADD COLUMN "imageUrl" TEXT;
+
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_salesUserId_fkey" FOREIGN KEY ("salesUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "warehouses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- >>> prisma/migrations/20261005100000_sale_checkout_walkin/migration.sql
+-- Bán lẻ tại quầy: khách lẻ ghi tên/SĐT trên đơn; khách hàng có MST và địa chỉ giao hàng. Chỉ thêm cột nullable.
+ALTER TABLE "partners" ADD COLUMN "taxCode" TEXT,
+ADD COLUMN "deliveryAddress" TEXT;
+
+ALTER TABLE "sale_orders" ADD COLUMN "walkInName" TEXT,
+ADD COLUMN "walkInPhone" TEXT;
+
+-- >>> prisma/migrations/20261005200000_sale_shipping_discount_note/migration.sql
+-- Phí vận chuyển + chiết khấu cả đơn (đã phân bổ vào dòng) + ghi chú theo dòng. Chỉ thêm cột có mặc định.
+ALTER TABLE "sale_orders" ADD COLUMN "shippingFee" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "orderDiscount" DECIMAL(18,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE "sale_order_lines" ADD COLUMN "discountOrder" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "note" TEXT;
+
+ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_shipping_discount_chk" CHECK ("shippingFee" >= 0 AND "orderDiscount" >= 0);
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_discount_order_chk" CHECK ("discountOrder" >= 0 AND "discountOrder" <= "discountNow");
+
+-- >>> prisma/migrations/20261005300000_product_groups/migration.sql
+-- Nhóm hàng của sản phẩm (tuỳ chọn). Chỉ thêm bảng + cột nullable.
+CREATE TABLE "product_groups" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "product_groups_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "product_groups_name_key" ON "product_groups"("name");
+
+ALTER TABLE "products" ADD COLUMN "groupId" INTEGER;
+
+CREATE INDEX "products_groupId_idx" ON "products"("groupId");
+
+ALTER TABLE "products" ADD CONSTRAINT "products_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "product_groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- app_rw: cùng quyền như các bảng danh mục khác (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON "product_groups" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "product_groups_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261006100000_return_refund_deduction/migration.sql
+-- Trả hàng của khách: khoản khấu trừ (phí vận chuyển/khác) + liên kết phiếu hoàn tiền (HOAN_KHACH) sinh cùng phiếu trả. Chỉ thêm cột.
+ALTER TABLE "goods_returns" ADD COLUMN "deductionAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+ADD COLUMN "deductionNote" TEXT;
+ALTER TABLE "goods_returns" ADD CONSTRAINT "goods_returns_deduction_chk" CHECK ("deductionAmount" >= 0 AND "deductionAmount" <= "totalAmount");
+
+ALTER TABLE "payments" ADD COLUMN "goodsReturnId" INTEGER;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_goodsReturnId_fkey" FOREIGN KEY ("goodsReturnId") REFERENCES "goods_returns"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "payments_goodsReturnId_idx" ON "payments"("goodsReturnId");
+
+-- >>> prisma/migrations/20261006200000_opening_demo_flag/migration.sql
+-- Cờ "số demo" cho số đầu kỳ (nạp tạm để test, reset khi chạy chính thức). Chỉ thêm cột có mặc định.
+ALTER TABLE "opening_stock" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_debt" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_cash" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "opening_discount" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261007100000_bom_area_ratio/migration.sql
+-- Tỷ lệ m²/md của định mức (bán tôn gia công theo kích thước). Chỉ thêm cột nullable.
+ALTER TABLE "boms" ADD COLUMN "areaRatio" DECIMAL(18,4);
+ALTER TABLE "boms" ADD CONSTRAINT "boms_areaRatio_positive" CHECK ("areaRatio" IS NULL OR "areaRatio" > 0);
+
+-- >>> prisma/migrations/20261007200000_product_processing_ratios/migration.sql
+-- Tỷ lệ m²/md theo (sản phẩm × kiểu gia công), không phụ thuộc định mức. Chuyển dữ liệu từ boms.areaRatio rồi bỏ cột.
+CREATE TABLE "product_processing_ratios" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "processingTypeId" INTEGER NOT NULL,
+    "ratio" DECIMAL(18,4) NOT NULL,
+    "updatedBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "product_processing_ratios_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "product_processing_ratios_ratio_positive" CHECK ("ratio" > 0)
+);
+CREATE UNIQUE INDEX "product_processing_ratios_productId_processingTypeId_key" ON "product_processing_ratios"("productId", "processingTypeId");
+ALTER TABLE "product_processing_ratios" ADD CONSTRAINT "product_processing_ratios_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "product_processing_ratios" ADD CONSTRAINT "product_processing_ratios_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+INSERT INTO "product_processing_ratios" ("productId", "processingTypeId", "ratio", "updatedBy", "updatedAt")
+SELECT "productId", "processingTypeId", "areaRatio", "createdBy", CURRENT_TIMESTAMP FROM "boms" WHERE "areaRatio" IS NOT NULL;
+
+ALTER TABLE "boms" DROP COLUMN "areaRatio";
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "product_processing_ratios" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "product_processing_ratios_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261008100000_partner_extra_fields/migration.sql
+-- Thông tin bổ sung của đối tác (tuỳ chọn): email, TK ngân hàng, người đại diện, thứ tự, loại "Chi phí".
+ALTER TABLE "partners" ADD COLUMN "email" TEXT;
+ALTER TABLE "partners" ADD COLUMN "bankAccount" TEXT;
+ALTER TABLE "partners" ADD COLUMN "representative" TEXT;
+ALTER TABLE "partners" ADD COLUMN "sortOrder" INTEGER;
+ALTER TABLE "partners" ADD COLUMN "isExpense" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261009100000_processing_type_ratio/migration.sql
+-- Kiểu gia công: tỷ lệ m²/md mặc định, tỷ lệ trừ kho, ĐVT thành cột thật (trước đây chỉ là chữ trong Ghi chú).
+ALTER TABLE "processing_types" ADD COLUMN "ratio" DECIMAL(18,4), ADD COLUMN "stockRatio" DECIMAL(18,4), ADD COLUMN "unit" TEXT;
+
+-- Chép số từ Ghi chú dạng "Tỷ lệ 1,08 · Trừ kho 1 · ĐVT m2" (số kiểu VN: phẩy thập phân). Dòng không đọc được giữ nguyên Ghi chú, cột để trống.
+UPDATE "processing_types" SET "ratio" = replace((regexp_match("note", 'Tỷ lệ ([0-9]+(?:,[0-9]+)?)'))[1], ',', '.')::numeric WHERE "note" ~ 'Tỷ lệ [0-9]+(,[0-9]+)?( |$|·|\()' ;
+UPDATE "processing_types" SET "stockRatio" = replace((regexp_match("note", 'Trừ kho ([0-9]+(?:,[0-9]+)?)'))[1], ',', '.')::numeric WHERE "note" ~ 'Trừ kho [0-9]+(,[0-9]+)?( |$|·)';
+UPDATE "processing_types" SET "unit" = (regexp_match("note", 'ĐVT ([^ ·]+)'))[1] WHERE "note" ~ 'ĐVT [^ ·]+';
+UPDATE "processing_types" SET "ratio" = NULL WHERE "ratio" <= 0 OR "ratio" > 1000000;
+UPDATE "processing_types" SET "stockRatio" = NULL WHERE "stockRatio" <= 0 OR "stockRatio" > 1000000;
+
+-- Bỏ phần đã chép khỏi Ghi chú (chỉ khi cột tương ứng đã có giá trị).
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*(—\s*)?Tỷ lệ [0-9]+(,[0-9]+)?( m2| m)?( \(theo sản phẩm đầu tiên dùng kiểu này\))?', ''), E' ·—'), '') WHERE "ratio" IS NOT NULL;
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*·?\s*Trừ kho [0-9]+(,[0-9]+)?', ''), E' ·—'), '') WHERE "stockRatio" IS NOT NULL;
+UPDATE "processing_types" SET "note" = NULLIF(btrim(regexp_replace("note", '\s*·?\s*ĐVT [^ ·]+', ''), E' ·—'), '') WHERE "unit" IS NOT NULL;
+
+ALTER TABLE "processing_types" ADD CONSTRAINT "processing_types_ratio_positive" CHECK ("ratio" IS NULL OR "ratio" > 0), ADD CONSTRAINT "processing_types_stockRatio_positive" CHECK ("stockRatio" IS NULL OR "stockRatio" > 0);
+
+-- >>> prisma/migrations/20261010100000_product_processing_links/migration.sql
+-- Gắn kiểu gia công cho từng sản phẩm: một dòng (sản phẩm × kiểu) = sản phẩm có kiểu đó; ratio NULL = dùng tỷ lệ mặc định của kiểu.
+-- Dòng đang có (tỷ lệ đã khai báo) mặc nhiên là đã gắn.
+ALTER TABLE "product_processing_ratios" ALTER COLUMN "ratio" DROP NOT NULL;
+
+-- >>> prisma/migrations/20261011100000_product_prices_units/migration.sql
+-- Danh mục đơn vị tính (nạp sẵn từ đơn vị đang dùng) + giá/đơn vị/thông tin bổ sung của sản phẩm. Chỉ thêm bảng/cột nullable.
+CREATE TABLE "units" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "units_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "units_name_key" ON "units"("name");
+
+INSERT INTO "units" ("name")
+SELECT DISTINCT TRIM(u) FROM (
+    SELECT "baseUnit" AS u FROM "products"
+    UNION SELECT "unit" FROM "product_units"
+) x WHERE TRIM(u) <> ''
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE "products"
+    ADD COLUMN "purchasePrice" DECIMAL(18,2),
+    ADD COLUMN "salePrice" DECIMAL(18,2),
+    ADD COLUMN "importUnit" TEXT,
+    ADD COLUMN "exportUnit" TEXT,
+    ADD COLUMN "bundleQty" DECIMAL(18,3),
+    ADD COLUMN "qtyLabel" TEXT,
+    ADD CONSTRAINT "products_prices_nonneg" CHECK (("purchasePrice" IS NULL OR "purchasePrice" >= 0) AND ("salePrice" IS NULL OR "salePrice" >= 0) AND ("bundleQty" IS NULL OR "bundleQty" > 0));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "units" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "units_id_seq" TO app_rw;
+
+-- >>> prisma/migrations/20261011200000_purchase_line_processing/migration.sql
+-- Kiểu gia công của dòng phiếu nhập (tuỳ chọn, chỉ ghi nhận). Chỉ thêm cột nullable + FK.
+ALTER TABLE "purchase_lines" ADD COLUMN "processingTypeId" INTEGER;
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "purchase_lines_processingTypeId_idx" ON "purchase_lines"("processingTypeId");
+
+-- >>> prisma/migrations/20261012100000_quote_line_processing/migration.sql
+-- Kiểu gia công của dòng báo giá (tuỳ chọn). Chỉ thêm cột nullable + FK.
+ALTER TABLE "quote_lines" ADD COLUMN "processingTypeId" INTEGER;
+ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_processingTypeId_fkey" FOREIGN KEY ("processingTypeId") REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "quote_lines_processingTypeId_idx" ON "quote_lines"("processingTypeId");
+
+-- >>> prisma/migrations/20261012200000_processing_price_basis/migration.sql
+-- Cách tính giá của kiểu gia công: mét dài (mặc định, giữ hành vi cũ) hoặc mét vuông. Chỉ thêm kiểu + cột có DEFAULT.
+CREATE TYPE "PriceBasis" AS ENUM ('LENGTH', 'AREA');
+ALTER TABLE "processing_types" ADD COLUMN "priceBasis" "PriceBasis" NOT NULL DEFAULT 'LENGTH';
+
+-- >>> prisma/migrations/20261012300000_price_basis_unit/migration.sql
+-- Kiểu gia công bán theo đúng ĐVT riêng (kg, bình, cây…). Chỉ thêm giá trị enum, không đụng dữ liệu.
+ALTER TYPE "PriceBasis" ADD VALUE 'UNIT';
+
+-- >>> prisma/migrations/20261013100000_return_undelivered/migration.sql
+-- Phiếu trả hàng chưa giao (hàng không giao được trả về kho): chỉ thêm cột có mặc định.
+ALTER TABLE "goods_returns" ADD COLUMN "undelivered" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261013200000_trip_discount_over/migration.sql
+-- Tiền bớt và phần thu vượt tại điểm giao (chuyến): chỉ thêm cột có mặc định 0.
+ALTER TABLE "trip_orders" ADD COLUMN "discountAmount" DECIMAL(18,2) NOT NULL DEFAULT 0, ADD COLUMN "overAmount" DECIMAL(18,2) NOT NULL DEFAULT 0;
+
+-- >>> prisma/migrations/20261015110000_daily_reviews/migration.sql
+CREATE TABLE "daily_reviews" (
+  "userId" INTEGER NOT NULL,
+  "day" DATE NOT NULL,
+  "itemKey" TEXT NOT NULL,
+  "seenAt" TIMESTAMP(3),
+  "seenVersion" TEXT,
+  "checkedAt" TIMESTAMP(3),
+  "checkedVersion" TEXT,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "daily_reviews_pkey" PRIMARY KEY ("userId", "day", "itemKey"),
+  CONSTRAINT "daily_reviews_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "daily_reviews_item_key_chk" CHECK ("itemKey" IN ('return-order','return-product','return-supplier','undelivered','loss','debt','discount-orders','settlements','receipts','payments','purchases')),
+  CONSTRAINT "daily_reviews_seen_pair_chk" CHECK (("seenAt" IS NULL) = ("seenVersion" IS NULL)),
+  CONSTRAINT "daily_reviews_checked_pair_chk" CHECK (("checkedAt" IS NULL) = ("checkedVersion" IS NULL))
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON "daily_reviews" TO app_rw;

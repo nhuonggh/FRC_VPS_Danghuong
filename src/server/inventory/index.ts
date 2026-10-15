@@ -21,6 +21,8 @@ export { withInventoryTx } from "./unit-of-work";
 export type { EngineOptions, WithInventoryOptions } from "./unit-of-work";
 export { postIssue, postReceipt, productsOfDocument, removeDocument, updateLayerCost } from "./ports";
 export type { IssueInput, ReceiptInput } from "./ports";
+export { postOpeningLots } from "./opening-lots";
+export type { OpeningLot } from "./opening-lots";
 
 // Chủ dòng chứng từ (ghi ngược giá vốn vào dòng đơn)
 export { registerCostOwner, unitCostOf } from "./owners";

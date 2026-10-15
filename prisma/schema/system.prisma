@@ -1,24 +1,55 @@
 model User {
-  id                 Int      @id @default(autoincrement())
-  username           String   @unique
-  passwordHash       String
-  fullName           String
+  id                    Int       @id @default(autoincrement())
+  username              String    @unique
+  passwordHash          String
+  fullName              String
   // Email Google được phép đăng nhập vào tài khoản này (khớp CHÍNH XÁC, email_verified). NULL = không đăng nhập Google.
   // Lưu dạng lowercase + trim — CHECK users_email_normalized_chk (migration SQL thô) chặn ở DB.
-  email              String?  @unique
+  email                 String?   @unique
   // Lần cuối giá trị email đổi/gỡ. Phiên Google mở TRƯỚC mốc này bị vô hiệu (loadActor so với authAt trong JWT).
-  emailChangedAt     DateTime? @db.Timestamptz(3)
+  emailChangedAt        DateTime? @db.Timestamptz(3)
   // Hạn của MẬT KHẨU TẠM (khi mustChangePassword): quá hạn → verifyCredentials từ chối như sai mật khẩu. NULL = không có hạn.
   tempPasswordExpiresAt DateTime? @db.Timestamptz(3)
-  isLocked         Boolean  @default(false)
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  isLocked              Boolean   @default(false)
+  mustChangePassword    Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  roles         UserRole[]
-  ownedPartners Partner[]  @relation("PartnerOwner")
+  roles           UserRole[]
+  ownedPartners   Partner[]        @relation("PartnerOwner")
+  salesOrders     SaleOrder[]      @relation("SaleOrderSalesUser")
+  userPreferences UserPreference[]
+  dailyReviews    DailyReview[]
 
   @@map("users")
+}
+
+/// Cấu hình giao diện theo tài khoản (tab yêu thích từng module, thu gọn sidebar…). KHÔNG chứa dữ liệu nghiệp vụ/bí mật.
+model UserPreference {
+  userId    Int      @id
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+/// Personal daily-review metadata; not a financial document or accounting approval.
+model DailyReview {
+  userId         Int
+  day            DateTime @db.Date
+  itemKey        String
+  seenAt         DateTime?
+  seenVersion    String?
+  checkedAt      DateTime?
+  checkedVersion String?
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day, itemKey])
+  @@map("daily_reviews")
 }
 
 model Role {
@@ -86,13 +117,16 @@ model AuditLog {
 
 // Bảng 1 dòng (id = 1) — mục 6
 model CompanySetting {
-  id       Int     @id @default(1)
-  name     String
-  address  String?
-  phone    String?
-  taxCode  String?
-  logo     String?
-  bankInfo Json?
+  id        Int      @id @default(1)
+  name      String
+  address   String?
+  phone     String?
+  taxCode   String?
+  logo      String?
+  bankInfo  Json?
+  /// Chống ghi đè mù khi hai người cùng sửa (Task 18).
+  updatedAt DateTime @default(now()) @updatedAt
+  updatedBy Int?
 
   @@map("company_settings")
 }

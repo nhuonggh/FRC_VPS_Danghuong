@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   // Sai tên hay sai mật khẩu đều CredentialsSignin → một thông báo chung (không lộ tài khoản có tồn tại hay không)
   CredentialsSignin: "Tên đăng nhập hoặc mật khẩu không đúng.",
   LOCKED: "Tài khoản đã bị khóa. Liên hệ giám đốc để mở khóa.",
+  RATE_LIMITED: "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.",
   // Google: không có user khớp email / email chưa xác minh / tài khoản bị khoá → MỘT thông báo (không lộ lý do)
   GoogleNotAllowed: "Tài khoản Google này chưa được cấp quyền vào hệ thống. Liên hệ quản trị viên.",
   AccessDenied: "Tài khoản Google này chưa được cấp quyền vào hệ thống. Liên hệ quản trị viên.",

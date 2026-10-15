@@ -2,7 +2,8 @@
 
 import clsx from "clsx";
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { normalizeSearch } from "@/lib/search";
 
 export interface ComboOption {
@@ -35,11 +36,19 @@ interface Props {
   disabled?: boolean;
   error?: string;
   debounceMs?: number;
+  /** Ẩn nhãn (vẫn đọc được bằng trình đọc màn hình) — dùng trong ô bảng đã có tiêu đề cột. */
+  hideLabel?: boolean;
+  /** Portaled menus inside a dialog must share its stacking layer. */
+  overlay?: boolean;
+  portalContainer?: HTMLElement | null;
 }
+
+interface ListPos { left: number; top?: number; bottom?: number; width: number; maxHeight: number }
+const LIST_MAX = 320, LIST_MIN_WIDTH = 360, LIST_GAP = 4;
 
 const BLUR_CLOSE_MS = 120; // chờ để click vào 1 dòng kịp chạy trước khi đóng danh sách
 
-export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300 }: Props) {
+export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300, hideLabel, overlay = false, portalContainer }: Props) {
   const uid = useId();
   const listId = `${uid}-list`;
   const [q, setQ] = useState(value?.label ?? "");
@@ -49,6 +58,8 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const req = useRef(0);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<ListPos | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => setQ(value?.label ?? ""), [value]);
@@ -83,6 +94,26 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
     document.getElementById(`${uid}-o${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [active, open, options, uid]);
 
+  // Danh sách vẽ ra <body> (portal, position: fixed) để không bị cắt bởi overflow của bảng/panel cha; lật lên khi sát đáy.
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const width = Math.min(Math.max(r.width, LIST_MIN_WIDTH), vw - 16);
+      const left = Math.max(8, Math.min(r.left, vw - width - 8));
+      const below = vh - r.bottom - LIST_GAP - 8, above = r.top - LIST_GAP - 8;
+      if (below >= 160 || below >= above) setPos({ left, top: r.bottom + LIST_GAP, width, maxHeight: Math.max(120, Math.min(LIST_MAX, below)) });
+      else setPos({ left, bottom: vh - r.top + LIST_GAP, width, maxHeight: Math.max(120, Math.min(LIST_MAX, above)) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open]);
+
   const pick = (o: ComboOption) => { onChange(o); setQ(o.label); setOpen(false); };
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -97,8 +128,8 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
 
   return (
     <div className="relative">
-      <label htmlFor={uid} className="mb-1 block text-xs text-fg-muted">{label}</label>
-      <div className="relative">
+      <label htmlFor={uid} className={hideLabel ? "sr-only" : "mb-1 block text-xs text-fg-muted"}>{label}</label>
+      <div className="relative" ref={anchorRef}>
         <input
           id={uid} role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
           aria-activedescendant={open && options[active] ? `${uid}-o${active}` : undefined}
@@ -121,8 +152,9 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
           <ChevronDown size={16} aria-hidden className="mr-2 text-fg-muted" />
         </div>
       </div>
-      {open && (
-        <ul id={listId} role="listbox" aria-label={label} className="absolute z-dropdown mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-raised p-1 shadow-md">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <ul id={listId} role="listbox" aria-label={label} style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
+          className={clsx(overlay ? "z-dialog" : "z-dropdown", "overflow-auto rounded-md border border-border bg-raised p-1 shadow-md")}>
           {options.map((o, i) => (
             <li key={o.value} id={`${uid}-o${i}`} role="option" aria-selected={value?.value === o.value}
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}
@@ -134,7 +166,8 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
           {!loading && failed && <li className="px-3 py-2 text-sm text-danger">Không tải được danh sách</li>}
           {!loading && !failed && options.length === 0 && <li className="px-3 py-2 text-sm text-fg-muted">Không tìm thấy kết quả</li>}
           {loading && options.length === 0 && <li className="px-3 py-2 text-sm text-fg-muted">Đang tìm…</li>}
-        </ul>
+        </ul>,
+        portalContainer ?? document.body,
       )}
       {error && <p role="alert" className="mt-1 text-xs text-danger">{error}</p>}
     </div>

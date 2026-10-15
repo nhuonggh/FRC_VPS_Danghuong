@@ -22,6 +22,12 @@ export function toIct(date: Date): IctParts {
   };
 }
 
+/** yyyy-mm-dd theo lịch Việt Nam (ICT), không phụ thuộc timezone máy chủ. */
+export function ictYmd(date: Date): string {
+  const t = toIct(date);
+  return `${t.y}-${String(t.m + 1).padStart(2, "0")}-${String(t.d).padStart(2, "0")}`;
+}
+
 /** 00:00 ICT của (y, m, d) — m 0–11; m và d được phép tràn (Date.UTC tự chuẩn hoá). */
 export function ictStartOfDay(y: number, m: number, d: number): Date {
   return new Date(Date.UTC(y, m, d) - ICT_OFFSET_MS);
