@@ -7,11 +7,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Check, SlidersHorizontal, X } from "lucide-react";
 import { Combobox, filterComboOptions, type ComboOption } from "@/components/ui/Combobox";
-import { SearchBox } from "@/components/ui";
+import { QuickTimeFilter, SearchBox } from "@/components/ui";
+import { TimeRangeEditor } from "@/components/ui/QuickTimeFilter";
 import { buildListHref, listTimeRange, type ListParams } from "@/lib/query-params";
 import { formatDate, formatNumber } from "@/lib/format";
 import { PAGE_SIZES } from "@/lib/pagination";
-import { resolveTimeRange, TIME_PRESETS, type TimePreset } from "@/lib/time-presets";
+import { resolveTimeRange } from "@/lib/time-presets";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
 import { activeOrderTab, ORDER_TABS, resetOrderStatusFilters, type OrderTabKey } from "./order-list-config";
 
@@ -44,8 +45,7 @@ export function OrderListControls({ params, counts, creators, groups, now }: { p
       <Choices label="Giao hàng" values={draft.filters.delivery ?? []} onChange={(v) => setFilter("delivery", v)} options={Object.entries(DELIVERY_LABEL).filter(([key]) => key !== "NEW").map(([value, v]) => ({ value, label: v.label }))} />
       <Choices label="Thanh toán" values={draft.filters.payment ?? []} onChange={(v) => setFilter("payment", v)} options={Object.entries(PAYMENT_LABEL).map(([value, v]) => ({ value, label: v.label }))} />
       <label className="grid gap-1 text-sm">Ghi nhận xuất kho<select className={input} value={draft.filters.stock?.[0] ?? ""} onChange={(e) => setFilter("stock", e.target.value ? [e.target.value] : [])}><option value="">Tất cả</option><option value="posted">Đã xác nhận xuất kho</option><option value="draft">Nháp — chưa xuất kho</option></select></label>
-      <label className="grid gap-1 text-sm">Thời gian<select className={input} value={draft.timePreset ?? ""} onChange={(e) => setDraft({ ...draft, timePreset: (e.target.value || undefined) as TimePreset | undefined })}><option value="">Mọi thời gian</option>{TIME_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
-      {draft.timePreset === "custom" && <><label className="grid gap-1 text-sm">Từ ngày<input type="date" className={input} value={draft.timeStart ?? ""} onChange={(e) => setDraft({ ...draft, timeStart: e.target.value })} /></label><label className="grid gap-1 text-sm">Đến ngày<input type="date" className={input} value={draft.timeEnd ?? ""} onChange={(e) => setDraft({ ...draft, timeEnd: e.target.value })} /></label></>}
+      <div className="grid gap-1 text-sm">{mobile ? <TimeRangeEditor value={draft} now={now} onChange={(value) => setDraft({ ...draft, ...value })} /> : <QuickTimeFilter basePath="/sales/orders" params={draft} now={now} onChange={(value) => setDraft({ ...draft, ...value })} />}</div>
       <label className="grid gap-1 text-sm">Bản ghi mỗi trang<select className={input} value={draft.pageSize} onChange={(e) => setDraft({ ...draft, pageSize: Number(e.target.value) })}>{PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
     </div>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}

@@ -44,7 +44,7 @@ describe("ProductionOrderForm", () => {
   it("tạo phụ kiện tại chỗ với loại mặc định và chọn ngay phụ kiện vừa tạo", async () => {
     apiFetch.mockImplementation(async (url: string) => url === "/api/products" ? { id: 99 } : []);
     render(<ProductionOrderForm today="2026-09-15" quickProduct={{ groups: [], units: ["cái"], canSeePurchase: false }} />);
-    await userEvent.click(screen.getByRole("button", { name: "Thêm phụ kiện" }));
+    await userEvent.click(screen.getByRole("button", { name: "Thêm phụ kiện Tôn" }));
     expect(screen.getByLabelText("Loại")).toHaveValue("PHU_KIEN");
     await userEvent.type(screen.getByLabelText(/Tên sản phẩm/), "Nóc mới");
     await userEvent.type(screen.getByLabelText(/Mã sản phẩm/), "PK99");
@@ -52,13 +52,13 @@ describe("ProductionOrderForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/products", expect.objectContaining({ method: "POST", json: expect.objectContaining({ kind: "PHU_KIEN", code: "PK99" }) })));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("combobox", { name: "Phụ kiện" })).toHaveValue("PK99 — Nóc mới");
-    await userEvent.click(screen.getByRole("button", { name: "Thêm phụ kiện" }));
+    expect(screen.getByRole("combobox", { name: "Phụ kiện Tôn" })).toHaveValue("PK99 — Nóc mới");
+    await userEvent.click(screen.getByRole("button", { name: "Thêm phụ kiện Tôn" }));
     expect(screen.getByLabelText("Loại")).toHaveValue("PHU_KIEN");
   });
   it("không hiện nút thêm phụ kiện khi chưa được cấp quyền tạo sản phẩm", () => {
     render(<ProductionOrderForm today="2026-09-15" />);
-    expect(screen.queryByRole("button", { name: "Thêm phụ kiện" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Thêm phụ kiện Tôn" })).not.toBeInTheDocument();
   });
   it("thiếu phụ kiện/số lượng ⇒ báo lỗi, không gọi API", async () => {
     render(<ProductionOrderForm today="2026-09-15" />);
