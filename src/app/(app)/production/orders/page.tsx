@@ -14,7 +14,7 @@ export default async function ProductionOrdersPage({ searchParams }: { searchPar
   const href = (p: Parameters<typeof buildListHref>[2]) => buildListHref(BASE, params, p);
   return (
     <ListPageLayout
-      title="Lệnh sản xuất phụ kiện"
+      title="Lệnh sản xuất phụ kiện Tôn"
       actions={<Link href={`${BASE}/new`} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} />Lập lệnh</Link>}
       stats={<><StatCard label="Tổng" value={result.stats.all} href={href({ filters: { status: [] } })} active={!status} /><StatCard label="Hiệu lực" value={result.stats.active} tone="success" href={href({ filters: { status: ["active"] } })} active={status === "active"} /><StatCard label="Đã hủy" value={result.stats.cancelled} tone="danger" href={href({ filters: { status: ["cancelled"] } })} active={status === "cancelled"} /></>}
       filters={<MultiSelectFilter label="Trạng thái" paramKey="status" basePath={BASE} params={params} options={[{ value: "active", label: "Hiệu lực" }, { value: "cancelled", label: "Đã hủy" }]} />}
