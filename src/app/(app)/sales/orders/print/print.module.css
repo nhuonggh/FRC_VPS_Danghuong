@@ -1,0 +1,12 @@
+.root { background: var(--bg-surface); color: var(--text-primary); padding: var(--space-4); }
+@media print {
+  :global(body):has(.root) * { visibility: hidden; }
+  :global(body):has(.root) :global(div):has(.root),
+  :global(body):has(.root) :global(main):has(.root) { position: static; display: block; height: auto; max-height: none; overflow: visible; }
+  .root, .root * { visibility: visible !important; }
+  .root { position: absolute; inset: 0; width: 100%; padding: 0; }
+  .root table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+  .root tr { break-inside: avoid; }
+  .root thead { display: table-header-group; }
+  .root :global(button) { display: none; }
+}

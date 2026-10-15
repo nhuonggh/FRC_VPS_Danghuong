@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
-import { sortToOrderBy, type ListParams } from "@/lib/query-params";
+import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
@@ -68,7 +68,8 @@ const TYPES = ["LOSS", "WRITE_OFF"] as const;
 export async function listLossAdjusts(db: PrismaClient, actor: Actor, params: ListParams) {
   assertCan(actor.perms, "stock_adjust.manage");
   const period = await getOpenPeriod(db), status = params.filters.status?.[0], type = params.filters.type?.[0];
-  const base = { periodId: period.id, type: { in: [...TYPES] } };
+  const range = listTimeRange(params);
+  const base = { periodId: period.id, type: { in: [...TYPES] }, ...(range ? { at: { gte: range.start, lt: range.end } } : {}) };
   const typeFilter: "LOSS" | "WRITE_OFF" | undefined = type === "LOSS" ? "LOSS" : type === "WRITE_OFF" ? "WRITE_OFF" : undefined;
   const where: Prisma.StockAdjustmentWhereInput = { ...base, ...(typeFilter ? { type: typeFilter } : {}), ...(status === "active" ? { isCancelled: false } : status === "cancelled" ? { isCancelled: true } : {}) };
   const [rows, total, all, cancelled] = await Promise.all([

@@ -114,7 +114,7 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     requireActor.mockResolvedValue(actor(["order.view", "stock.view", "debt.view"]));
     await render_({});
     const nav = screen.getByRole("navigation", { name: "Tổng quan theo mục" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Chức năng", "Bán hàng", "Kho", "Kế toán"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Chức năng", "Kiểm tra hằng ngày", "Bán hàng", "Kho", "Kế toán"]);
     expect(within(nav).getByRole("link", { name: "Chức năng" })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByRole("link", { name: "Bán hàng" })).toHaveAttribute("href", "/?tab=sales");
     expect(loadDashboard).not.toHaveBeenCalled(); // tab Chức năng không tải dashboard

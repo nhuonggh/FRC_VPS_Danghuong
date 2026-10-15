@@ -37,7 +37,7 @@ describe("kiến trúc: cửa duy nhất ghi partner_ledger", () => {
       for (const f of readdirSync(dir)) {
         const p = join(dir, f);
         if (statSync(p).isDirectory()) walk(p);
-        else if (/\.tsx?$/.test(f) && !p.endsWith("src/server/debt/ledger.ts") && /partnerLedger\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/.test(readFileSync(p, "utf8"))) hits.push(p);
+        else if (/\.tsx?$/.test(f) && !p.replace(/\\/g, "/").endsWith("src/server/debt/ledger.ts") && /partnerLedger\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/.test(readFileSync(p, "utf8"))) hits.push(p);
       }
     };
     walk("src");

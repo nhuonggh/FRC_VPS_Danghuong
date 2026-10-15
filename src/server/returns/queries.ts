@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient, type ReturnKind } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
-import { sortToOrderBy, type ListParams } from "@/lib/query-params";
+import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { escapeLike, normalizeSearch } from "@/lib/search";
 import { DomainError } from "@/server/http/errors";
 
@@ -29,9 +29,11 @@ export interface ReturnDetailDTO extends Omit<ReturnRowDTO, "lineCount"> {
 function where(actor: Actor, kinds: ReturnKind[], params: ListParams): Prisma.GoodsReturnWhereInput {
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const state = params.filters.state ?? [];
+  const range = listTimeRange(params);
   return {
     AND: [
       { kind: { in: kinds } },
+      ...(range ? [{ at: { gte: range.start, lt: range.end } }] : []),
       ...(kinds.includes("SUPPLIER") ? [] : [{ partner: partnerScopeWhere(actor) }]),
       ...(state.length === 1 ? [{ isCancelled: state[0] === "cancelled" }] : []),
       ...terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { order: { code: { contains: escapeLike(t.toUpperCase()) } } }, { partner: { searchText: { contains: escapeLike(t) } } }] })),

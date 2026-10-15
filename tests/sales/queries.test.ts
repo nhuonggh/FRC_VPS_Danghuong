@@ -58,6 +58,17 @@ describe("status", () => {
 });
 
 describe("listOrders", () => {
+  it("reference list filters use real fields and status tab counts respect partner scope", async () => {
+    const doc = await make(1);
+    const partner = await prisma.partner.findUniqueOrThrow({ where: { id: customer.id } });
+    const res = await listOrders(prisma, writer, params({ code: doc.code, customer: partner.code, group: String(partner.groupId), stock: "posted" }), NOW);
+    expect(res.total).toBe(1);
+    expect(res.tabCounts).toMatchObject({ all: 1, delivered: 0, failed: 0, unpaid: 1 });
+    expect((await listOrders(prisma, writer, params({ stock: "draft" }), NOW)).total).toBe(0);
+    expect((await listOrders(prisma, writer, params({ customer: "khong-co-khach" }), NOW)).total).toBe(0);
+    await prisma.saleOrder.update({ where: { id: doc.id }, data: { deliveryStatus: "FAILED" } });
+    expect((await listOrders(prisma, writer, params(), NOW)).tabCounts.failed).toBe(1);
+  });
   it("lọc theo trạng thái HIỂN THỊ: đơn đủ tồn = Sẵn hàng, đơn treo = Chưa đủ tồn; stats đếm đúng", async () => {
     const ok = await make(5); const pending = await make(20); // tồn 10 → đơn 2 thiếu
     const all = await listOrders(prisma, writer, params(), NOW);

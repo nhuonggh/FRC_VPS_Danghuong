@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { ReturnKind } from "@prisma/client";
-import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, SearchBox } from "@/components/ui";
+import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
 import type { Actor } from "@/lib/permissions/scope";
@@ -14,7 +14,7 @@ export async function ReturnListPage({ actor, title, base, kinds, newHref, searc
 }) {
   const params = parseListParams(await searchParams, RETURN_FILTER_KEYS);
   const { rows, total } = await listReturns(prisma, actor, kinds, params);
-  const filtering = Boolean(params.q || params.filters.state);
+  const filtering = Boolean(params.q || params.filters.state || params.timePreset);
   return (
     <ListPageLayout
       title={title}
@@ -22,6 +22,7 @@ export async function ReturnListPage({ actor, title, base, kinds, newHref, searc
       filters={
         <div className="flex flex-wrap items-center gap-2">
           <SearchBox basePath={base} params={params} placeholder="Tìm mã phiếu, đơn, đối tác…" />
+          <QuickTimeFilter basePath={base} params={params} />
           <MultiSelectFilter label="Trạng thái" paramKey="state" basePath={base} params={params} options={[{ value: "active", label: "Hiệu lực" }, { value: "cancelled", label: "Đã hủy" }]} />
         </div>
       }

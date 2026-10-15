@@ -38,6 +38,9 @@ interface Props {
   debounceMs?: number;
   /** Ẩn nhãn (vẫn đọc được bằng trình đọc màn hình) — dùng trong ô bảng đã có tiêu đề cột. */
   hideLabel?: boolean;
+  /** Portaled menus inside a dialog must share its stacking layer. */
+  overlay?: boolean;
+  portalContainer?: HTMLElement | null;
 }
 
 interface ListPos { left: number; top?: number; bottom?: number; width: number; maxHeight: number }
@@ -45,7 +48,7 @@ const LIST_MAX = 320, LIST_MIN_WIDTH = 360, LIST_GAP = 4;
 
 const BLUR_CLOSE_MS = 120; // chờ để click vào 1 dòng kịp chạy trước khi đóng danh sách
 
-export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300, hideLabel }: Props) {
+export function Combobox({ label, value, onChange, loadOptions, placeholder = "Tìm…", disabled, error, debounceMs = 300, hideLabel, overlay = false, portalContainer }: Props) {
   const uid = useId();
   const listId = `${uid}-list`;
   const [q, setQ] = useState(value?.label ?? "");
@@ -151,7 +154,7 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
       </div>
       {open && pos && typeof document !== "undefined" && createPortal(
         <ul id={listId} role="listbox" aria-label={label} style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
-          className="z-dropdown overflow-auto rounded-md border border-border bg-raised p-1 shadow-md">
+          className={clsx(overlay ? "z-dialog" : "z-dropdown", "overflow-auto rounded-md border border-border bg-raised p-1 shadow-md")}>
           {options.map((o, i) => (
             <li key={o.value} id={`${uid}-o${i}`} role="option" aria-selected={value?.value === o.value}
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}
@@ -164,7 +167,7 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
           {!loading && !failed && options.length === 0 && <li className="px-3 py-2 text-sm text-fg-muted">Không tìm thấy kết quả</li>}
           {loading && options.length === 0 && <li className="px-3 py-2 text-sm text-fg-muted">Đang tìm…</li>}
         </ul>,
-        document.body,
+        portalContainer ?? document.body,
       )}
       {error && <p role="alert" className="mt-1 text-xs text-danger">{error}</p>}
     </div>
