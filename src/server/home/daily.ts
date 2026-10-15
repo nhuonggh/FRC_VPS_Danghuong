@@ -24,7 +24,7 @@ export interface DailyRow {
   amount: string | null; extra: string | null;
 }
 interface RawRow extends Omit<DailyRow, "amount" | "extra"> { amount: Prisma.Decimal | null; extra: Prisma.Decimal | null }
-export interface DailyTotals { count: number; cancelled: number; amount: string | null; extra: string | null }
+export interface DailyTotals { count: number; cancelled: number; amount: string | null; extra: string | null; version?: string }
 export interface DailySummary { item: DailyItem; totals: DailyTotals | null }
 
 /** Amount meanings are explicit: never add these columns across different business categories. */
@@ -58,7 +58,7 @@ function source(actor: Actor, key: DailyKey): Prisma.Sql {
       FROM debt_adjustments r JOIN partners p ON p.id = r."partnerId" WHERE true ${scope}`;
     case "discount-orders": return Prisma.sql`SELECT o.id, o.code, o."orderDate" AS at, p.name AS partner, ''::text AS related,
       '/sales/orders/' || o.id AS href, o."isCancelled" AS cancelled, CASE WHEN o."isCancelled" THEN 'Đã hủy' ELSE 'Đã xác nhận' END AS status,
-      COALESCE(o.note,'') AS note, d.amount, d.extra, ''::text AS type, ''::text AS method
+      COALESCE(o.note,'') AS note, d.amount, d.extra, ''::text AS type, ''::text AS method, o."updatedAt" AS revision
       FROM sale_orders o JOIN partners p ON p.id = o."partnerId"
       JOIN LATERAL (SELECT SUM(l."discountNow") AS amount, SUM(l."discountAccum") AS extra FROM sale_order_lines l WHERE l."orderId" = o.id) d ON true
       WHERE NOT o."isDraft" AND (d.amount > 0 OR d.extra > 0) ${scope}`;
@@ -88,7 +88,7 @@ function source(actor: Actor, key: DailyKey): Prisma.Sql {
       FROM payments r LEFT JOIN partners p ON p.id = r."partnerId" JOIN cash_accounts a ON a.id = r."cashAccountId"`;
     case "purchases": return Prisma.sql`SELECT r.id, r.code, r.at, p.name AS partner, ''::text AS related,
       '/purchase/orders/' || r.id AS href, r."isCancelled" AS cancelled, CASE WHEN r."isCancelled" THEN 'Đã hủy' ELSE 'Đã nhập kho' END AS status,
-      COALESCE(r.note,'') AS note, r."purchaseTotal" AS amount, r."freightCost" AS extra, ''::text AS type, ''::text AS method
+      COALESCE(r.note,'') AS note, r."purchaseTotal" AS amount, r."freightCost" AS extra, ''::text AS type, ''::text AS method, r."updatedAt" AS revision
       FROM purchases r JOIN partners p ON p.id = r."partnerId"`;
     default: throw new DomainError("Không tìm thấy mục kiểm tra.", 404);
   }
@@ -119,14 +119,15 @@ export async function loadDailyItem(db: PrismaClient, actor: Actor, key: string,
   const range = dailyRange(params, now), money = dailyCanMoney(actor, item);
   const query = Prisma.sql`WITH source AS (${source(actor, item.key)}) SELECT * FROM source d WHERE ${dailyWhere(item.key, params, range)}`;
   const work = async (tx: Prisma.TransactionClient) => {
-    const [totals] = await tx.$queryRaw<{ count: bigint; cancelled: bigint; amount: Prisma.Decimal; extra: Prisma.Decimal }[]>`
+    const [totals] = await tx.$queryRaw<{ count: bigint; cancelled: bigint; amount: Prisma.Decimal; extra: Prisma.Decimal; version: string }[]>`
       SELECT COUNT(*) AS count, COUNT(*) FILTER (WHERE cancelled) AS cancelled,
-      COALESCE(SUM(amount) FILTER (WHERE NOT cancelled),0) AS amount, COALESCE(SUM(extra) FILTER (WHERE NOT cancelled),0) AS extra FROM (${query}) f`;
+      COALESCE(SUM(amount) FILTER (WHERE NOT cancelled),0) AS amount, COALESCE(SUM(extra) FILTER (WHERE NOT cancelled),0) AS extra,
+      md5(COALESCE(string_agg(md5(${money ? Prisma.sql`to_jsonb(f)` : Prisma.sql`(to_jsonb(f) - 'amount' - 'extra')`}::text), '' ORDER BY id), '')) AS version FROM (${query}) f`;
     if (opts.export && Number(totals.count) > 10000) throw new DomainError("Báo cáo vượt 10.000 chứng từ. Hãy thu hẹp khoảng ngày hoặc bộ lọc rồi xuất lại.", 400);
     const page = Math.max(1, Math.min(params.page, Math.ceil(Number(totals.count) / params.pageSize)));
     const limit = opts.export ? Prisma.sql`LIMIT 10000` : Prisma.sql`LIMIT ${params.pageSize} OFFSET ${(page - 1) * params.pageSize}`;
     const rows = opts.summaryOnly ? [] : await tx.$queryRaw<RawRow[]>`${query} ORDER BY at DESC, id DESC ${limit}`;
-    return { item, range, page, totals: { count: Number(totals.count), cancelled: Number(totals.cancelled), amount: money ? totals.amount.toString() : null, extra: money ? totals.extra.toString() : null },
+    return { item, range, page, totals: { count: Number(totals.count), cancelled: Number(totals.cancelled), amount: money ? totals.amount.toString() : null, extra: money ? totals.extra.toString() : null, version: totals.version },
       rows: rows.map((r): DailyRow => ({ id: r.id, code: r.code, at: r.at, partner: r.partner, related: r.related, href: r.href, cancelled: r.cancelled, status: r.status, note: r.note,
         amount: money ? r.amount?.toString() ?? null : null, extra: money ? r.extra?.toString() ?? null : null })) };
   };
