@@ -75,6 +75,25 @@ describe("tìm đơn để xếp chuyến", () => {
 });
 
 describe("danh sách và chi tiết chuyến", () => {
+  it("delivery-results metrics include all filtered trips beyond the page and exclude cancelled money", async () => {
+    const a = await order(), pendingOrder = await order(), paidOrder = await order(), cancelledOrder = await order();
+    const waiting = await trip([a.id, pendingOrder.id]);
+    await result(waiting.id, a.id, { cashAmount: 150000 });
+    const paid = await trip([paidOrder.id], { date: "2026-09-17" });
+    await result(paid.id, paidOrder.id);
+    const cancelled = await trip([cancelledOrder.id], { date: "2026-09-18" });
+    await result(cancelled.id, cancelledOrder.id);
+    await prisma.trip.update({ where: { id: cancelled.id }, data: { status: "CANCELLED", cancelledAt: NOW, cancelledBy: KT.userId, cancelReason: "Kiểm thử" } });
+    const all = await listTrips(prisma, KT, { ...P(), pageSize: 1 }, { resultsSummary: true });
+    expect(all.rows).toHaveLength(1);
+    expect(all.resultsSummary).toMatchObject({ total: 3, stops: 3, completed: 2, pending: 1, expected: "400000", collected: "350000", outstanding: "50000", paidTrips: 1, unpaidTrips: 1, filteredExpected: "400000", filteredCollected: "350000" });
+    expect((await listTrips(prisma, KT, P({ route: "none" }))).total).toBe(3);
+    const unpaid = await listTrips(prisma, KT, P({ collection: "unpaid" }), { resultsSummary: true });
+    expect(unpaid.total).toBe(1);
+    expect(unpaid.resultsSummary).toMatchObject({ total: 3, filteredExpected: "200000", filteredCollected: "150000", tabPaidTrips: 1, tabUnpaidTrips: 1, tabAllTrips: 3 });
+    const completed = await listTrips(prisma, KT, P({ status: "RETURNED" }), { resultsSummary: true });
+    expect(completed.resultsSummary).toMatchObject({ tabAllTrips: 1, tabPaidTrips: 1, filteredExpected: "200000", filteredCollected: "200000" });
+  });
   it("multi-customer and route filters combine; tab counts preserve filters without the selected status", async () => {
     const other = await makePartner({ isCustomer: true });
     const routeA = await prisma.route.create({ data: { name: "Tuyến A" } });

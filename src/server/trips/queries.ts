@@ -13,6 +13,7 @@ import { RESULT_LABEL, TRIP_STATUS_LABEL } from "./schemas";
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const TRIP_FILTER_KEYS = ["status", "vehicle", "customer", "route", "collection"] as const;
+export const TRIP_RESULTS_FILTER_KEYS = [...TRIP_FILTER_KEYS, "resultState", "detail", "entry"] as const;
 export const UNDELIVERED_FILTER_KEYS = ["result", "state"] as const;
 
 const canSee = (actor: Actor) => { if (!actor.perms.has("trip.manage") && !actor.perms.has("trip.settle") && !actor.perms.has("trip.confirm_cash")) assertCan(actor.perms, "trip.manage"); };
@@ -25,9 +26,13 @@ export interface TripRowDTO {
   collectionStatus: "paid" | "unpaid" | null;
 }
 export interface TripStatsDTO { active: number; returned: number; settled: number; confirmed: number; all: number; counts: Record<TripStatus, number> }
+export interface TripResultsSummary {
+  total: number; stops: number; completed: number; pending: number; expected: string; collected: string; outstanding: string;
+  paidTrips: number; unpaidTrips: number; tabPaidTrips: number; tabUnpaidTrips: number; tabAllTrips: number; filteredExpected: string; filteredCollected: string; counts: Record<TripStatus, number>;
+}
 
 /** Server pagination and tab counts share the same customer/route/collection/date/search predicate. */
-export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: { statuses?: TripStatus[]; now?: Date } = {}): Promise<{ rows: TripRowDTO[]; total: number; stats: TripStatsDTO }> {
+export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: { statuses?: TripStatus[]; now?: Date; resultsSummary?: boolean } = {}): Promise<{ rows: TripRowDTO[]; total: number; stats: TripStatsDTO; resultsSummary?: TripResultsSummary }> {
   canSee(actor);
   const range = params.timePreset ? resolveTimeRange(params.timePreset, opts.now ?? new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
   const statuses = [...new Set((opts.statuses ?? params.filters.status ?? []).filter((s): s is TripStatus => Object.prototype.hasOwnProperty.call(TRIP_STATUS_LABEL, s)))];
@@ -37,6 +42,10 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
     const values = params.filters[key] ?? [];
     if (!values.length) continue;
     const ids = values.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0);
+    if (key === "route" && values.includes("none")) {
+      conditions.push(ids.length ? Prisma.sql`(t."routeId" IS NULL OR t."routeId" IN (${Prisma.join(ids)}))` : Prisma.sql`t."routeId" IS NULL`);
+      continue;
+    }
     if (!ids.length) { conditions.push(Prisma.sql`false`); continue; }
     if (key === "vehicle") conditions.push(Prisma.sql`t."vehicleId" IN (${Prisma.join(ids)})`);
     else if (key === "route") conditions.push(Prisma.sql`t."routeId" IN (${Prisma.join(ids)})`);
@@ -52,6 +61,7 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
     SELECT 1 FROM trip_orders s WHERE s."tripId" = t.id AND (s.result IS NULL OR s."dueAmount" IS NULL
       OR s."dueAmount" - s."cashAmount" - s."transferAmount" - s."discountAmount" + s."overAmount" > 0)))`;
   const collection = Prisma.sql`CASE WHEN t.status = 'CANCELLED' THEN NULL WHEN ${unpaid} THEN 'unpaid' ELSE 'paid' END`;
+  const summarySource = Prisma.sql`SELECT t.id, t.status, ${collection} AS collection FROM trips t JOIN vehicles v ON v.id = t."vehicleId" JOIN drivers dr ON dr.id = t."driverId" WHERE ${Prisma.join(conditions, " AND ")}`;
   const selectedCollection = (params.filters.collection ?? []).filter((s) => s === "paid" || s === "unpaid");
   if (selectedCollection.length) conditions.push(Prisma.sql`${collection} IN (${Prisma.join(selectedCollection)})`);
   if (opts.statuses?.length) conditions.push(Prisma.sql`t.status::text IN (${Prisma.join(opts.statuses)})`);
@@ -68,8 +78,26 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
   const c = (keys: TripStatus[]) => keys.reduce((sum, key) => sum + counts[key], 0);
   const list = page.length ? await db.trip.findMany({ where: { id: { in: page.map((r) => r.id) } }, orderBy: [{ tripDate: "desc" }, { id: "desc" }], include: { route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } }, stops: { select: { result: true, dueAmount: true, cashAmount: true, transferAmount: true } } } }) : [];
   const collectionById = new Map(page.map((r) => [r.id, r.collection]));
+  let resultsSummary: TripResultsSummary | undefined;
+  if (opts.resultsSummary) {
+    const groups = await db.$queryRaw<{ status: TripStatus; collection: string | null; count: bigint; stops: bigint; completed: bigint; pending: bigint; expected: Prisma.Decimal; collected: Prisma.Decimal; outstanding: Prisma.Decimal }[]>`
+      SELECT t.status, t.collection, COUNT(DISTINCT t.id) AS count,
+        COUNT(s.id) FILTER (WHERE t.status <> 'CANCELLED') AS stops,
+        COUNT(s.id) FILTER (WHERE t.status <> 'CANCELLED' AND s.result::text IN ('GIAO_DU','GHI_NO','HEN_TRA')) AS completed,
+        COUNT(s.id) FILTER (WHERE t.status <> 'CANCELLED' AND s.result IS NULL) AS pending,
+        COALESCE(SUM(s."dueAmount") FILTER (WHERE t.status <> 'CANCELLED'),0) AS expected,
+        COALESCE(SUM(s."cashAmount" + s."transferAmount") FILTER (WHERE t.status <> 'CANCELLED'),0) AS collected,
+        COALESCE(SUM(GREATEST(s."dueAmount" - s."cashAmount" - s."transferAmount" - s."discountAmount" + s."overAmount",0)) FILTER (WHERE t.status <> 'CANCELLED'),0) AS outstanding
+      FROM (${summarySource}) t LEFT JOIN trip_orders s ON s."tripId" = t.id GROUP BY t.status, t.collection`;
+    const sum = (key: "expected" | "collected" | "outstanding", filtered = false) => groups.filter((g) => !filtered || ((!statuses.length || statuses.includes(g.status)) && (!selectedCollection.length || selectedCollection.some((value) => value === g.collection)))).reduce((s, g) => s.plus(g[key]), D(0)).toString();
+    resultsSummary = { total: groups.reduce((n, g) => n + Number(g.count), 0), stops: groups.reduce((n, g) => n + Number(g.stops), 0), completed: groups.reduce((n, g) => n + Number(g.completed), 0), pending: groups.reduce((n, g) => n + Number(g.pending), 0), expected: sum("expected"), collected: sum("collected"), outstanding: sum("outstanding"),
+      paidTrips: groups.filter((g) => g.collection === "paid").reduce((n, g) => n + Number(g.count), 0), unpaidTrips: groups.filter((g) => g.collection === "unpaid").reduce((n, g) => n + Number(g.count), 0),
+      tabPaidTrips: groups.filter((g) => g.collection === "paid" && (!statuses.length || statuses.includes(g.status))).reduce((n, g) => n + Number(g.count), 0), tabUnpaidTrips: groups.filter((g) => g.collection === "unpaid" && (!statuses.length || statuses.includes(g.status))).reduce((n, g) => n + Number(g.count), 0), tabAllTrips: groups.filter((g) => !statuses.length || statuses.includes(g.status)).reduce((n, g) => n + Number(g.count), 0),
+      filteredExpected: sum("expected", true), filteredCollected: sum("collected", true), counts: Object.fromEntries(Object.keys(TRIP_STATUS_LABEL).map((key) => [key, groups.filter((g) => g.status === key).reduce((n, g) => n + Number(g.count), 0)])) as Record<TripStatus, number> };
+  }
   return {
     total: c(statuses.length ? statuses : Object.keys(TRIP_STATUS_LABEL) as TripStatus[]),
+    resultsSummary,
     stats: { active: c(["PLANNED", "ON_ROAD"]), returned: counts.RETURNED, settled: counts.SETTLED, confirmed: counts.CONFIRMED, all: c(Object.keys(TRIP_STATUS_LABEL) as TripStatus[]), counts },
     rows: list.map((t) => ({
       id: t.id, code: t.code, date: ymd(t.tripDate), status: t.status, statusLabel: TRIP_STATUS_LABEL[t.status], routeName: t.route?.name ?? null, vehiclePlate: t.vehicle.plate, driverName: t.driver.name, assistantName: t.assistant?.name ?? null,
