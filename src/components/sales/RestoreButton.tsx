@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 
 /** Khôi phục đơn đã hủy: xuất kho lại tại vị trí thời gian gốc (thiếu tồn ⇒ đơn treo). */
-export function RestoreButton({ orderId, code }: { orderId: number; code: string }) {
+export function RestoreButton({ orderId, code, iconOnly = false }: { orderId: number; code: string; iconOnly?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   async function restore() {
@@ -18,9 +18,9 @@ export function RestoreButton({ orderId, code }: { orderId: number; code: string
     try { await apiFetch(`/api/orders/${orderId}/restore`, { method: "POST" }); router.refresh(); } finally { setBusy(false); }
   }
   return (
-    <button type="button" onClick={restore} disabled={busy} aria-label={`Khôi phục đơn ${code}`}
-      className="inline-flex h-9 items-center gap-1 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">
-      <RotateCcw size={14} aria-hidden />Khôi phục
+    <button type="button" onClick={restore} disabled={busy} aria-label={`Khôi phục đơn ${code}`} title={`Khôi phục đơn ${code}`}
+      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50 md:min-h-9 md:min-w-9">
+      <RotateCcw size={16} aria-hidden />{!iconOnly && "Khôi phục"}
     </button>
   );
 }
