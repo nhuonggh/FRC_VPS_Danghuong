@@ -4,7 +4,7 @@ import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import type { ListParams } from "@/lib/query-params";
 import { escapeLike, normalizeSearch } from "@/lib/search";
-import { resolveTimeRange, timeRangeWhere } from "@/lib/time-presets";
+import { resolveTimeRange } from "@/lib/time-presets";
 import { orderPaid } from "@/server/deposits/status";
 import { DomainError } from "@/server/http/errors";
 import { lineAmountOf } from "@/server/sales/queries";
@@ -12,7 +12,7 @@ import { RESULT_LABEL, TRIP_STATUS_LABEL } from "./schemas";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
-export const TRIP_FILTER_KEYS = ["status", "vehicle"] as const;
+export const TRIP_FILTER_KEYS = ["status", "vehicle", "customer", "route", "collection"] as const;
 export const UNDELIVERED_FILTER_KEYS = ["result", "state"] as const;
 
 const canSee = (actor: Actor) => { if (!actor.perms.has("trip.manage") && !actor.perms.has("trip.settle") && !actor.perms.has("trip.confirm_cash")) assertCan(actor.perms, "trip.manage"); };
@@ -22,38 +22,72 @@ const ymd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slic
 export interface TripRowDTO {
   id: number; code: string; date: string; status: TripStatus; statusLabel: string; routeName: string | null; vehiclePlate: string; driverName: string; assistantName: string | null;
   stops: number; done: number; expected: string; collected: string; cash: string; transfer: string;
+  collectionStatus: "paid" | "unpaid" | null;
 }
-export interface TripStatsDTO { active: number; returned: number; settled: number; confirmed: number }
+export interface TripStatsDTO { active: number; returned: number; settled: number; confirmed: number; all: number; counts: Record<TripStatus, number> }
 
-/** Danh sách chuyến (39). Lọc: trạng thái, xe, từ khoá (mã chuyến / lái xe / biển số), thời gian theo NGÀY CHUYẾN. */
-export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: { statuses?: TripStatus[] } = {}): Promise<{ rows: TripRowDTO[]; total: number; stats: TripStatsDTO }> {
+/** Server pagination and tab counts share the same customer/route/collection/date/search predicate. */
+export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: { statuses?: TripStatus[]; now?: Date } = {}): Promise<{ rows: TripRowDTO[]; total: number; stats: TripStatsDTO }> {
   canSee(actor);
-  const terms = (params.q ?? "").trim().split(/\s+/).filter(Boolean); // tên lái xe có dấu: tìm theo chữ người dùng gõ
-  const range = params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
-  const statuses = (opts.statuses ?? (params.filters.status ?? [])) as TripStatus[];
-  const vehicles = (params.filters.vehicle ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
-  const where: Prisma.TripWhereInput = {
-    ...(statuses.length ? { status: { in: statuses } } : {}), ...(vehicles.length ? { vehicleId: { in: vehicles } } : {}), ...(range ? { tripDate: timeRangeWhere(range) } : {}),
-    AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { vehicle: { plate: { contains: escapeLike(t.toUpperCase()) } } }, { driver: { name: { contains: escapeLike(t), mode: "insensitive" as const } } }] })),
-  };
-  const [list, total, group] = await Promise.all([
-    db.trip.findMany({ where, orderBy: [{ tripDate: "desc" }, { id: "desc" }], skip: (params.page - 1) * params.pageSize, take: params.pageSize, include: { route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } }, stops: { select: { result: true, dueAmount: true, cashAmount: true, transferAmount: true } } } }),
-    db.trip.count({ where }),
-    db.trip.groupBy({ by: ["status"], _count: { _all: true } }),
+  const range = params.timePreset ? resolveTimeRange(params.timePreset, opts.now ?? new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
+  const statuses = [...new Set((opts.statuses ?? params.filters.status ?? []).filter((s): s is TripStatus => Object.prototype.hasOwnProperty.call(TRIP_STATUS_LABEL, s)))];
+  const conditions: Prisma.Sql[] = [Prisma.sql`true`];
+  if (range) conditions.push(Prisma.sql`t."tripDate" >= ${range.start} AND t."tripDate" < ${range.end}`);
+  for (const key of ["vehicle", "route", "customer"] as const) {
+    const values = params.filters[key] ?? [];
+    if (!values.length) continue;
+    const ids = values.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0);
+    if (!ids.length) { conditions.push(Prisma.sql`false`); continue; }
+    if (key === "vehicle") conditions.push(Prisma.sql`t."vehicleId" IN (${Prisma.join(ids)})`);
+    else if (key === "route") conditions.push(Prisma.sql`t."routeId" IN (${Prisma.join(ids)})`);
+    else conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM trip_orders s JOIN sale_orders o ON o.id = s."orderId" WHERE s."tripId" = t.id AND o."partnerId" IN (${Prisma.join(ids)}))`);
+  }
+  for (const term of (params.q ?? "").trim().split(/\s+/).filter(Boolean)) {
+    const pattern = `%${escapeLike(term)}%`;
+    conditions.push(Prisma.sql`(t.code ILIKE ${pattern} OR v.plate ILIKE ${pattern} OR dr.name ILIKE ${pattern})`);
+  }
+  // ASSUMPTION: paid means every stop has a result and no outstanding due after cash/transfer/discount.
+  // Overpayments at one stop cannot offset unpaid amounts at another. Cancelled trips have no collection state.
+  const unpaid = Prisma.sql`(NOT EXISTS (SELECT 1 FROM trip_orders s WHERE s."tripId" = t.id) OR EXISTS (
+    SELECT 1 FROM trip_orders s WHERE s."tripId" = t.id AND (s.result IS NULL OR s."dueAmount" IS NULL
+      OR s."dueAmount" - s."cashAmount" - s."transferAmount" - s."discountAmount" + s."overAmount" > 0)))`;
+  const collection = Prisma.sql`CASE WHEN t.status = 'CANCELLED' THEN NULL WHEN ${unpaid} THEN 'unpaid' ELSE 'paid' END`;
+  const selectedCollection = (params.filters.collection ?? []).filter((s) => s === "paid" || s === "unpaid");
+  if (selectedCollection.length) conditions.push(Prisma.sql`${collection} IN (${Prisma.join(selectedCollection)})`);
+  if (opts.statuses?.length) conditions.push(Prisma.sql`t.status::text IN (${Prisma.join(opts.statuses)})`);
+  const source = Prisma.sql`SELECT t.id, t.status, t."tripDate", ${collection} AS collection
+    FROM trips t JOIN vehicles v ON v.id = t."vehicleId" JOIN drivers dr ON dr.id = t."driverId"
+    WHERE ${Prisma.join(conditions, " AND ")}`;
+  const [group, page] = await Promise.all([
+    db.$queryRaw<{ status: TripStatus; count: bigint }[]>`SELECT status, COUNT(*) AS count FROM (${source}) matched GROUP BY status`,
+    db.$queryRaw<{ id: number; collection: "paid" | "unpaid" | null }[]>`SELECT id, collection FROM (${source}) matched
+      ${statuses.length ? Prisma.sql`WHERE status::text IN (${Prisma.join(statuses)})` : Prisma.empty}
+      ORDER BY "tripDate" DESC, id DESC LIMIT ${params.pageSize} OFFSET ${(params.page - 1) * params.pageSize}`,
   ]);
-  const c = (s: TripStatus[]) => group.filter((g) => s.includes(g.status)).reduce((a, g) => a + g._count._all, 0);
+  const counts = Object.fromEntries(Object.keys(TRIP_STATUS_LABEL).map((key) => [key, Number(group.find((g) => g.status === key)?.count ?? 0)])) as Record<TripStatus, number>;
+  const c = (keys: TripStatus[]) => keys.reduce((sum, key) => sum + counts[key], 0);
+  const list = page.length ? await db.trip.findMany({ where: { id: { in: page.map((r) => r.id) } }, orderBy: [{ tripDate: "desc" }, { id: "desc" }], include: { route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } }, stops: { select: { result: true, dueAmount: true, cashAmount: true, transferAmount: true } } } }) : [];
+  const collectionById = new Map(page.map((r) => [r.id, r.collection]));
   return {
-    total,
-    stats: { active: c(["PLANNED", "ON_ROAD"]), returned: c(["RETURNED"]), settled: c(["SETTLED"]), confirmed: c(["CONFIRMED"]) },
+    total: c(statuses.length ? statuses : Object.keys(TRIP_STATUS_LABEL) as TripStatus[]),
+    stats: { active: c(["PLANNED", "ON_ROAD"]), returned: counts.RETURNED, settled: counts.SETTLED, confirmed: counts.CONFIRMED, all: c(Object.keys(TRIP_STATUS_LABEL) as TripStatus[]), counts },
     rows: list.map((t) => ({
       id: t.id, code: t.code, date: ymd(t.tripDate), status: t.status, statusLabel: TRIP_STATUS_LABEL[t.status], routeName: t.route?.name ?? null, vehiclePlate: t.vehicle.plate, driverName: t.driver.name, assistantName: t.assistant?.name ?? null,
       stops: t.stops.length, done: t.stops.filter((s) => s.result !== null).length,
       expected: t.stops.reduce((s, x) => s.plus(x.dueAmount ?? 0), D(0)).toString(), collected: t.stops.reduce((s, x) => s.plus(x.cashAmount).plus(x.transferAmount), D(0)).toString(),
-      cash: t.stops.reduce((s, x) => s.plus(x.cashAmount), D(0)).toString(), transfer: t.stops.reduce((s, x) => s.plus(x.transferAmount), D(0)).toString(),
+      cash: t.stops.reduce((s, x) => s.plus(x.cashAmount), D(0)).toString(), transfer: t.stops.reduce((s, x) => s.plus(x.transferAmount), D(0)).toString(), collectionStatus: collectionById.get(t.id) ?? null,
     })),
   };
 }
 
+export async function listTripFilterOptions(db: Db, actor: Actor) {
+  canSee(actor);
+  const [customers, routes] = await Promise.all([
+    db.partner.findMany({ where: { saleOrders: { some: { tripStops: { some: {} } } } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.route.findMany({ where: { trips: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  return { customers, routes };
+}
 export interface StopLineDTO { orderLineId: number; productCode: string; productName: string; processingTypeName: string | null; unit: string; qty: string; delivered: string; remaining: string }
 export interface StopDTO {
   id: number; seq: number; orderId: number; orderCode: string; orderTotal: string; partnerId: number; partnerName: string; phone: string | null; address: string | null; allowCredit: boolean; debtLimit: string;

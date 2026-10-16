@@ -11,9 +11,9 @@ import { cancelReturnTx, createReturnByOrderIdempotent } from "@/server/returns/
 import { returnByOrderSchema } from "@/server/returns/schemas";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner } from "../helpers/factories";
-import { buy, engine, newWorld, T, useNoopCostOwners, type World } from "../inventory/helpers";
+import { buy, engine, newWorld, T, useNoopCostOwners as installNoopCostOwners, type World } from "../inventory/helpers";
 
-useNoopCostOwners();
+installNoopCostOwners();
 const NOW = new Date("2026-09-15T03:00:00Z");
 const KT: Actor = { userId: 0, perms: new Set(["trip.manage", "trip.settle", "order.create", "sale_price.view", "order.edit_price", "partner.view_all"]) };
 const tx = <R,>(fn: (t: Prisma.TransactionClient) => Promise<R>) => prisma.$transaction(fn);
@@ -75,6 +75,47 @@ describe("tìm đơn để xếp chuyến", () => {
 });
 
 describe("danh sách và chi tiết chuyến", () => {
+  it("multi-customer and route filters combine; tab counts preserve filters without the selected status", async () => {
+    const other = await makePartner({ isCustomer: true });
+    const routeA = await prisma.route.create({ data: { name: "Tuyến A" } });
+    const routeB = await prisma.route.create({ data: { name: "Tuyến B" } });
+    const pending = await trip([(await order()).id], { routeId: routeA.id });
+    const paidOrder = await order(), partialOrder = await order();
+    const paid = await trip([paidOrder.id], { routeId: routeA.id, date: "2026-09-17" });
+    const partial = await trip([partialOrder.id], { routeId: routeA.id, date: "2026-09-18" });
+    await trip([(await order({ partnerId: other.id })).id], { routeId: routeB.id, date: "2026-09-19" });
+    await result(paid.id, paidOrder.id);
+    await result(partial.id, partialOrder.id, { cashAmount: 150000 });
+    const all = await listTrips(prisma, KT, P({ customer: `${customer.id},${other.id}`, route: `${routeA.id},${routeB.id}` }));
+    expect(all.total).toBe(4);
+    const selected = await listTrips(prisma, KT, P({ customer: String(customer.id), route: String(routeA.id), status: "RETURNED" }));
+    expect(selected.total).toBe(2);
+    expect(selected.stats).toMatchObject({ all: 3, counts: { PLANNED: 1, RETURNED: 2 } });
+    const dated = await listTrips(prisma, KT, P({ timePreset: "custom", timeStart: "2026-09-17", timeEnd: "2026-09-17" }));
+    expect(dated.rows.map((r) => r.id)).toEqual([paid.id]);
+    expect(dated.stats).toMatchObject({ all: 1, counts: { PLANNED: 0, RETURNED: 1 } });
+    const paidOnly = await listTrips(prisma, KT, P({ collection: "paid" }));
+    expect(paidOnly.rows.map((r) => r.id)).toEqual([paid.id]);
+    const unpaid = await listTrips(prisma, KT, P({ customer: String(customer.id), collection: "unpaid" }));
+    expect(unpaid.rows.map((r) => r.id).sort()).toEqual([pending.id, partial.id].sort());
+    expect(unpaid.rows.every((r) => r.collectionStatus === "unpaid")).toBe(true);
+    expect((await listTrips(prisma, KT, P({ customer: "invalid" }))).total).toBe(0);
+    expect((await listTrips(prisma, KT, P({ status: "RETURNED,RETURNED" }))).total).toBe(2);
+  });
+  it("collection status handles discounts per stop and never offsets another customer's debt with overpayment", async () => {
+    const a = await order(), b = await order(), discounted = await order();
+    const mixed = await trip([a.id, b.id]);
+    await result(mixed.id, a.id, { cashAmount: 400000, note: "Trả nợ cũ" });
+    await result(mixed.id, b.id, { cashAmount: 0 });
+    const cleared = await trip([discounted.id], { date: "2026-09-17" });
+    await result(cleared.id, discounted.id, { cashAmount: 150000, discountAmount: 50000, note: "Bớt tiền" });
+    const paid = await listTrips(prisma, KT, P({ collection: "paid" }));
+    expect(paid.rows.map((r) => r.id)).toEqual([cleared.id]);
+    expect((await listTrips(prisma, KT, P({ collection: "unpaid" }))).rows.map((r) => r.id)).toEqual([mixed.id]);
+    await prisma.trip.update({ where: { id: cleared.id }, data: { status: "CANCELLED", cancelledAt: NOW, cancelledBy: KT.userId, cancelReason: "Kiểm thử trạng thái hủy" } });
+    expect((await listTrips(prisma, KT, P({ collection: "paid" }))).total).toBe(0);
+    expect((await listTrips(prisma, KT, P({ status: "CANCELLED" }))).rows[0].collectionStatus).toBeNull();
+  });
   it("đếm theo trạng thái, lọc, tổng phải thu/đã thu, số điểm đã có kết quả", async () => {
     const [a, b] = [await order(), await order()];
     const t1 = await trip([a.id, b.id]);

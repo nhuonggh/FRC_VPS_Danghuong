@@ -1,54 +1,69 @@
-import { Plus } from "lucide-react";
+﻿import { Plus, X } from "lucide-react";
 import Link from "next/link";
-import { Badge, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox, StatCard } from "@/components/ui";
-import { formatCurrency } from "@/lib/format";
+import { Badge, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 import type { TripRowDTO, TripStatsDTO } from "@/server/trips/queries";
 import { TRIP_STATUS_LABEL } from "@/server/trips/schemas";
 
-const TONE = { PLANNED: "info", ON_ROAD: "info", RETURNED: "warning", SETTLED: "warning", CONFIRMED: "success", CANCELLED: "neutral" } as const;
+const TONE = { PLANNED: "info", ON_ROAD: "info", RETURNED: "warning", SETTLED: "warning", CONFIRMED: "success", CANCELLED: "danger" } as const;
+const COLLECTION_OPTIONS = [{ value: "paid", label: "Đã thu" }, { value: "unpaid", label: "Chưa thu" }];
+function CollectionBadge({ state }: { state: TripRowDTO["collectionStatus"] }) {
+  return state ? <Badge tone={state === "paid" ? "success" : "warning"}>{state === "paid" ? "Đã thu" : "Chưa thu"}</Badge> : <span className="text-fg-secondary">—</span>;
+}
 
-/** Danh sách chuyến (39); dùng chung cho “Nhập kết quả giao” (40) và “Đối soát lái xe” (41) bằng bộ lọc trạng thái cố định. */
-export function TripList({ title, base, rows, total, stats, params, vehicles, canCreate, fixedStatus }: {
-  title: string; base: string; rows: TripRowDTO[]; total: number; stats: TripStatsDTO; params: ListParams; vehicles: { id: number; name: string }[]; canCreate: boolean; fixedStatus?: boolean;
+/** Shared list; fixedStatus pages retain their workflow-specific status constraints. */
+export function TripList({ title, base, rows, total, stats, params, vehicles, customers = [], routes = [], canCreate, fixedStatus }: {
+  title: string; base: string; rows: TripRowDTO[]; total: number; stats: TripStatsDTO; params: ListParams;
+  vehicles: { id: number; name: string }[]; customers?: { id: number; name: string }[]; routes?: { id: number; name: string }[]; canCreate: boolean; fixedStatus?: boolean;
 }) {
-  const status = params.filters.status?.[0];
   const href = (patch: Parameters<typeof buildListHref>[2]) => buildListHref(base, params, patch);
-  const filtered = !!(params.q || params.filters.status || params.filters.vehicle || params.timePreset);
-  return (
-    <ListPageLayout
-      title={title}
-      actions={canCreate ? <Link href="/delivery/trips/new" className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Xếp chuyến</Link> : undefined}
-      stats={fixedStatus ? undefined : <>
-        <StatCard label="Đang chạy" value={stats.active} tone="info" href={href({ filters: { status: ["PLANNED", "ON_ROAD"] } })} active={status === "PLANNED"} />
-        <StatCard label="Chờ đối soát" value={stats.returned} tone="warning" href={href({ filters: { status: ["RETURNED"] } })} active={status === "RETURNED"} />
-        <StatCard label="Chờ thủ quỹ nhận tiền" value={stats.settled} tone="warning" href={href({ filters: { status: ["SETTLED"] } })} active={status === "SETTLED"} />
-        <StatCard label="Hoàn tất" value={stats.confirmed} tone="success" href={href({ filters: { status: ["CONFIRMED"] } })} active={status === "CONFIRMED"} />
-      </>}
-      filters={<div className="flex flex-wrap items-center gap-2">
-        <SearchBox basePath={base} params={params} placeholder="Tìm mã chuyến, biển số, lái xe…" />
-        {!fixedStatus && <MultiSelectFilter label="Trạng thái" paramKey="status" basePath={base} params={params} options={Object.entries(TRIP_STATUS_LABEL).map(([value, label]) => ({ value, label }))} />}
+  const filtered = !!(params.q || Object.values(params.filters).some((v) => v.length) || params.timePreset);
+  const tabs = [{ key: "all", label: "Tất cả", count: stats.all }, ...Object.entries(TRIP_STATUS_LABEL).map(([key, label]) => ({ key, label, count: stats.counts[key as keyof typeof TRIP_STATUS_LABEL] }))];
+  const selectedStatus = params.filters.status?.length === 1 ? params.filters.status[0] : params.filters.status?.length ? "multiple" : "all";
+  const referenceFilters = [{ key: "customer", label: "Khách hàng", options: customers }, { key: "route", label: "Tuyến", options: routes }];
+  const clearFilters = href({ q: undefined, timePreset: undefined, timeStart: undefined, timeEnd: undefined, filters: Object.fromEntries(Object.keys(params.filters).map((key) => [key, []])) });
+  return <ListPageLayout title={title}
+    actions={canCreate ? <Link href="/delivery/trips/new" className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Xếp chuyến</Link> : undefined}
+    filters={<div className="space-y-3">
+      {!fixedStatus && <nav aria-label="Trạng thái chuyến" className="flex overflow-x-auto border-b border-border">
+        {tabs.map((tab) => <Link key={tab.key} href={href({ filters: { status: tab.key === "all" ? [] : [tab.key] } })} aria-current={selectedStatus === tab.key ? "page" : undefined}
+          className={`flex min-h-11 shrink-0 flex-col items-start gap-1 border-b-2 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${selectedStatus === tab.key ? "border-accent bg-accent-soft text-accent" : "border-transparent text-fg-secondary hover:bg-hover"}`}>
+          <strong className="text-2xl font-semibold tabular-nums">{formatNumber(tab.count)}</strong>{" "}<span className="whitespace-nowrap text-sm font-medium">{tab.label}</span>
+        </Link>)}
+      </nav>}
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchBox basePath={base} params={params} placeholder="Tìm mã chuyến, biển số, lái xe…" className="[&_input]:min-h-11 md:[&_input]:min-h-10" />
+        {!fixedStatus && <>{referenceFilters.map((filter) => <MultiSelectFilter key={filter.key} label={filter.label} paramKey={filter.key} basePath={base} params={params} searchable options={filter.options.map((o) => ({ value: String(o.id), label: o.name }))} />)}
+          <MultiSelectFilter label="Trạng thái phải thu" paramKey="collection" basePath={base} params={params} options={COLLECTION_OPTIONS} />
+        </>}
         <MultiSelectFilter label="Xe" paramKey="vehicle" basePath={base} params={params} options={vehicles.map((v) => ({ value: String(v.id), label: v.name }))} />
         <QuickTimeFilter basePath={base} params={params} />
+      </div>
+      {!fixedStatus && <div className="flex flex-wrap items-center gap-2">
+        {referenceFilters.flatMap((filter) => (params.filters[filter.key] ?? []).map((value) => <Link key={`${filter.key}-${value}`} href={href({ filters: { [filter.key]: params.filters[filter.key].filter((v) => v !== value) } })} aria-label={`Bỏ lọc ${filter.label.toLocaleLowerCase("vi")}: ${filter.options.find((o) => String(o.id) === value)?.name ?? value}`} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent-soft px-3 text-xs text-accent md:min-h-9">{filter.label}: {filter.options.find((o) => String(o.id) === value)?.name ?? value}<X size={14} aria-hidden /></Link>))}
+        {filtered && <Link href={clearFilters} className="inline-flex min-h-11 items-center text-sm text-accent">Xóa bộ lọc</Link>}
+        <p className="w-full text-xs text-fg-secondary">Chưa thu gồm thu một phần hoặc điểm giao chưa nhập kết quả. Đã thu tính cả khoản bớt đã được ghi nhận.</p>
       </div>}
-      footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => href(page)} />}
-    >
-      {total === 0 ? <EmptyState kind={filtered ? "no-result" : "empty"} title={filtered ? "Không có chuyến phù hợp" : "Chưa có chuyến nào"} /> : (
-        <table className="w-full min-w-[920px] text-sm">
-          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Mã</th><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Tuyến</th><th className="px-3 py-2">Xe / lái xe</th><th className="px-3 py-2 text-right">Điểm giao</th><th className="px-3 py-2 text-right">Phải thu</th><th className="px-3 py-2 text-right">Đã thu tiền mặt</th><th className="px-3 py-2 text-right">Đã thu chuyển khoản</th><th className="px-3 py-2">Trạng thái</th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-border">
-                <td className="px-3 py-2 font-mono text-xs"><Link href={`/delivery/trips/${r.id}`} className="text-accent hover:underline">{r.code}</Link></td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.date.split("-").reverse().join("/")}</td><td className="px-3 py-2">{r.routeName}</td>
-                <td className="px-3 py-2"><strong>{r.vehiclePlate}</strong><span className="block text-xs text-fg-muted">{r.driverName}{r.assistantName ? ` + ${r.assistantName}` : ""}</span></td>
-                <td className="px-3 py-2 text-right tabular">{r.done}/{r.stops}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.expected)}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.cash)}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(r.transfer)}</td>
-                <td className="px-3 py-2"><Badge tone={TONE[r.status]}>{r.statusLabel}</Badge></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </ListPageLayout>
-  );
+    </div>}
+    footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => href(page)} />}
+  >
+    {rows.length === 0 ? <EmptyState kind={filtered ? "no-result" : "empty"} title={filtered ? "Không có chuyến phù hợp" : "Chưa có chuyến nào"} action={filtered ? <Link href={clearFilters} className="text-sm text-accent">Xóa bộ lọc</Link> : undefined} /> : <>
+      <div className="hidden overflow-x-auto md:block"><table className="w-full text-sm">
+        <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary">{["Mã", "Ngày", "Tuyến", "Xe / lái xe", "Điểm giao", "Phải thu", "Đã thu tiền mặt", "Đã thu chuyển khoản", "Trạng thái phải thu", "Trạng thái"].map((label, i) => <th key={label} scope="col" className={`whitespace-nowrap px-3 py-3 ${i >= 4 && i <= 7 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-border hover:bg-hover">
+          <td className="px-3 py-3 font-mono text-xs"><Link href={`/delivery/trips/${r.id}`} className="font-semibold text-accent hover:underline">{r.code}</Link></td>
+          <td className="whitespace-nowrap px-3 py-3">{r.date.split("-").reverse().join("/")}</td><td className="px-3 py-3">{r.routeName ?? "—"}</td>
+          <td className="px-3 py-3"><strong className="font-medium">{r.vehiclePlate}</strong><span className="block text-xs text-fg-secondary">{r.driverName}{r.assistantName ? ` + ${r.assistantName}` : ""}</span></td>
+          <td className="px-3 py-3 text-right tabular-nums">{formatNumber(r.done)}/{formatNumber(r.stops)}</td><td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatCurrency(r.expected)}</td><td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatCurrency(r.cash)}</td><td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatCurrency(r.transfer)}</td>
+          <td className="px-3 py-3"><CollectionBadge state={r.collectionStatus} /></td><td className="px-3 py-3"><Badge tone={TONE[r.status]}>{r.statusLabel}</Badge></td>
+        </tr>)}</tbody>
+      </table></div>
+      <ul className="space-y-3 p-3 md:hidden">{rows.map((r) => <li key={r.id} className="rounded-md border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/delivery/trips/${r.id}`} className="inline-flex min-h-11 items-center font-mono text-sm font-semibold text-accent">{r.code}</Link><Badge tone={TONE[r.status]}>{r.statusLabel}</Badge></div>
+        <p className="mt-1 text-sm font-medium">{r.routeName ?? "Chưa có tuyến"} · {r.vehiclePlate}</p><p className="mt-1 text-xs text-fg-secondary">{r.driverName}{r.assistantName ? ` + ${r.assistantName}` : ""} · {r.date.split("-").reverse().join("/")}</p>
+        <dl className="mt-3 space-y-2 text-sm">{[{ label: "Điểm giao", value: `${formatNumber(r.done)}/${formatNumber(r.stops)}` }, { label: "Phải thu", value: formatCurrency(r.expected) }, { label: "Đã thu tiền mặt", value: formatCurrency(r.cash) }, { label: "Đã thu chuyển khoản", value: formatCurrency(r.transfer) }].map((field) => <div key={field.label} className="flex justify-between gap-3"><dt className="text-fg-secondary">{field.label}</dt><dd className="text-right tabular-nums">{field.value}</dd></div>)}<div className="flex justify-between gap-3"><dt className="text-fg-secondary">Trạng thái phải thu</dt><dd><CollectionBadge state={r.collectionStatus} /></dd></div></dl>
+      </li>)}</ul>
+    </>}
+  </ListPageLayout>;
 }
