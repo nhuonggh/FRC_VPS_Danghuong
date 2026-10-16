@@ -160,7 +160,7 @@ describe("52/53 — tiêu hao thực tế và đối chiếu định mức", () 
 describe("72 — báo cáo sản xuất", () => {
   it("liệt kê lệnh còn hiệu lực trong kỳ; giá thành chỉ với cost.view; lệnh hủy không tính", async () => {
     const { createProductionOrderIdempotent, cancelProductionOrderTx } = await import("@/server/production/service");
-    const pk = await prisma.product.create({ data: { code: "PK-R", name: "Nóc R", kind: "PHU_KIEN", baseUnit: "cái" } });
+    const pk = await prisma.product.create({ data: { code: "PK-R", name: "Nóc R", kind: "PHU_KIEN", canProduce: true, baseUnit: "cái" } });
     const a2: Actor = { userId: w.userId, perms: new Set([...ALL, "production.manage"]) };
     const mk = (qty: number, k: string) => createProductionOrderIdempotent(prisma, a2, k, { date: "2026-09-15", productId: pk.id, qty, note: "", materials: [{ productId: w.p.id, qty: 10 }] });
     const o1 = await mk(5, "p1"), o2 = await mk(2, "p2");

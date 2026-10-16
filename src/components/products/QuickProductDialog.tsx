@@ -11,6 +11,7 @@ import type { ProductOption } from "@/server/products/queries";
 
 export type QuickProductConfig = { groups: ComboOption[]; units: string[]; canSeePurchase: boolean };
 
+import { PRODUCT_CAPABILITIES, defaultCapabilities } from "@/server/products/capabilities";
 const EMPTY = { code: "", name: "", baseUnit: "", kind: "HANG", groupId: "", minStock: "", purchasePrice: "", note: "" };
 const LABEL = "sm:min-w-40";
 
@@ -19,6 +20,7 @@ export function QuickProductDialog({ config, onCreated, defaultKind = "HANG", tr
   const idem = useIdempotencyKey();
   const [open, setOpen] = useState(false);
   const [v, setV] = useState({ ...EMPTY, kind: defaultKind });
+  const [capabilities, setCapabilities] = useState(() => defaultCapabilities(defaultKind));
   const [isCoil, setIsCoil] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function QuickProductDialog({ config, onCreated, defaultKind = "HANG", tr
       const r = await apiFetch<{ id: number }>("/api/products", {
         method: "POST", idempotencyKey: idem.key,
         json: {
-          code: v.code.trim(), name: v.name.trim(), kind: v.kind, baseUnit: v.baseUnit.trim(), minStock: Number(v.minStock) || 0, isCoil, isActive: true, note: v.note.trim(),
+          ...capabilities, code: v.code.trim(), name: v.name.trim(), kind: v.kind, baseUnit: v.baseUnit.trim(), minStock: Number(v.minStock) || 0, isCoil, isActive: true, note: v.note.trim(),
           groupId: v.groupId ? Number(v.groupId) : null, imageUrl: "", importUnit: "", exportUnit: "", bundleQty: null, qtyLabel: "", units: [],
           ...(config.canSeePurchase ? { purchasePrice: price, salePrice: null } : {}),
         },
@@ -49,7 +51,7 @@ export function QuickProductDialog({ config, onCreated, defaultKind = "HANG", tr
       idem.reset();
       const baseUnit = v.baseUnit.trim();
       onCreated({ value: r.id, label: `${v.code.trim()} — ${v.name.trim()}`, hint: baseUnit, baseUnit, units: [{ unit: baseUnit, factor: "1" }] });
-      setOpen(false); setV({ ...EMPTY, kind: defaultKind }); setIsCoil(false);
+      setOpen(false); setV({ ...EMPTY, kind: defaultKind }); setIsCoil(false); setCapabilities(defaultCapabilities(defaultKind));
     } catch (e) {
       if (e instanceof ApiError && e.fields && Object.keys(e.fields).length) { setFieldErrors(e.fields); setError(e.message); }
       else setError(e instanceof Error ? e.message : "Không tạo được sản phẩm.");
@@ -99,6 +101,7 @@ export function QuickProductDialog({ config, onCreated, defaultKind = "HANG", tr
               {config.canSeePurchase && <InlineField id="qp-purchasePrice" label="Giá nhập" hint="theo đơn vị gốc" labelClass={LABEL}><NumberInput id="qp-purchasePrice" maxFrac={2} value={v.purchasePrice} placeholder="0" onValueChange={(val) => setV((s) => ({ ...s, purchasePrice: val }))} className={`${igInput} tabular text-right`} /></InlineField>}
             </div>
             <label className="mt-3 flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={isCoil} onChange={(e) => setIsCoil(e.target.checked)} className="h-4 w-4" />Sản phẩm là tôn (tôn cuộn)</label>
+            <fieldset className="mt-3 space-y-2"><legend className="text-sm font-medium">Khả năng sử dụng</legend><div className="grid gap-2 sm:grid-cols-2">{PRODUCT_CAPABILITIES.map((c) => <label key={c.value} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={capabilities[c.value]} onChange={(e) => setCapabilities((s) => ({ ...s, [c.value]: e.target.checked }))} />{c.label}</label>)}</div></fieldset>
             {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
           </div>
           <div className="flex items-center justify-end gap-3 px-4 py-3">

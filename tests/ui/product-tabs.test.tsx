@@ -15,6 +15,16 @@ beforeEach(() => { apiFetch.mockReset(); search = ""; });
 afterEach(cleanup);
 
 describe("ProductNewForm — tab dọc", () => {
+  it("chọn nhiều khả năng độc lập với loại sản phẩm", async () => {
+    render(<ProductNewForm />);
+    expect(screen.getByRole("checkbox", { name: "Được bán" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Dùng làm nguyên liệu" })).toBeChecked();
+    await userEvent.selectOptions(screen.getByLabelText("Loại"), "THANH_PHAM");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Được sản xuất" }));
+    expect(screen.getByRole("checkbox", { name: "Được bán" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Dùng làm nguyên liệu" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Được sản xuất" })).toBeChecked();
+  });
   it("5 tab: Thông tin cơ bản · Đơn vị & quy đổi · Giá · Tồn kho · Lịch sử giao dịch; 3 tab cuối bị khóa", () => {
     render(<ProductNewForm />);
     const tabs = screen.getAllByRole("tab").slice(0, 5);

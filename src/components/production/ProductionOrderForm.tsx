@@ -21,8 +21,8 @@ export function ProductionOrderForm({ today, quickProduct }: { today: string; qu
   const { fields, append, remove, update } = useFieldArray({ control: form.control, name: "materials" });
   const entry = useLineEntry({ count: fields.length, getLines: () => form.getValues("materials"), append, remove, blank, qtyLabel: (i) => `Số lượng NVL dòng ${i + 1}` });
   const addProducts = (picked: ProductOption[]) => addPickedLines(picked, form.getValues("materials"), (p) => ({ ...blank, productId: p.value }), { update, append: (vs) => append(vs) });
-  const load = (kinds: string) => async (q: string) => {
-    const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}&kinds=${kinds}`);
+  const load = (capability: string) => async (q: string) => {
+    const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}&capability=${capability}`);
     setMeta((x) => ({ ...x, ...Object.fromEntries(rows.map((p) => [p.value, p])) }));
     return rows;
   };
@@ -34,14 +34,14 @@ export function ProductionOrderForm({ today, quickProduct }: { today: string; qu
   const target = meta[form.watch("productId") as number];
   const lineIds = form.watch("materials").flatMap((l) => (l?.productId ? [l.productId as number] : []));
   return (
-    <NewPage wide bare backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất phụ kiện Tôn" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+    <NewPage wide bare backHref="/production/orders" backLabel="Quay lại lệnh sản xuất" title="Lập lệnh sản xuất" submitLabel="Lưu lệnh" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={Factory} title="Thông tin lệnh sản xuất">
-        <p className="mb-3 text-sm text-fg-secondary">Xuất nguyên vật liệu theo FIFO và nhập phụ kiện Tôn thành phẩm; giá thành = tổng vốn nguyên vật liệu / số lượng. Chỉ dành cho phụ kiện Tôn (nóc, sườn, sối, máng…).</p>
+        <p className="mb-3 text-sm text-fg-secondary">Xuất nguyên vật liệu theo FIFO và nhập sản phẩm đầu ra; giá thành = tổng vốn nguyên vật liệu / số lượng. Sản phẩm đầu vào phải có tồn kho thực tế.</p>
         <FormGrid cols={2}>
           <InlineField id="date" label="Ngày sản xuất" required error={err.date?.message} labelClass="sm:min-w-40"><input id="date" type="date" max={today} {...form.register("date")} aria-invalid={!!err.date} className={igInput} /></InlineField>
           <InlineField id="note" label="Ghi chú" labelClass="sm:min-w-40"><input id="note" {...form.register("note")} className={igInput} /></InlineField>
-          <InlineField id="productId" label="Phụ kiện Tôn" required error={err.productId?.message} labelClass="sm:min-w-40">
-            <Controller control={form.control} name="productId" render={({ field }) => <div className={igCombo}><Combobox hideLabel label="Phụ kiện Tôn" value={target ?? null} loadOptions={load("PHU_KIEN")} onChange={(o) => field.onChange(o ? Number(o.value) : undefined)} /></div>} />
+          <InlineField id="productId" label="Sản phẩm đầu ra" required error={err.productId?.message} labelClass="sm:min-w-40">
+            <Controller control={form.control} name="productId" render={({ field }) => <div className={igCombo}><Combobox hideLabel label="Sản phẩm đầu ra" value={target ?? null} loadOptions={load("canProduce")} onChange={(o) => field.onChange(o ? Number(o.value) : undefined)} /></div>} />
             {quickProduct && <div className="flex shrink-0 items-center border-l border-border px-1"><QuickProductDialog config={quickProduct} defaultKind="PHU_KIEN" triggerLabel="Thêm phụ kiện Tôn" onCreated={(p) => {
               setMeta((current) => ({ ...current, [p.value]: p }));
               form.setValue("productId", p.value, { shouldDirty: true, shouldValidate: true });
@@ -60,7 +60,7 @@ export function ProductionOrderForm({ today, quickProduct }: { today: string; qu
                   const e = err.materials?.[i], p = meta[form.watch(`materials.${i}.productId`) as number];
                   return (
                     <tr key={field.id} className="border-t border-border">
-                      <td className="px-2 py-2" data-line-product={i} data-label="Nguyên vật liệu" data-wide><Controller control={form.control} name={`materials.${i}.productId`} render={({ field: f }) => <Combobox label={`Nguyên vật liệu dòng ${i + 1}`} value={p ?? null} loadOptions={load("NVL,HANG")} onChange={(o) => { f.onChange(o ? Number(o.value) : undefined); if (o) entry.onProductPicked(i); }} error={e?.productId?.message} />} /></td>
+                      <td className="px-2 py-2" data-line-product={i} data-label="Nguyên vật liệu" data-wide><Controller control={form.control} name={`materials.${i}.productId`} render={({ field: f }) => <Combobox label={`Nguyên vật liệu dòng ${i + 1}`} value={p ?? null} loadOptions={load("canUseAsMaterial")} onChange={(o) => { f.onChange(o ? Number(o.value) : undefined); if (o) entry.onProductPicked(i); }} error={e?.productId?.message} />} /></td>
                       <td className="px-2 py-2" data-label="Số lượng (đv gốc)"><RhfNumberInput aria-label={`Số lượng NVL dòng ${i + 1}`} maxFrac={3} control={form.control} name={`materials.${i}.qty`} onKeyDown={entry.onQtyKeyDown(i)} className={`${inputClass(e?.qty)} tabular text-right`} />{p && <span className="block text-right text-xs text-fg-muted">{p.baseUnit}</span>}</td>
                       <td data-action><button type="button" aria-label={`Xóa dòng ${i + 1}`} disabled={fields.length === 1} onClick={() => remove(i)} className="h-11 w-11 text-danger disabled:opacity-40">×</button></td>
                     </tr>
@@ -72,7 +72,7 @@ export function ProductionOrderForm({ today, quickProduct }: { today: string; qu
           {err.materials?.message && <p role="alert" className="text-sm text-danger">{err.materials.message}</p>}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => append(blank)} className="h-11 rounded-sm border border-border px-3 text-sm hover:bg-hover">+ Thêm nguyên vật liệu</button>
-            <ProductMultiPicker load={load("NVL,HANG")} existingIds={lineIds} onPicked={addProducts} />
+            <ProductMultiPicker load={load("canUseAsMaterial")} existingIds={lineIds} onPicked={addProducts} />
           </div>
         </div>
       </FormCard>

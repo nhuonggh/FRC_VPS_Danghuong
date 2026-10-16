@@ -88,7 +88,7 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   const at = resolveEditAt(order.orderDate, input.date, now);
   const lines = await planLines(tx, input, at, {
     keepInactive: new Set(order.lines.map((l) => l.productId)),
-    pinned: new Map(order.lines.map((l) => [l.id, { productId: l.productId, processingTypeId: l.processingTypeId, bomVersionId: l.bomVersionId }])),
+    pinned: new Map(order.lines.map((l) => [l.id, { productId: l.productId, processingTypeId: l.processingTypeId, bomVersionId: l.bomVersionId, issueMode: l.issueMode }])),
   });
   for (const l of lines) for (const i of l.issues) {
     if (!ctx.locked.has(i.productId)) throw new DomainError("Định mức hoặc dữ liệu vừa thay đổi, hãy tải lại trang rồi thử lại.", 409);
@@ -114,7 +114,7 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
     const data = {
       productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
       salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
-      processingTypeId: l.input.processingTypeId, bomVersionId: l.bomVersionId, at,
+      processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", bomVersionId: l.bomVersionId, at,
     };
     const row = l.input.id === undefined
       ? await tx.saleOrderLine.create({ data: { orderId: id, ...data } })
@@ -157,7 +157,7 @@ export async function editSaleOrderTx(prisma: PrismaClient, actor: Actor, id: nu
   // Khoá cả mã cũ lẫn mã sẽ xuất theo kế hoạch mới (BOM ghim phiên bản của dòng không đổi)
   const planned = await planLines(prisma, input, resolveEditAt(order.orderDate, input.date, now), {
     keepInactive: new Set(order.lines.map((l) => l.productId)),
-    pinned: new Map(order.lines.map((l) => [l.id, { productId: l.productId, processingTypeId: l.processingTypeId, bomVersionId: l.bomVersionId }])),
+    pinned: new Map(order.lines.map((l) => [l.id, { productId: l.productId, processingTypeId: l.processingTypeId, bomVersionId: l.bomVersionId, issueMode: l.issueMode }])),
   });
   const products = sortedUnique([...(await productsOfDocument(prisma, "SALE", id)), ...planned.flatMap((l) => l.issues.map((i) => i.productId))]);
   return withInventoryTx(prisma, { userId: actor.userId, periodId: order.periodId, products }, (ctx) => editSaleOrder(ctx, actor, id, input, now));
@@ -260,7 +260,7 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
       lines: {
         create: planned.map((l, i) => ({
           productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
-          discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, at: now,
+          discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", at: now,
         })),
       },
     },
@@ -285,7 +285,7 @@ export async function confirmDraftOrder(ctx: EngineCtx, actor: Actor, id: number
   const expected = ymd(order.expectedDeliveryDate) < today ? today : ymd(order.expectedDeliveryDate);
   const lines = await planLines(tx, {
     partnerId: order.partnerId, date: today, expectedDeliveryDate: expected, note: order.note ?? "",
-    lines: order.lines.map((l) => ({ id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId })),
+    lines: order.lines.map((l) => ({ id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM" })),
   }, at, { keepInactive: new Set(order.lines.map((l) => l.productId)) });
   for (const l of lines) for (const i of l.issues) {
     if (!ctx.locked.has(i.productId)) throw new DomainError("Định mức hoặc dữ liệu vừa thay đổi, hãy tải lại trang rồi thử lại.", 409);
@@ -293,7 +293,7 @@ export async function confirmDraftOrder(ctx: EngineCtx, actor: Actor, id: number
 
   const accum = new Map<number, Prisma.Decimal>();
   for (const l of lines) {
-    const row = await tx.saleOrderLine.update({ where: { id: l.input.id! }, data: { at, bomVersionId: l.bomVersionId } });
+    const row = await tx.saleOrderLine.update({ where: { id: l.input.id! }, data: { at, bomVersionId: l.bomVersionId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM" } });
     await tx.saleLineIssue.deleteMany({ where: { orderLineId: row.id } });
     for (const issue of l.issues) {
       const { seq } = await postIssue(ctx, { productId: issue.productId, qty: issue.qtyBase, docType: "SALE", docId: id, docLineId: row.id, at });
@@ -315,7 +315,7 @@ export async function confirmDraftOrderTx(prisma: PrismaClient, actor: Actor, id
   const today = ictYmd(now);
   const planned = await planLines(prisma, {
     partnerId: order.partnerId, date: today, expectedDeliveryDate: today, note: "",
-    lines: order.lines.map((l) => ({ id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId })),
+    lines: order.lines.map((l) => ({ id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice), discountNow: Number(l.discountNow), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM" })),
   }, docTimestamp(today, now), { keepInactive: new Set(order.lines.map((l) => l.productId)) });
   const products = sortedUnique(planned.flatMap((l) => l.issues.map((i) => i.productId)));
   return withInventoryTx(prisma, { userId: actor.userId, periodId: order.periodId, products }, (ctx) => confirmDraftOrder(ctx, actor, id, now));

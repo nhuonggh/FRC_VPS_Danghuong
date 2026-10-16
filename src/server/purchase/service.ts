@@ -77,6 +77,7 @@ async function prepareLines(tx: Tx, lines: PurchaseInput["lines"], keepInactive:
     if (!product.isActive && !keepInactive.has(product.id)) {
       throw new DomainError(`Dòng ${index + 1}: sản phẩm ${product.code} đã ngừng bán.`, 400);
     }
+    if (!product.canPurchase && !keepInactive.has(product.id)) throw new DomainError(`Dòng ${index + 1}: ${product.code} chưa bật khả năng được mua.`, 400);
     resolveFactor(product, line.unit);
     if (line.unit === product.baseUnit && !D(line.factor).eq(1)) {
       throw new DomainError(`Dòng ${index + 1}: đơn vị gốc (${product.baseUnit}) phải có hệ số 1.`, 400);

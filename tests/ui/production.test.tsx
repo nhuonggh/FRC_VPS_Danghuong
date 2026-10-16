@@ -52,7 +52,7 @@ describe("ProductionOrderForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/products", expect.objectContaining({ method: "POST", json: expect.objectContaining({ kind: "PHU_KIEN", code: "PK99" }) })));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("combobox", { name: "Phụ kiện Tôn" })).toHaveValue("PK99 — Nóc mới");
+    expect(screen.getByRole("combobox", { name: "Sản phẩm đầu ra" })).toHaveValue("PK99 — Nóc mới");
     await userEvent.click(screen.getByRole("button", { name: "Thêm phụ kiện Tôn" }));
     expect(screen.getByLabelText("Loại")).toHaveValue("PHU_KIEN");
   });
@@ -63,7 +63,7 @@ describe("ProductionOrderForm", () => {
   it("thiếu phụ kiện/số lượng ⇒ báo lỗi, không gọi API", async () => {
     render(<ProductionOrderForm today="2026-09-15" />);
     await userEvent.click(screen.getByRole("button", { name: "Lưu lệnh" }));
-    expect(await screen.findByText("Chọn phụ kiện cần sản xuất.")).toBeInTheDocument();
+    expect(await screen.findByText("Chọn sản phẩm cần sản xuất.")).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
   });
 });

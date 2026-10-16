@@ -35,6 +35,14 @@ export async function planBomIssues(
     if (e instanceof DomainError && e.status === 404) throw new DomainError(`Dòng ${o.n}: ${o.product.code} chưa có định mức hiệu lực cho kiểu gia công đã chọn.`, 400);
     throw e;
   });
+  const ids = [o.product.id, ...bom.lines.map((l) => l.materialProductId)];
+  const products = await db.product.findMany({ where: { id: { in: ids } }, select: { id: true, code: true, isActive: true, canProduce: true, canUseAsMaterial: true } });
+  const target = products.find((p) => p.id === o.product.id);
+  if (!target?.canProduce) throw new DomainError(`Dòng ${o.n}: ${o.product.code} chưa bật khả năng được sản xuất.`, 400);
+  for (const l of bom.lines) {
+    const p = products.find((p) => p.id === l.materialProductId);
+    if (!p?.isActive || !p.canUseAsMaterial) throw new DomainError(`Dòng ${o.n}: nguyên liệu ${p?.code ?? l.materialProductId} đã ngừng sử dụng hoặc chưa bật khả năng làm nguyên liệu.`, 400);
+  }
   const issues = bom.lines.map((l) => ({ productId: l.materialProductId, qtyBase: materialQty(l.qtyPerUnit, o.qtyBase) }));
   if (issues.some((i) => !i.qtyBase.gt(0))) throw new DomainError(`Dòng ${o.n}: số lượng quá nhỏ so với định mức nguyên vật liệu.`, 400);
   return { bomVersionId: bom.versionId, issues };

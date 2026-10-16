@@ -100,7 +100,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }
   useEffect(() => { for (const id of new Set(productKey.split(",").map(Number))) ensureTypes(id || undefined); }, [productKey, ensureTypes]);
   const [products, setProducts] = useState(() => new Map(initialProducts.map((product) => [product.value, product])));
   const loadProducts = async (q: string) => {
-    const result = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
+    const result = await apiFetch<ProductOption[]>(`/api/products/search?capability=canPurchase&q=${encodeURIComponent(q)}`);
     setProducts((current) => new Map([...current, ...result.map((row) => [row.value, row] as const)]));
     return result;
   };

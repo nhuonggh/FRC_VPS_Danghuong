@@ -1,3 +1,4 @@
+import { defaultCapabilities } from "../src/server/products/capabilities";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -76,7 +77,7 @@ export async function seedCustomerData(prisma: PrismaClient, opts: { file?: stri
     const owners = new Map((await tx.user.findMany({ select: { id: true, username: true } })).map((u) => [u.username.toLowerCase(), u.id]));
     await tx.partner.createMany({ data: seed.partners.map((p) => ({ code: p.code, name: p.name, searchText: normalizeSearch(`${p.code} ${p.name} ${p.phone}`), groupId: groups.get(p.group)!, isCustomer: p.isCustomer ?? p.kind === "customer", isSupplier: p.isSupplier ?? p.kind === "supplier", ownerUserId: p.owner ? (owners.get(p.owner.toLowerCase()) ?? null) : null, debtLimit: new Prisma.Decimal(p.debtLimit), allowCredit: p.allowCredit, phone: p.phone || null, address: p.address || null, note: p.note || null })) });
     const pgroups = new Map((await tx.productGroup.findMany()).map((g) => [g.name, g.id]));
-    await tx.product.createMany({ data: seed.products.map((p) => ({ groupId: p.group ? (pgroups.get(p.group) ?? null) : null, code: p.code, name: p.name, searchText: normalizeSearch(`${p.code} ${p.name}`), kind: p.kind, baseUnit: p.baseUnit, minStock: new Prisma.Decimal(p.minStock), isCoil: p.isCoil, isActive: p.isActive, note: p.note || null })) });
+    await tx.product.createMany({ data: seed.products.map((p) => ({ groupId: p.group ? (pgroups.get(p.group) ?? null) : null, code: p.code, name: p.name, searchText: normalizeSearch(`${p.code} ${p.name}`), kind: p.kind, ...defaultCapabilities(p.kind), baseUnit: p.baseUnit, minStock: new Prisma.Decimal(p.minStock), isCoil: p.isCoil, isActive: p.isActive, note: p.note || null })) });
     for (const p of seed.products.filter((x) => x.unit && x.factor)) await tx.productUnit.create({ data: { product: { connect: { code: p.code } }, unit: p.unit, factor: new Prisma.Decimal(p.factor!) } });
     log(`Dữ liệu khách: nạp ${seed.partners.length} khách/NCC, ${seed.products.length} sản phẩm, ${usersCreated} người dùng, ${seed.processingTypes.length} kiểu gia công`);
   }, { timeout: 120_000 });

@@ -25,10 +25,12 @@ export const saleLineSchema = z
     discountAccum: z.number().finite().min(0, "Chiết khấu không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân."),
     /** Có → bán hàng gia công: xuất NVL theo BOM hiệu lực tại ngày đơn thay vì xuất chính mã này. */
     processingTypeId: z.number().int().positive().nullable(),
+    issueMode: z.enum(["LEGACY", "STOCK", "BOM"]).optional(),
     /** Ghi chú theo dòng hàng. */
     note: z.string().trim().max(200, "Ghi chú dòng tối đa 200 ký tự.").optional(),
   })
   .superRefine((l, ctx) => {
+    if (l.issueMode === "BOM" && !l.processingTypeId) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["processingTypeId"], message: "Chọn kiểu gia công khi xuất theo định mức." });
     if (l.discountNow + l.discountAccum > Math.round(l.qty * l.salePrice * 100) / 100 + 1e-9) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discountNow"], message: "Tổng chiết khấu vượt giá trị dòng." });
     }

@@ -78,7 +78,7 @@ describe("nhập định mức (BOM) từ Excel", () => {
     expect(other.code).toBe("HH1");
     expect(pv.counts.error).toBe(7);
     const msgs = pv.rows.map((r) => r.message ?? "").join("|");
-    expect(msgs).toContain("chỉ khai báo định mức");
+    expect(msgs).toContain("chưa bật khả năng được sản xuất");
     expect(msgs).toContain("trùng với chính thành phẩm");
     expect(msgs).toContain("lớn hơn 0");
     expect(msgs).toContain("Trùng mã");

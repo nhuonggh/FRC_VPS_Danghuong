@@ -104,6 +104,10 @@ model Product {
   name        String
   searchText  String      @default("")
   kind        ProductKind @default(HANG)
+  canSell          Boolean @default(true)
+  canPurchase      Boolean @default(true)
+  canUseAsMaterial Boolean @default(false)
+  canProduce       Boolean @default(false)
   baseUnit    String // đơn vị gốc (thường md); sổ kho & FIFO luôn tính theo đơn vị này
   minStock    Decimal     @default(0) @db.Decimal(18, 3)
   isCoil      Boolean     @default(false) // tôn cuộn — bật để hiện ở màn Tra cứu cuộn (mã 30). TODO: confirm với khách
