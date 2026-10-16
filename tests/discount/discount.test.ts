@@ -157,3 +157,33 @@ describe("số dư âm và sổ", () => {
     await expect(getDiscountDetail(prisma, kt, 99999, P())).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe("chuyển phần chiết khấu còn lại vào lãi công ty (FORFEIT)", () => {
+  it("chi 300k + chuyển lãi 200k cùng giao dịch: hết số dư, 1 phiếu chi, phiếu FORFEIT không đụng quỹ/công nợ; hủy phiếu hoàn lại số dư", async () => {
+    const before = await partnerBalance(prisma, customer.id);
+    const s = await settle({ amount: 300_000, forfeitAmount: 200_000 });
+    expect(s.forfeit).toBeDefined();
+    expect(await dbal()).toBe("0");
+    expect(await prisma.payment.count()).toBe(1);
+    expect(await prisma.discountSettlement.findUniqueOrThrow({ where: { id: s.forfeit!.id } })).toMatchObject({ method: "FORFEIT", paymentId: null });
+    expect(await prisma.discountLedger.count({ where: { docType: "DISCOUNT_SETTLE", docId: s.forfeit!.id, settleMethod: "FORFEIT" } })).toBe(1);
+    expect((await partnerBalance(prisma, customer.id)).balance.toString()).toBe(before.balance.toString());
+    await tx((t) => cancelSettlement(t, kt, s.forfeit!.id, "nhầm", NOW));
+    expect(await dbal()).toBe("200000");
+  });
+
+  it("chỉ chuyển lãi (method FORFEIT) một phần; tổng chi + chuyển lãi vượt số dư ⇒ 409; FORFEIT không kèm quỹ", async () => {
+    await settle({ method: "FORFEIT", cashAccountId: null, amount: 100_000 });
+    expect(await dbal()).toBe("400000");
+    expect(await prisma.payment.count()).toBe(0);
+    await expect(settle({ amount: 300_000, forfeitAmount: 100_001 })).rejects.toMatchObject({ code: "DISCOUNT_EXCEEDS_BALANCE" });
+    expect(settleSchema.safeParse({ partnerId: 1, method: "FORFEIT", amount: 5, cashAccountId: 3, date: "2026-09-15", note: "" }).success).toBe(false);
+    expect(settleSchema.safeParse({ partnerId: 1, method: "FORFEIT", amount: 5, cashAccountId: null, forfeitAmount: 1, date: "2026-09-15", note: "" }).success).toBe(false);
+  });
+
+  it("phiếu FORFEIT cần hậu kiểm như phiếu khác", async () => {
+    const s = await settle({ method: "FORFEIT", cashAccountId: null, amount: 100_000 });
+    await tx((t) => reconcileSettlement(t, hk, s.id, NOW));
+    await expect(tx((t) => cancelSettlement(t, kt, s.id, "x", NOW))).rejects.toMatchObject({ code: "SETTLEMENT_RECONCILED" });
+  });
+});

@@ -18,10 +18,11 @@ export const RECONCILED_MSG = "Phiếu tất toán đã được hậu kiểm n�
 
 /**
  * Tất toán chiết khấu tích lũy (D-37). Không vượt số dư chiết khấu còn lại; OFFSET không vượt công nợ phải thu hiện có
- * (phần dư trả bằng tiền mặt). CASH sinh phiếu chi TAT_TOAN_CK (sổ quỹ ra, chờ thủ quỹ kiểm) — mọi thứ cùng transaction,
- * khoá dòng khách để hai lần tất toán đồng thời không vượt số dư.
+ * (phần dư trả bằng tiền mặt). CASH sinh phiếu chi TAT_TOAN_CK (sổ quỹ ra, chờ thủ quỹ kiểm); FORFEIT = chuyển vào lãi công ty
+ * (chỉ hết số dư chiết khấu). `forfeitAmount` tạo thêm một phiếu FORFEIT cùng giao dịch. Mọi thứ cùng transaction,
+ * khoá dòng khách để hai lần tất toán đồng thời không vượt số dư. Trả về phiếu CHÍNH (`forfeit` = phiếu chuyển lãi kèm theo).
  */
-export async function settleDiscount(tx: Tx, actor: Actor, input: SettleInput, now: Date = new Date()): Promise<{ id: number; code: string }> {
+export async function settleDiscount(tx: Tx, actor: Actor, input: SettleInput, now: Date = new Date()): Promise<{ id: number; code: string; forfeit?: { id: number; code: string } }> {
   assertCan(actor.perms, "discount.settle");
   const period = await getOpenPeriod(tx);
   const at = docTimestamp(input.date, now);
@@ -31,23 +32,33 @@ export async function settleDiscount(tx: Tx, actor: Actor, input: SettleInput, n
   if (!partner || partner.mergedIntoId !== null) throw new DomainError("Không tìm thấy khách hàng.", 404);
   if (!partner.isCustomer) throw new DomainError("Chỉ tất toán chiết khấu cho khách hàng.", 400);
   const amount = D(input.amount);
+  const forfeitAmount = D(input.forfeitAmount ?? 0);
   const left = await discountBalance(tx, input.partnerId);
-  if (amount.gt(left)) throw new DomainError(`Vượt số dư chiết khấu còn lại (${left.toFixed(0)}).`, 409, "DISCOUNT_EXCEEDS_BALANCE");
+  if (amount.plus(forfeitAmount).gt(left)) throw new DomainError(`Vượt số dư chiết khấu còn lại (${left.toFixed(0)}).`, 409, "DISCOUNT_EXCEEDS_BALANCE");
   if (input.method === "OFFSET") {
     const owed = (await partnerBalance(tx, input.partnerId)).balance;
     if (amount.gt(owed.gt(0) ? owed : D(0))) throw new DomainError(`Trừ vào công nợ không vượt số khách đang nợ (${owed.gt(0) ? owed.toFixed(0) : "0"}) — phần còn lại hãy chi tiền.`, 409, "OFFSET_EXCEEDS_DEBT");
   }
+  const main = await createSettlement(tx, actor, { partnerId: input.partnerId, method: input.method, amount, input, periodId: period.id, at }, now);
+  let forfeit: { id: number; code: string } | undefined;
+  if (forfeitAmount.gt(0)) forfeit = await createSettlement(tx, actor, { partnerId: input.partnerId, method: "FORFEIT", amount: forfeitAmount, input, periodId: period.id, at }, now);
+  return forfeit ? { ...main, forfeit } : main;
+}
+
+async function createSettlement(tx: Tx, actor: Actor, v: { partnerId: number; method: SettleInput["method"]; amount: Prisma.Decimal; input: SettleInput; periodId: number; at: Date }, now: Date): Promise<{ id: number; code: string }> {
+  const { input, method, amount, periodId, at } = v;
+  const period = { id: periodId };
   const id = await nextDocId(tx, "discount_settlements");
   const code = formatDocCode("CK", id);
   let paymentId: number | null = null;
-  if (input.method === "CASH") {
-    const p = await createPayment(tx, actor, { kind: "TAT_TOAN_CK", partnerId: null, cashAccountId: input.cashAccountId!, amount: input.amount, date: input.date, note: `Tất toán chiết khấu ${code}${input.note ? ` — ${input.note}` : ""}` }, now);
+  if (method === "CASH") {
+    const p = await createPayment(tx, actor, { kind: "TAT_TOAN_CK", partnerId: null, cashAccountId: input.cashAccountId!, amount: amount.toNumber(), date: input.date, note: `Tất toán chiết khấu ${code}${input.note ? ` — ${input.note}` : ""}` }, now);
     paymentId = p.id;
   }
-  await tx.discountSettlement.create({ data: { id, code, periodId: period.id, partnerId: input.partnerId, method: input.method, amount, at, note: input.note || null, paymentId, createdBy: actor.userId } });
-  await tx.discountLedger.create({ data: { periodId: period.id, partnerId: input.partnerId, amountOut: amount, settleMethod: input.method, docType: "DISCOUNT_SETTLE", docId: id, at, createdBy: actor.userId } });
-  if (input.method === "OFFSET") await postPartnerLedger(tx, { periodId: period.id, partnerId: input.partnerId, side: "credit", amount, docType: "DISCOUNT_SETTLE", docId: id, at, createdBy: actor.userId });
-  await writeAudit(tx, { userId: actor.userId, action: "discount.settle", entity: "DiscountSettlement", entityId: id, after: { code, partnerId: input.partnerId, method: input.method, amount: input.amount } });
+  await tx.discountSettlement.create({ data: { id, code, periodId: period.id, partnerId: input.partnerId, method, amount, at, note: input.note || null, paymentId, createdBy: actor.userId } });
+  await tx.discountLedger.create({ data: { periodId: period.id, partnerId: input.partnerId, amountOut: amount, settleMethod: method, docType: "DISCOUNT_SETTLE", docId: id, at, createdBy: actor.userId } });
+  if (method === "OFFSET") await postPartnerLedger(tx, { periodId: period.id, partnerId: input.partnerId, side: "credit", amount, docType: "DISCOUNT_SETTLE", docId: id, at, createdBy: actor.userId });
+  await writeAudit(tx, { userId: actor.userId, action: "discount.settle", entity: "DiscountSettlement", entityId: id, after: { code, partnerId: input.partnerId, method, amount: amount.toString() } });
   return { id, code };
 }
 

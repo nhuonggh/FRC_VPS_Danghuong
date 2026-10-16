@@ -1791,7 +1791,7 @@ ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_paymentI
 
 -- CHECK số liệu/trạng thái: tiền mặt ⇔ có phiếu chi; trừ nợ ⇔ không có phiếu chi
 ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_amount_chk" CHECK ("amount" > 0);
-ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" = 'OFFSET' AND "paymentId" IS NULL));
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" IN ('OFFSET', 'FORFEIT') AND "paymentId" IS NULL));
 ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
 
 -- >>> prisma/migrations/20261001030000_trips/migration.sql

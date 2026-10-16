@@ -51,7 +51,7 @@ export async function listDiscountBalances(db: Db, actor: Actor, params: ListPar
 }
 
 export interface DiscountEntryDTO { id: number; at: Date; docType: string; docLabel: string; docCode: string | null; docHref: string | null; orderCode: string | null; amountIn: string; amountOut: string; running: string; method: string | null; isReconciled: boolean }
-export interface SettlementDTO { id: number; code: string; at: Date; method: "CASH" | "OFFSET"; methodLabel: string; amount: string; note: string | null; paymentId: number | null; paymentCode: string | null; isCancelled: boolean; cancelReason: string | null; isReconciled: boolean; reconciledByName: string | null; createdByName: string | null }
+export interface SettlementDTO { id: number; code: string; at: Date; method: "CASH" | "OFFSET" | "FORFEIT"; methodLabel: string; amount: string; note: string | null; paymentId: number | null; paymentCode: string | null; isCancelled: boolean; cancelReason: string | null; isReconciled: boolean; reconciledByName: string | null; createdByName: string | null }
 export interface DiscountDetailDTO {
   partner: { id: number; code: string; name: string; debtBalance: string };
   opening: string; accrued: string; settled: string; balance: string; negative: boolean; total: number;

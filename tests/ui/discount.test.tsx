@@ -28,7 +28,7 @@ describe("DiscountDetail", () => {
   it("tất toán CASH: vượt số dư bị chặn ở form; đủ ⇒ POST kèm quỹ + khoá idempotency", async () => {
     render(<DiscountDetail d={detail()} perms={{ canSettle: true, canReconcile: true }} accounts={accounts} today="2026-09-15" />);
     await userEvent.click(screen.getByRole("button", { name: "Tất toán chiết khấu" }));
-    await userEvent.type(screen.getByLabelText(/Số tiền/), "600000");
+    await userEvent.clear(screen.getByLabelText(/Số tiền/)); await userEvent.type(screen.getByLabelText(/Số tiền/), "600000");
     await userEvent.click(screen.getByRole("button", { name: "Tất toán" }));
     expect(await screen.findByText(/Tối đa/)).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
@@ -42,9 +42,17 @@ describe("DiscountDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tất toán chiết khấu" }));
     await userEvent.selectOptions(screen.getByLabelText(/Hình thức/), "OFFSET");
     expect(screen.queryByLabelText(/Chi từ quỹ/)).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText(/Số tiền/), "250000");
+    await userEvent.clear(screen.getByLabelText(/Số tiền/)); await userEvent.type(screen.getByLabelText(/Số tiền/), "250000");
     await userEvent.click(screen.getByRole("button", { name: "Tất toán" }));
     expect(await screen.findByText(/Tối đa 200\.000/)).toBeInTheDocument();
+  });
+  it("chi 300.000 và chuyển phần còn lại vào lãi công ty ⇒ POST kèm forfeitAmount = số còn lại", async () => {
+    render(<DiscountDetail d={detail()} perms={{ canSettle: true, canReconcile: false }} accounts={accounts} today="2026-09-15" />);
+    await userEvent.click(screen.getByRole("button", { name: "Tất toán chiết khấu" }));
+    await userEvent.clear(screen.getByLabelText(/Số tiền/)); await userEvent.type(screen.getByLabelText(/Số tiền/), "300000");
+    await userEvent.click(screen.getByLabelText(/Chuyển vào lãi công ty/));
+    await userEvent.click(screen.getByRole("button", { name: "Tất toán" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/discount/settlements", expect.objectContaining({ json: expect.objectContaining({ method: "CASH", amount: 300000, forfeitAmount: 240000 }) })));
   });
   it("phiếu chờ hậu kiểm có Hậu kiểm + Hủy, phiếu đã hậu kiểm thì không; hậu kiểm gọi API; thiếu quyền ẩn nút", async () => {
     const { unmount } = render(<DiscountDetail d={detail()} perms={{ canSettle: true, canReconcile: true }} accounts={accounts} today="2026-09-15" />);

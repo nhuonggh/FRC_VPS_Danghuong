@@ -88,17 +88,21 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "su
 }
 
 function SettleDialog({ open, onClose, d, accounts, today, idemKey, onDone }: { open: boolean; onClose: () => void; d: DiscountDetailDTO; accounts: { id: number; name: string }[]; today: string; idemKey: string; onDone: () => void }) {
-  const [method, setMethod] = useState<"CASH" | "OFFSET">("CASH");
-  const [amount, setAmount] = useState(""); const [accountId, setAccountId] = useState<number>(accounts[0]?.id ?? 0); const [date, setDate] = useState(today); const [note, setNote] = useState("");
+  const [method, setMethod] = useState<"CASH" | "OFFSET" | "FORFEIT">("CASH");
+  const [amount, setAmount] = useState(String(Math.max(Number(d.balance), 0))); const [remainder, setRemainder] = useState<"KEEP" | "FORFEIT">("KEEP"); const [accountId, setAccountId] = useState<number>(accounts[0]?.id ?? 0); const [date, setDate] = useState(today); const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  const debt = Number(d.partner.debtBalance); const max = method === "OFFSET" ? Math.min(Number(d.balance), Math.max(debt, 0)) : Number(d.balance);
+  const debt = Number(d.partner.debtBalance), owes = debt > 0, balance = Number(d.balance);
+  const max = method === "OFFSET" ? Math.min(balance, Math.max(debt, 0)) : balance;
+  const left = Math.max(Math.round((balance - (Number(amount) || 0)) * 100) / 100, 0); // phần chiết khấu còn lại sau khi chi/trừ nợ
+  const forfeitLeft = method !== "FORFEIT" && remainder === "FORFEIT" && left > 0 ? left : 0;
   async function submit() {
     if (busy) return;
     if (!(Number(amount) > 0)) { setError("Nhập số tiền lớn hơn 0."); return; }
+    if (method === "OFFSET" && !owes) { setError("Khách không đang nợ nên không trừ vào công nợ được — hãy chọn Chi tiền."); return; }
     if (Number(amount) > max) { setError(`Tối đa ${formatCurrency(String(max))}.`); return; }
     setBusy(true); setError(null);
     try {
-      await apiFetch("/api/discount/settlements", { method: "POST", json: { partnerId: d.partner.id, method, amount: Number(amount), cashAccountId: method === "CASH" ? accountId : null, date, note }, idempotencyKey: idemKey });
+      await apiFetch("/api/discount/settlements", { method: "POST", json: { partnerId: d.partner.id, method, amount: Number(amount), cashAccountId: method === "CASH" ? accountId : null, ...(forfeitLeft > 0 ? { forfeitAmount: forfeitLeft } : {}), date, note }, idempotencyKey: idemKey });
       setAmount(""); setNote(""); onDone(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Không tất toán được."); } finally { setBusy(false); }
   }
@@ -107,9 +111,16 @@ function SettleDialog({ open, onClose, d, accounts, today, idemKey, onDone }: { 
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-dialog max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 overflow-y-auto rounded-lg border border-border bg-raised p-5 shadow-lg">
           <Dialog.Title className="text-base font-semibold">Tất toán chiết khấu — {d.partner.name}</Dialog.Title>
-          <Dialog.Description className="text-sm text-fg-secondary">Còn lại {formatCurrency(d.balance)}. Chi tiền: sinh phiếu chi (thủ quỹ kiểm sau). Trừ công nợ: giảm số khách đang nợ ({formatCurrency(String(Math.max(debt, 0)))}).</Dialog.Description>
-          <InlineField id="st-method" label="Hình thức" required><select id="st-method" value={method} onChange={(e) => { setMethod(e.target.value as "CASH" | "OFFSET"); setError(null); }} className={igInput}><option value="CASH">Chi tiền cho khách</option><option value="OFFSET">Trừ vào công nợ</option></select></InlineField>
+          <Dialog.Description className="text-sm text-fg-secondary">Còn lại {formatCurrency(d.balance)}. Chi tiền: sinh phiếu chi (thủ quỹ kiểm sau). Trừ công nợ: giảm số khách đang nợ ({formatCurrency(String(Math.max(debt, 0)))}). Chỉ chiết khấu cho khách một phần được; phần còn lại giữ trong quỹ chiết khấu hoặc chuyển vào lãi công ty.</Dialog.Description>
+          <InlineField id="st-method" label="Hình thức" required><select id="st-method" value={method} onChange={(e) => { const m = e.target.value as "CASH" | "OFFSET" | "FORFEIT"; setMethod(m); setError(null); const cap = m === "OFFSET" ? Math.min(balance, Math.max(debt, 0)) : balance; if (!(Number(amount) > 0) || Number(amount) > cap) setAmount(cap > 0 ? String(cap) : ""); }} className={igInput}><option value="CASH">Chi tiền cho khách</option><option value="OFFSET" disabled={!owes}>{owes ? "Trừ vào công nợ" : "Trừ vào công nợ (khách không nợ)"}</option><option value="FORFEIT">Chỉ chuyển vào lãi công ty</option></select></InlineField>
           <InlineField id="st-amount" label={`Số tiền (tối đa ${formatCurrency(String(max))})`} required><NumberInput id="st-amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular`} /></InlineField>
+          {method !== "FORFEIT" && (
+            <fieldset className="space-y-1 rounded-sm border border-border p-3 text-sm">
+              <legend className="px-1 text-xs font-semibold text-fg-secondary">Phần chiết khấu còn lại: {formatCurrency(String(left))}</legend>
+              <label className="flex items-center gap-2"><input type="radio" name="st-remainder" checked={remainder === "KEEP"} onChange={() => setRemainder("KEEP")} />Giữ lại quỹ chiết khấu (tiếp tục tích luỹ)</label>
+              <label className="flex items-center gap-2"><input type="radio" name="st-remainder" checked={remainder === "FORFEIT"} onChange={() => setRemainder("FORFEIT")} disabled={left <= 0} />Chuyển vào lãi công ty (hết số dư, khách không còn quyền lợi này)</label>
+            </fieldset>
+          )}
           {method === "CASH" && <InlineField id="st-account" label="Chi từ quỹ / tài khoản" required><select id="st-account" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} className={igInput}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
           <InlineField id="st-date" label="Ngày" required><input id="st-date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
           <InlineField id="st-note" label="Ghi chú" multiline><textarea id="st-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>

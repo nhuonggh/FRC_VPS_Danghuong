@@ -1,6 +1,8 @@
 enum DiscountSettleMethod {
   CASH
   OFFSET
+  /// Chuyển phần chiết khấu còn lại vào lãi công ty: hết số dư, không chi tiền, không trừ công nợ.
+  FORFEIT
 
   @@map("discount_settle_method")
 }
