@@ -56,6 +56,7 @@ COPY prisma ./prisma
 COPY src/lib/permissions/catalog.ts ./src/lib/permissions/catalog.ts
 COPY src/lib/time.ts src/lib/search.ts ./src/lib/
 COPY src/server/auth/password.ts src/server/auth/normalize.ts ./src/server/auth/
+COPY src/server/products/capabilities.ts ./src/server/products/capabilities.ts
 # Cứu hộ admin (RUNBOOK mục 13): npx tsx scripts/admin-reset.ts → prisma/admin-reset-lib.ts (cùng các file auth ở trên)
 COPY scripts/admin-reset.ts ./scripts/admin-reset.ts
 RUN npx prisma generate

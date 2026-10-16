@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 
+import { defaultCapabilities } from "@/server/products/capabilities";
 let n = 0;
 const next = () => ++n;
 
@@ -20,7 +21,7 @@ export async function makePeriod(over: Partial<Prisma.PeriodUncheckedCreateInput
 export async function makeProduct(over: Partial<Prisma.ProductUncheckedCreateInput> = {}) {
   const i = next();
   return prisma.product.create({
-    data: { code: `SP${i}`, name: `Sản phẩm ${i}`, searchText: `san pham ${i}`, baseUnit: "md", ...over },
+    data: { code: `SP${i}`, name: `Sản phẩm ${i}`, searchText: `san pham ${i}`, baseUnit: "md", ...defaultCapabilities(over.kind ?? "HANG"), ...over },
   });
 }
 

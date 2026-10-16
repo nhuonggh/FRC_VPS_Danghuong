@@ -14,6 +14,8 @@ const uniqueUnits = (value: { unit: string }[], ctx: z.RefinementCtx) => {
 const money = z.number().finite().min(0, "Giá không được âm.").max(999_999_999_999);
 const optUnit = z.string().trim().max(10, "Đơn vị tối đa 10 ký tự.");
 const base = z.object({
+  canSell: z.boolean().optional(), canPurchase: z.boolean().optional(),
+  canUseAsMaterial: z.boolean().optional(), canProduce: z.boolean().optional(),
   code: z.string().trim().min(1, "Nhập mã sản phẩm.").max(30).regex(/^[A-Za-z0-9._\-/]+$/, "Mã chỉ gồm chữ không dấu, số và . _ - /."),
   name: z.string().trim().min(1, "Nhập tên sản phẩm.").max(200), kind: z.enum(["HANG", "NVL", "THANH_PHAM", "PHU_KIEN"]),
   baseUnit: unitName, minStock: z.number().finite().min(0, "Định mức tồn không được âm.").max(999_999_999),
@@ -29,7 +31,7 @@ const base = z.object({
   imageUrl: z.string().trim().max(500, "Địa chỉ ảnh tối đa 500 ký tự.").refine((v) => v === "" || ((v.startsWith("https://") || v.startsWith("/uploads/")) && !/[\s"'<>]/.test(v)), "Ảnh phải là địa chỉ https:// hoặc /uploads/…").optional(),
 });
 export const createProductSchema = base.extend({ units: z.array(unitRow).max(10, "Tối đa 10 đơn vị quy đổi.") }).superRefine((value, ctx) => { uniqueUnits(value.units, ctx); value.units.forEach((row, index) => { if (row.unit.toLocaleLowerCase("vi") === value.baseUnit.toLocaleLowerCase("vi")) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["units", index, "unit"], message: "Đơn vị gốc không được là đơn vị quy đổi." }); }); });
-export const basicSectionSchema = base.pick({ name: true, kind: true, baseUnit: true, isCoil: true, note: true, imageUrl: true, groupId: true, importUnit: true, exportUnit: true, bundleQty: true, qtyLabel: true });
+export const basicSectionSchema = base.pick({ canSell: true, canPurchase: true, canUseAsMaterial: true, canProduce: true, name: true, kind: true, baseUnit: true, isCoil: true, note: true, imageUrl: true, groupId: true, importUnit: true, exportUnit: true, bundleQty: true, qtyLabel: true });
 export const priceSectionSchema = base.pick({ purchasePrice: true, salePrice: true });
 export const stockSectionSchema = base.pick({ minStock: true });
 export const statusSectionSchema = base.pick({ isActive: true });

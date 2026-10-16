@@ -311,7 +311,7 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
       shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount),
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
-        discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, note: l.note ?? "",
+        discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM", note: l.note ?? "",
       })),
     },
   };

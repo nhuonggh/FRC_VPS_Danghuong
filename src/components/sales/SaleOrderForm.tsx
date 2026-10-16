@@ -198,7 +198,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   };
   const loadCustomers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/customers/search?q=${encodeURIComponent(q)}`);
   const loadProducts = async (q: string) => {
-    const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
+    const rows = await apiFetch<ProductOption[]>(`/api/products/search?capability=canSell&q=${encodeURIComponent(q)}`);
     setProducts((m) => new Map([...m, ...rows.map((r) => [r.value, r] as const)]));
     return rows;
   };
@@ -546,6 +546,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
       </td>
       <td data-label="CK tích lũy" className={cell}><RhfNumberInput aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} control={control} name={`lines.${index}.discountAccum`} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
       <td data-label="Gia công" className={cell}>
+        <select aria-label={`Cách xuất kho dòng ${index + 1}`} {...register(`lines.${index}.issueMode`)} className={inputClass(err?.issueMode)}><option value="LEGACY">Theo kiểu gia công</option><option value="STOCK">Xuất tồn sản phẩm</option><option value="BOM">Gia công theo định mức</option></select>
         <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError("");
           const t = e.target.value ? types.find((x) => Number(x.value) === Number(e.target.value)) : null;
           if (t?.priceBasis === "UNIT" && t.unit) { const u = product?.units.find((x) => sameUnit(x.unit, t.unit)); if (u) setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); else setDimError(`Sản phẩm chưa khai đơn vị "${t.unit}" (Sản phẩm → Đơn vị & quy đổi).`); }
@@ -553,7 +554,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {currentType && !currentType.hasBom && <p className="mt-1 text-xs text-fg-muted">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
+        {line?.issueMode !== "BOM" && currentType && !currentType.hasBom && <p className="mt-1 text-xs text-fg-muted">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
         {typeId && (
           <div className="mt-2 space-y-1.5 text-xs">
             {!isUnitBasis && !ratioKnown && (

@@ -10,13 +10,13 @@ import type { ProductionOrderInput } from "./schemas";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const uniqueSorted = (ids: number[]) => [...new Set(ids)].sort((a, b) => a - b);
-const MATERIAL_KINDS = ["NVL", "HANG"] as const;
+
 
 /** Mọi mã chạm bởi lệnh: thành phẩm + từng NVL (khoá theo thứ tự tăng dần trong withInventoryTx). */
 export const productionProducts = (input: ProductionOrderInput) => uniqueSorted([input.productId, ...input.materials.map((m) => m.productId)]);
 
 /**
- * Lệnh SX phụ kiện (spec 3.6, engine-fifo §PRODUCTION): NVL xuất `PRODUCTION_USE` (FIFO của chính NVL) GHI TRƯỚC,
+ * Lệnh SX sản phẩm (engine-fifo §PRODUCTION): NVL xuất `PRODUCTION_USE` (FIFO của chính NVL) GHI TRƯỚC,
  * rồi thành phẩm nhập `PRODUCTION_OUT` với `costRef` = lệnh. Giá thành phẩm = Σ vốn NVL / SL, do engine giữ.
  * `docLineId` của mọi dòng NVL và của costRef là id lệnh (duy nhất trong docType xuất PRODUCTION_USE).
  */
@@ -26,9 +26,9 @@ export async function createProductionOrder(ctx: EngineCtx, actor: Actor, input:
   const products = await ctx.tx.product.findMany({ where: { id: { in: ids } } });
   const byId = new Map(products.map((p) => [p.id, p]));
   const target = byId.get(input.productId);
-  if (!target) throw new DomainError("Phụ kiện không tồn tại.", 400);
-  if (target.kind !== "PHU_KIEN") throw new DomainError(`${target.code} không phải phụ kiện — lệnh sản xuất chỉ dành cho phụ kiện (tôn xốp/1 lớp/sóng bán theo định mức, không lập lệnh).`, 400);
-  if (!target.isActive) throw new DomainError(`${target.code} đã ngừng bán.`, 400);
+  if (!target) throw new DomainError("Sản phẩm đầu ra không tồn tại.", 400);
+  if (!target.canProduce) throw new DomainError(`${target.code} chưa bật khả năng được sản xuất.`, 400);
+  if (!target.isActive) throw new DomainError(`${target.code} đã ngừng sử dụng.`, 400);
   const seen = new Set<number>();
   for (const [i, m] of input.materials.entries()) {
     const p = byId.get(m.productId);
@@ -36,7 +36,8 @@ export async function createProductionOrder(ctx: EngineCtx, actor: Actor, input:
     if (m.productId === input.productId) throw new DomainError(`Dòng NVL ${i + 1}: nguyên vật liệu không được trùng với thành phẩm.`, 400);
     if (seen.has(m.productId)) throw new DomainError(`Dòng NVL ${i + 1}: ${p.code} bị lặp — gộp thành một dòng.`, 400);
     seen.add(m.productId);
-    if (!(MATERIAL_KINDS as readonly string[]).includes(p.kind)) throw new DomainError(`Dòng NVL ${i + 1}: ${p.code} không phải nguyên vật liệu/hàng hóa.`, 400);
+    if (!p.canUseAsMaterial) throw new DomainError(`Dòng NVL ${i + 1}: ${p.code} chưa bật khả năng dùng làm nguyên liệu.`, 400);
+    if (!p.isActive) throw new DomainError(`Dòng NVL ${i + 1}: ${p.code} đã ngừng sử dụng.`, 400);
     const onHand = await getOnHand(ctx.tx, ctx.period.id, p.id);
     if (onHand.lt(D(m.qty))) throw new DomainError(`Không đủ tồn ${p.code}: cần ${m.qty}, còn ${onHand.toString()} ${p.baseUnit}.`, 409);
   }
@@ -65,7 +66,13 @@ export async function cancelProductionOrder(ctx: EngineCtx, actor: Actor, id: nu
   if (!current) throw new DomainError("Không tìm thấy lệnh sản xuất.", 404);
   if (current.isCancelled) throw new DomainError("Lệnh đã hủy trước đó.", 409);
   if (current.periodId !== ctx.period.id) throw new PeriodClosedError();
-  // Thành phẩm (lớp phụ thuộc) gỡ trước, rồi NVL. Thành phẩm đã bán/dùng hết ⇒ engine từ chối (DependentDocumentsError).
+  // The inventory engine may replay ordinary receipt removal into negative stock.
+  // A production output already consumed must instead keep its provenance intact.
+  const consumed = await ctx.tx.costConsumption.count({
+    where: { layer: { sourceDocType: "PRODUCTION_OUT", sourceDocId: id } },
+  });
+  if (consumed > 0) throw new DomainError("Không hủy được: sản phẩm đầu ra đã được bán hoặc sử dụng. Hãy xử lý chứng từ tiêu thụ trước.", 409, "PRODUCTION_OUTPUT_CONSUMED");
+  // Gỡ đầu ra trước, rồi hoàn nguyên liệu trong cùng giao dịch.
   await removeDocument(ctx, "PRODUCTION_OUT", id);
   await removeDocument(ctx, "PRODUCTION_USE", id);
   await ctx.tx.productionOrder.update({ where: { id }, data: { isCancelled: true, cancelledAt: new Date(), cancelledBy: actor.userId, cancelReason: reason } });

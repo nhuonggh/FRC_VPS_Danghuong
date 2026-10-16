@@ -4,7 +4,7 @@ const num = (label: string) => z.number({ required_error: `Nhập ${label.toLowe
 
 export const productionOrderSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ."),
-  productId: z.number({ required_error: "Chọn phụ kiện cần sản xuất.", invalid_type_error: "Chọn phụ kiện cần sản xuất." }).int().positive("Chọn phụ kiện cần sản xuất."),
+  productId: z.number({ required_error: "Chọn sản phẩm cần sản xuất.", invalid_type_error: "Chọn sản phẩm cần sản xuất." }).int().positive("Chọn sản phẩm cần sản xuất."),
   qty: num("Số lượng thành phẩm"),
   note: z.string().trim().max(500),
   materials: z.array(z.object({ productId: z.number({ required_error: "Chọn nguyên vật liệu.", invalid_type_error: "Chọn nguyên vật liệu." }).int().positive("Chọn nguyên vật liệu."), qty: num("Lượng NVL") })).min(1, "Cần ít nhất một nguyên vật liệu.").max(50),

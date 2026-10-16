@@ -1,9 +1,6 @@
 import { z } from "zod";
 
-/**
- * Policy sản phẩm được phép có BOM (plan 03c, mục "Cần khách xác nhận" #1) — TODO: confirm với khách.
- * Đặt MỘT chỗ để đổi khi khách chốt bảng định mức thật; service và UI đều đọc từ đây.
- */
+/** @deprecated Classification lists are legacy metadata only. Eligibility uses product capabilities. */
 export const BOM_TARGET_KINDS = ["THANH_PHAM", "PHU_KIEN"] as const;
 export const BOM_MATERIAL_KINDS = ["NVL", "HANG", "PHU_KIEN"] as const;
 

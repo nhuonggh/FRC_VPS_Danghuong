@@ -166,7 +166,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "orders", label: "Lệnh & gia công", hideTitle: true,
         functions: [
-          { key: "production-order", label: "Lệnh sản xuất", desc: "Chỉ phụ kiện", icon: "factory", view: "table", path: "/production/orders", codes: ["49", "50"], perm: "production.manage" },
+          { key: "production-order", label: "Lệnh sản xuất", desc: "Xuất nguyên liệu, nhập sản phẩm đầu ra", icon: "factory", view: "table", path: "/production/orders", codes: ["49", "50"], perm: "production.manage" },
           { key: "processing-job", label: "Gia công thuê", desc: "Tôn của khách, tính tiền công + NVL xưởng", icon: "hammer", view: "table", path: "/production/processing", codes: ["54", "55"], perm: "processing.manage", planned: P },
         ],
       },

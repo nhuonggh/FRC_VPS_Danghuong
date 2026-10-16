@@ -25,3 +25,15 @@ describe("product import", () => {
     expect(none.ok && none.data.processing).toEqual([]);
   });
 });
+
+describe("product capability import", () => {
+  const ctx = { groups: new Map<string, number>(), types: new Map<string, number>() };
+  it("reads explicit flags, rejects invalid booleans and leaves old templates unspecified", () => {
+    const spec = productImportSpec();
+    const explicit = spec.parseRow({ ...row, canSell: "Không", canUseAsMaterial: "Có", canProduce: "Có" }, ctx);
+    expect(explicit.ok && explicit.data).toMatchObject({ canSell: false, canUseAsMaterial: true, canProduce: true });
+    const old = spec.parseRow(row, ctx);
+    expect(old.ok && old.data.canUseAsMaterial).toBeUndefined();
+    expect(spec.parseRow({ ...row, canSell: "không hợp lệ" }, ctx).ok).toBe(false);
+  });
+});

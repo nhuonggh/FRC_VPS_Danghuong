@@ -156,6 +156,10 @@ CREATE TABLE "partners" (
 
 -- CreateTable
 CREATE TABLE "products" (
+    "canSell" BOOLEAN NOT NULL DEFAULT true,
+    "canPurchase" BOOLEAN NOT NULL DEFAULT true,
+    "canUseAsMaterial" BOOLEAN NOT NULL DEFAULT false,
+    "canProduce" BOOLEAN NOT NULL DEFAULT false,
     "id" SERIAL NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -1067,6 +1071,7 @@ CREATE TABLE "sale_orders" (
 
 -- CreateTable
 CREATE TABLE "sale_order_lines" (
+    "issueMode" TEXT NOT NULL DEFAULT 'LEGACY',
     "id" SERIAL NOT NULL,
     "orderId" INTEGER NOT NULL,
     "productId" INTEGER NOT NULL,
@@ -2265,3 +2270,5 @@ CREATE TABLE "daily_reviews" (
   CONSTRAINT "daily_reviews_checked_pair_chk" CHECK (("checkedAt" IS NULL) = ("checkedVersion" IS NULL))
 );
 GRANT SELECT, INSERT, UPDATE, DELETE ON "daily_reviews" TO app_rw;
+
+ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_issue_mode_check" CHECK ("issueMode" IN ('LEGACY', 'STOCK', 'BOM'));

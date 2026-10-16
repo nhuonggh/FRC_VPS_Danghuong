@@ -3,10 +3,11 @@ import { useState } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Combobox, filterComboOptions, igArea, igCombo, igInput, InlineField, type ComboOption, RhfNumberInput } from "@/components/ui";
 import { PRODUCT_KINDS, type CreateProductInput } from "@/server/products/schemas";
+import { PRODUCT_CAPABILITIES } from "@/server/products/capabilities";
 import { QuickCatalogAdd } from "./QuickCatalogAdd";
 
 /** Các trường dùng chung của form tạo + form sửa "Thông tin cơ bản" (mã/tên do form ngoài dựng). */
-export type BasicFormValues = Pick<CreateProductInput, "name" | "kind" | "baseUnit" | "isCoil" | "note" | "imageUrl" | "groupId" | "importUnit" | "exportUnit" | "bundleQty" | "qtyLabel">;
+export type BasicFormValues = Pick<CreateProductInput, "canSell" | "canPurchase" | "canUseAsMaterial" | "canProduce" | "name" | "kind" | "baseUnit" | "isCoil" | "note" | "imageUrl" | "groupId" | "importUnit" | "exportUnit" | "bundleQty" | "qtyLabel">;
 const num = { setValueAs: (v: unknown) => (v === "" || v == null ? null : Number(v)) };
 
 export function ProductBasicFields({ form, groups, units, canCatalog, lockBaseUnit }: { form: UseFormReturn<BasicFormValues>; groups: ComboOption[]; units: string[]; canCatalog: boolean; lockBaseUnit?: boolean }) {
@@ -36,6 +37,7 @@ export function ProductBasicFields({ form, groups, units, canCatalog, lockBaseUn
         <InlineField id="qtyLabel" label="Tên số lượng" error={errors.qtyLabel?.message}><input id="qtyLabel" maxLength={30} {...register("qtyLabel")} className={igInput} /></InlineField>
         <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" {...register("isCoil")} />Sản phẩm là tôn (tôn cuộn)</label>
       </div>
+      <fieldset className="space-y-2"><legend className="text-sm font-medium">Khả năng sử dụng</legend><div className="grid gap-2 sm:grid-cols-2">{PRODUCT_CAPABILITIES.map((c) => <label key={c.value} className="flex min-h-11 items-center gap-2 rounded-sm border border-border px-3 text-sm"><input type="checkbox" {...register(c.value)} className="accent-accent focus-visible:outline focus-visible:outline-accent" />{c.label}</label>)}</div><p className="text-sm text-fg-secondary">Có thể chọn nhiều khả năng. Dùng làm nguyên liệu cần có tồn kho thực tế.</p></fieldset>
       <InlineField id="imageUrl" label="Địa chỉ ảnh" hint="https://… hoặc /uploads/…" error={errors.imageUrl?.message}><input id="imageUrl" {...register("imageUrl")} className={igInput} /></InlineField>
       <InlineField id="note" label="Ghi chú" multiline><textarea id="note" rows={3} {...register("note")} className={igArea} /></InlineField>
     </div>

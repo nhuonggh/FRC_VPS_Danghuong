@@ -8,26 +8,24 @@ import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import type { ListParams } from "@/lib/query-params";
 import { productWhere } from "@/server/products/queries";
 import { dateOnly } from "./resolve";
-import { BOM_MATERIAL_KINDS, BOM_TARGET_KINDS, createBomBatchSchema, type CreateBomBatchInput, type CreateBomVersionInput } from "./schemas";
+import { createBomBatchSchema, type CreateBomBatchInput, type CreateBomVersionInput } from "./schemas";
 
 type Db = Prisma.TransactionClient;
 
-const KIND_LABEL: Record<string, string> = { HANG: "Hàng hóa", NVL: "Nguyên vật liệu", THANH_PHAM: "Thành phẩm", PHU_KIEN: "Phụ kiện" };
-const kinds = (list: readonly string[]) => list.map((k) => KIND_LABEL[k]).join(", ");
 
 /** Kiểm dữ liệu tham chiếu của phiên bản mới; lỗi tiếng Việt, gộp theo từng ô. */
 async function validateRefs(db: Db, input: CreateBomVersionInput) {
   const [product, processingType, materials] = await Promise.all([
-    db.product.findUnique({ where: { id: input.productId }, select: { id: true, code: true, kind: true, isActive: true } }),
+    db.product.findUnique({ where: { id: input.productId }, select: { id: true, code: true, canProduce: true, canUseAsMaterial: true, isActive: true } }),
     db.processingType.findUnique({ where: { id: input.processingTypeId }, select: { id: true, name: true, isActive: true } }),
-    db.product.findMany({ where: { id: { in: input.lines.map((l) => l.materialProductId) } }, select: { id: true, code: true, kind: true, isActive: true } }),
+    db.product.findMany({ where: { id: { in: input.lines.map((l) => l.materialProductId) } }, select: { id: true, code: true, canProduce: true, canUseAsMaterial: true, isActive: true } }),
   ]);
   if (!product) throw new DomainError("Không tìm thấy thành phẩm.", 404);
   if (!processingType) throw new DomainError("Không tìm thấy kiểu gia công.", 404);
   if (!processingType.isActive) throw new ValidationError("Kiểu gia công đã tắt.", { processingTypeId: "Kiểu gia công đã tắt." });
   if (!product.isActive) throw new ValidationError("Thành phẩm đã tắt.", { productId: "Sản phẩm đã tắt." });
-  if (!(BOM_TARGET_KINDS as readonly string[]).includes(product.kind)) {
-    const msg = `Chỉ khai báo định mức cho: ${kinds(BOM_TARGET_KINDS)}.`;
+  if (!product.canProduce) {
+    const msg = "Sản phẩm chưa bật khả năng được sản xuất.";
     throw new ValidationError(msg, { productId: msg });
   }
   const byId = new Map(materials.map((m) => [m.id, m]));
@@ -36,7 +34,7 @@ async function validateRefs(db: Db, input: CreateBomVersionInput) {
     const m = byId.get(l.materialProductId);
     if (!m) fields[`lines.${i}.materialProductId`] = "Không tìm thấy nguyên vật liệu.";
     else if (!m.isActive) fields[`lines.${i}.materialProductId`] = `${m.code} đã tắt.`;
-    else if (!(BOM_MATERIAL_KINDS as readonly string[]).includes(m.kind)) fields[`lines.${i}.materialProductId`] = `${m.code} không phải ${kinds(BOM_MATERIAL_KINDS)}.`;
+    else if (!m.canUseAsMaterial) fields[`lines.${i}.materialProductId`] = `${m.code} chưa bật khả năng dùng làm nguyên liệu.`;
   });
   if (Object.keys(fields).length) throw new ValidationError(Object.values(fields)[0]!, fields);
   return { product, processingType };

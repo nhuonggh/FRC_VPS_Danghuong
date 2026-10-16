@@ -72,7 +72,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
   });
   const loadCustomers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/customers/search?q=${encodeURIComponent(q)}`);
   const loadProducts = async (q: string) => {
-    const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`);
+    const rows = await apiFetch<ProductOption[]>(`/api/products/search?capability=canSell&q=${encodeURIComponent(q)}`);
     setProducts((m) => new Map([...m, ...rows.map((r) => [r.value, r] as const)]));
     return rows;
   };

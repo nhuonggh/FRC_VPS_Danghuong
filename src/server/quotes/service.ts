@@ -31,6 +31,7 @@ async function validateLines(tx: Tx, lines: QuoteInput["lines"]) {
     const p = byId.get(l.productId);
     if (!p) throw new DomainError(`Dòng ${i + 1}: sản phẩm không tồn tại.`, 400);
     if (!p.isActive) throw new DomainError(`Dòng ${i + 1}: sản phẩm ${p.code} đã ngừng bán.`, 400);
+    if (!p.canSell) throw new DomainError(`Dòng ${i + 1}: ${p.code} chưa bật khả năng được bán.`, 400);
     resolveFactor(p, l.unit);
   });
 }

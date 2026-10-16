@@ -3,7 +3,7 @@ import { normalizeSearch } from "@/lib/search";
 import { ictYmd } from "@/lib/time";
 import { ValidationError } from "@/server/http/errors";
 import type { ImportColumn, ImportSpec } from "@/server/import/types";
-import { BOM_MATERIAL_KINDS, BOM_MAX_LINES, BOM_TARGET_KINDS } from "./schemas";
+import { BOM_MAX_LINES } from "./schemas";
 import { createBomVersion } from "./service";
 
 /**
@@ -12,7 +12,7 @@ import { createBomVersion } from "./service";
  * Cặp đã có định mức: bỏ qua; bật "Ghi đè" ⇒ tạo PHIÊN BẢN MỚI (D-19: không sửa bản cũ; ngày hiệu lực không ở quá khứ).
  */
 export interface BomImportRow { productCode: string; productId: number; processingTypeId: number; processingName: string; validFrom: string; materialCode: string; materialId: number; qtyPerUnit: number; note: string; empty: boolean; seq: number }
-interface Ref { id: number; kind: string; isActive: boolean }
+interface Ref { id: number; canProduce: boolean; canUseAsMaterial: boolean; isActive: boolean }
 interface BomImportCtx { products: Map<string, Ref>; types: Map<string, { id: number; name: string; isActive: boolean }>; today: string; seq: number }
 
 const columns: readonly ImportColumn[] = [
@@ -27,8 +27,6 @@ const columns: readonly ImportColumn[] = [
 
 const SEP = " | ";
 const text = (v: unknown) => (v == null ? "" : String(v).trim());
-const KIND_LABEL: Record<string, string> = { HANG: "Hàng hóa", NVL: "Nguyên vật liệu", THANH_PHAM: "Thành phẩm", PHU_KIEN: "Phụ kiện" };
-const kinds = (list: readonly string[]) => list.map((k) => KIND_LABEL[k]).join(", ");
 
 /** Ngày hiệu lực: ô ngày của Excel, `dd/mm/yyyy` hoặc `yyyy-mm-dd`; ô trống = hôm nay (ICT). */
 export function parseBomDate(raw: unknown, today: string): { ok: true; value: string } | { ok: false } {
@@ -52,11 +50,11 @@ export const bomImportSpec = (): ImportSpec<BomImportRow, BomImportCtx> => ({
   columns,
   async loadContext(db) {
     const [products, types] = await Promise.all([
-      db.product.findMany({ select: { id: true, code: true, kind: true, isActive: true } }),
+      db.product.findMany({ select: { id: true, code: true, canProduce: true, canUseAsMaterial: true, isActive: true } }),
       db.processingType.findMany({ select: { id: true, name: true, isActive: true } }),
     ]);
     return {
-      products: new Map(products.map((p) => [p.code.toUpperCase(), { id: p.id, kind: p.kind, isActive: p.isActive }])),
+      products: new Map(products.map((p) => [p.code.toUpperCase(), { id: p.id, canProduce: p.canProduce, canUseAsMaterial: p.canUseAsMaterial, isActive: p.isActive }])),
       types: new Map(types.map((t) => [normalizeSearch(t.name), t])),
       today: ictYmd(new Date()),
       seq: 0,
@@ -80,7 +78,7 @@ export const bomImportSpec = (): ImportSpec<BomImportRow, BomImportCtx> => ({
     const type = ctx.types.get(normalizeSearch(ptName));
     const errors: string[] = [];
     if (!product) errors.push(`Không có thành phẩm "${code}".`);
-    else if (!(BOM_TARGET_KINDS as readonly string[]).includes(product.kind)) errors.push(`${code}: chỉ khai báo định mức cho ${kinds(BOM_TARGET_KINDS)}.`);
+    else if (!product.canProduce) errors.push(`${code} chưa bật khả năng được sản xuất.`);
     else if (!product.isActive) errors.push(`${code} đã tắt.`);
     if (!ptName) errors.push("Thiếu kiểu gia công.");
     else if (!type) errors.push(`Không có kiểu gia công "${ptName}".`);
@@ -97,7 +95,7 @@ export const bomImportSpec = (): ImportSpec<BomImportRow, BomImportCtx> => ({
     else if (!material) errors.push(`Không có nguyên vật liệu "${matCode}".`);
     else if (matCode === code) errors.push("Nguyên vật liệu không được trùng với chính thành phẩm.");
     else if (!material.isActive) errors.push(`${matCode} đã tắt.`);
-    else if (!(BOM_MATERIAL_KINDS as readonly string[]).includes(material.kind)) errors.push(`${matCode} không phải ${kinds(BOM_MATERIAL_KINDS)}.`);
+    else if (!material.canUseAsMaterial) errors.push(`${matCode} chưa bật khả năng dùng làm nguyên liệu.`);
     const n = parseViNumber(cells.qty, { maxFrac: 3 });
     const qty = n.ok && n.value !== null ? Number(n.value) : NaN;
     if (!n.ok) errors.push(`Định mức: ${n.message}`);
