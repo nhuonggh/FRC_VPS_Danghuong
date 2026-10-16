@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PrintButton } from "@/components/print/PrintButton";
 import { Badge, ReasonDialog, InlineField, igInput, igArea, inputClass, NumberInput } from "@/components/ui";
+import { Combobox, filterComboOptions } from "@/components/ui/Combobox";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDateTime, formatQty } from "@/lib/format";
@@ -106,7 +107,8 @@ const btnPrimary = "h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-o
 const btnGhost = "h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10";
 
 /** Nhập / sửa kết quả một điểm giao (40). Giao một phần nhập số lượng thực giao từng dòng. */
-function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey }: { stop: StopDTO; tripId: number; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; onClose: () => void; onDone: () => void; idemKey: string }) {
+export function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey }: { stop: StopDTO; tripId: number; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; onClose: () => void; onDone: () => void; idemKey: string }) {
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const cashAccounts = accounts.filter((a) => a.type === "CASH"), bankAccounts = accounts.filter((a) => a.type === "BANK");
   const [cashId, setCashId] = useState<number | "">(stop.cashAccountId ?? (cashAccounts.length === 1 ? cashAccounts[0]!.id : ""));
   const [bankId, setBankId] = useState<number | "">(stop.transferAccountId ?? (bankAccounts.length === 1 ? bankAccounts[0]!.id : ""));
@@ -150,14 +152,15 @@ function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey }: { st
   const money = (id: string, label: string, value: string, set: (v: string) => void) => (
     <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} className={`${igInput} tabular text-right`} /></InlineField>
   );
-  const acct = (id: string, label: string, list: { id: number; name: string }[], value: number | "", set: (v: number | "") => void, placeholder: string) => (
-    <InlineField id={id} label={label} required><select id={id} value={value} onChange={(e) => set(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">{placeholder}</option>{list.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>
-  );
+  const acct = (id: string, label: string, list: { id: number; name: string }[], value: number | "", set: (v: number | "") => void, placeholder: string) => {
+    const options = list.map((a) => ({ value: a.id, label: a.name }));
+    return <div id={id} className="[&_input]:min-h-11"><Combobox label={label} value={options.find((o) => o.value === value) ?? null} onChange={(o) => set(o ? Number(o.value) : "")} loadOptions={async (q) => filterComboOptions(options, q)} placeholder={placeholder} disabled={busy} overlay portalContainer={portalContainer} /></div>;
+  };
   return (
     <Dialog.Root open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
-        <Dialog.Content className={shell}>
-          <Dialog.Title className="text-base font-semibold">Kết quả giao — {stop.orderCode}</Dialog.Title>
+        <Dialog.Content ref={setPortalContainer} className="fixed inset-x-0 bottom-0 z-dialog max-h-[90dvh] space-y-3 overflow-y-auto rounded-t-lg border border-border bg-raised p-4 shadow-lg md:inset-0 md:m-auto md:h-fit md:w-[calc(100%-2rem)] md:max-w-lg md:rounded-lg md:p-5">
+          <Dialog.Title className="sticky top-0 z-header border-b border-border bg-raised pb-3 text-base font-semibold">Kết quả giao — {stop.orderCode}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">{stop.partnerName}. Giao hết phần còn lại thì phải thu ≈ <strong className="tabular">{formatCurrency(stop.suggestedDue)}</strong> (giá trị đơn − tiền đã thu). Khách đưa nhiều hơn (trả nợ cũ/trả dư) hoặc ít hơn (được bớt) đều nhập được, kèm lý do.</Dialog.Description>
           <InlineField id="rs-kind" label="Kết quả" required><select id="rs-kind" value={result} onChange={(e) => pick(e.target.value as (typeof RESULT_KINDS)[number])} className={igInput}>{RESULT_KINDS.map((k) => <option key={k} value={k}>{RESULT_LABEL[k]}</option>)}</select></InlineField>
           {result === "GIAO_MOT_PHAN" && (
@@ -184,7 +187,7 @@ function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey }: { st
             </div>
           )}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-          <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Lưu kết quả</button></div>
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-raised pt-3"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Lưu kết quả</button></div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
