@@ -50,3 +50,23 @@ export const createBomVersionSchema = z
   });
 
 export type CreateBomVersionInput = z.infer<typeof createBomVersionSchema>;
+
+export const BOM_MAX_BATCH = 50;
+export const createBomBatchSchema = z.object({
+  productIds: z.array(z.number().int().positive()).min(1, "Chọn thành phẩm.").max(BOM_MAX_BATCH),
+  processingTypeIds: z.array(z.number().int().positive()).min(1, "Chọn kiểu gia công.").max(BOM_MAX_BATCH),
+  validFrom: ymd,
+  note: z.string().trim().max(500).optional(),
+  lines: z.array(bomLineSchema).min(1, "Nhập ít nhất một nguyên vật liệu.").max(BOM_MAX_LINES),
+}).superRefine((v, ctx) => {
+  if (new Set(v.productIds).size !== v.productIds.length || new Set(v.processingTypeIds).size !== v.processingTypeIds.length)
+    ctx.addIssue({ code: "custom", path: ["productIds"], message: "Thành phẩm và kiểu gia công không được chọn trùng." });
+  if (v.productIds.length * v.processingTypeIds.length > BOM_MAX_BATCH)
+    ctx.addIssue({ code: "custom", path: ["productIds"], message: `Tối đa ${BOM_MAX_BATCH} cặp thành phẩm × kiểu gia công mỗi lần.` });
+  // Reuse all single-version rules, including duplicate materials and self-consumption.
+  for (const productId of v.productIds) {
+    const result = createBomVersionSchema.safeParse({ ...v, productId, processingTypeId: v.processingTypeIds[0] });
+    if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ ...issue, message: `${issue.message} (thành phẩm #${productId})` });
+  }
+});
+export type CreateBomBatchInput = z.infer<typeof createBomBatchSchema>;

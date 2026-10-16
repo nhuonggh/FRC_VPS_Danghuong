@@ -1,10 +1,10 @@
 import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
-import { createBomVersionSchema } from "@/server/bom/schemas";
+import { createBomBatchSchema, createBomVersionSchema } from "@/server/bom/schemas";
 import { BomNotFoundError, resolveBom } from "@/server/bom/resolve";
 import { productSearchText } from "@/server/products/service";
-import { cancelBomVersion, createBomVersion, createBomVersionIdempotent } from "@/server/bom/service";
+import { cancelBomVersion, createBomBatchIdempotent, createBomVersion, createBomVersionIdempotent } from "@/server/bom/service";
 import { getBom, listBoms } from "@/server/bom/queries";
 import { parseListParams } from "@/lib/query-params";
 import { prisma, resetDb } from "../helpers/db";
@@ -28,6 +28,29 @@ beforeEach(async () => {
   actor = { userId: (await makeUser()).id, perms: new Set(["bom.manage"]) };
   fg = await makeProduct({ kind: "THANH_PHAM" }); pt = await makeProcessingType();
   m1 = await makeProduct({ kind: "NVL" }); m2 = await makeProduct({ kind: "NVL" });
+});
+
+describe("batch BOM creation", () => {
+  it("creates every selected pair atomically and replays without duplicates", async () => {
+    const second = await makeProduct({ kind: "THANH_PHAM" });
+    const type = await makeProcessingType();
+    const batch = createBomBatchSchema.parse({ ...input(), productIds: [fg.id, second.id], processingTypeIds: [pt.id, type.id], validFrom: "2026-12-01" });
+    const key = crypto.randomUUID();
+    const result = await createBomBatchIdempotent(prisma, actor, key, batch);
+    expect(result.count).toBe(4);
+    expect(await prisma.bomVersion.count()).toBe(4);
+    expect(await prisma.bomLine.count()).toBe(8);
+    expect(await createBomBatchIdempotent(prisma, actor, key, batch)).toEqual(result);
+    expect(await prisma.bomVersion.count()).toBe(4);
+  });
+  it("rolls back earlier pairs when a later pair conflicts", async () => {
+    const second = await makeProduct({ kind: "THANH_PHAM" });
+    await create({ productId: second.id, validFrom: "2026-12-01" });
+    const batch = createBomBatchSchema.parse({ ...input(), productIds: [fg.id, second.id], processingTypeIds: [pt.id], validFrom: "2026-12-01" });
+    await expect(createBomBatchIdempotent(prisma, actor, crypto.randomUUID(), batch)).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.bomVersion.count()).toBe(1);
+    expect(await prisma.bom.count()).toBe(1);
+  });
 });
 
 describe("createBomVersion", () => {
