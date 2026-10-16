@@ -6,6 +6,7 @@ import { resolveTimeRange, timeRangeWhere, type TimeRange } from "@/lib/time-pre
 import { DomainError } from "@/server/http/errors";
 import { actualConsumption, consumptionCompare, productionReport } from "./consumption";
 import { REPORTS, type ReportKey, type ReportResult } from "./types";
+import { grossOf } from "@/server/sales/queries";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -16,7 +17,7 @@ export function reportRange(params: ListParams, now: Date = new Date()): TimeRan
   const r = resolveTimeRange(params.timePreset ?? "thisMonth", now, { start: params.timeStart, end: params.timeEnd });
   return r ?? resolveTimeRange("thisMonth", now)!;
 }
-const lineNet = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) => l.qty.times(l.salePrice).minus(l.discountNow);
+const lineNet = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) => grossOf(l.qty, l.salePrice).minus(l.discountNow);
 
 async function liveOrders(db: Db, actor: Actor, range: TimeRange) {
   return db.saleOrder.findMany({

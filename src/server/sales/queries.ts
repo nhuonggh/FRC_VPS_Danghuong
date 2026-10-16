@@ -13,9 +13,11 @@ import { delayDays, effectiveDeliveryStatus } from "./status";
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-/** Thành tiền dòng = SL × đơn giá (làm tròn 2 số) − chiết khấu trừ ngay. Chiết khấu tích lũy KHÔNG trừ (D-27). */
+/** SL × đơn giá, làm tròn 2 số rồi LÀM TRÒN LÊN nghìn đồng (356.400 → 357.000). Cùng công thức `src/lib/line-amount.ts`. */
+export const grossOf = (qty: Prisma.Decimal, price: Prisma.Decimal) => round2(qty.times(price)).div(1000).ceil().times(1000);
+/** Thành tiền dòng = grossOf − chiết khấu trừ ngay. Chiết khấu tích lũy KHÔNG trừ (D-27). */
 export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) =>
-  round2(l.qty.times(l.salePrice)).minus(l.discountNow);
+  grossOf(l.qty, l.salePrice).minus(l.discountNow);
 
 export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;

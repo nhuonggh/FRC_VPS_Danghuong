@@ -28,6 +28,9 @@ export const tripResultSchema = z.object({
   result: z.enum(RESULT_KINDS, { errorMap: () => ({ message: "Chọn kết quả giao." }) }),
   lines: z.array(z.object({ orderLineId: id("Dòng không hợp lệ."), qty: z.number().finite().min(0, "SL không được âm.") })).max(200).default([]),
   cashAmount: money0.default(0),
+  /** Quỹ / tài khoản NH nhận tiền của điểm giao (UI bắt buộc chọn khi có tiền; thiếu thì thủ quỹ chọn lúc xác nhận). */
+  cashAccountId: id("Quỹ tiền mặt không hợp lệ.").nullable().default(null),
+  transferAccountId: id("Tài khoản ngân hàng không hợp lệ.").nullable().default(null),
   transferAmount: money0.default(0),
   debtAmount: money0.default(0),
   /** Tiền bớt cho khách (khách đưa ít hơn phải thu một chút). Bắt buộc ghi lý do. */
@@ -51,7 +54,8 @@ export const tripResultSchema = z.object({
 });
 
 export const settleTripSchema = z.object({ reason: z.string().trim().max(300, "Lý do tối đa 300 ký tự.").default("") });
-export const confirmTripSchema = z.object({ cashAccountId: id("Chọn quỹ tiền mặt.").nullable(), transferAccountId: id("Chọn tài khoản ngân hàng.").nullable() });
+/** Chỉ cần cho điểm giao chưa chọn tài khoản lúc nhập kết quả (dữ liệu cũ). */
+export const confirmTripSchema = z.object({ cashAccountId: id("Chọn quỹ tiền mặt.").nullable().default(null), transferAccountId: id("Chọn tài khoản ngân hàng.").nullable().default(null) });
 export const cancelTripSchema = z.object({ reason: z.string().trim().min(1, "Nhập lý do hủy chuyến.").max(300, "Lý do tối đa 300 ký tự.") });
 export const handleStopSchema = z.object({ note: z.string().trim().min(1, "Nhập cách xử lý.").max(300, "Tối đa 300 ký tự.") });
 

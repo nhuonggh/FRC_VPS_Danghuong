@@ -19,7 +19,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   if (!Number.isInteger(id) || id <= 0 || id > 2_147_483_647) notFound();
   const trip = await getTrip(prisma, actor, id).catch((e: unknown) => { if (e instanceof DomainError && e.status === 404) return null; throw e; });
   if (!trip) notFound();
-  const accounts = p.has("trip.confirm_cash") ? await listActiveCashAccounts(prisma) : [];
+  const accounts = await listActiveCashAccounts(prisma);
   const closed = await closedPeriodOf(prisma, "trip", id);
   return (
     <>

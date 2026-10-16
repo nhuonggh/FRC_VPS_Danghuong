@@ -156,11 +156,11 @@ describe("chiết khấu, kiểm dữ liệu, audit", () => {
 
   it("schema chặn: SL ≤ 0, quá 3 số lẻ, tổng chiết khấu vượt giá trị dòng, ngày giao trước ngày đơn, 0 dòng", () => {
     const base = { partnerId: 1, date: "2026-09-15", expectedDeliveryDate: "2026-09-15", note: "" };
-    const ok = line(1, 1, 100, { unit: "md" });
+    const ok = line(1, 1, 1000, { unit: "md" });
     expect(saleOrderSchema.safeParse({ ...base, lines: [ok] }).success).toBe(true);
     expect(saleOrderSchema.safeParse({ ...base, lines: [{ ...ok, qty: 0 }] }).success).toBe(false);
     expect(saleOrderSchema.safeParse({ ...base, lines: [{ ...ok, qty: 1.2345 }] }).success).toBe(false);
-    expect(saleOrderSchema.safeParse({ ...base, lines: [{ ...ok, discountNow: 60, discountAccum: 50 }] }).success).toBe(false);
+    expect(saleOrderSchema.safeParse({ ...base, lines: [{ ...ok, discountNow: 600, discountAccum: 500 }] }).success).toBe(false);
     expect(saleOrderSchema.safeParse({ ...base, expectedDeliveryDate: "2026-09-14", lines: [ok] }).success).toBe(false);
     expect(saleOrderSchema.safeParse({ ...base, lines: [] }).success).toBe(false);
   });

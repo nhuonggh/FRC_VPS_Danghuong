@@ -110,15 +110,15 @@ describe("loader dashboard (DB thật)", () => {
 
   it("Bán hàng: loại đơn hủy/nháp; doanh thu = qty×giá − chiết khấu; delta; khách mới; công nợ", async () => {
     const d = await load(full(owner), "sales");
-    expect(kpi(d, "revenue")!.value).toBe(1000);
-    expect(kpi(d, "revenue")!.delta).toBe(100); // tháng trước: 10 × 50 = 500
+    expect(kpi(d, "revenue")!.value).toBe(1900);
+    expect(kpi(d, "revenue")!.delta).toBe(90); // tháng trước: 10 × 50 = 500 → làm tròn lên 1.000
     expect(kpi(d, "orders")!.value).toBe(1);
     expect(kpi(d, "receivable")!.value).toBe(900);
     const recent = widget(d, "recent");
     expect(recent?.kind === "table" && recent.rows.length).toBe(4); // 4 đơn (kể cả hủy/nháp) trong danh sách "gần đây"
     const monthly = widget(d, "monthly");
-    expect(monthly?.kind === "bars" && monthly.bars[0]!.values[8]).toBe(1000); // T9
-    expect(monthly?.kind === "bars" && monthly.bars[0]!.values[7]).toBe(500); // T8
+    expect(monthly?.kind === "bars" && monthly.bars[0]!.values[8]).toBe(1900); // T9
+    expect(monthly?.kind === "bars" && monthly.bars[0]!.values[7]).toBe(1000); // T8
   });
 
   it("Bán hàng: không có sale_price.view → không có số tiền nào; thiếu partner.view_all → chỉ khách của mình", async () => {

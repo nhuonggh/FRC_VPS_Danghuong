@@ -12,6 +12,7 @@ import { convertToBase, resolveFactor } from "@/server/products/units";
 import { planBomIssues } from "./issue-by-bom";
 import { lastSalePricePerBase, priceForUnit } from "./pricing";
 import type { SaleOrderInput } from "./schemas";
+import { grossOf } from "./queries";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -29,7 +30,7 @@ export function allocateOrderDiscount(lines: readonly PlannedLine[], orderDiscou
   const zero = lines.map(() => D(0));
   if (!total.gt(0)) return zero;
   const cap = lines.map((l) => {
-    const c = round2(D(l.input.qty).times(l.input.salePrice)).minus(l.input.discountNow).minus(l.input.discountAccum);
+    const c = grossOf(D(l.input.qty), D(l.input.salePrice)).minus(l.input.discountNow).minus(l.input.discountAccum);
     return c.gt(0) ? c : D(0);
   });
   const capSum = cap.reduce((s, c) => s.plus(c), D(0));

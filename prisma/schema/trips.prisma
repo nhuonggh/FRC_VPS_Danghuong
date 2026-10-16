@@ -80,6 +80,9 @@ model TripOrder {
   dueAmount      Decimal?        @db.Decimal(18, 2)
   cashAmount     Decimal         @default(0) @db.Decimal(18, 2)
   transferAmount Decimal         @default(0) @db.Decimal(18, 2)
+  /// Quỹ tiền mặt / tài khoản NH nhận tiền của điểm giao này (chọn lúc nhập kết quả; thủ quỹ xác nhận dùng đúng tài khoản này).
+  cashAccountId     Int?
+  transferAccountId Int?
   debtAmount     Decimal         @default(0) @db.Decimal(18, 2)
   /// Tiền bớt cho khách tại điểm giao (VD đơn 153.000 khách đưa 150.000): ghi có công nợ (docType TRIP_DISCOUNT), không vào quỹ.
   discountAmount Decimal         @default(0) @db.Decimal(18, 2)

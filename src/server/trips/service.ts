@@ -135,7 +135,7 @@ async function revertStop(tx: Tx, actor: Actor, stop: { id: number; orderId: num
   }
   await removePartnerLedger(tx, "TRIP_COLLECT", stop.id);
   await removePartnerLedger(tx, "TRIP_DISCOUNT", stop.id);
-  await tx.tripOrder.update({ where: { id: stop.id }, data: { result: null, dueAmount: null, cashAmount: 0, transferAmount: 0, debtAmount: 0, discountAmount: 0, overAmount: 0, promiseDate: null, resultNote: null, resultAt: null, resultBy: null, handledAt: null, handledBy: null, handledNote: null } });
+  await tx.tripOrder.update({ where: { id: stop.id }, data: { result: null, dueAmount: null, cashAmount: 0, transferAmount: 0, cashAccountId: null, transferAccountId: null, debtAmount: 0, discountAmount: 0, overAmount: 0, promiseDate: null, resultNote: null, resultAt: null, resultBy: null, handledAt: null, handledBy: null, handledNote: null } });
 }
 
 export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, input: TripResultInput, now: Date = new Date()): Promise<{ stopId: number; due: string }> {
@@ -153,6 +153,10 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   const at = docTimestamp(ictYmd(now), now);
   const round = (n: number) => D(n).toDecimalPlaces(2);
   const cash = round(input.cashAmount), transfer = round(input.transferAmount), debt = round(input.debtAmount), discount = round(input.discountAmount);
+  for (const [amount, accId] of [[cash, input.cashAccountId], [transfer, input.transferAccountId]] as const) {
+    if (!amount.gt(0) || accId === null) continue;
+    if (!(await tx.cashAccount.findUnique({ where: { id: accId }, select: { isActive: true } }))?.isActive) throw new DomainError("Quỹ/tài khoản không hợp lệ hoặc đã tắt.", 400);
+  }
 
   let noteId: number | null = null;
   if (input.result !== "KHONG_GIAO") {
@@ -186,7 +190,7 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   }
   await tx.tripOrder.update({
     where: { id: stop.id },
-    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, debtAmount: debt, discountAmount: discount, overAmount: over, promiseDate: input.promiseDate ? new Date(`${input.promiseDate}T00:00:00Z`) : null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
+    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, cashAccountId: cash.gt(0) ? input.cashAccountId : null, transferAccountId: transfer.gt(0) ? input.transferAccountId : null, debtAmount: debt, discountAmount: discount, overAmount: over, promiseDate: input.promiseDate ? new Date(`${input.promiseDate}T00:00:00Z`) : null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
   });
   // Trục giao hàng + thanh toán của đơn
   if (input.result === "KHONG_GIAO") await setDeliveryStatus(tx, order.id, "FAILED");
@@ -252,10 +256,12 @@ export async function confirmTripCash(tx: Tx, actor: Actor, id: number, input: C
   const period = await assertTripPeriod(tx, t.periodId);
   if (t.status === "CONFIRMED") throw new DomainError("Thủ quỹ đã xác nhận chuyến này.", 409, "ALREADY_CONFIRMED");
   if (t.status !== "SETTLED") throw new DomainError("Chỉ xác nhận chuyến đã đối soát.", 409, "TRIP_NOT_SETTLED");
-  const needCash = t.stops.some((s) => s.cashAmount.gt(0)), needBank = t.stops.some((s) => s.transferAmount.gt(0));
+  // Mỗi điểm giao có quỹ/TK riêng (chọn lúc nhập kết quả); điểm cũ chưa chọn thì dùng quỹ/TK thủ quỹ chọn ở đây.
+  const cashOf = (s: (typeof t.stops)[number]) => s.cashAccountId ?? input.cashAccountId, bankOf = (s: (typeof t.stops)[number]) => s.transferAccountId ?? input.transferAccountId;
+  const needCash = t.stops.some((s) => s.cashAmount.gt(0) && s.cashAccountId === null), needBank = t.stops.some((s) => s.transferAmount.gt(0) && s.transferAccountId === null);
   if (needCash && input.cashAccountId === null) throw new DomainError("Chọn quỹ tiền mặt nhận tiền.", 400);
   if (needBank && input.transferAccountId === null) throw new DomainError("Chọn tài khoản ngân hàng nhận chuyển khoản.", 400);
-  for (const accId of [needCash ? input.cashAccountId : null, needBank ? input.transferAccountId : null]) {
+  for (const accId of new Set([...t.stops.flatMap((s) => [s.cashAmount.gt(0) ? cashOf(s) : null, s.transferAmount.gt(0) ? bankOf(s) : null]), ...(needCash ? [input.cashAccountId] : []), ...(needBank ? [input.transferAccountId] : [])])) {
     if (accId === null) continue;
     const a = await tx.cashAccount.findUnique({ where: { id: accId }, select: { isActive: true } });
     if (!a?.isActive) throw new DomainError("Quỹ/tài khoản không hợp lệ hoặc đã tắt.", 400);
@@ -270,8 +276,8 @@ export async function confirmTripCash(tx: Tx, actor: Actor, id: number, input: C
     const overCash = s.overAmount.lt(s.cashAmount) ? s.overAmount : s.cashAmount;
     const overBank = s.overAmount.minus(overCash);
     const parts: [Prisma.Decimal, number | null, string, boolean][] = [
-      [s.cashAmount.minus(overCash), input.cashAccountId, "tiền mặt", false], [s.transferAmount.minus(overBank), input.transferAccountId, "chuyển khoản", false],
-      [overCash, input.cashAccountId, "tiền mặt · thu vượt (nợ cũ/dư)", true], [overBank, input.transferAccountId, "chuyển khoản · thu vượt (nợ cũ/dư)", true],
+      [s.cashAmount.minus(overCash), cashOf(s), "tiền mặt", false], [s.transferAmount.minus(overBank), bankOf(s), "chuyển khoản", false],
+      [overCash, cashOf(s), "tiền mặt · thu vượt (nợ cũ/dư)", true], [overBank, bankOf(s), "chuyển khoản · thu vượt (nợ cũ/dư)", true],
     ];
     for (const [amount, accountId, label, isOver] of parts) {
       if (!amount.gt(0) || accountId === null) continue;

@@ -57,7 +57,7 @@ export async function listTrips(db: Db, actor: Actor, params: ListParams, opts: 
 export interface StopLineDTO { orderLineId: number; productCode: string; productName: string; processingTypeName: string | null; unit: string; qty: string; delivered: string; remaining: string }
 export interface StopDTO {
   id: number; seq: number; orderId: number; orderCode: string; orderTotal: string; partnerId: number; partnerName: string; phone: string | null; address: string | null; allowCredit: boolean; debtLimit: string;
-  result: TripResultKind | null; resultLabel: string | null; due: string | null; cash: string; transfer: string; debt: string; discount: string; over: string; promiseDate: string | null; resultNote: string | null; resultAt: Date | null;
+  result: TripResultKind | null; resultLabel: string | null; due: string | null; cash: string; transfer: string; cashAccountId: number | null; transferAccountId: number | null; debt: string; discount: string; over: string; promiseDate: string | null; resultNote: string | null; resultAt: Date | null;
   /** Gợi ý phải thu nếu giao hết phần còn lại = giá trị đơn − tiền đã thu (chưa tính điểm này). */
   suggestedDue: string; lines: StopLineDTO[]; deliveryNoteId: number | null; handledNote: string | null; canCancelResult: boolean;
 }
@@ -91,7 +91,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     const suggested = total.minus(paid).gt(0) ? total.minus(paid) : D(0);
     stops.push({
       id: s.id, seq: s.seq, orderId: o.id, orderCode: o.code, orderTotal: total.toString(), partnerId: o.partner.id, partnerName: o.partner.name, phone: o.partner.phone, address: o.partner.address, allowCredit: o.partner.allowCredit, debtLimit: o.partner.debtLimit.toString(),
-      result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), debt: s.debtAmount.toString(), discount: s.discountAmount.toString(), over: s.overAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
+      result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), cashAccountId: s.cashAccountId, transferAccountId: s.transferAccountId, debt: s.debtAmount.toString(), discount: s.discountAmount.toString(), over: s.overAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
       suggestedDue: suggested.toString(), deliveryNoteId: s.deliveryNoteId, handledNote: s.handledNote,
       canCancelResult: s.result !== null && (t.status === "PLANNED" || t.status === "ON_ROAD" || t.status === "RETURNED"),
       lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: remainingToDeliver(l).toString() }; }),

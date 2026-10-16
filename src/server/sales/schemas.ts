@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { grossAmount } from "@/lib/line-amount";
 
 export const SALE_MAX_LINES = 200;
 export const SALE_PAYMENT_METHODS = ["NONE", "CASH", "TRANSFER", "COD"] as const;
@@ -31,7 +32,7 @@ export const saleLineSchema = z
   })
   .superRefine((l, ctx) => {
     if (l.issueMode === "BOM" && !l.processingTypeId) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["processingTypeId"], message: "Chọn kiểu gia công khi xuất theo định mức." });
-    if (l.discountNow + l.discountAccum > Math.round(l.qty * l.salePrice * 100) / 100 + 1e-9) {
+    if (l.discountNow + l.discountAccum > grossAmount(l.qty, l.salePrice) + 1e-9) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discountNow"], message: "Tổng chiết khấu vượt giá trị dòng." });
     }
   });

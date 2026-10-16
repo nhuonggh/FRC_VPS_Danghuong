@@ -43,7 +43,7 @@ describe("TripForm", () => {
 const line = { orderLineId: 100, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "4", delivered: "0", remaining: "4", processingTypeName: "Tôn xốp 6S" };
 const stop = (over: Partial<StopDTO> = {}): StopDTO => ({
   id: 1, seq: 1, orderId: 11, orderCode: "DH000011", orderTotal: "200000", partnerId: 7, partnerName: "Khách Đạt", phone: "0912", address: "Q12", allowCredit: true, debtLimit: "0",
-  result: null, resultLabel: null, due: null, cash: "0", transfer: "0", debt: "0", discount: "0", over: "0", promiseDate: null, resultNote: null, resultAt: null, suggestedDue: "200000", lines: [line], deliveryNoteId: null, handledNote: null, canCancelResult: false, ...over,
+  result: null, resultLabel: null, due: null, cash: "0", transfer: "0", cashAccountId: null, transferAccountId: null, debt: "0", discount: "0", over: "0", promiseDate: null, resultNote: null, resultAt: null, suggestedDue: "200000", lines: [line], deliveryNoteId: null, handledNote: null, canCancelResult: false, ...over,
 });
 const trip = (over: Partial<TripDetailDTO> = {}): TripDetailDTO => ({
   id: 3, code: "CH000003", date: "2026-09-16", status: "PLANNED", statusLabel: "Đã xếp", note: null, routeName: "Quận 12", vehiclePlate: "51C-12345", driverName: "Lái A", assistantName: "Phụ B", departedAt: null, returnedAt: null, createdByName: "KT",
@@ -59,7 +59,7 @@ describe("TripDetail — nhập kết quả (40)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
     expect(screen.getByLabelText("Tiền mặt")).toHaveValue("200.000");
     await userEvent.click(screen.getByRole("button", { name: "Lưu kết quả" }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/result", expect.objectContaining({ json: { orderId: 11, result: "GIAO_DU", lines: [], cashAmount: 200000, transferAmount: 0, debtAmount: 0, discountAmount: 0, promiseDate: null, note: "" }, idempotencyKey: expect.any(String) })));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/result", expect.objectContaining({ json: { orderId: 11, result: "GIAO_DU", lines: [], cashAmount: 200000, transferAmount: 0, cashAccountId: 1, transferAccountId: null, debtAmount: 0, discountAmount: 0, promiseDate: null, note: "" }, idempotencyKey: expect.any(String) })));
     expect(refresh).toHaveBeenCalled();
   });
   it("không giao được bắt buộc lý do (server), hẹn trả hiện ô ngày, giao một phần nhập SL từng dòng và chặn vượt SL còn lại", async () => {

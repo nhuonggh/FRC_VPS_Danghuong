@@ -10,8 +10,8 @@ import {
 } from "./common";
 import type { Dashboard, Kpi, Widget } from "./types";
 
-// Doanh thu dòng = qty × giá bán (làm tròn 2) − chiết khấu đợt này — đúng `lineAmountOf` ở src/server/sales/queries.ts.
-const LINE_AMOUNT = Prisma.sql`ROUND(l.qty * l."salePrice", 2) - l."discountNow"`;
+// Doanh thu dòng = qty × giá bán (làm tròn 2, lên nghìn đồng) − chiết khấu đợt này — đúng `lineAmountOf` ở src/server/sales/queries.ts.
+const LINE_AMOUNT = Prisma.sql`CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 - l."discountNow"`;
 const VALID = Prisma.sql`o."isCancelled" = false AND o."isDraft" = false`;
 
 async function totals(db: Db, actor: Actor, from: Date, to: Date) {

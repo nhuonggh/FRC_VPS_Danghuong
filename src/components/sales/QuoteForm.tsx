@@ -15,6 +15,7 @@ import { useProcessingOptions } from "@/lib/use-processing-options";
 import type { ProductOption } from "@/server/products/queries";
 import type { SalePricingDTO } from "@/server/sales/pricing";
 import { quoteSchema, type QuoteInput } from "@/server/quotes/schemas";
+import { grossAmount } from "@/lib/line-amount";
 
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, note: "", processingTypeId: null } as unknown as QuoteInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
@@ -76,7 +77,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
     setProducts((m) => new Map([...m, ...rows.map((r) => [r.value, r] as const)]));
     return rows;
   };
-  const total = lines.reduce((s, l) => s + Math.round(num(l?.qty) * num(l?.salePrice) * 100) / 100, 0);
+  const total = lines.reduce((s, l) => s + grossAmount(num(l?.qty), num(l?.salePrice)), 0);
 
   const entry = useLineEntry({ count: fields.length, getLines: () => getValues("lines"), append, remove, blank: emptyLine, qtyLabel: (i) => `Số lượng dòng ${i + 1}` });
   const addProducts = (picked: ProductOption[]) => {

@@ -37,14 +37,14 @@ const planned = (qty: number, price: number, dn = 0, da = 0) => ({ input: L(qty,
 
 describe("allocateOrderDiscount", () => {
   it("chia theo tỷ lệ phần còn lại của dòng, dòng cuối nhận dư — Σ = đúng số nhập", () => {
-    const shares = allocateOrderDiscount([planned(1, 100), planned(1, 200), planned(1, 300)], 100);
+    const shares = allocateOrderDiscount([planned(1, 100000), planned(1, 200000), planned(1, 300000)], 100);
     expect(shares.map(String)).toEqual(["16.67", "33.33", "50"]);
     expect(shares.reduce((s, x) => s.plus(x), D(0)).toString()).toBe("100");
   });
   it("trừ chiết khấu dòng khỏi phần chia; dòng hết giá trị không nhận; vượt tổng ⇒ 400", () => {
-    const shares = allocateOrderDiscount([planned(1, 100, 100), planned(2, 100)], 50);
+    const shares = allocateOrderDiscount([planned(1, 100000, 100000), planned(2, 100000)], 50);
     expect(shares.map(String)).toEqual(["0", "50"]);
-    expect(() => allocateOrderDiscount([planned(1, 100)], 100.01)).toThrowError(/vượt/);
+    expect(() => allocateOrderDiscount([planned(1, 100000)], 100000.01)).toThrowError(/vượt/);
   });
 });
 

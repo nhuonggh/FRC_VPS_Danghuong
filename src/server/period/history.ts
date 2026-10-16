@@ -4,13 +4,14 @@ import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { normalizeSearch } from "@/lib/search";
 import { DomainError } from "@/server/http/errors";
 import { previewClosing, type ClosePreview } from "./close";
+import { grossOf } from "@/server/sales/queries";
 
 type Db = PrismaClient;
 const D = (v: Prisma.Decimal.Value | null | undefined) => new Prisma.Decimal(v ?? 0);
 const norm = normalizeSearch;
 
-/** Doanh thu dòng đơn — cùng công thức `lineAmountOf` (qty × giá làm tròn 2 − chiết khấu đợt này). */
-const LINE_AMOUNT = Prisma.sql`ROUND(l.qty * l."salePrice", 2) - l."discountNow"`;
+/** Doanh thu dòng đơn — cùng công thức `lineAmountOf` (qty × giá làm tròn 2, lên nghìn đồng − chiết khấu đợt này). */
+const LINE_AMOUNT = Prisma.sql`CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 - l."discountNow"`;
 
 export interface PeriodRow {
   id: number; name: string; status: "OPEN" | "CLOSED"; openedAt: Date; closedAt: Date | null; closedByName: string | null;
@@ -180,7 +181,7 @@ export async function periodOrders(db: Db, actor: Actor, id: number, opts: { q?:
     total,
     rows: rows.map((r) => ({
       id: r.id, code: r.code, orderDate: r.orderDate, partnerName: r.partner.name, status: r.isCancelled ? "Đã hủy" : r.isDraft ? "Nháp" : r.deliveryStatus,
-      ...(sale ? { total: r.lines.reduce((s, l) => s.plus(D(l.qty).times(l.salePrice).toDecimalPlaces(2)).minus(l.discountNow), D(0)).toFixed(2) } : {}),
+      ...(sale ? { total: r.lines.reduce((s, l) => s.plus(grossOf(D(l.qty), l.salePrice)).minus(l.discountNow), D(0)).toFixed(2) } : {}),
     })),
   };
 }

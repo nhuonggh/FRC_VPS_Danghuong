@@ -8,11 +8,12 @@ import { ictYmd } from "@/lib/time";
 import { DomainError } from "@/server/http/errors";
 import { productOptionsByIds } from "@/server/products/queries";
 import type { QuoteInput } from "./schemas";
+import { grossOf } from "@/server/sales/queries";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-const amountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal }) => round2(l.qty.times(l.salePrice));
+const amountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal }) => grossOf(l.qty, l.salePrice);
 
 export const QUOTE_FILTER_KEYS = ["status"] as const;
 const STATUSES: readonly QuoteStatus[] = ["DRAFT", "SENT", "CONVERTED", "CANCELLED"];

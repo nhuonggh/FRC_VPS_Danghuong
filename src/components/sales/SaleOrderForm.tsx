@@ -22,6 +22,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import { buildDimNote, parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termArea, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
+import { grossAmount } from "@/lib/line-amount";
 
 const LABEL = "sm:min-w-40";
 /** Nhãn trong ô tìm khách là "MÃ — Tên"; lấy phần mã để hiện ở ô "Mã khách hàng". */
@@ -172,7 +173,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
   };
-  const linesTotal = lines.reduce((sum, l) => sum + round2(num(l?.qty) * num(l?.salePrice)) - num(l?.discountNow), 0);
+  const linesTotal = lines.reduce((sum, l) => sum + grossAmount(num(l?.qty), num(l?.salePrice)) - num(l?.discountNow), 0);
   const orderDiscount = num(watch("orderDiscount"));
   const shippingFee = num(watch("shippingFee"));
   const total = round2(linesTotal - orderDiscount + shippingFee);
@@ -438,7 +439,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   // Đơn giá thấp hơn giá nhập gần nhất (quy về đơn vị gốc) ⇒ báo đỏ
   const belowCost = dto?.lastPurchasePrice != null && num(line?.salePrice) > 0 && num(line?.salePrice) * factor < num(dto.lastPurchasePrice) - 0.005;
   const red = belowCost ? "!border-danger !text-danger" : "";
-  const amount = round2(num(line?.qty) * num(line?.salePrice)) - num(line?.discountNow);
+  const amount = grossAmount(num(line?.qty), num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
