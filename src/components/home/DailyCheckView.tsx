@@ -1,16 +1,17 @@
-import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+﻿import Link from "next/link";
 import type { Actor } from "@/lib/permissions/scope";
 import { prisma } from "@/lib/prisma";
 import { buildExportHref, buildListHref, type ListParams } from "@/lib/query-params";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
-import { dailyAmountLabels, dailyRange, loadDailyItem, loadDailySummary, pendingUndeliveredCount, type DailyTotals } from "@/server/home/daily";
+import { dailyAmountLabels, dailyRange, loadDailyItem, loadDailyPartners, loadDailySummary, pendingUndeliveredCount, type DailyTotals } from "@/server/home/daily";
 import { dailyCanMoney, type DailyKey } from "@/server/home/daily-config";
 import { PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { DailyFilters } from "./DailyFilters";
+import { DailyPartnerFilter } from "./DailyBoardControls";
+import { DailySummaryBoard } from "./DailySummaryBoard";
 import { RefreshDashboard } from "./dashboard/RefreshDashboard";
 import { ReportExportButton } from "./dashboard/ReportExportButton";
-import { DailyReviewBadge, DailyReviewControl } from "./DailyReviewControl";
+import { DailyReviewControl } from "./DailyReviewControl";
 import { canReviewParams, getDailyReviews, reviewState, singleReviewDay } from "@/server/home/daily-review";
 
 const BASE = "/?tab=daily";
@@ -30,66 +31,32 @@ export async function DailyCheckView({ actor, params, itemKey, now, review }: { 
 
 async function DailyCheckContent({ actor, params, itemKey, now, review }: { actor: Actor; params: ListParams; itemKey?: string; now: Date; review?: string }) {
   const reviewTab = review === "seen" || review === "unseen" ? review : "all";
-  const BASE = `/?tab=daily${reviewTab !== "all" ? `&review=${reviewTab}` : ""}`;
+  const baseSummary = `/?tab=daily${reviewTab !== "all" ? `&review=${reviewTab}` : ""}`;
   let range;
   try { range = dailyRange(params, now); }
-  catch { return <div className="space-y-3"><h1 className="text-xl font-semibold">Kiểm tra hằng ngày</h1><QuickTimeFilter basePath={itemKey ? `${BASE}&item=${encodeURIComponent(itemKey)}` : BASE} params={params} allowAll={false} now={now} /><p role="alert" className="text-danger">Vui lòng chọn đủ ngày bắt đầu và kết thúc hợp lệ.</p></div>; }
-  const base = itemKey ? `${BASE}&item=${encodeURIComponent(itemKey)}` : BASE;
-  const data = itemKey ? await loadDailyItem(prisma, actor, itemKey, params, now) : null;
-  const summary = data ? [] : await loadDailySummary(prisma, actor, params, now);
+  catch { return <div className="space-y-3"><h1 className="text-xl font-semibold">Kiểm tra hằng ngày</h1><QuickTimeFilter basePath={baseSummary} params={params} allowAll={false} now={now} /><p role="alert" className="text-danger">Vui lòng chọn đủ ngày bắt đầu và kết thúc hợp lệ.</p></div>; }
+  const base = itemKey ? `${baseSummary}&item=${encodeURIComponent(itemKey)}` : baseSummary;
+  const summaryParams = { ...params, q: undefined, page: 1, filters: Object.fromEntries(Object.entries(params.filters).filter(([key]) => !["state", "type", "method"].includes(key))) };
+  const [data, summary, partners] = await Promise.all([
+    itemKey ? loadDailyItem(prisma, actor, itemKey, params, now) : Promise.resolve(null),
+    loadDailySummary(prisma, actor, summaryParams, now),
+    loadDailyPartners(prisma, actor, summaryParams, now).catch((e) => { console.error("[home] daily partners", e); return null; }),
+  ]);
   const reviewDay = singleReviewDay(range, now);
-  const reviewable = reviewDay && canReviewParams(params);
-  const reviews = reviewable ? await getDailyReviews(prisma, actor, reviewDay).catch((e) => { console.error("[home] daily review state", e); return null; }) : [];
+  const reviewable = !!reviewDay && canReviewParams(summaryParams);
+  const reviews = reviewable ? await getDailyReviews(prisma, actor, reviewDay!).catch((e) => { console.error("[home] daily review state", e); return null; }) : null;
   const reviewMap = new Map((reviews ?? []).map((r) => [r.itemKey, r]));
-  const checked = summary.filter((r) => r.totals && reviewState(reviewMap.get(r.item.key), r.totals.version).status === "checked").length;
-  const seen = summary.filter((r) => r.totals && ["seen", "checked"].includes(reviewState(reviewMap.get(r.item.key), r.totals.version).status)).length;
-  const showReviewTabs = reviewable && reviews !== null && !data;
-  // ASSUMPTION: checked counts as seen; changed content needs viewing again and belongs to unseen.
-  const visibleSummary = !showReviewTabs || reviewTab === "all" ? summary : summary.filter((r) => {
-    const isSeen = !!r.totals && ["seen", "checked"].includes(reviewState(reviewMap.get(r.item.key), r.totals.version).status);
-    return reviewTab === "seen" ? isSeen : !isSeen;
+  const entries = summary.map((r) => {
+    const totals = r.totals;
+    return { ...r, totals, state: reviewable && reviews !== null && totals?.version ? reviewState(reviewMap.get(r.item.key), totals.version) : undefined };
   });
   const pending = actor.perms.has("trip.manage") ? await pendingUndeliveredCount(prisma, actor).catch((e) => { console.error("[home] pending undelivered", e); return null; }) : undefined;
-  const exportPath = `/api/home/daily/export${data ? `?item=${data.item.key}` : ""}`;
   const rangeText = `${formatDate(range.start)} – ${formatDate(new Date(range.end.getTime() - 1))}`;
-  const groups = [...new Set(visibleSummary.map((r) => r.item.group))];
   const [amountLabel, extraLabel] = data ? dailyAmountLabels(data.item.key) : ["", null];
-  return <div className="space-y-4">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1">{data && <Link href={buildListHref(BASE, { ...params, q: undefined, page: 1, filters: {} }, {})} className="inline-flex min-h-11 items-center gap-1 text-sm text-accent"><ArrowLeft size={16} aria-hidden />Kiểm tra hằng ngày</Link>}
-        <h1 className="text-xl font-semibold">{data?.item.label ?? "Kiểm tra hằng ngày"}</h1>
-        <p className="text-sm text-fg-secondary">{rangeText} · Cập nhật {formatDateTime(now)}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2"><RefreshDashboard /><ReportExportButton href={buildExportHref(exportPath, params)} label={data ? "Xuất mục này" : "Xuất báo cáo"} /></div>
-    </div>
-    <div className="flex flex-wrap items-center gap-2">
-      <DailyFilters basePath={base} params={params} itemKey={data?.item.key} now={now} />
-      {data && <SearchBox basePath={base} params={params} placeholder="Tìm mã chứng từ, đối tác, ghi chú…" />}
-    </div>
-    <p className="text-sm text-fg-secondary">{data ? `${formatNumber(data.totals.count)} chứng từ · ${formatNumber(data.totals.cancelled)} đã hủy. Tổng giá trị chỉ tính chứng từ còn hiệu lực.` : "Số liệu chỉ tính chứng từ còn hiệu lực. Chọn một mục để xem đầy đủ danh sách."}{(!data || data.item.key === "loss") && " Hao hụt mặc định không gồm xuất hủy."}</p>
-    {!reviewable && <p className="text-sm text-fg-secondary">Chọn một ngày cụ thể và bỏ tìm kiếm/bộ lọc chi tiết để lưu tiến độ kiểm tra. Tiến độ được lưu riêng theo tài khoản và ngày.</p>}
-    {reviewable && reviews === null && <p role="alert" className="text-sm text-danger">Chưa tải được tiến độ kiểm tra. Hãy làm mới để thử lại.</p>}
-    {reviewable && reviews !== null && !data && <p role="status" className="text-sm font-medium">Bạn đã xem {seen}/{summary.length} mục · Đã kiểm tra {checked}/{summary.length} mục. Mở chi tiết và tick khi đối chiếu xong.</p>}
-    {showReviewTabs && <nav aria-label="Trạng thái xem nội dung" className="flex overflow-x-auto border-b border-border">
-      {[{ key: "all", label: "Tất cả", count: summary.length }, { key: "unseen", label: "Chưa xem", count: summary.length - seen }, { key: "seen", label: "Đã xem", count: seen }].map((tab) => <Link key={tab.key} href={buildListHref(`/?tab=daily${tab.key === "all" ? "" : `&review=${tab.key}`}`, params, { page: 1 })} aria-current={reviewTab === tab.key ? "page" : undefined} className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${reviewTab === tab.key ? "border-accent text-accent" : "border-transparent text-fg-secondary hover:bg-hover"}`}>
-        {tab.label}{" "}<span className={`tabular rounded-full px-2 py-1 text-xs ${reviewTab === tab.key ? "bg-accent-soft text-accent" : "bg-hover text-fg-secondary"}`}>{formatNumber(tab.count)}</span>
-      </Link>)}
-    </nav>}
-    {reviewable && reviews !== null && data?.totals.version && <DailyReviewControl day={reviewDay} itemKey={data.item.key} version={data.totals.version} initial={reviewState(reviewMap.get(data.item.key), data.totals.version)} />}
-    {pending !== undefined && (!data || data.item.key === "undelivered") && <Link href="/delivery/undelivered?state=pending,handled" className="block rounded-md border border-border bg-surface p-3 text-sm text-accent">Hàng giao không hết còn cần giao lại / trả kho hiện tại: {pending === null ? "Chưa tải được" : `${formatNumber(pending)} đơn`} →<span className="mt-1 block text-xs text-fg-secondary">Số đơn hiện tại, không giới hạn theo khoảng ngày phía trên; bao gồm đơn đã ghi nhận hướng xử lý còn hàng.</span></Link>}
-    {!data && groups.map((group) => <section key={group} aria-label={group} className="overflow-hidden rounded-md border border-border bg-surface">
-      <h2 className="border-b border-border bg-hover px-4 py-3 text-sm font-semibold">{group}</h2>
-      <div className="hidden grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)_3rem] gap-3 border-b border-border px-4 py-2 text-xs text-fg-secondary md:grid"><span>Mục kiểm tra</span><span className="text-right">Số chứng từ</span><span className="text-right">Giá trị (VND)</span><span /></div>
-      <ul>{visibleSummary.filter((r) => r.item.group === group).map(({ item, totals }) => <li key={item.key} className="border-b border-border last:border-0">
-        <Link href={buildListHref(`${BASE}&item=${item.key}`, { ...params, page: 1, q: undefined, filters: {} }, {})} className="flex min-h-11 flex-wrap items-center gap-3 p-4 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent md:grid md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)_3rem]">
-          <span className="w-full space-y-1 font-medium md:w-auto"><span className="block">{item.label}</span>{reviewable && reviews !== null && totals?.version && <DailyReviewBadge state={reviewState(reviewMap.get(item.key), totals.version)} />}</span>
-          {totals ? <><span className="tabular text-sm md:text-right">{formatNumber(totals.count)}<span className="md:hidden"> chứng từ</span></span><div className="ml-auto text-right text-sm md:ml-0"><Amounts totals={totals} item={item.key} /></div></> : <span role="status" className="text-sm text-danger md:col-span-2 md:text-right">Chưa tải được · bấm để thử lại</span>}
-          <ChevronRight size={18} aria-hidden className="ml-auto text-fg-secondary" />
-        </Link>
-      </li>)}</ul>
-    </section>)}
-    {!data && summary.length === 0 && <p className="rounded-md border border-border p-4">Bạn chưa được cấp quyền xem các mục kiểm tra.</p>}
-    {showReviewTabs && summary.length > 0 && visibleSummary.length === 0 && <p className="rounded-md border border-border bg-surface p-6 text-center text-fg-secondary">{reviewTab === "seen" ? "Chưa có nội dung đã xem trong ngày này." : "Bạn đã xem tất cả nội dung trong ngày này."}</p>}
+  const detail = <>
+    {data && <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{data.item.label}</h3><ReportExportButton href={buildExportHref(`/api/home/daily/export?item=${data.item.key}`, params)} label="Xuất mục này" /></div>}
+    <div className="flex flex-wrap items-center gap-3"><DailyFilters basePath={base} params={params} itemKey={data?.item.key} now={now} /><SearchBox basePath={base} params={params} placeholder="Tìm mã chứng từ, đối tác, ghi chú…" /></div>
+    {data && <p className="text-xs text-fg-secondary">{formatNumber(data.totals.count)} chứng từ · {formatNumber(data.totals.cancelled)} đã hủy. Tổng giá trị chỉ tính chứng từ còn hiệu lực.</p>}
     {data && <>
       <div className="rounded-md border border-border bg-surface p-3 text-sm"><Amounts totals={data.totals} item={data.item.key} />{!dailyCanMoney(actor, data.item) && <p className="text-fg-secondary">Bạn chưa có quyền xem giá trị của mục này.</p>}</div>
       {data.rows.length === 0 ? <p className="rounded-md border border-border p-6 text-center text-fg-secondary">Không có chứng từ phù hợp. Thử đổi khoảng ngày hoặc bộ lọc.</p> : <>
@@ -98,6 +65,23 @@ async function DailyCheckContent({ actor, params, itemKey, now, review }: { acto
       </>}
       <PaginationFooter total={data.totals.count} page={data.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(base, params, patch)} />
     </>}
-    <p className="text-xs text-fg-secondary">Trả theo đơn không gồm hàng chưa giao trả kho. Không cộng tiền giữa các mục vì nghiệp vụ có thể liên quan nhau. File Excel xuất toàn bộ chứng từ theo bộ lọc.</p>
+
+    {reviewable && canReviewParams(params) && reviews !== null && data?.totals.version && <DailyReviewControl day={reviewDay!} itemKey={data.item.key} version={data.totals.version} initial={reviewState(reviewMap.get(data.item.key), data.totals.version)} />}
+    {data && !canReviewParams(params) && <p className="text-xs text-fg-secondary">Bỏ tìm kiếm và bộ lọc chi tiết để xác nhận toàn bộ mục kiểm tra.</p>}
+  </>;
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1"><h1 className="text-xl font-semibold">Kiểm tra hằng ngày</h1><p className="text-sm text-fg-secondary">{rangeText} · Cập nhật {formatDateTime(now)}</p>
+        <details className="text-xs text-fg-secondary"><summary className="w-fit cursor-pointer py-1 focus-visible:outline focus-visible:outline-accent">Lưu ý về số liệu</summary><p className="mt-1 max-w-prose">Chỉ tính chứng từ còn hiệu lực. Hao hụt không gồm xuất hủy. Trả hàng theo đơn không gồm hàng chưa giao trả kho. Không cộng tiền giữa các mục vì nghiệp vụ có thể liên quan nhau.</p></details>
+      </div>
+      <div className="flex items-center gap-2"><RefreshDashboard /><ReportExportButton href={buildExportHref("/api/home/daily/export", summaryParams)} /></div>
+    </div>
+    {!reviewable && <p className="text-xs text-fg-secondary">Chọn một ngày cụ thể và bỏ tìm kiếm/bộ lọc chi tiết để lưu tiến độ kiểm tra. Tiến độ được lưu riêng theo tài khoản và ngày.</p>}
+    {reviewable && reviews === null && <p role="alert" className="text-sm text-danger">Chưa tải được tiến độ kiểm tra. Hãy làm mới để thử lại.</p>}
+    {partners === null && <p role="alert" className="text-sm text-danger">Chưa tải được danh sách khách hàng / NCC. Hãy làm mới để thử lại.</p>}
+    <DailySummaryBoard entries={entries} params={summaryParams} reviewTab={reviewTab} reviewable={reviewable && reviews !== null} selectedKey={data?.item.key} detail={detail}
+      filters={<><DailyPartnerFilter basePath={baseSummary} params={summaryParams} partners={partners ?? []} /><DailyFilters basePath={baseSummary} params={summaryParams} now={now} /></>} />
+    {pending !== undefined && <Link href="/delivery/undelivered?state=pending,handled" className="block rounded-md border border-border bg-surface p-3 text-sm text-accent">Hàng giao không hết còn cần giao lại / trả kho hiện tại: {pending === null ? "Chưa tải được" : `${formatNumber(pending)} đơn`} →<span className="mt-1 block text-xs text-fg-secondary">Số đơn hiện tại, không giới hạn theo khoảng ngày phía trên; bao gồm đơn đã ghi nhận hướng xử lý còn hàng.</span></Link>}
+    <p className="text-xs text-fg-secondary">File Excel xuất toàn bộ chứng từ theo bộ lọc. Tiến độ kiểm tra tính trên các mục có dữ liệu.</p>
   </div>;
 }

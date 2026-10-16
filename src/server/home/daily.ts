@@ -107,6 +107,7 @@ export function dailyWhere(key: DailyKey, params: ListParams, range: TimeRange):
     const methods = (params.filters.method ?? []).filter((v) => v === "CASH" || v === "OFFSET");
     if (methods.length) conditions.push(Prisma.sql`d.method IN (${Prisma.join(methods)})`);
   }
+  if (params.filters.partner?.length) conditions.push(Prisma.sql`d.partner IN (${Prisma.join(params.filters.partner)})`);
   for (const term of (params.q ?? "").split(/\s+/).filter(Boolean)) {
     const pattern = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
     conditions.push(Prisma.sql`(d.code ILIKE ${pattern} OR d.partner ILIKE ${pattern} OR d.related ILIKE ${pattern} OR d.note ILIKE ${pattern})`);
@@ -141,6 +142,17 @@ export async function loadDailySummary(db: PrismaClient, actor: Actor, params: L
     try { return { item, totals: (await loadDailyItem(db, actor, item.key, params, now, { summaryOnly: true })).totals }; }
     catch (error) { console.error(`[home] daily ${item.key}`, error); return { item, totals: null }; }
   }));
+}
+
+/** Only partners present in documents the actor can see, within the selected range. */
+export async function loadDailyPartners(db: PrismaClient, actor: Actor, params: ListParams, now: Date): Promise<string[]> {
+  const range = dailyRange(params, now);
+  const unfiltered = { ...params, q: undefined, filters: { ...params.filters, partner: [] } };
+  const items = visibleDailyItems(actor);
+  if (!items.length) return [];
+  const queries = items.map((item) => Prisma.sql`SELECT d.partner FROM (${source(actor, item.key)}) d WHERE ${dailyWhere(item.key, unfiltered, range)} AND d.partner <> ''`);
+  const rows = await db.$queryRaw<{ partner: string }[]>`SELECT DISTINCT partner FROM (${Prisma.join(queries, " UNION ALL ")}) partners ORDER BY partner`;
+  return rows.map((r) => r.partner);
 }
 
 /** Current unresolved orders, distinct from return documents in the selected date range. Partial returns remain pending. */

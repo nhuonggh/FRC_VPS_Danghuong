@@ -4,7 +4,7 @@ import { redactDeep } from "@/lib/permissions/redact";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { escapeLike, normalizeSearch } from "@/lib/search";
-import { timeRangeWhere } from "@/lib/time-presets";
+import { TIME_PRESETS, timeRangeWhere } from "@/lib/time-presets";
 import { ictYmd } from "@/lib/time";
 import { DomainError } from "@/server/http/errors";
 import { productOptionsByIds } from "@/server/products/queries";
@@ -325,8 +325,15 @@ export interface DeletedOrderDTO {
 }
 
 /** Danh sách đơn đã hủy (mã 34): xem lý do, ai hủy, khôi phục. */
-export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams) {
-  const where: Prisma.SaleOrderWhereInput = { AND: [{ isCancelled: true }, { partner: partnerScopeWhere(actor) }, searchWhere(params.q)] };
+export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams, now = new Date()) {
+  const terms = (params.q ?? "").trim().split(/\s+/).filter(Boolean);
+  const baseWhere: Prisma.SaleOrderWhereInput = { AND: [
+    { isCancelled: true }, { partner: partnerScopeWhere(actor) },
+    ...terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(normalizeSearch(t)) } } }, { cancelReason: { contains: escapeLike(t), mode: "insensitive" as const } }] })),
+    ...(params.filters.customer?.length ? [{ partnerId: { in: params.filters.customer.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0) } }] : []),
+  ] };
+  const range = listTimeRange(params, now);
+  const where: Prisma.SaleOrderWhereInput = { AND: [baseWhere, ...(range ? [{ cancelledAt: timeRangeWhere(range) }] : [])] };
   const [rows, total] = await Promise.all([
     db.saleOrder.findMany({
       where, orderBy: { cancelledAt: "desc" }, skip: (params.page - 1) * params.pageSize, take: params.pageSize,
@@ -340,7 +347,16 @@ export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams
     cancelledByName: o.cancelledBy === null ? null : users.get(o.cancelledBy) ?? null,
     orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
   }));
-  return { rows: redactDeep(out, actor.perms), total };
+  const [amountRows, customers, presetCounts] = await Promise.all([
+    actor.perms.has("sale_price.view") ? db.saleOrderLine.groupBy({ by: ["qty", "salePrice", "discountNow"], where: { order: where }, _count: { _all: true } }) : Promise.resolve(null),
+    db.partner.findMany({ where: { AND: [partnerScopeWhere(actor), { saleOrders: { some: { isCancelled: true } } }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    Promise.all([{ value: "all" }, ...TIME_PRESETS.filter((p) => p.value !== "custom")].map(async (preset) => {
+      const r = preset.value === "all" ? null : listTimeRange({ ...params, timePreset: preset.value as ListParams["timePreset"] }, now);
+      return [preset.value, await db.saleOrder.count({ where: { AND: [baseWhere, ...(r ? [{ cancelledAt: timeRangeWhere(r) }] : [])] } })] as const;
+    })),
+  ]);
+  const amount = amountRows?.reduce((sum, line) => sum.plus(lineAmountOf(line).times(line._count._all)), D(0)).toString();
+  return { rows: redactDeep(out, actor.perms), total, amount, customers, counts: Object.fromEntries(presetCounts) };
 }
 
 /** Người đã lập đơn (cho bộ lọc "Người tạo" của danh sách đơn). */

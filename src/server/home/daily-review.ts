@@ -24,6 +24,7 @@ export function singleReviewDay(range: TimeRange, now: Date): string | null {
 /** Personal check confirms the whole default category, never a searched/filtered subset. */
 export function canReviewParams(params: ListParams): boolean {
   return !params.q && Object.entries(params.filters).every(([key, values]) => !values.length ||
+    key === "dailyGroup" || key === "showEmpty" ||
     (key === "state" && values.length === 1 && values[0] === "active") ||
     (key === "type" && values.length === 1 && values[0] === "LOSS"));
 }

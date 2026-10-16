@@ -17,6 +17,6 @@ export const DAILY_ITEMS = [
 
 export type DailyItem = (typeof DAILY_ITEMS)[number];
 export type DailyKey = DailyItem["key"];
-export const DAILY_FILTER_KEYS = ["state", "type", "method"] as const;
+export const DAILY_FILTER_KEYS = ["state", "type", "method", "partner", "dailyGroup", "showEmpty"] as const;
 export const visibleDailyItems = (actor: Actor) => DAILY_ITEMS.filter((item) => actor.perms.has(item.perm));
 export const dailyCanMoney = (actor: Actor, item: DailyItem) => !("moneyPerm" in item) || actor.perms.has(item.moneyPerm);

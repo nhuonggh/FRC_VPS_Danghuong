@@ -4,7 +4,7 @@ import { PERMISSIONS } from "@/lib/permissions/catalog";
 import { parseListParams } from "@/lib/query-params";
 import type { Actor } from "@/lib/permissions/scope";
 import { DAILY_ITEMS, visibleDailyItems } from "@/server/home/daily-config";
-import { dailyRange, loadDailyItem, loadDailySummary, pendingUndeliveredCount } from "@/server/home/daily";
+import { dailyRange, loadDailyItem, loadDailyPartners, loadDailySummary, pendingUndeliveredCount } from "@/server/home/daily";
 import { exportDaily } from "@/server/home/daily-export";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner, makePeriod, makeProduct, makeUser, makeVehicle } from "../helpers/factories";
@@ -58,6 +58,15 @@ describe("daily review and Excel (real test DB)", () => {
     expect(summary).toHaveLength(11);
     for (const r of summary) expect(r.totals, r.item.key).not.toBeNull();
     for (const item of DAILY_ITEMS) expect((await loadDailyItem(prisma, actor, item.key, params, now)).rows.length).toBeGreaterThan(0);
+  });
+  it("partner options and exact partner filters execute against the permitted document sources", async () => {
+    const partner = await prisma.partner.findUniqueOrThrow({ where: { id: partnerId } });
+    const scoped = { userId: owner, perms: new Set(["order.view"]) };
+    expect(await loadDailyPartners(prisma, scoped, params, now)).toEqual([partner.name]);
+    const selected = { ...params, filters: { partner: [partner.name] } };
+    expect(await loadDailyPartners(prisma, actor, selected, now)).toContain(partner.name);
+    expect((await loadDailyItem(prisma, scoped, "discount-orders", selected, now)).totals.count).toBe(1);
+    expect((await loadDailyItem(prisma, scoped, "discount-orders", { ...params, filters: { partner: ["Không tồn tại"] } }, now)).totals.count).toBe(0);
   });
   it("ICT range includes midnight start, excludes next midnight and separates undelivered returns", async () => {
     const scoped = { userId: owner, perms: new Set(["return.manage", "sale_price.view"]) };

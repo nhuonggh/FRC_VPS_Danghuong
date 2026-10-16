@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DailyCheckView } from "@/components/home/DailyCheckView";
@@ -8,24 +8,25 @@ import { ReportExportButton } from "@/components/home/dashboard/ReportExportButt
 import { DailyFilters } from "@/components/home/DailyFilters";
 import { DAILY_ITEMS } from "@/server/home/daily-config";
 import { parseListParams } from "@/lib/query-params";
-import { loadDailyItem, loadDailySummary } from "@/server/home/daily";
+import { loadDailyItem, loadDailyPartners, loadDailySummary } from "@/server/home/daily";
 import { getDailyReviews } from "@/server/home/daily-review";
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
-vi.mock("@/server/home/daily", async (original) => ({ ...await original<typeof import("@/server/home/daily")>(), loadDailySummary: vi.fn(), loadDailyItem: vi.fn() }));
+vi.mock("@/server/home/daily", async (original) => ({ ...await original<typeof import("@/server/home/daily")>(), loadDailySummary: vi.fn(), loadDailyItem: vi.fn(), loadDailyPartners: vi.fn() }));
 vi.mock("@/server/home/daily-review", async (original) => ({ ...await original<typeof import("@/server/home/daily-review")>(), getDailyReviews: vi.fn() }));
 
 const actor = { userId: 1, perms: new Set(["return.manage", "sale_price.view"]) };
 const params = parseListParams({ timePreset: "custom", timeStart: "2026-10-14", timeEnd: "2026-10-15" });
 const now = new Date("2026-10-15T03:00:00Z");
+beforeEach(() => { vi.mocked(loadDailyPartners).mockResolvedValue([]); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe("daily review UI", () => {
   it("counts seen and checked together, puts changed content in unseen, and filters by URL", async () => {
     const version = "a".repeat(32);
-    vi.mocked(loadDailySummary).mockResolvedValue(DAILY_ITEMS.slice(0, 4).map((item) => ({ item, totals: { count: 0, cancelled: 0, amount: "0", extra: "0", version } })));
+    vi.mocked(loadDailySummary).mockResolvedValue(DAILY_ITEMS.slice(0, 4).map((item) => ({ item, totals: { count: 1, cancelled: 0, amount: "0", extra: "0", version } })));
     const date = new Date("2026-10-15T03:00:00Z");
     vi.mocked(getDailyReviews).mockResolvedValue([0, 1, 2].map((i) => ({ userId: 1, day: date, itemKey: DAILY_ITEMS[i].key, seenAt: date, seenVersion: i === 2 ? "b".repeat(32) : version, checkedAt: i === 1 ? date : null, checkedVersion: i === 1 ? version : null, updatedAt: date })));
     render(await DailyCheckView({ actor, params: parseListParams({ timePreset: "today" }), now, review: "unseen" }));
@@ -38,7 +39,7 @@ describe("daily review UI", () => {
     expect(screen.getByRole("link", { name: /Trả hàng NCC/ }).getAttribute("href")).toContain("review=unseen");
   });
   it("shows an empty seen tab and does not offer counts for a multi-day range", async () => {
-    vi.mocked(loadDailySummary).mockResolvedValue([{ item: DAILY_ITEMS[0], totals: { count: 0, cancelled: 0, amount: "0", extra: "0", version: "a".repeat(32) } }]);
+    vi.mocked(loadDailySummary).mockResolvedValue([{ item: DAILY_ITEMS[0], totals: { count: 1, cancelled: 0, amount: "0", extra: "0", version: "a".repeat(32) } }]);
     vi.mocked(getDailyReviews).mockResolvedValue([]);
     const { unmount } = render(await DailyCheckView({ actor, params: parseListParams({ timePreset: "today" }), now, review: "seen" }));
     expect(screen.getByText("Chưa có nội dung đã xem trong ngày này.")).toBeInTheDocument();
@@ -50,7 +51,7 @@ describe("daily review UI", () => {
   });
   it("has three compact groups, eleven links keeping dates, export and explicit load failure", async () => {
     vi.mocked(loadDailySummary).mockResolvedValue(DAILY_ITEMS.map((item, i) => ({ item, totals: i === 0 ? null : { count: 0, cancelled: 0, amount: "0", extra: "0" } })));
-    render(await DailyCheckView({ actor, params, now }));
+    render(await DailyCheckView({ actor, params: { ...params, filters: { showEmpty: ["1"] } }, now }));
     expect(screen.getByRole("heading", { name: "Kiểm tra hằng ngày" })).toBeInTheDocument();
     expect(screen.getAllByRole("region")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Xuất báo cáo" })).toBeInTheDocument();
@@ -99,3 +100,38 @@ describe("daily review UI", () => {
     expect(screen.getByRole("button", { name: "Xuất báo cáo" })).toBeEnabled();
   });
 });
+
+
+  it("hides empty items by default and keeps failed items visible", async () => {
+    vi.mocked(loadDailySummary).mockResolvedValue([
+      { item: DAILY_ITEMS[0], totals: { count: 2, cancelled: 0, amount: "300000", extra: "0" } },
+      { item: DAILY_ITEMS[1], totals: { count: 0, cancelled: 0, amount: "0", extra: "0" } },
+      { item: DAILY_ITEMS[2], totals: null },
+    ]);
+    render(await DailyCheckView({ actor, params, now }));
+    expect(screen.getByText("Chứng từ cần xem")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Trả hàng theo đơn/ })).toHaveTextContent("300.000");
+    expect(screen.queryByRole("link", { name: /Trả hàng theo sản phẩm/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Trả hàng NCC/ })).toHaveTextContent("Chưa tải được");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ẩn mục không có dữ liệu/ }));
+    expect(push).toHaveBeenCalledWith(expect.stringContaining("showEmpty=1"));
+    expect(push).toHaveBeenCalledWith(expect.stringContaining("timeStart=2026-10-14"));
+  });
+
+  it("expands document details inside the selected category and keeps closing links free of detail filters", async () => {
+    vi.mocked(loadDailySummary).mockResolvedValue([{ item: DAILY_ITEMS[0], totals: { count: 1, cancelled: 0, amount: "300000", extra: "0" } }]);
+    vi.mocked(loadDailyItem).mockResolvedValue({ item: DAILY_ITEMS[0], range: { start: now, end: new Date(now.getTime() + 86400000) }, page: 1,
+      totals: { count: 1, cancelled: 0, amount: "300000", extra: "0", version: "a".repeat(32) },
+      rows: [{ id: 1, code: "TH000001", at: now, partner: "A Đô MT", related: "DH000001", href: "/returns/1", cancelled: false, status: "Đã ghi sổ", note: "", amount: "300000", extra: "0" }],
+    });
+    render(await DailyCheckView({ actor, params: { ...params, q: "TH000001" }, now, itemKey: "return-order" }));
+    const row = screen.getByRole("link", { name: /Trả hàng theo đơn/ });
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(row.getAttribute("href")).not.toContain("q=");
+    expect(row.getAttribute("href")).not.toContain("item=");
+    const detail = document.getElementById("daily-detail-return-order")!;
+    expect(within(detail).getByRole("heading", { name: "Trả hàng theo đơn" })).toBeInTheDocument();
+    expect(within(detail).getByRole("button", { name: "Xuất mục này" })).toBeInTheDocument();
+    expect(within(detail).getAllByRole("link", { name: "TH000001" })).toHaveLength(2);
+    expect(screen.getByRole("navigation", { name: "Nhóm kiểm tra" })).toBeInTheDocument();
+  });
