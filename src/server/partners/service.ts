@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan, can } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
+import { normalizePhone } from "@/lib/phone";
 import { normalizeSearch } from "@/lib/search";
 import { writeAudit } from "@/server/audit/write";
 import { DomainError, FieldConflictError } from "@/server/http/errors";
@@ -72,11 +73,20 @@ export async function updatePartnerProfile(db: Db, actor: Actor, id: number, v: 
   assertCan(actor.perms, "partner.manage");
   const before = await loadEditable(db, actor, id);
   if (v.groupId !== before.groupId) await assertGroupUsable(db, v.groupId);
-  await db.partner.update({ where: { id }, data: { name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, ...(v.taxCode === undefined ? {} : { taxCode: v.taxCode || null }), ...(v.deliveryAddress === undefined ? {} : { deliveryAddress: v.deliveryAddress || null }), note: v.note || null } });
+  // Khách lẻ thân quen: SĐT là khoá nhận diện ⇒ bắt buộc hợp lệ và giữ `phoneKey` đồng bộ
+  const phoneKey = before.isRegularRetail ? normalizePhone(v.phone) : "";
+  if (before.isRegularRetail && !phoneKey) throw new DomainError("Khách lẻ thân quen cần số điện thoại hợp lệ (ít nhất 8 chữ số).", 400);
+  try {
+    await db.partner.update({ where: { id }, data: { ...(phoneKey ? { phoneKey } : {}), name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, ...(v.taxCode === undefined ? {} : { taxCode: v.taxCode || null }), ...(v.deliveryAddress === undefined ? {} : { deliveryAddress: v.deliveryAddress || null }), note: v.note || null } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw new DomainError("SĐT này đã thuộc một khách lẻ thân quen khác.", 409);
+    throw e;
+  }
   await writeAudit(db, { userId: actor.userId, action: "partner.update_profile", entity: "Partner", entityId: id, before: { name: before.name, groupId: before.groupId, isCustomer: before.isCustomer, isSupplier: before.isSupplier, phone: before.phone, address: before.address, note: before.note }, after: { name: v.name, groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, note: v.note || null } });
 }
 export async function setPartnerCredit(db: Db, actor: Actor, id: number, v: { debtLimit: number; allowCredit: boolean }) {
   assertCan(actor.perms, "partner.manage"); const before = await loadEditable(db, actor, id);
+  if (before.isRegularRetail && (v.allowCredit || v.debtLimit > 0)) throw new DomainError("Khách lẻ thân quen không có công nợ — hãy nâng thành đối tác trước khi đặt hạn mức.", 409);
   await db.partner.update({ where: { id }, data: { debtLimit: new Prisma.Decimal(v.debtLimit), allowCredit: v.allowCredit } });
   await writeAudit(db, { userId: actor.userId, action: "partner.set_credit", entity: "Partner", entityId: id, before: { debtLimit: before.debtLimit.toString(), allowCredit: before.allowCredit }, after: { debtLimit: String(v.debtLimit), allowCredit: v.allowCredit } });
 }

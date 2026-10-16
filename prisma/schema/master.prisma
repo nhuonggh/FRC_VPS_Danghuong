@@ -67,6 +67,10 @@ model Partner {
   representative String? // người đại diện
   sortOrder      Int? // thứ tự hiển thị
   isExpense      Boolean  @default(false) // loại đối tác "Chi phí"
+  /// Khách lẻ thân quen: hồ sơ nhẹ (tên + SĐT) tự tạo khi bán lẻ, thanh toán đủ ngay, không công nợ. Ẩn khỏi danh sách đối tác mặc định.
+  isRegularRetail Boolean @default(false)
+  /// SĐT chuẩn hoá (chỉ chữ số) — CHỈ điền cho khách lẻ thân quen; unique ⇒ một SĐT một hồ sơ (NULL không tranh nhau).
+  phoneKey       String?  @unique
   note         String?
   isActive     Boolean  @default(true)
   mergedIntoId Int? // sau khi gộp mã (mục 65)

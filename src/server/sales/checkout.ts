@@ -1,11 +1,13 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { normalizeSearch } from "@/lib/search";
 import { createDeliveryNoteCore } from "@/server/delivery/service";
 import { createDeposit } from "@/server/deposits/service";
 import { DomainError } from "@/server/http/errors";
+import { ensureRegularRetail } from "@/server/partners/regular-retail";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
 import { docTimestamp } from "@/server/inventory";
 import { lineAmountOf } from "./queries";
@@ -66,7 +68,14 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
   let eff = actor;
   let order = input;
   if (checkout.walkIn) {
-    order = { ...input, partnerId: await ensureWalkInCustomer(prisma) };
+    // Có SĐT ⇒ hồ sơ khách lẻ thân quen (tự tạo/dùng lại theo SĐT); không SĐT ⇒ khách chung KHL
+    const walkInId = await ensureWalkInCustomer(prisma);
+    let partnerId = walkInId;
+    if (normalizePhone(checkout.walkIn.phone)) { // SĐT chưa đủ 8 số ⇒ coi như không có (vẫn KHL, SĐT ghi trên đơn)
+      const { groupId } = await prisma.partner.findUniqueOrThrow({ where: { id: walkInId }, select: { groupId: true } });
+      partnerId = (await ensureRegularRetail(prisma, { name: checkout.walkIn.name, phone: checkout.walkIn.phone, groupId })).id;
+    }
+    order = { ...input, partnerId };
     eff = { ...actor, perms: new Set([...actor.perms, "partner.view_all"]) };
   }
   const planned = await planLines(prisma, order, docTimestamp(order.date, now));

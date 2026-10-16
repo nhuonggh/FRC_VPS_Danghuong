@@ -108,6 +108,10 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     return { line, qty, qtyBase: convertToBase(qty, line.factorUsed), amount, discount };
   });
 
+  const refunded = (input.refunds ?? []).reduce((s, x) => s.plus(x.amount), D(0));
+  if (undelivered && refunded.gt(0)) throw new DomainError("Hàng chưa giao chưa ghi nợ khách nên không có tiền để hoàn.", 400);
+  if (refunded.gt(total)) throw new DomainError("Số tiền hoàn vượt giá trị hàng trả.", 400);
+
   const { id, code } = await nextCode(tx, "BY_ORDER");
   await tx.goodsReturn.create({
     data: { id, code, periodId: ctx.period.id, kind: "BY_ORDER", partnerId: order.partnerId, orderId: order.id, at, note: input.note || (undelivered ? "Hàng không giao được — trả về kho" : null), totalAmount: total, undelivered, createdBy: actor.userId },
@@ -129,7 +133,11 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     }
   }
   if (!undelivered) await postPartnerLedger(tx, { periodId: ctx.period.id, partnerId: order.partnerId, side: "credit", amount: total, docType: "RETURN", docId: id, at, createdBy: actor.userId });
-  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: "BY_ORDER", undelivered, orderCode: order.code, lineCount: rows.length } });
+  // Hoàn tiền khách: phiếu chi HOAN_KHACH (ghi nợ lại đúng phần đã hoàn) liên kết phiếu trả để hủy cùng
+  for (const x of input.refunds ?? []) {
+    await createPayment(tx, actor, { kind: "HOAN_KHACH", partnerId: order.partnerId, cashAccountId: x.cashAccountId, amount: x.amount, date: input.date, note: `Hoàn tiền phiếu trả ${code}`, goodsReturnId: id }, now);
+  }
+  await writeAudit(tx, { userId: actor.userId, action: "return.create", entity: "GoodsReturn", entityId: id, after: { code, kind: "BY_ORDER", undelivered, orderCode: order.code, lineCount: rows.length, refunded: refunded.toString() } });
   return { id, code };
 }
 

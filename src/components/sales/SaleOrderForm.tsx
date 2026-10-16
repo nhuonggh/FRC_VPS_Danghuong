@@ -13,6 +13,7 @@ import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
+import { normalizePhone } from "@/lib/phone";
 import { sameUnit } from "@/lib/price-basis";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { ProductOption } from "@/server/products/queries";
@@ -78,7 +79,17 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const [secAmount, setSecAmount] = useState("");
   const [secAccount, setSecAccount] = useState<number | null>(null);
   // Khách lẻ chưa có hồ sơ: gợi ý giá lấy theo "giá gần nhất của bất kỳ khách" (id không tồn tại ⇒ không có giá riêng)
-  const pricingPartnerId = walkIn ? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
+  // Khách lẻ thân quen đã có hồ sơ (khớp SĐT): gợi ý giá theo chính khách đó; chưa có thì theo khách chung KHL
+  const [hits, setHits] = useState<{ id: number; code: string; name: string; phone: string | null }[]>([]);
+  const phoneKey = normalizePhone(walkPhone);
+  const matched = phoneKey ? hits.find((h) => normalizePhone(h.phone) === phoneKey) ?? null : null;
+  const pricingPartnerId = walkIn ? matched?.id ?? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
+  useEffect(() => {
+    const q = phoneKey.length >= 3 ? walkPhone.trim() : walkName.trim().length >= 2 ? walkName.trim() : "";
+    if (!walkIn || !q) { setHits([]); return; }
+    const t = setTimeout(() => { apiFetch<typeof hits>(`/api/orders/options/regular-retail?q=${encodeURIComponent(q)}`).then(setHits).catch(() => setHits([])); }, 250);
+    return () => clearTimeout(t);
+  }, [walkIn, walkName, walkPhone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [customer, setCustomer] = useState<ComboOption | null>(edit?.customer ?? null);
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
@@ -280,9 +291,20 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
         <div className="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
           {walkIn ? (<>
             <InlineField id="walkName" label="Tên khách (tuỳ chọn)" labelClass={LABEL}><input id="walkName" value={walkName} onChange={(e) => setWalkName(e.target.value)} placeholder="Khách lẻ (tuỳ chọn)" autoComplete="off" className={igInput} /></InlineField>
-            <InlineField id="walkCode" label="Mã khách hàng" labelClass={LABEL} readOnly><input id="walkCode" readOnly value="KHL" className={igInput} /></InlineField>
-            <InlineField id="walkPhone" label="Số điện thoại (tuỳ chọn)" labelClass={LABEL}><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" placeholder="Tuỳ chọn" className={igInput} /></InlineField>
-            <p className="text-xs text-fg-muted md:col-span-2 xl:col-span-3">Khách lẻ dùng khách chung <strong>KHL</strong>, thanh toán đủ ngay, không ghi nợ.</p>
+            <InlineField id="walkCode" label="Mã khách hàng" labelClass={LABEL} readOnly><input id="walkCode" readOnly value={matched ? matched.code : phoneKey ? "Tự cấp khi lập đơn" : "KHL"} className={igInput} /></InlineField>
+            <InlineField id="walkPhone" label="Số điện thoại (tuỳ chọn)" labelClass={LABEL}><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" placeholder="Nhập để lưu khách quen" autoComplete="off" className={igInput} /></InlineField>
+            {hits.length > 0 && !matched && (
+              <ul aria-label="Khách lẻ thân quen đã lưu" className="flex flex-wrap gap-2 text-xs md:col-span-2 xl:col-span-3">
+                {hits.map((h) => <li key={h.id}><button type="button" onClick={() => { setWalkName(h.name); setWalkPhone(h.phone ?? ""); }} className="rounded-full border border-border px-3 py-1.5 hover:bg-hover">{h.name} · {h.phone} · <span className="text-fg-muted">{h.code}</span></button></li>)}
+              </ul>
+            )}
+            <p className="text-xs text-fg-muted md:col-span-2 xl:col-span-3">
+              {matched
+                ? <>SĐT này đã lưu là khách lẻ thân quen <strong>{matched.name}</strong> ({matched.code}) — đơn ghi cho khách này, dùng để tra lịch sử mua và trả hàng.</>
+                : phoneKey
+                  ? <>Có số điện thoại ⇒ hệ thống <strong>lưu hồ sơ khách lẻ thân quen</strong> (tên + SĐT, không công nợ) để tra lịch sử mua và trả hàng. Thanh toán đủ ngay.</>
+                  : <>Không nhập số điện thoại (hoặc chưa đủ 8 số) ⇒ dùng khách chung <strong>KHL</strong> (không nhận diện được từng người). Thanh toán đủ ngay, không ghi nợ.</>}
+            </p>
           </>) : (<>
             <InlineField id="partnerId" label="Tên khách hàng" required error={errors.partnerId?.message} labelClass={LABEL}>
               <div className={igCombo}>

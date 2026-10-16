@@ -108,3 +108,53 @@ describe("khách lẻ (KHL)", () => {
     expect(await counts()).toEqual(before);
   });
 });
+
+describe("khách lẻ thân quen (có SĐT)", () => {
+  const pay = { amount: 150_000, cashAccountId: 0, note: "" };
+  const retail = (name: string, phone: string) => run(body(), { walkIn: { name, phone }, payment: { ...pay, cashAccountId: cash.id } });
+
+  it("có SĐT ⇒ tự tạo hồ sơ nhẹ (KLxxxxxx, không nợ), đơn gắn hồ sơ đó thay vì KHL; lần sau cùng SĐT (khác định dạng) ⇒ dùng lại", async () => {
+    await makePartnerGroup();
+    const o1 = await retail("Chú Mạnh", "0349 631 425");
+    const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
+    expect(kh).toMatchObject({ code: "KL000001", name: "Chú Mạnh", phone: "0349 631 425", phoneKey: "0349631425", allowCredit: false, isCustomer: true });
+    expect(await prisma.saleOrder.findUniqueOrThrow({ where: { id: o1.id } })).toMatchObject({ partnerId: kh.id, walkInName: "Chú Mạnh", walkInPhone: "0349 631 425", paymentStatus: "PAID" });
+    const o2 = await retail("", "+84349631425");
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(kh.id);
+    expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(1);
+    // khách khác ⇒ hồ sơ khác, mã tăng
+    await retail("Anh Hai", "0911222333");
+    expect(await prisma.partner.findFirstOrThrow({ where: { phoneKey: "0911222333" } })).toMatchObject({ code: "KL000002" });
+  });
+
+  it("không SĐT hoặc SĐT chưa đủ 8 số ⇒ vẫn dùng KHL (không tạo hồ sơ)", async () => {
+    await makePartnerGroup();
+    const o = await retail("Khách vãng lai", "");
+    const khl = await prisma.partner.findUniqueOrThrow({ where: { code: WALK_IN_CODE } });
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).partnerId).toBe(khl.id);
+    expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(0);
+    const o2 = await retail("X", "12ab");
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(khl.id);
+    expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(0);
+  });
+
+  it("hồ sơ khách lẻ thân quen không cho đặt hạn mức/ghi nợ (CHECK DB); nâng thành đối tác xong thì cho", async () => {
+    await makePartnerGroup();
+    await retail("Chú Mạnh", "0349631425");
+    const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
+    await expect(prisma.partner.update({ where: { id: kh.id }, data: { allowCredit: true } })).rejects.toThrow();
+    const { promoteRegularRetail } = await import("@/server/partners/regular-retail");
+    await prisma.$transaction((t) => promoteRegularRetail(t, { userId: w.userId, perms: new Set(["partner.manage"]) }, kh.id));
+    expect(await prisma.partner.findUniqueOrThrow({ where: { id: kh.id } })).toMatchObject({ isRegularRetail: false, phoneKey: null });
+    await expect(prisma.partner.update({ where: { id: kh.id }, data: { allowCredit: true, debtLimit: 1000 } })).resolves.toBeTruthy();
+  });
+
+  it("gợi ý tìm theo tên không dấu và theo SĐT", async () => {
+    await makePartnerGroup();
+    await retail("Chú Mạnh", "0349631425");
+    const { searchRegularRetail } = await import("@/server/partners/regular-retail");
+    expect((await searchRegularRetail(prisma, "manh")).map((h) => h.name)).toEqual(["Chú Mạnh"]);
+    expect((await searchRegularRetail(prisma, "0349")).length).toBe(1);
+    expect(await searchRegularRetail(prisma, "")).toEqual([]);
+  });
+});

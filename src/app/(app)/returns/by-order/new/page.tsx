@@ -23,7 +23,9 @@ export default async function NewReturnByOrderPage({ searchParams }: { searchPar
       if (e instanceof DomainError && e.status === 404) notFound();
       throw e;
     });
-    return <ReturnByOrderForm order={order} today={ictYmd(new Date())} />;
+    const canRefund = actor.perms.has("payment.manage") && actor.perms.has("cash.transaction.create") && !order.undelivered;
+    const accounts = canRefund ? await prisma.cashAccount.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }) : [];
+    return <ReturnByOrderForm order={order} today={ictYmd(new Date())} refundAccounts={canRefund ? accounts.map((a) => ({ value: a.id, label: a.name, type: a.type as "CASH" | "BANK" })) : undefined} />;
   }
   const q = first(sp.q).slice(0, 100);
   const orders = await searchReturnableOrders(prisma, actor, q);

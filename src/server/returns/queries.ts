@@ -97,6 +97,8 @@ export async function searchReturnableOrders(db: Db, actor: Actor, q: string) {
 
 export interface ReturnableOrderDTO {
   id: number; code: string; partnerName: string; partnerCode: string; orderDate: Date;
+  /** Khách lẻ (KHL hoặc khách lẻ thân quen): không ghi nợ ⇒ nên hoàn tiền ngay khi trả hàng. */
+  partnerIsRetail: boolean;
   /** true: trả về kho phần HÀNG CHƯA GIAO (hàng không giao được). */
   undelivered: boolean;
   lines: { id: number; productCode: string; productName: string; unit: string; ordered: string; delivered: string; returned: string; remaining: string; returnable: boolean; processingTypeName: string | null }[];
@@ -106,7 +108,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number, u
   const o = await db.saleOrder.findFirst({
     where: { id: orderId, partner: partnerScopeWhere(actor) },
     include: {
-      partner: { select: { code: true, name: true } },
+      partner: { select: { code: true, name: true, isRegularRetail: true, allowCredit: true } },
       lines: {
         orderBy: { id: "asc" },
         include: {
@@ -121,7 +123,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number, u
   if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
   if (o.isCancelled || o.isDraft) throw new DomainError("Đơn đã hủy hoặc còn là nháp, không trả hàng được.", 409);
   return {
-    id: o.id, code: o.code, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate, undelivered,
+    id: o.id, code: o.code, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate, partnerIsRetail: o.partner.isRegularRetail || (!o.partner.allowCredit && o.partner.code === "KHL"), undelivered,
     lines: o.lines.map((l) => {
       const delivered = l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0));
       const returned = l.returnLines.filter((d) => d.goodsReturn.undelivered === undelivered).reduce((s, d) => s.plus(d.qty), D(0));

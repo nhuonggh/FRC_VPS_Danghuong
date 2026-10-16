@@ -16,3 +16,13 @@ describe("partner queries", () => {
     expect((await searchPartners(prisma, boss, { q: "dat", kind: "customer" })).map((row) => row.value)).toHaveLength(2);
   });
 });
+
+describe("khách lẻ thân quen", () => {
+  it("ẩn khỏi danh sách khách hàng và ô chọn mặc định; chỉ hiện khi bật bộ lọc retail=1", async () => {
+    await makePartner({ code: "KH1", name: "Khách thường", searchText: "kh1 khach thuong", groupId });
+    await makePartner({ code: "KL000001", name: "Chú Mạnh", searchText: "kl000001 chu manh 0349631425", groupId, isRegularRetail: true, phoneKey: "0349631425" });
+    expect((await listPartners(prisma, boss, params(), "customer")).rows.map((r) => r.code)).toEqual(["KH1"]);
+    expect((await listPartners(prisma, boss, params({ retail: "1" }), "customer")).rows.map((r) => r.code)).toEqual(["KL000001"]);
+    expect((await searchPartners(prisma, boss, { q: "manh", kind: "customer" }))).toHaveLength(0);
+  });
+});

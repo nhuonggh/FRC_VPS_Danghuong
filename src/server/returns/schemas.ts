@@ -16,6 +16,11 @@ export const returnByOrderSchema = z.object({
   note: z.string().trim().max(500),
   /** Trả về kho phần hàng CHƯA GIAO (hàng không giao được): chỉ nhập kho, không đụng công nợ. */
   undelivered: z.boolean().optional(),
+  /** Hoàn tiền mặt/chuyển khoản cho khách ngay (tối đa 2 khoản); phần còn lại trừ vào công nợ. Không dùng với `undelivered`. */
+  refunds: z.array(z.object({
+    amount: z.number({ invalid_type_error: "Nhập số tiền hoàn." }).finite().gt(0, "Số tiền hoàn phải lớn hơn 0.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân."),
+    cashAccountId: z.number({ invalid_type_error: "Chọn quỹ/tài khoản." }).int().positive("Chọn quỹ/tài khoản."),
+  })).max(2, "Tối đa 2 khoản hoàn tiền.").optional(),
   lines: z.array(z.object({ orderLineId: z.number().int().positive(), qty })).min(1, "Nhập số lượng trả cho ít nhất một dòng.").max(RETURN_MAX_LINES),
 });
 

@@ -21,7 +21,7 @@ beforeEach(() => { refresh.mockReset(); replace.mockReset(); apiFetch.mockReset(
 afterEach(cleanup);
 
 const order: ReturnableOrderDTO = {
-  id: 1, code: "DH000001", partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt", orderDate: new Date("2026-09-10T03:00:00Z"), undelivered: false,
+  id: 1, code: "DH000001", partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt", orderDate: new Date("2026-09-10T03:00:00Z"), partnerIsRetail: false, undelivered: false,
   lines: [
     { id: 11, productCode: "TX01", productName: "Tôn xốp", unit: "md", ordered: "4", delivered: "4", returned: "1", remaining: "3", returnable: true, processingTypeName: "Tôn xốp 11 sóng" },
     { id: 12, productCode: "TX02", productName: "Tôn gia công", unit: "md", ordered: "2", delivered: "2", returned: "0", remaining: "2", returnable: false, processingTypeName: null },

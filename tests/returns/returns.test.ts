@@ -291,3 +291,24 @@ describe("trả nhà cung cấp (47)", () => {
     expect((await lastPurchasePricePerBase(prisma, w.p.id, supplier.id))!.forPartner).toBe(true);
   });
 });
+
+describe("trả theo đơn — hoàn tiền khách", () => {
+  it("hoàn tiền mặt đúng phần hàng trả: công nợ cân bằng, có phiếu chi HOAN_KHACH; hoàn vượt giá trị hàng ⇒ 400; hàng chưa giao ⇒ 400", async () => {
+    const cash = await makeCashAccount({ type: "CASH", name: "Quỹ TM" });
+    const payer: Actor = { userId: w.userId, perms: new Set([...PERMS, "payment.manage", "cash.transaction.create"]) };
+    const o = await deliveredOrder();
+    const before = await balance(customer.id);
+    const mk = (refunds: { amount: number; cashAccountId: number }[], qty = 1, extra: object = {}) => createReturnByOrderIdempotent(prisma, payer, `rof-${++n}`, returnByOrderSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: [{ orderLineId: o.lineId, qty }], refunds, ...extra }), NOW);
+    await expect(mk([{ amount: 45_001, cashAccountId: cash.id }])).rejects.toMatchObject({ status: 400 }); // trả 1/4 của 180.000 = 45.000
+    const r = await mk([{ amount: 45_000, cashAccountId: cash.id }]);
+    expect(await prisma.payment.count({ where: { goodsReturnId: r.id, kind: "HOAN_KHACH", isCancelled: false } })).toBe(1);
+    expect(await balance(customer.id)).toBe(before); // credit 45.000 (trả hàng) rồi debit 45.000 (hoàn)
+    await expect(mk([{ amount: 10, cashAccountId: cash.id }], 1, { undelivered: true })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("không có quyền chi tiền ⇒ từ chối hoàn tiền (403)", async () => {
+    const cash = await makeCashAccount({ type: "CASH", name: "Quỹ TM" });
+    const o = await deliveredOrder();
+    await expect(createReturnByOrderIdempotent(prisma, actor, `rof-${++n}`, returnByOrderSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: [{ orderLineId: o.lineId, qty: 1 }], refunds: [{ amount: 1000, cashAccountId: cash.id }] }), NOW)).rejects.toMatchObject({ status: 403 });
+  });
+});
