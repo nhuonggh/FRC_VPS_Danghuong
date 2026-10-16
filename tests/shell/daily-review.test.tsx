@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DailyCheckView } from "@/components/home/DailyCheckView";
 import { ReportExportButton } from "@/components/home/dashboard/ReportExportButton";
@@ -9,11 +9,13 @@ import { DailyFilters } from "@/components/home/DailyFilters";
 import { DAILY_ITEMS } from "@/server/home/daily-config";
 import { parseListParams } from "@/lib/query-params";
 import { loadDailyItem, loadDailySummary } from "@/server/home/daily";
+import { getDailyReviews } from "@/server/home/daily-review";
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
 vi.mock("@/server/home/daily", async (original) => ({ ...await original<typeof import("@/server/home/daily")>(), loadDailySummary: vi.fn(), loadDailyItem: vi.fn() }));
+vi.mock("@/server/home/daily-review", async (original) => ({ ...await original<typeof import("@/server/home/daily-review")>(), getDailyReviews: vi.fn() }));
 
 const actor = { userId: 1, perms: new Set(["return.manage", "sale_price.view"]) };
 const params = parseListParams({ timePreset: "custom", timeStart: "2026-10-14", timeEnd: "2026-10-15" });
@@ -21,6 +23,31 @@ const now = new Date("2026-10-15T03:00:00Z");
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe("daily review UI", () => {
+  it("counts seen and checked together, puts changed content in unseen, and filters by URL", async () => {
+    const version = "a".repeat(32);
+    vi.mocked(loadDailySummary).mockResolvedValue(DAILY_ITEMS.slice(0, 4).map((item) => ({ item, totals: { count: 0, cancelled: 0, amount: "0", extra: "0", version } })));
+    const date = new Date("2026-10-15T03:00:00Z");
+    vi.mocked(getDailyReviews).mockResolvedValue([0, 1, 2].map((i) => ({ userId: 1, day: date, itemKey: DAILY_ITEMS[i].key, seenAt: date, seenVersion: i === 2 ? "b".repeat(32) : version, checkedAt: i === 1 ? date : null, checkedVersion: i === 1 ? version : null, updatedAt: date })));
+    render(await DailyCheckView({ actor, params: parseListParams({ timePreset: "today" }), now, review: "unseen" }));
+    const tabs = screen.getByRole("navigation", { name: "Trạng thái xem nội dung" });
+    expect(within(tabs).getByRole("link", { name: "Tất cả 4" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Chưa xem 2" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Đã xem 2" })).toHaveAttribute("href", "/?tab=daily&review=seen&timePreset=today");
+    expect(screen.queryByRole("link", { name: /Trả hàng theo đơn/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Trả hàng NCC/ })).toHaveTextContent("Có cập nhật");
+    expect(screen.getByRole("link", { name: /Trả hàng NCC/ }).getAttribute("href")).toContain("review=unseen");
+  });
+  it("shows an empty seen tab and does not offer counts for a multi-day range", async () => {
+    vi.mocked(loadDailySummary).mockResolvedValue([{ item: DAILY_ITEMS[0], totals: { count: 0, cancelled: 0, amount: "0", extra: "0", version: "a".repeat(32) } }]);
+    vi.mocked(getDailyReviews).mockResolvedValue([]);
+    const { unmount } = render(await DailyCheckView({ actor, params: parseListParams({ timePreset: "today" }), now, review: "seen" }));
+    expect(screen.getByText("Chưa có nội dung đã xem trong ngày này.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Trả hàng theo đơn/ })).not.toBeInTheDocument();
+    unmount();
+    render(await DailyCheckView({ actor, params, now, review: "seen" }));
+    expect(screen.queryByRole("navigation", { name: "Trạng thái xem nội dung" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Trả hàng theo đơn/ })).toBeInTheDocument();
+  });
   it("has three compact groups, eleven links keeping dates, export and explicit load failure", async () => {
     vi.mocked(loadDailySummary).mockResolvedValue(DAILY_ITEMS.map((item, i) => ({ item, totals: i === 0 ? null : { count: 0, cancelled: 0, amount: "0", extra: "0" } })));
     render(await DailyCheckView({ actor, params, now }));

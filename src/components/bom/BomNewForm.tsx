@@ -4,11 +4,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { FileText, Package } from "lucide-react";
+import { FileText, Package, X } from "lucide-react";
 import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
-import { BOM_MAX_LINES, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
+import { toast } from "@/lib/toast";
+import { BOM_MAX_BATCH, BOM_MAX_LINES, createBomBatchSchema, createBomVersionSchema, type CreateBomVersionInput } from "@/server/bom/schemas";
 
 export type MaterialOption = ComboOption & { baseUnit?: string };
 
@@ -37,6 +38,11 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
   const idem = useIdempotencyKey();
   const [product, setProduct] = useState(defaults.product);
   const [processingType, setProcessingType] = useState(defaults.processingType);
+  const [extraProducts, setExtraProducts] = useState<ComboOption[]>([]);
+  const [extraTypes, setExtraTypes] = useState<ComboOption[]>([]);
+  const productIds = [...new Set([...(product ? [Number(product.value)] : []), ...extraProducts.map((o) => Number(o.value))])];
+  const processingTypeIds = [...new Set([...(processingType ? [Number(processingType.value)] : []), ...extraTypes.map((o) => Number(o.value))])];
+  const batchCount = productIds.length * processingTypeIds.length;
   // Nhớ NVL đã chọn theo id để hiện lại nhãn + đơn vị gốc trong ô/cột ĐVT
   const [materials, setMaterials] = useState(() => new Map(defaults.lines.map((l) => [Number(l.material.value), l.material])));
 
@@ -63,6 +69,20 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
 
   const submit = handleSubmit(async (value) => {
     try {
+      if (batchCount > 1) {
+        const parsed = createBomBatchSchema.safeParse({ ...value, productIds, processingTypeIds });
+        if (!parsed.success) {
+          for (const issue of parsed.error.issues) {
+            const path = issue.path.join(".").replace(/^productIds.*$/, "productId").replace(/^processingTypeIds.*$/, "processingTypeId");
+            setError(path as never, { message: issue.message }, { shouldFocus: true });
+          }
+          return;
+        }
+        const result = await apiFetch<{ count: number }>("/api/bom/batch", { method: "POST", json: parsed.data, idempotencyKey: idem.key });
+        toast.success(`Đã tạo ${result.count} phiên bản định mức.`);
+        router.replace("/production/bom");
+        return;
+      }
       const r = await apiFetch<{ bomId: number }>("/api/bom", { method: "POST", json: value, idempotencyKey: idem.key });
       router.replace(`/production/bom/${r.bomId}?tab=versions`);
     } catch (error) {
@@ -78,19 +98,19 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
   return (
     <NewPage
       bare wide backHref="/production/bom" backLabel="Quay lại định mức NVL" title="Tạo phiên bản định mức" submitLabel="Lưu phiên bản"
-      isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+      isDirty={() => isDirty || extraProducts.length > 0 || extraTypes.length > 0} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
       <FormCard icon={FileText} title="Thông tin định mức">
         <FormGrid>
           <InlineField id="productId" label="Thành phẩm" required error={errors.productId?.message}>
             <Controller control={control} name="productId" render={({ field }) => (
               <div className={igCombo}><Combobox hideLabel label="Thành phẩm" value={field.value ? product : null} loadOptions={searchProducts("target")} placeholder="Tìm mã, tên…"
-                onChange={(o) => { setProduct(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
+                onChange={(o) => { const next = o ?? extraProducts[0] ?? null; setProduct(next); setExtraProducts((cur) => cur.filter((p) => Number(p.value) !== Number(next?.value))); field.onChange(next ? Number(next.value) : undefined); }} /></div>
             )} />
           </InlineField>
           <InlineField id="processingTypeId" label="Kiểu gia công" required error={errors.processingTypeId?.message}>
             <Controller control={control} name="processingTypeId" render={({ field }) => (
               <div className={igCombo}><Combobox hideLabel label="Kiểu gia công" value={field.value ? processingType : null} loadOptions={loadProcessingTypes} placeholder="Chọn kiểu gia công…"
-                onChange={(o) => { setProcessingType(o); field.onChange(o ? Number(o.value) : undefined); }} /></div>
+                onChange={(o) => { const next = o ?? extraTypes[0] ?? null; setProcessingType(next); setExtraTypes((cur) => cur.filter((p) => Number(p.value) !== Number(next?.value))); field.onChange(next ? Number(next.value) : undefined); }} /></div>
             )} />
           </InlineField>
           <InlineField id="validFrom" label="Hiệu lực từ ngày" required error={errors.validFrom?.message}
@@ -101,6 +121,29 @@ export function BomNewForm({ today, defaults }: { today: string; defaults: BomFo
             <textarea id="note" rows={3} {...register("note")} className={igArea} />
           </InlineField>
         </FormGrid>
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          <p className="text-sm font-medium">Áp dụng cùng định mức cho nhiều thành phẩm / kiểu gia công</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <ProductMultiPicker buttonLabel="Chọn thêm thành phẩm" existingIds={productIds} load={async (q) => (await searchProducts("target")(q)).map((o) => ({ ...o, value: Number(o.value) }))} onPicked={(picked) => {
+                const next = picked.filter((o) => Number(o.value) !== Number(product?.value));
+                setExtraProducts((cur) => [...new Map([...cur, ...next].map((o) => [Number(o.value), o])).values()]);
+                if (!product && next.length) { setProduct(next[0]); form.setValue("productId", Number(next[0].value), { shouldDirty: true, shouldValidate: true }); setExtraProducts((cur) => cur.filter((o) => Number(o.value) !== Number(next[0].value))); }
+              }} />
+              <div className="flex flex-wrap gap-2">{extraProducts.filter((o) => Number(o.value) !== Number(product?.value)).map((o) => <span key={o.value} className="inline-flex items-center gap-1 rounded-full bg-accent-soft pl-3 text-sm text-accent">{o.label}<button type="button" aria-label={`Bỏ thành phẩm ${o.label}`} onClick={() => setExtraProducts((cur) => cur.filter((p) => p.value !== o.value))} className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-accent"><X size={14} aria-hidden /></button></span>)}</div>
+            </div>
+            <div className="space-y-2">
+              <Combobox key={`${processingType?.value}-${extraTypes.length}`} label="Thêm kiểu gia công" value={null} loadOptions={loadProcessingTypes} placeholder="Tìm và chọn thêm kiểu gia công…" onChange={(o) => {
+                if (!o) return;
+                if (!processingType) { setProcessingType(o); form.setValue("processingTypeId", Number(o.value), { shouldDirty: true, shouldValidate: true }); }
+                else if (Number(o.value) !== Number(processingType.value)) setExtraTypes((cur) => [...new Map([...cur, o].map((p) => [Number(p.value), p])).values()]);
+              }} />
+              <div className="flex flex-wrap gap-2">{extraTypes.filter((o) => Number(o.value) !== Number(processingType?.value)).map((o) => <span key={o.value} className="inline-flex items-center gap-1 rounded-full bg-accent-soft pl-3 text-sm text-accent">{o.label}<button type="button" aria-label={`Bỏ kiểu gia công ${o.label}`} onClick={() => setExtraTypes((cur) => cur.filter((p) => p.value !== o.value))} className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-accent"><X size={14} aria-hidden /></button></span>)}</div>
+            </div>
+          </div>
+          <p role="status" className={`text-sm ${batchCount > BOM_MAX_BATCH ? "text-danger" : "text-fg-secondary"}`}>{productIds.length} thành phẩm × {processingTypeIds.length} kiểu gia công = {batchCount} định mức. Nguyên vật liệu, số lượng, ghi chú và ngày hiệu lực áp dụng chung. Tối đa {BOM_MAX_BATCH} định mức mỗi lần.</p>
+          {batchCount > 1 && <p className="text-xs text-fg-secondary">Mỗi cặp có phiên bản riêng. Nếu một cặp bị lỗi hoặc trùng ngày hiệu lực, toàn bộ lần lưu sẽ được hủy để bạn sửa rồi lưu lại.</p>}
+        </div>
       </FormCard>
       <FormCard icon={Package} title="Nguyên vật liệu">
         <div className="space-y-3">

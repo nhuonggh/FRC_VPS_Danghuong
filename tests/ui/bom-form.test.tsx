@@ -26,6 +26,24 @@ const prefilled = (over: Partial<BomFormDefaults> = {}): BomFormDefaults => ({
 const submit = () => userEvent.click(screen.getByRole("button", { name: "Lưu phiên bản" }));
 
 describe("BomNewForm (/production/bom/new)", () => {
+  it("applies one material list to multiple products and processing types in one batch", async () => {
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/bom/options/products?role=target")) return [{ value: 11, label: "TP02 — Tôn thứ hai" }];
+      if (url === "/api/bom/options/processing-types") return [{ value: 4, label: "Cán sóng" }];
+      if (url === "/api/bom/batch") return { count: 4 };
+      return [];
+    });
+    render(<BomNewForm today="2026-09-29" defaults={prefilled()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Chọn thêm thành phẩm" }));
+    await userEvent.click(await screen.findByRole("checkbox", { name: "TP02 — Tôn thứ hai" }));
+    await userEvent.click(screen.getByRole("button", { name: "Thêm 1 sản phẩm" }));
+    await userEvent.click(screen.getByRole("combobox", { name: "Thêm kiểu gia công" }));
+    await userEvent.click(await screen.findByRole("option", { name: /Cán sóng/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 thành phẩm × 2 kiểu gia công = 4 định mức");
+    await submit();
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/bom/batch", expect.objectContaining({ method: "POST", json: expect.objectContaining({ productIds: [10, 11], processingTypeIds: [3, 4], lines: expect.arrayContaining([expect.objectContaining({ materialProductId: 21, qtyPerUnit: 1.25 })]) }), idempotencyKey: expect.any(String) })));
+    expect(replace).toHaveBeenCalledWith("/production/bom");
+  });
   it("form trống → không gọi API", async () => {
     render(<BomNewForm today="2026-09-29" defaults={{ product: null, processingType: null, lines: [], hasVersions: false }} />);
     await submit();

@@ -57,7 +57,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     const params = parseListParams(sp, DAILY_FILTER_KEYS);
     const itemKey = Array.isArray(sp.item) ? sp.item[0] : sp.item;
     const effective = { ...params, filters: { ...params.filters, ...(itemKey ? { state: params.filters.state ?? ["active"], ...(itemKey === "loss" ? { type: params.filters.type ?? ["LOSS"] } : {}) } : {}) }, timePreset: params.timePreset ?? "today" as const };
-    return <div className="space-y-4"><HomeTabs tabs={tabItems} active="daily" /><DailyCheckView actor={actor} params={effective} itemKey={itemKey} now={now} /></div>;
+    const review = Array.isArray(sp.review) ? sp.review[0] : sp.review;
+    return <div className="space-y-4"><HomeTabs tabs={tabItems} active="daily" /><DailyCheckView actor={actor} params={effective} itemKey={itemKey} now={now} review={review} /></div>;
   }
 
   if (tab === null) {

@@ -8,7 +8,7 @@ import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import type { ListParams } from "@/lib/query-params";
 import { productWhere } from "@/server/products/queries";
 import { dateOnly } from "./resolve";
-import { BOM_MATERIAL_KINDS, BOM_TARGET_KINDS, type CreateBomVersionInput } from "./schemas";
+import { BOM_MATERIAL_KINDS, BOM_TARGET_KINDS, createBomBatchSchema, type CreateBomBatchInput, type CreateBomVersionInput } from "./schemas";
 
 type Db = Prisma.TransactionClient;
 
@@ -100,6 +100,35 @@ export async function createBomVersion(db: Db, actor: Actor, input: CreateBomVer
 export async function createBomVersionIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: CreateBomVersionInput) {
   assertCan(actor.perms, "bom.manage");
   return withIdempotency(prisma, { userId: actor.userId, scope: "bom.create_version", key }, (tx) => createBomVersion(tx, actor, input));
+}
+
+/** Every selected product × processing type receives an independent version; any error rolls back the whole batch. */
+export async function createBomBatchIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: CreateBomBatchInput) {
+  assertCan(actor.perms, "bom.manage");
+  const value = createBomBatchSchema.parse(input);
+  return withIdempotency(prisma, { userId: actor.userId, scope: "bom.create_batch", key }, async (tx) => {
+    const results = [];
+    // Stable lock order prevents overlapping batches from acquiring BOM locks in opposite orders.
+    for (const productId of [...value.productIds].sort((a, b) => a - b)) {
+      for (const processingTypeId of [...value.processingTypeIds].sort((a, b) => a - b)) {
+        try {
+          results.push(await createBomVersion(tx, actor, { ...value, productId, processingTypeId }));
+        } catch (error) {
+          if (error instanceof DomainError) {
+            const [product, type] = await Promise.all([tx.product.findUnique({ where: { id: productId }, select: { code: true } }), tx.processingType.findUnique({ where: { id: processingTypeId }, select: { name: true } })]);
+            const message = `${product?.code ?? productId} / ${type?.name ?? processingTypeId}: ${error.message} Chưa lưu định mức nào trong lần này.`;
+            if (error instanceof ValidationError || error instanceof FieldConflictError) {
+              const fields = Object.fromEntries(Object.keys(error.fields ?? { productId: "" }).map((field) => [field, message]));
+              throw error.status === 409 ? new FieldConflictError(message, fields) : new ValidationError(message, fields);
+            }
+            throw new DomainError(message, error.status, error.code);
+          }
+          throw error;
+        }
+      }
+    }
+    return { count: results.length, results };
+  });
 }
 
 /** Huỷ phiên bản CHƯA có hiệu lực (validFrom > hôm nay ICT). Không xoá dữ liệu; nhả ngày hiệu lực cho bản khác. */
