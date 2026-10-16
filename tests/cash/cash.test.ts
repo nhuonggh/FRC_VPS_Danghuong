@@ -46,7 +46,7 @@ beforeEach(async () => {
 describe("kiến trúc & quyền mặc định", () => {
   it("chỉ src/server/cash/ledger.ts ghi cash_ledger", () => {
     const hits: string[] = [];
-    const walk = (dir: string) => { for (const f of readdirSync(dir)) { const p = join(dir, f); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(f) && !p.endsWith("src/server/cash/ledger.ts") && /cashLedger\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/.test(readFileSync(p, "utf8"))) hits.push(p); } };
+    const walk = (dir: string) => { for (const f of readdirSync(dir)) { const p = join(dir, f); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(f) && !p.replaceAll("\\", "/").endsWith("src/server/cash/ledger.ts") && /cashLedger\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/.test(readFileSync(p, "utf8"))) hits.push(p); } };
     walk("src");
     expect(hits).toEqual([]);
   });
