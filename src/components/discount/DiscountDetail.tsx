@@ -11,7 +11,12 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { DiscountDetailDTO } from "@/server/discount/queries";
 
-export interface DiscountPerms { canSettle: boolean; canReconcile: boolean }
+export interface DiscountPerms { canSettle: boolean; canReconcile: boolean; canViewProfit?: boolean }
+
+const ictYm = (at: Date | string) => new Date(new Date(at).getTime() + 7 * 3600_000).toISOString().slice(0, 7);
+const monthLabel = (at: Date | string) => { const ym = ictYm(at); return `${ym.slice(5)}/${ym.slice(0, 4)}`; };
+/** Báo cáo Lãi lỗ lọc đúng tháng của phiếu (ngày cuối tháng tính bằng Date.UTC ngày 0 của tháng kế). */
+const profitHref = (at: Date | string) => { const ym = ictYm(at); const [y, m] = ym.split("-").map(Number); const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate(); return `/reports/period-pnl?timePreset=custom&timeStart=${ym}-01&timeEnd=${ym}-${String(last).padStart(2, "0")}`; };
 
 /** Chiết khấu tích lũy của MỘT khách: số dư, sổ chi tiết, tất toán (chi tiền / trừ công nợ), phiếu tất toán + hậu kiểm. */
 export function DiscountDetail({ d, perms, accounts, today }: { d: DiscountDetailDTO; perms: DiscountPerms; accounts: { id: number; name: string }[]; today: string }) {
@@ -40,6 +45,12 @@ export function DiscountDetail({ d, perms, accounts, today }: { d: DiscountDetai
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="Đầu kỳ" value={d.opening} /><Stat label="Phát sinh (đơn)" value={d.accrued} /><Stat label="Đã tất toán / trừ" value={d.settled} /><Stat label="Còn lại" value={d.balance} tone={d.negative ? "danger" : "success"} />
       </div>
+      {Number(d.forfeited) > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface p-3 text-sm">
+          <span>Đã chuyển vào lãi công ty: <strong className="tabular">{formatCurrency(d.forfeited)}</strong> <span className="text-fg-secondary">(đã nằm trong số “Đã tất toán / trừ”, không còn trả cho khách)</span></span>
+          {perms.canViewProfit && <Link href="/reports/period-pnl" className="text-accent hover:underline">Xem trong báo cáo Lãi lỗ →</Link>}
+        </div>
+      )}
 
       <section className="rounded-md border border-border bg-surface p-4">
         <h2 className="mb-2 text-sm font-semibold">Phiếu tất toán</h2>
@@ -49,6 +60,7 @@ export function DiscountDetail({ d, perms, accounts, today }: { d: DiscountDetai
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className={s.isCancelled ? "text-fg-muted line-through" : ""}><span className="font-mono text-xs">{s.code}</span> · {formatDate(s.at)} · <strong className="tabular">{formatCurrency(s.amount)}</strong> · {s.methodLabel}{s.paymentCode ? ` (${s.paymentCode})` : ""}{s.note ? ` — ${s.note}` : ""}</span>
                 <span className="flex flex-wrap items-center gap-2">
+                  {s.method === "FORFEIT" && !s.isCancelled && (perms.canViewProfit ? <Link href={profitHref(s.at)} className="text-xs text-accent hover:underline">Đã tính vào lãi tháng {monthLabel(s.at)} · xem</Link> : <span className="text-xs text-fg-secondary">Đã tính vào lãi tháng {monthLabel(s.at)}</span>)}
                   {s.isCancelled ? <Badge tone="neutral">Đã hủy{s.cancelReason ? `: ${s.cancelReason}` : ""}</Badge> : s.isReconciled ? <Badge tone="success">Đã hậu kiểm{s.reconciledByName ? ` · ${s.reconciledByName}` : ""}</Badge> : <Badge tone="warning">Chờ hậu kiểm</Badge>}
                   {!s.isCancelled && !s.isReconciled && perms.canReconcile && <button type="button" disabled={busy} onClick={() => reconcile(s.id, s.code)} aria-label={`Hậu kiểm ${s.code}`} className="h-9 rounded-sm bg-accent px-3 text-sm font-medium text-fg-on-accent disabled:opacity-50">Hậu kiểm</button>}
                   {!s.isCancelled && !s.isReconciled && perms.canSettle && <button type="button" disabled={busy} onClick={() => setCancelId(s.id)} aria-label={`Hủy ${s.code}`} className="h-9 rounded-sm border border-danger px-3 text-sm text-danger hover:bg-danger-soft disabled:opacity-50">Hủy</button>}
@@ -67,7 +79,7 @@ export function DiscountDetail({ d, perms, accounts, today }: { d: DiscountDetai
             {d.entries.map((e) => (
               <tr key={e.id} className="border-t border-border">
                 <td className="px-3 py-2 whitespace-nowrap">{formatDate(e.at)}</td>
-                <td className="px-3 py-2">{e.docLabel} {e.docHref ? <Link href={e.docHref} className="font-mono text-xs text-accent hover:underline">{e.docCode}</Link> : e.docCode ? <span className="font-mono text-xs">{e.docCode}</span> : null}{e.method ? ` · ${e.method === "CASH" ? "chi tiền" : "trừ nợ"}` : ""}</td>
+                <td className="px-3 py-2">{e.docLabel} {e.docHref ? <Link href={e.docHref} className="font-mono text-xs text-accent hover:underline">{e.docCode}</Link> : e.docCode ? <span className="font-mono text-xs">{e.docCode}</span> : null}{e.method ? ` · ${e.method === "CASH" ? "chi tiền" : e.method === "FORFEIT" ? "chuyển vào lãi" : "trừ nợ"}` : ""}</td>
                 <td className="px-3 py-2 text-right tabular">{Number(e.amountIn) ? formatCurrency(e.amountIn) : ""}</td><td className="px-3 py-2 text-right tabular">{Number(e.amountOut) ? formatCurrency(e.amountOut) : ""}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(e.running)}</td>
               </tr>
             ))}

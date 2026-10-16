@@ -54,7 +54,7 @@ export interface DiscountEntryDTO { id: number; at: Date; docType: string; docLa
 export interface SettlementDTO { id: number; code: string; at: Date; method: "CASH" | "OFFSET" | "FORFEIT"; methodLabel: string; amount: string; note: string | null; paymentId: number | null; paymentCode: string | null; isCancelled: boolean; cancelReason: string | null; isReconciled: boolean; reconciledByName: string | null; createdByName: string | null }
 export interface DiscountDetailDTO {
   partner: { id: number; code: string; name: string; debtBalance: string };
-  opening: string; accrued: string; settled: string; balance: string; negative: boolean; total: number;
+  opening: string; accrued: string; settled: string; /** Tổng phiếu "Chuyển vào lãi công ty" chưa hủy (một phần của `settled`). */ forfeited: string; balance: string; negative: boolean; total: number;
   entries: DiscountEntryDTO[]; settlements: SettlementDTO[];
 }
 const DOC_LABEL: Record<string, string> = {
@@ -83,7 +83,7 @@ export async function getDiscountDetail(db: Db, actor: Actor, partnerId: number,
   const codes = new Map(settlements.map((s) => [s.id, s.code]));
   return {
     partner: { id: p.id, code: p.code, name: p.name, debtBalance: debt.balance.toString() },
-    opening: o.toString(), accrued: accrued.toString(), settled: settled.toString(), balance: run.toString(), negative: run.lt(0), total: rows.length,
+    opening: o.toString(), accrued: accrued.toString(), settled: settled.toString(), forfeited: settlements.filter((s) => s.method === "FORFEIT" && !s.isCancelled).reduce((s, x) => s.plus(x.amount), D(0)).toString(), balance: run.toString(), negative: run.lt(0), total: rows.length,
     entries: page.map(({ r, running }) => ({
       id: r.id, at: r.at, docType: r.docType, docLabel: DOC_LABEL[r.docType] ?? r.docType,
       docCode: r.docType === "DISCOUNT_SETTLE" ? (codes.get(r.docId) ?? null) : (r.orderLine?.order.code ?? null), docHref: r.docType === "DISCOUNT_SETTLE" ? null : r.orderLine ? `/sales/orders/${r.orderLine.order.id}` : null, orderCode: r.orderLine?.order.code ?? null,

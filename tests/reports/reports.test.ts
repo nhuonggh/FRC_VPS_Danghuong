@@ -73,6 +73,19 @@ describe("68 — lãi lỗ toàn xưởng", () => {
     expect(r.rows[0]).toMatchObject({ month: "09/2026", revenue: "200000", returns: "50000", cost: "30000", accum: "30000", gross: "90000", expense: "30000", profit: "60000" });
     // 200.000 − 50.000 = 150.000 thuần; vốn 40.000 − 10.000 = 30.000; CK 40.000 − 10.000 = 30.000 ⇒ lãi gộp 90.000; − chi phí 30.000 = 60.000
   });
+  it("CK chuyển vào lãi cộng vào lãi gộp đúng tháng của phiếu; phiếu hủy và loại CASH không tính", async () => {
+    const period = await prisma.period.findFirstOrThrow();
+    const mk = (code: string, method: "FORFEIT" | "OFFSET", amount: number, over: { isCancelled?: boolean; at?: string } = {}) =>
+      prisma.discountSettlement.create({ data: { periodId: period.id, code, partnerId: a.id, method, amount, at: new Date(over.at ?? "2026-09-16T03:00:00Z"), createdBy: w.userId, ...(over.isCancelled ? { isCancelled: true, cancelledAt: NOW, cancelledBy: w.userId, cancelReason: "nhầm" } : {}) } });
+    await mk("CK-T1", "FORFEIT", 10_000);
+    await mk("CK-T2", "FORFEIT", 99_000, { isCancelled: true });
+    await mk("CK-T3", "OFFSET", 77_000);
+    await mk("CK-T4", "FORFEIT", 5_000, { at: "2026-08-20T03:00:00Z" });
+    const r = await run("period-pnl");
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ month: "09/2026", forfeit: "10000", gross: "10000", profit: "10000" });
+    expect(r.totals).toMatchObject({ forfeit: "10000", profit: "10000" });
+  });
   it("chi phí đã hủy không tính; tháng khác tách dòng", async () => {
     const et = await prisma.expenseType.create({ data: { name: "Điện" } });
     await tx((t) => createExpense(t, actor, { expenseTypeId: et.id, cashAccountId: cash.id, amount: 10_000, date: "2026-09-15", note: "" }, NOW));

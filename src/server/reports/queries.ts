@@ -47,35 +47,37 @@ async function orderProfit(db: Db, actor: Actor, params: ListParams, range: Time
     columns: [{ key: "code", label: "Đơn", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "customer", label: "Khách", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "cost", label: "Giá vốn", kind: "money" }, { key: "profit", label: "Lãi", kind: "money" }, { key: "margin", label: "% lãi", kind: "pct" }, { key: "note", label: "Ghi chú", kind: "text", align: "left" }],
     rows: rows.map(({ o, f }) => ({ code: o.code, date: ymd(o.orderDate), customer: o.partner.name, revenue: f.revenue.toString(), accum: f.accum.toString(), cost: f.cost.toString(), profit: f.profit.toString(), margin: pct(f.profit, f.revenue), note: f.provisional ? "Có dòng thiếu tồn (giá vốn tạm)" : "" })),
     totals: { code: "Tổng", revenue: tot.rev.toString(), accum: tot.acc.toString(), cost: tot.cost.toString(), profit: tot.profit.toString(), margin: pct(tot.profit, tot.rev) },
-    notes: ["Chưa trừ giá trị hàng khách trả (xem Lãi lỗ toàn xưởng)."],
+    notes: ["Chưa trừ giá trị hàng khách trả; chưa cộng CK chuyển vào lãi công ty (xem Lãi lỗ toàn xưởng)."],
   };
 }
 
 /** 68 — Lãi lỗ toàn xưởng theo tháng: DT − hàng trả + vốn hàng trả − giá vốn − CK tích lũy − chi phí hoạt động. */
 async function periodPnl(db: Db, actor: Actor, _params: ListParams, range: TimeRange): Promise<ReportResult> {
-  const [orders, returns, expenses] = await Promise.all([
+  const [orders, returns, expenses, forfeits] = await Promise.all([
     liveOrders(db, actor, range),
     db.goodsReturn.findMany({ where: { isCancelled: false, kind: { not: "SUPPLIER" }, at: timeRangeWhere(range), partner: partnerScopeWhere(actor) }, select: { id: true, at: true, totalAmount: true, lines: { select: { discountAccumReversed: true } } } }),
     db.operatingExpense.findMany({ where: { payment: { isCancelled: false, at: timeRangeWhere(range) } }, select: { payment: { select: { at: true, amount: true } } } }),
+    db.discountSettlement.findMany({ where: { method: "FORFEIT", isCancelled: false, at: timeRangeWhere(range), partner: partnerScopeWhere(actor) }, select: { at: true, amount: true } }),
   ]);
   const layers = returns.length ? await db.costLayer.findMany({ where: { sourceDocType: "RETURN_IN", sourceDocId: { in: returns.map((r) => r.id) } }, select: { sourceDocId: true, qtyIn: true, unitCost: true } }) : [];
-  const m = new Map<string, { rev: Prisma.Decimal; ret: Prisma.Decimal; retCost: Prisma.Decimal; cost: Prisma.Decimal; acc: Prisma.Decimal; exp: Prisma.Decimal }>();
-  const get = (k: string) => { let v = m.get(k); if (!v) { v = { rev: D(0), ret: D(0), retCost: D(0), cost: D(0), acc: D(0), exp: D(0) }; m.set(k, v); } return v; };
+  const m = new Map<string, { rev: Prisma.Decimal; ret: Prisma.Decimal; retCost: Prisma.Decimal; cost: Prisma.Decimal; acc: Prisma.Decimal; exp: Prisma.Decimal; fo: Prisma.Decimal }>();
+  const get = (k: string) => { let v = m.get(k); if (!v) { v = { rev: D(0), ret: D(0), retCost: D(0), cost: D(0), acc: D(0), exp: D(0), fo: D(0) }; m.set(k, v); } return v; };
   for (const o of orders) { const f = orderFigures(o.lines); const v = get(ymd(o.orderDate).slice(0, 7)); v.rev = v.rev.plus(f.revenue); v.cost = v.cost.plus(f.cost); v.acc = v.acc.plus(f.accum); }
   const retMonth = new Map(returns.map((r) => [r.id, ymd(r.at).slice(0, 7)]));
   for (const r of returns) { const v = get(ymd(r.at).slice(0, 7)); v.ret = v.ret.plus(r.totalAmount); v.acc = v.acc.minus(r.lines.reduce((s, l) => s.plus(l.discountAccumReversed), D(0))); }
   for (const l of layers) { const v = get(retMonth.get(l.sourceDocId)!); v.retCost = v.retCost.plus(l.qtyIn.times(l.unitCost)); }
   for (const e of expenses) { const v = get(ymd(e.payment.at).slice(0, 7)); v.exp = v.exp.plus(e.payment.amount); }
+  for (const f of forfeits) { const v = get(ymd(f.at).slice(0, 7)); v.fo = v.fo.plus(f.amount); }
   const rows = [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([month, v]) => {
-    const net = v.rev.minus(v.ret); const cost = v.cost.minus(v.retCost); const gross = net.minus(cost).minus(v.acc); const profit = gross.minus(v.exp);
-    return { month: `${month.slice(5)}/${month.slice(0, 4)}`, revenue: v.rev.toString(), returns: v.ret.toString(), cost: r2(cost).toString(), accum: r2(v.acc).toString(), gross: r2(gross).toString(), expense: v.exp.toString(), profit: r2(profit).toString() };
+    const net = v.rev.minus(v.ret); const cost = v.cost.minus(v.retCost); const gross = net.minus(cost).minus(v.acc).plus(v.fo); const profit = gross.minus(v.exp);
+    return { month: `${month.slice(5)}/${month.slice(0, 4)}`, revenue: v.rev.toString(), returns: v.ret.toString(), cost: r2(cost).toString(), accum: r2(v.acc).toString(), forfeit: v.fo.toString(), gross: r2(gross).toString(), expense: v.exp.toString(), profit: r2(profit).toString() };
   });
   const S = (k: keyof (typeof rows)[number]) => rows.reduce((s, r) => s.plus(r[k] as string), D(0)).toString();
   return {
     key: "period-pnl", title: "Lãi lỗ toàn xưởng", negativeKey: "profit", total: rows.length,
-    columns: [{ key: "month", label: "Tháng", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "returns", label: "Hàng trả", kind: "money" }, { key: "cost", label: "Giá vốn (đã trừ vốn hàng trả)", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "gross", label: "Lãi gộp", kind: "money" }, { key: "expense", label: "Chi phí hoạt động", kind: "money" }, { key: "profit", label: "Lãi ròng", kind: "money" }],
-    rows, totals: { month: "Tổng", revenue: S("revenue"), returns: S("returns"), cost: S("cost"), accum: S("accum"), gross: S("gross"), expense: S("expense"), profit: S("profit") },
-    notes: ["Lãi ròng = doanh thu − hàng trả − giá vốn (đã cộng lại vốn hàng trả) − CK tích lũy − chi phí hoạt động.", "Chi phí tính theo phiếu chi CHI_PHI chưa hủy (kể cả chưa kiểm tra)."],
+    columns: [{ key: "month", label: "Tháng", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "returns", label: "Hàng trả", kind: "money" }, { key: "cost", label: "Giá vốn (đã trừ vốn hàng trả)", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "forfeit", label: "CK chuyển vào lãi", kind: "money" }, { key: "gross", label: "Lãi gộp", kind: "money" }, { key: "expense", label: "Chi phí hoạt động", kind: "money" }, { key: "profit", label: "Lãi ròng", kind: "money" }],
+    rows, totals: { month: "Tổng", revenue: S("revenue"), returns: S("returns"), cost: S("cost"), accum: S("accum"), forfeit: S("forfeit"), gross: S("gross"), expense: S("expense"), profit: S("profit") },
+    notes: ["Lãi ròng = doanh thu − hàng trả − giá vốn (đã cộng lại vốn hàng trả) − CK tích lũy + CK chuyển vào lãi − chi phí hoạt động.", "CK chuyển vào lãi = phần chiết khấu tích lũy khách không nhận, được tất toán \"Chuyển vào lãi công ty\" (tính theo ngày phiếu, bỏ phiếu đã hủy).", "Chi phí tính theo phiếu chi CHI_PHI chưa hủy (kể cả chưa kiểm tra)."],
   };
 }
 

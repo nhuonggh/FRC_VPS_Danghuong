@@ -15,7 +15,7 @@ beforeEach(() => { refresh.mockReset(); apiFetch.mockReset(); apiFetch.mockResol
 afterEach(cleanup);
 
 const detail = (over: Partial<DiscountDetailDTO> = {}): DiscountDetailDTO => ({
-  partner: { id: 7, code: "KH000007", name: "Khách Đạt", debtBalance: "200000" }, opening: "500000", accrued: "40000", settled: "0", balance: "540000", negative: false, total: 1,
+  partner: { id: 7, code: "KH000007", name: "Khách Đạt", debtBalance: "200000" }, opening: "500000", accrued: "40000", settled: "0", forfeited: "0", balance: "540000", negative: false, total: 1,
   entries: [{ id: 1, at: new Date("2026-09-15T03:00:00Z"), docType: "SALE", docLabel: "Đơn hàng", docCode: "DH000001", docHref: "/sales/orders/1", orderCode: "DH000001", amountIn: "40000", amountOut: "0", running: "540000", method: null, isReconciled: false }],
   settlements: [
     { id: 3, code: "CK000003", at: new Date("2026-09-14T03:00:00Z"), method: "CASH", methodLabel: "Chi tiền", amount: "100000", note: null, paymentId: 5, paymentCode: "PC000005", isCancelled: false, cancelReason: null, isReconciled: false, reconciledByName: null, createdByName: "KT" },
@@ -23,6 +23,24 @@ const detail = (over: Partial<DiscountDetailDTO> = {}): DiscountDetailDTO => ({
   ], ...over,
 });
 const accounts = [{ id: 1, name: "Tiền mặt" }];
+
+describe("DiscountDetail — chuyển vào lãi", () => {
+  const forfeitSettle = { id: 4, code: "CK000004", at: new Date("2026-09-16T03:00:00Z"), method: "FORFEIT" as const, methodLabel: "Chuyển vào lãi công ty", amount: "10000", note: null, paymentId: null, paymentCode: null, isCancelled: false, cancelReason: null, isReconciled: false, reconciledByName: null, createdByName: "KT" };
+  it("hiện tổng đã chuyển vào lãi + tháng + link báo cáo lọc đúng tháng khi có quyền xem lãi", () => {
+    render(<DiscountDetail d={detail({ forfeited: "10000", settlements: [forfeitSettle] })} perms={{ canSettle: true, canReconcile: false, canViewProfit: true }} accounts={accounts} today="2026-09-15" />);
+    expect(screen.getByText(/Đã chuyển vào lãi công ty:/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Đã tính vào lãi tháng 09\/2026/ });
+    expect(link).toHaveAttribute("href", "/reports/period-pnl?timePreset=custom&timeStart=2026-09-01&timeEnd=2026-09-30");
+  });
+  it("không có quyền xem lãi ⇒ chỉ chữ, không link; không có phiếu FORFEIT ⇒ không hiện khung", () => {
+    const { unmount } = render(<DiscountDetail d={detail({ forfeited: "10000", settlements: [forfeitSettle] })} perms={{ canSettle: true, canReconcile: false }} accounts={accounts} today="2026-09-15" />);
+    expect(screen.getByText(/Đã tính vào lãi tháng 09\/2026/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Lãi lỗ/ })).toBeNull();
+    unmount();
+    render(<DiscountDetail d={detail()} perms={{ canSettle: true, canReconcile: false, canViewProfit: true }} accounts={accounts} today="2026-09-15" />);
+    expect(screen.queryByText(/Đã chuyển vào lãi công ty:/)).toBeNull();
+  });
+});
 
 describe("DiscountDetail", () => {
   it("tất toán CASH: vượt số dư bị chặn ở form; đủ ⇒ POST kèm quỹ + khoá idempotency", async () => {
