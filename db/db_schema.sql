@@ -156,10 +156,6 @@ CREATE TABLE "partners" (
 
 -- CreateTable
 CREATE TABLE "products" (
-    "canSell" BOOLEAN NOT NULL DEFAULT true,
-    "canPurchase" BOOLEAN NOT NULL DEFAULT true,
-    "canUseAsMaterial" BOOLEAN NOT NULL DEFAULT false,
-    "canProduce" BOOLEAN NOT NULL DEFAULT false,
     "id" SERIAL NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -1071,7 +1067,6 @@ CREATE TABLE "sale_orders" (
 
 -- CreateTable
 CREATE TABLE "sale_order_lines" (
-    "issueMode" TEXT NOT NULL DEFAULT 'LEGACY',
     "id" SERIAL NOT NULL,
     "orderId" INTEGER NOT NULL,
     "productId" INTEGER NOT NULL,
@@ -1791,7 +1786,7 @@ ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_paymentI
 
 -- CHECK số liệu/trạng thái: tiền mặt ⇔ có phiếu chi; trừ nợ ⇔ không có phiếu chi
 ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_amount_chk" CHECK ("amount" > 0);
-ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" IN ('OFFSET', 'FORFEIT') AND "paymentId" IS NULL));
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" = 'OFFSET' AND "paymentId" IS NULL));
 ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
 
 -- >>> prisma/migrations/20261001030000_trips/migration.sql
@@ -2271,4 +2266,144 @@ CREATE TABLE "daily_reviews" (
 );
 GRANT SELECT, INSERT, UPDATE, DELETE ON "daily_reviews" TO app_rw;
 
+-- >>> prisma/migrations/20261016090000_product_capabilities/migration.sql
+-- Preserve product IDs, stock, FIFO layers and historical documents.
+ALTER TABLE "products"
+  ADD COLUMN "canSell" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canPurchase" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canUseAsMaterial" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN "canProduce" BOOLEAN NOT NULL DEFAULT false;
+UPDATE "products" SET
+  "canUseAsMaterial" = kind IN ('NVL', 'HANG', 'PHU_KIEN'),
+  "canProduce" = kind IN ('THANH_PHAM', 'PHU_KIEN');
+
+ALTER TABLE "sale_order_lines" ADD COLUMN "issueMode" TEXT NOT NULL DEFAULT 'LEGACY';
+-- Posted lines already encode their actual stock behavior via their BOM snapshot.
+UPDATE "sale_order_lines" AS l SET "issueMode" = CASE WHEN l."bomVersionId" IS NULL THEN 'STOCK' ELSE 'BOM' END
+FROM "sale_orders" AS o WHERE l."orderId" = o.id AND NOT o."isDraft";
 ALTER TABLE "sale_order_lines" ADD CONSTRAINT "sale_order_lines_issue_mode_check" CHECK ("issueMode" IN ('LEGACY', 'STOCK', 'BOM'));
+
+-- >>> prisma/migrations/20261016120000_trip_stop_accounts/migration.sql
+-- Quỹ tiền mặt / tài khoản ngân hàng nhận tiền theo từng điểm giao (mỗi đơn có thể vào quỹ/STK khác nhau).
+ALTER TABLE "trip_orders"
+  ADD COLUMN "cashAccountId" INTEGER,
+  ADD COLUMN "transferAccountId" INTEGER;
+
+-- >>> prisma/migrations/20261016150000_regular_retail/migration.sql
+-- Khách lẻ thân quen: hồ sơ nhẹ (tên + SĐT), không công nợ. Chỉ thêm cột.
+ALTER TABLE "partners"
+  ADD COLUMN "isRegularRetail" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN "phoneKey" TEXT;
+CREATE UNIQUE INDEX "partners_phoneKey_key" ON "partners"("phoneKey");
+ALTER TABLE "partners" ADD CONSTRAINT "partners_regular_retail_nocredit"
+  CHECK ("isRegularRetail" = false OR ("allowCredit" = false AND "debtLimit" = 0));
+
+-- >>> prisma/migrations/20261016170000_discount_forfeit/migration.sql
+-- Tất toán chiết khấu: thêm hình thức "chuyển vào lãi công ty" (không chi tiền, không trừ công nợ). Chỉ thêm giá trị enum.
+ALTER TYPE "discount_settle_method" ADD VALUE 'FORFEIT';
+
+-- >>> prisma/migrations/20261016170100_discount_forfeit_check/migration.sql
+-- Tách khỏi migration thêm giá trị enum (Postgres không cho dùng giá trị enum mới trong cùng giao dịch).
+-- Tiền mặt ⇔ có phiếu chi; trừ nợ / chuyển vào lãi công ty ⇔ không có phiếu chi.
+ALTER TABLE "discount_settlements" DROP CONSTRAINT "discount_settlements_method_chk";
+ALTER TABLE "discount_settlements" ADD CONSTRAINT "discount_settlements_method_chk" CHECK (("method" = 'CASH' AND "paymentId" IS NOT NULL) OR ("method" IN ('OFFSET', 'FORFEIT') AND "paymentId" IS NULL));
+
+-- >>> prisma/migrations/20261017100000_supplier_orders/migration.sql
+-- AlterTable
+ALTER TABLE "purchase_lines" ADD COLUMN     "supplierOrderLineId" INTEGER;
+
+-- CreateTable
+CREATE TABLE "supplier_orders" (
+    "id" SERIAL NOT NULL,
+    "code" TEXT NOT NULL,
+    "partnerId" INTEGER NOT NULL,
+    "date" DATE NOT NULL,
+    "state" TEXT NOT NULL DEFAULT 'DRAFT',
+    "note" TEXT NOT NULL DEFAULT '',
+    "closeReason" TEXT,
+    "createdBy" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "supplier_orders_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "supplier_order_lines" (
+    "id" SERIAL NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "qty" DECIMAL(18,3) NOT NULL,
+    "unit" TEXT NOT NULL,
+    "factor" DECIMAL(18,6) NOT NULL,
+    "purchasePrice" DECIMAL(18,2) NOT NULL,
+    "expectedDate" DATE,
+    "note" TEXT NOT NULL DEFAULT '',
+
+    CONSTRAINT "supplier_order_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "supplier_order_notices" (
+    "id" SERIAL NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "purchaseId" INTEGER NOT NULL,
+    "message" TEXT NOT NULL,
+    "readAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "supplier_order_notices_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "supplier_orders_code_key" ON "supplier_orders"("code");
+
+-- CreateIndex
+CREATE INDEX "supplier_orders_state_date_idx" ON "supplier_orders"("state", "date");
+
+-- CreateIndex
+CREATE INDEX "supplier_orders_createdBy_date_idx" ON "supplier_orders"("createdBy", "date");
+
+-- CreateIndex
+CREATE INDEX "supplier_orders_partnerId_date_idx" ON "supplier_orders"("partnerId", "date");
+
+-- CreateIndex
+CREATE INDEX "supplier_order_lines_orderId_idx" ON "supplier_order_lines"("orderId");
+
+-- CreateIndex
+CREATE INDEX "supplier_order_lines_productId_idx" ON "supplier_order_lines"("productId");
+
+-- CreateIndex
+CREATE INDEX "supplier_order_notices_userId_readAt_createdAt_idx" ON "supplier_order_notices"("userId", "readAt", "createdAt");
+
+-- AddForeignKey
+ALTER TABLE "purchase_lines" ADD CONSTRAINT "purchase_lines_supplierOrderLineId_fkey" FOREIGN KEY ("supplierOrderLineId") REFERENCES "supplier_order_lines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_orders" ADD CONSTRAINT "supplier_orders_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_orders" ADD CONSTRAINT "supplier_orders_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_order_lines" ADD CONSTRAINT "supplier_order_lines_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "supplier_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_order_lines" ADD CONSTRAINT "supplier_order_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_order_notices" ADD CONSTRAINT "supplier_order_notices_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "supplier_order_notices" ADD CONSTRAINT "supplier_order_notices_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "supplier_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+CREATE INDEX "purchase_lines_supplierOrderLineId_idx" ON "purchase_lines"("supplierOrderLineId");
+ALTER TABLE "supplier_orders" ADD CONSTRAINT "supplier_orders_state_check" CHECK (state IN ('DRAFT','SENT','CLOSED','CANCELLED'));
+ALTER TABLE "supplier_order_lines" ADD CONSTRAINT "supplier_order_lines_values_check" CHECK (qty > 0 AND factor > 0 AND "purchasePrice" >= 0);
+GRANT SELECT, INSERT, UPDATE, DELETE ON "supplier_orders", "supplier_order_lines", "supplier_order_notices" TO app_rw;
+GRANT USAGE, SELECT ON SEQUENCE "supplier_orders_id_seq", "supplier_order_lines_id_seq", "supplier_order_notices_id_seq" TO app_rw;
+
+ALTER TABLE "supplier_orders" ADD COLUMN "attachments" JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE "supplier_order_lines" ADD COLUMN "processingTypeId" INTEGER REFERENCES "processing_types"("id") ON DELETE RESTRICT;

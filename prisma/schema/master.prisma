@@ -85,6 +85,7 @@ model Partner {
   openingDisc         OpeningDiscount[]
   partnerLedger       PartnerLedger[]
   discountLedger      DiscountLedger[]
+  supplierOrders SupplierOrder[]
   purchases           Purchase[]
   saleOrders          SaleOrder[]
   quotes              Quote[]
@@ -134,6 +135,7 @@ model Product {
   openingStock        OpeningStock[]
   layers              CostLayer[]
   ledger              StockLedger[]
+  supplierOrderLines SupplierOrderLine[]
   purchaseLines       PurchaseLine[]
   adjustmentLines     StockAdjustmentLine[]
   productionOrders    ProductionOrder[]
@@ -256,6 +258,7 @@ model ProcessingType {
   boms      Bom[]
   ratios    ProductProcessingRatio[]
   saleLines SaleOrderLine[]
+  supplierOrderLines SupplierOrderLine[]
   purchaseLines PurchaseLine[]
   quoteLines    QuoteLine[]
 

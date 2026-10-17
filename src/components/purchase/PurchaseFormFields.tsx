@@ -1,5 +1,6 @@
 "use client";
 
+import { LastSupplierPrice } from "./LastSupplierPrice";
 import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { addPickedLines, Combobox, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, ProductMultiPicker, useLineEntry, type ComboOption, RhfNumberInput, NumberInput } from "@/components/ui";
@@ -27,7 +28,7 @@ export function dropEmptyPurchaseLines(form: UseFormReturn<PurchaseInput>) {
 }
 
 /** Nhà cung cấp · ngày nhập · cước vận chuyển. */
-export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, supplierGroups }: FormProps & { initialSupplier?: ComboOption | null; maxDate: string; /** Có = hiện nút thêm nhanh nhà cung cấp (cần quyền quản lý đối tác). */ supplierGroups?: ComboOption[] }) {
+export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, supplierGroups, ordering = false }: FormProps & { initialSupplier?: ComboOption | null; ordering?: boolean; maxDate: string; /** Có = hiện nút thêm nhanh nhà cung cấp (cần quyền quản lý đối tác). */ supplierGroups?: ComboOption[] }) {
   const { register, control, watch, setValue, formState: { errors } } = form;
   const [picked, setPicked] = useState<ComboOption | null>(initialSupplier);
   const supplier = watch("partnerId") ? picked : null;
@@ -39,8 +40,8 @@ export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, su
         {supplierGroups && <div className="flex items-center border-l border-border px-1"><QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} /></div>}
       </>} />
     </InlineField>
-    <InlineField id="date" label="Ngày nhập" required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} aria-invalid={!!errors.date} className={igInput} /></InlineField>
-    <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><RhfNumberInput id="freightCost" control={control} name={"freightCost"} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>
+    <InlineField id="date" label={ordering ? "Ngày đặt" : "Ngày nhập"} required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} aria-invalid={!!errors.date} className={igInput} /></InlineField>
+    {!ordering && <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><RhfNumberInput id="freightCost" control={control} name={"freightCost"} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>}
   </FormGrid>;
 }
 
@@ -91,7 +92,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes,
 }
 
 /** Bảng dòng hàng + nút thêm dòng / chọn nhiều + tiền hàng. Trên mobile mỗi dòng là một thẻ. */
-export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }: FormProps & { initialProducts?: ProductOption[]; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
+export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, ordering = false }: FormProps & { initialProducts?: ProductOption[]; ordering?: boolean; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
   const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
@@ -134,7 +135,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }
       <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
           <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th>{showFactor && <><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th></>}
-          <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th><th className="px-2 py-2">Ghi chú / Kích thước</th><th aria-label="Thao tác" />
+          <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th>{ordering && <th className="px-2 py-2">Dự kiến giao / Giá gần nhất</th>}<th className="px-2 py-2">Ghi chú / Kích thước</th><th aria-label="Thao tác" />
         </tr></thead>
         <tbody>{fields.map((field, index) => {
           const line = lines[index] ?? emptyPurchaseLine; const error = errors.lines?.[index]; const product = products.get(line.productId); const units = product?.units ?? [];
@@ -174,11 +175,12 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct }
               return <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} maxFrac={2} control={control} name={`lines.${index}.purchasePrice`} className={`${inputClass(error?.purchasePrice)} tabular text-right`} />;
             })()}</td>
             <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td>
+            {ordering && <td className="px-2 py-2" data-label="Dự kiến giao / Giá gần nhất" data-wide><input type="date" aria-label={`Dự kiến giao dòng ${index + 1}`} {...register(`lines.${index}.expectedDate`)} className={inputClass()} /><LastSupplierPrice partnerId={watch("partnerId")} productId={line.productId} /></td>}
             <td className="px-2 py-2" data-label="Ghi chú cuộn" data-wide><input aria-label={`Ghi chú cuộn dòng ${index + 1}`} {...register(`lines.${index}.rollInfo`)} className={inputClass(error?.rollInfo)} /></td>
             <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>
           </tr>;
         })}</tbody>
-        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={showFactor ? 7 : 5} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={2} /></tr></tfoot>
+        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={showFactor ? 7 : 5} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={ordering ? 3 : 2} /></tr></tfoot>
       </table>
     </div>
     <div className="flex flex-wrap gap-2">

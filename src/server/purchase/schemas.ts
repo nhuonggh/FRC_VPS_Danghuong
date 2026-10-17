@@ -3,6 +3,7 @@ import { z } from "zod";
 const num = (message: string) => z.number({ required_error: message, invalid_type_error: message });
 
 export const purchaseLineSchema = z.object({
+  expectedDate: z.string().optional(),
   /** Present on edit so the existing FIFO position is preserved. */
   id: z.number().int().positive().optional(),
   productId: num("Chọn sản phẩm.").int("Chọn sản phẩm.").positive("Chọn sản phẩm."),

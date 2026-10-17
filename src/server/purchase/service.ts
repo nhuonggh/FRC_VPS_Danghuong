@@ -221,6 +221,7 @@ export async function updatePurchase(ctx: EngineCtx, actor: Actor, id: number, i
   if (current.periodId !== ctx.period.id) throw new PeriodClosedError();
   await assertOldProductsLocked(ctx, id);
 
+  if (current.lines.some(line => line.supplierOrderLineId !== null)) throw new DomainError("Phiếu nhận từ đơn đặt hàng không sửa dòng trực tiếp. Hãy hủy phiếu rồi nhận lại để giữ đúng đối chiếu.", 409);
   const owned = new Set(current.lines.map((line) => line.id));
   for (const line of input.lines) {
     if (line.id !== undefined && !owned.has(line.id)) throw new DomainError("Dòng hàng không thuộc phiếu này.", 400);
@@ -279,6 +280,14 @@ export async function cancelPurchase(ctx: EngineCtx, actor: Actor, id: number, r
     where: { id },
     data: { isCancelled: true, cancelledAt: now, cancelledBy: actor.userId, cancelReason: reason },
   });
+  const linkedLines = current.lines.flatMap(line => line.supplierOrderLineId ? [line.supplierOrderLineId] : []);
+  if (linkedLines.length) {
+    const orders = await ctx.tx.supplierOrder.findMany({ where: { lines: { some: { id: { in: linkedLines } } } } });
+    for (const order of orders) {
+      await ctx.tx.supplierOrderNotice.create({ data: { userId: order.createdBy, orderId: order.id, purchaseId: id, message: `${order.code}: phiếu ${current.code} đã hủy, tiến độ nhận đã cập nhật lại.` } });
+      await writeAudit(ctx.tx, { userId: actor.userId, action: "supplier-order.receipt-cancel", entity: "SupplierOrder", entityId: order.id, after: { purchaseId: id, reason } });
+    }
+  }
   await writeAudit(ctx.tx, {
     userId: actor.userId, action: "purchase.cancel", entity: "Purchase", entityId: id,
     before: auditSummary(current, current.lines.length), after: { isCancelled: true, reason },

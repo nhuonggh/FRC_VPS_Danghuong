@@ -88,6 +88,7 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "receiving", label: "Nhập hàng", hideTitle: true,
         functions: [
+          { key: "supplier-orders", label: "Đặt hàng nhà cung cấp", desc: "Đặt hàng, dự kiến giao và đối chiếu nhận hàng", icon: "clipboard-list", view: "table", path: "/purchase/supplier-orders", codes: ["20"], perm: "purchase.view" },
           { key: "purchase-new", label: "Lập phiếu nhập", desc: "Quy đổi đơn vị, sinh lô FIFO, phân bổ cước", icon: "package-plus", view: "form", path: "/purchase/orders/new", codes: ["19"], perm: "purchase.create" },
           { key: "purchase-list", label: "Danh sách phiếu nhập", desc: "Xem, tìm, sửa phiếu nhập", icon: "clipboard-list", view: "table", path: "/purchase/orders", codes: ["20"], perm: "purchase.view" },
           { key: "stock-in-adj", label: "Nhập kho đầu kỳ / không NCC", desc: "Hàng lệch, dư — không sinh công nợ", icon: "layers", view: "table", path: "/purchase/adjustments-in", codes: ["21"], perm: "stock_adjust.manage" },

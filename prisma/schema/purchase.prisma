@@ -52,10 +52,14 @@ model PurchaseLine {
   seq              BigInt?
   createdAt        DateTime @default(now())
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  supplierOrderLineId Int?
+  supplierOrderLine   SupplierOrderLine? @relation(fields: [supplierOrderLineId], references: [id], onDelete: Restrict)
+
+  purchase       Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
   processingType ProcessingType? @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
 
+  @@index([supplierOrderLineId])
   @@index([purchaseId])
   @@index([productId])
   @@map("purchase_lines")
@@ -96,4 +100,63 @@ model StockAdjustmentLine {
   @@index([adjustmentId])
   @@index([productId])
   @@map("stock_adjustment_lines")
+}
+
+model SupplierOrder {
+  id          Int                   @id @default(autoincrement())
+  code        String                @unique
+  partnerId   Int
+  date        DateTime              @db.Date
+  state       String                @default("DRAFT")
+  note        String                @default("")
+  attachments Json                  @default("[]")
+  closeReason String?
+  createdBy   Int
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  partner     Partner               @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  creator     User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  lines       SupplierOrderLine[]
+  notices     SupplierOrderNotice[]
+
+  @@index([state, date])
+  @@index([createdBy, date])
+  @@index([partnerId, date])
+  @@map("supplier_orders")
+}
+
+model SupplierOrderLine {
+  id               Int             @id @default(autoincrement())
+  orderId          Int
+  productId        Int
+  qty              Decimal         @db.Decimal(18, 3)
+  unit             String
+  factor           Decimal         @db.Decimal(18, 6)
+  purchasePrice    Decimal         @db.Decimal(18, 2)
+  processingTypeId Int?
+  processingType   ProcessingType? @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+  expectedDate     DateTime?       @db.Date
+  note             String          @default("")
+  order            SupplierOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product          Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  receipts         PurchaseLine[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("supplier_order_lines")
+}
+
+model SupplierOrderNotice {
+  id         Int           @id @default(autoincrement())
+  userId     Int
+  orderId    Int
+  purchaseId Int
+  message    String
+  readAt     DateTime?
+  createdAt  DateTime      @default(now())
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order      SupplierOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([userId, readAt, createdAt])
+  @@map("supplier_order_notices")
 }

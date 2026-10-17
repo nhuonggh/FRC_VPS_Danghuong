@@ -4,6 +4,7 @@ import { Breadcrumb } from "./Breadcrumb";
 import { QuickAccess } from "./QuickAccess";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { UserMenu } from "./UserMenu";
+import { SupplierOrderBell } from "@/components/purchase/SupplierOrderBell";
 
 export function Header({ nav, user }: { nav: NavModule[]; user: { fullName: string; username: string } }) {
   return (
@@ -17,6 +18,7 @@ export function Header({ nav, user }: { nav: NavModule[]; user: { fullName: stri
         <div className="hidden md:block"><Breadcrumb nav={nav} /></div>
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
+        {nav.some(module => module.categories.some(category => category.functions.some(fn => fn.key === "supplier-orders"))) && <SupplierOrderBell />}
         <QuickAccess nav={nav} />
         <ThemeSwitch />
         <UserMenu fullName={user.fullName} username={user.username} />
