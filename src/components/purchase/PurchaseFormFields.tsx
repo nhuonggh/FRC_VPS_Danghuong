@@ -134,6 +134,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
+          {ordering && <th className="px-2 py-2 text-center">STT</th>}
           <th className="px-2 py-2">Sản phẩm</th><th className="px-2 py-2">Kiểu gia công</th><th className="px-2 py-2">Đơn vị</th><th className="px-2 py-2 text-right">Số lượng</th>{showFactor && <><th className="px-2 py-2 text-right">Tỷ trọng</th><th className="px-2 py-2 text-right">SL gốc</th></>}
           <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th>{ordering && <th className="px-2 py-2">Dự kiến giao / Giá gần nhất</th>}<th className="px-2 py-2">Ghi chú / Kích thước</th><th aria-label="Thao tác" />
         </tr></thead>
@@ -142,8 +143,9 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
           const qtyBase = asNumber(line.qty) && asNumber(line.factor) ? round3(asNumber(line.qty) / asNumber(line.factor)) : 0;
           const dup = line.productId ? lines.findIndex((o, i) => i < index && o?.productId === line.productId && o?.unit === line.unit) + 1 : 0;
           return <tr key={field.id} className="border-b border-border align-top last:border-b-0">
+            {ordering && <td data-stt className="px-2 py-2 text-center tabular text-fg-secondary">{index + 1}</td>}
             <td className="min-w-64 px-2 py-2" data-line-product={index} data-label="Sản phẩm" data-wide>
-              <Controller control={control} name={`lines.${index}.productId`} render={({ field: item }) => <Combobox label={`Sản phẩm dòng ${index + 1}`} value={product ?? null} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={error?.productId?.message}
+              <Controller control={control} name={`lines.${index}.productId`} render={({ field: item }) => <Combobox hideLabel={ordering} label={`Sản phẩm dòng ${index + 1}`} value={product ?? null} loadOptions={loadProducts} placeholder="Tìm mã, tên…" error={error?.productId?.message}
                 onChange={(option) => {
                   item.onChange(option ? Number(option.value) : undefined);
                   const selected = option as ProductOption | null;
@@ -180,7 +182,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
             <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>
           </tr>;
         })}</tbody>
-        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={showFactor ? 7 : 5} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={ordering ? 3 : 2} /></tr></tfoot>
+        <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={(showFactor ? 7 : 5) + (ordering ? 1 : 0)} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={ordering ? 3 : 2} /></tr></tfoot>
       </table>
     </div>
     <div className="flex flex-wrap gap-2">
