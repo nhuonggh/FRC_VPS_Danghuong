@@ -9,6 +9,9 @@ export interface ReportResult {
   negativeKey?: string;
   total: number;
   notes?: string[];
+  summary?: { label: string; value: string | number | null; money?: boolean; tone?: "neutral" | "success" | "warning" | "danger" | "info" }[];
+  customers?: { value: string; label: string }[];
+  orderDetail?: { id: number; code: string; date: string; customer: string; figures: Record<string, Cell>; lines: Record<string, Cell>[] } | null;
 }
 export const REPORTS = [
   { key: "order-profit", code: "67", title: "Lãi từng đơn", perm: "order.analysis.view" },
@@ -22,4 +25,4 @@ export const REPORTS = [
   { key: "consumption-compare", code: "53", title: "Đối chiếu định mức", perm: "bom.manage" },
 ] as const;
 export type ReportKey = (typeof REPORTS)[number]["key"];
-export const REPORT_FILTER_KEYS = ["neg"] as const;
+export const REPORT_FILTER_KEYS = ["neg", "customer", "order"] as const;

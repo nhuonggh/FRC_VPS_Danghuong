@@ -88,6 +88,7 @@ export async function productionReport(db: Db, range: TimeRange, showCost: boole
   const cost = showCost ? [{ key: "unitCost", label: "Giá thành/đv", kind: "money" as const }, { key: "totalCost", label: "Tổng giá thành", kind: "money" as const }] : [];
   return {
     key: "production", title: "Báo cáo sản xuất", total: rows.length,
+    summary: [{ label: "Lệnh sản xuất", value: orders.length }, { label: "Mã phụ kiện", value: new Set(orders.map((o) => o.productId)).size }, { label: "Dòng nguyên vật liệu", value: orders.reduce((sum, o) => sum + o._count.materials, 0) }, ...(showCost ? [{ label: "Tổng giá thành đã ghi nhận", value: total.toString(), money: true }] : [])],
     columns: [{ key: "code", label: "Lệnh SX", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "product", label: "Phụ kiện", kind: "text", align: "left" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "materials", label: "Số NVL", kind: "int" }, ...cost],
     rows: showCost ? rows : rows.map(({ unitCost: _u, totalCost: _t, ...r }) => r),
     ...(showCost ? { totals: { code: "Tổng", totalCost: total.toString() } } : {}),

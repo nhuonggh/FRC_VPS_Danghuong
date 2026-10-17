@@ -51,6 +51,16 @@ describe("67 — lãi từng đơn", () => {
     expect(r.totals).toMatchObject({ revenue: "210000", profit: "110000" }); expect(r.negativeKey).toBe("profit");
     expect((await run("order-profit", { neg: "1" })).rows.map((x) => x.code)).toEqual([loss.code]);
     expect((await run("order-profit", { q: "khách a" })).rows.map((x) => x.code)).toEqual([good.code]);
+    const filtered = await run("order-profit", { customer: String(a.id), order: String(good.id) });
+    expect(filtered.rows.map((x) => x.code)).toEqual([good.code]);
+    expect(filtered.totals).toMatchObject({ revenue: "190000", profit: "130000" });
+    expect(filtered.orderDetail).toMatchObject({ id: good.id, figures: { revenue: "190000", accum: "20000", cost: "40000", profit: "130000" } });
+    expect(filtered.orderDetail?.lines).toHaveLength(1);
+    expect(filtered.orderDetail?.lines[0]).toMatchObject({ qty: "4", price: "50000", discountNow: "10000", profit: "130000" });
+    expect((await run("order-profit", { customer: "invalid" })).rows).toHaveLength(0);
+    const scoped = await run("order-profit", { order: String(good.id) }, { userId: -1, perms: new Set(ALL.filter((p) => p !== "partner.view_all")) });
+    expect(scoped.orderDetail).toBeNull();
+    expect(scoped.customers).toHaveLength(0);
     expect((await run("order-profit", { timeStart: "2026-08-01", timeEnd: "2026-08-31" })).rows).toHaveLength(0);
   });
   it("thiếu quyền profit.view bị chặn; report.view không đủ", async () => {
@@ -71,6 +81,7 @@ describe("68 — lãi lỗ toàn xưởng", () => {
     const r = await run("period-pnl");
     expect(r.rows).toHaveLength(1);
     expect(r.rows[0]).toMatchObject({ month: "09/2026", revenue: "200000", returns: "50000", cost: "30000", accum: "30000", gross: "90000", expense: "30000", profit: "60000" });
+    expect(r.summary).toContainEqual({ label: "Lãi ròng", value: "60000", money: true, tone: "success" });
     // 200.000 − 50.000 = 150.000 thuần; vốn 40.000 − 10.000 = 30.000; CK 40.000 − 10.000 = 30.000 ⇒ lãi gộp 90.000; − chi phí 30.000 = 60.000
   });
   it("CK chuyển vào lãi cộng vào lãi gộp đúng tháng của phiếu; phiếu hủy và loại CASH không tính", async () => {
@@ -102,8 +113,14 @@ describe("69/70 — bán hàng theo khách và nhóm", () => {
     const byC = await run("by-customer");
     expect(byC.rows.map((x) => [x.code, x.orders, x.revenue])).toEqual([["KHA", 2, "380000"], ["KHB", 1, "40000"]]);
     expect(byC.totals).toMatchObject({ orders: 3, revenue: "420000" });
+    const filtered = await run("by-customer", { customer: String(b.id) });
+    expect(filtered.rows.map((x) => x.code)).toEqual(["KHB"]);
+    expect(filtered.summary).toContainEqual({ label: "Doanh thu", value: "40000", money: true });
+    expect(filtered.customers).toContainEqual({ value: String(b.id), label: "KHB — Khách B" });
+    expect((await run("by-customer", { customer: "invalid" })).rows).toHaveLength(0);
     const byG = await run("by-group");
     expect(byG.rows.map((x) => [x.name, x.orders, x.net])).toEqual([["Đại lý", 2, "380000"], ["Khách lẻ", 1, "40000"]]);
+    expect(byG.summary).toContainEqual({ label: "Nhóm khách hàng", value: 2 });
     expect((await run("by-customer", { q: "khb" })).rows).toHaveLength(1);
     await expect(run("by-customer", {}, { userId: 1, perms: new Set() })).rejects.toMatchObject({ status: 403 });
   });
@@ -116,6 +133,8 @@ describe("71 — xuất kho theo đơn", () => {
     expect(full.rows).toEqual([expect.objectContaining({ order: o.code, qty: "4", cost: "40000", customer: "Khách A" })]);
     const noCost = await run("issue-by-order", {}, { userId: actor.userId, perms: new Set(["report.view", "partner.view_all"]) });
     expect(noCost.columns.some((c) => c.key === "cost")).toBe(false); expect(noCost.rows[0]!.cost).toBeNull();
+    expect(full.summary).toContainEqual({ label: "Giá vốn đã ghi nhận", value: "40000", money: true });
+    expect(noCost.summary?.some((s) => s.money)).toBe(false);
   });
 });
 
@@ -131,6 +150,8 @@ describe("73 — đối chiếu công nợ", () => {
     await prisma.partnerLedger.create({ data: { periodId: w.periodId, partnerId: a.id, credit: 5_000, docType: "RECEIPT", docId: 987654, at: NOW, createdBy: w.userId } });
     r = await run("debt-reconciliation");
     expect(row(r, "item", "Phiếu thu (ghi có, không tính tiền lái xe/chuyến)")).toMatchObject({ diff: "5000" });
+    expect(r.summary).toContainEqual({ label: "Khoản mục lệch", value: 1, tone: "danger" });
+    expect(r.summary).toContainEqual({ label: "Tổng lệch tuyệt đối", value: "5000", money: true, tone: "danger" });
     expect(r.notes!.join(" ")).toContain("mồ côi (chứng từ đã hủy/không còn): 1");
   });
 });
@@ -182,5 +203,7 @@ describe("72 — báo cáo sản xuất", () => {
     expect(r.rows).toHaveLength(1); expect(r.rows[0]).toMatchObject({ code: o1.code, qty: "5", unitCost: "20000", totalCost: "100000" }); expect(r.totals).toMatchObject({ totalCost: "100000" });
     const nc = await runReport(prisma, { userId: w.userId, perms: new Set(["report.view"]) }, "production", P(), NOW);
     expect(nc.columns.some((c) => c.key === "unitCost")).toBe(false); expect(nc.rows[0]).not.toHaveProperty("unitCost");
+    expect(r.summary).toContainEqual({ label: "Tổng giá thành đã ghi nhận", value: "100000", money: true });
+    expect(nc.summary?.some((s) => s.money)).toBe(false);
   });
 });
