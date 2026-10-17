@@ -1,6 +1,6 @@
 ﻿import { Plus, X } from "lucide-react";
 import Link from "next/link";
-import { Badge, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
+import { Badge, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox, StatCard } from "@/components/ui";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 import type { TripRowDTO, TripStatsDTO } from "@/server/trips/queries";
@@ -24,13 +24,14 @@ export function TripList({ title, base, rows, total, stats, params, vehicles, cu
   const referenceFilters = [{ key: "customer", label: "Khách hàng", options: customers }, { key: "route", label: "Tuyến", options: routes }];
   const clearFilters = href({ q: undefined, timePreset: undefined, timeStart: undefined, timeEnd: undefined, filters: Object.fromEntries(Object.keys(params.filters).map((key) => [key, []])) });
   return <ListPageLayout title={title}
+    description={!fixedStatus ? "Theo dõi chuyến giao hàng theo trạng thái và thu tiền" : undefined}
     actions={canCreate ? <Link href="/delivery/trips/new" className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Xếp chuyến</Link> : undefined}
     filters={<div className="space-y-3">
-      {!fixedStatus && <nav aria-label="Trạng thái chuyến" className="flex overflow-x-auto border-b border-border">
-        {tabs.map((tab) => <Link key={tab.key} href={href({ filters: { status: tab.key === "all" ? [] : [tab.key] } })} aria-current={selectedStatus === tab.key ? "page" : undefined}
-          className={`flex min-h-11 shrink-0 flex-col items-start gap-1 border-b-2 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${selectedStatus === tab.key ? "border-accent bg-accent-soft text-accent" : "border-transparent text-fg-secondary hover:bg-hover"}`}>
-          <strong className="text-2xl font-semibold tabular-nums">{formatNumber(tab.count)}</strong>{" "}<span className="whitespace-nowrap text-sm font-medium">{tab.label}</span>
-        </Link>)}
+      {!fixedStatus && <nav aria-label="Trạng thái chuyến" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+        {tabs.map((tab) => <StatCard key={tab.key} label={tab.label} value={tab.count}
+          tone={tab.key === "all" ? "neutral" : TONE[tab.key as keyof typeof TONE]}
+          href={href({ filters: { status: tab.key === "all" ? [] : [tab.key] } })}
+          active={selectedStatus === tab.key} />)}
       </nav>}
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox basePath={base} params={params} placeholder="Tìm mã chuyến, biển số, lái xe…" className="[&_input]:min-h-11 md:[&_input]:min-h-10" />
