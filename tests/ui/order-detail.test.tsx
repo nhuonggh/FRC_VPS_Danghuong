@@ -7,11 +7,12 @@ import { OrderDetail } from "@/components/sales/OrderDetail";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 
 const refresh = vi.fn();
+const push = vi.fn();
 const apiFetch = vi.fn();
 const confirmFn = vi.fn();
 let search = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh }),
+  useRouter: () => ({ push, replace: vi.fn(), refresh }),
   usePathname: () => "/sales/orders/1",
   useSearchParams: () => new URLSearchParams(search),
 }));
@@ -19,7 +20,7 @@ vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 vi.mock("@/lib/confirm-store", () => ({ confirm: (...a: unknown[]) => confirmFn(...a) }));
 
-beforeEach(() => { refresh.mockReset(); apiFetch.mockReset(); confirmFn.mockReset(); search = ""; });
+beforeEach(() => { refresh.mockReset(); push.mockReset(); apiFetch.mockReset(); confirmFn.mockReset(); search = ""; });
 afterEach(cleanup);
 
 const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
@@ -35,6 +36,35 @@ const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
 });
 const ALL = { canEdit: true, canCancel: true, canRestore: true, canConfirm: true, canDeleteDraft: true, canDeposit: true, canReturn: true };
 const view = (o = order(), perms = ALL) => render(<OrderDetail order={o} perms={perms} today="2026-09-15" />);
+
+describe("OrderDetail — điều hướng theo mẫu", () => {
+  it("mặc định Tất cả; deep-link chỉ hiện phần được chọn và cuộn nội dung về đầu", async () => {
+    const user = userEvent.setup();
+    const { rerender } = view();
+    expect(screen.getByRole("heading", { name: "Thông tin cơ bản" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Dòng hàng (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lịch sử (0)" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Thông tin cơ bản" })[0]!);
+    expect(push).toHaveBeenCalledWith("/sales/orders/1?tab=info", { scroll: false });
+    const content = screen.getByRole("region", { name: "Nội dung đơn hàng" });
+    content.scrollTop = 250;
+    search = "tab=info";
+    rerender(<OrderDetail order={order()} perms={ALL} today="2026-09-15" />);
+    expect(content.scrollTop).toBe(0);
+    expect(screen.getByRole("heading", { name: "Thông tin cơ bản" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dòng hàng (1)" })).toBeNull();
+    search = "tab=lines";
+    rerender(<OrderDetail order={order()} perms={ALL} today="2026-09-15" />);
+    expect(screen.queryByRole("heading", { name: "Thông tin cơ bản" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Dòng hàng (1)" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Tất cả" })[0]!);
+    expect(push).toHaveBeenLastCalledWith("/sales/orders/1?tab=all", { scroll: false });
+    search = "tab=all";
+    rerender(<OrderDetail order={order()} perms={ALL} today="2026-09-15" />);
+    expect(screen.getByRole("heading", { name: "Thông tin cơ bản" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Dòng hàng (1)" })).toBeInTheDocument();
+  });
+});
 
 describe("OrderDetail — hành động theo quyền", () => {
   it("có quyền: Sửa đơn (link) + Hủy đơn; đơn hoạt động không có Khôi phục", () => {

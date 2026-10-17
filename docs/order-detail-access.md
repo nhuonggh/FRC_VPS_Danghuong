@@ -2,6 +2,8 @@
 
 Giao diện tham khảo `Template/ThongtinDonhang.html`: tóm tắt đơn bên trái, thông tin cơ bản và các phần nghiệp vụ bên phải; nhãn ở trên giá trị; bảng dòng hàng gọn, có STT. Trên điện thoại bảng chuyển thành thẻ. Tóm tắt bên trái giữ vị trí khi cuộn trên PC.
 
+Điều hướng có **Tất cả** (mặc định, `?tab=all`) để xem mọi phần. Chọn từng mục chỉ hiển thị đúng phần đó, kể cả khi mở trực tiếp URL `?tab=info`, `lines`, `delivery`, `deposits`, `history`. Đổi mục đưa vùng nội dung về đầu. Trên PC khung nội dung và khung tóm tắt cuộn độc lập trong chiều cao còn lại của màn hình; mobile giữ cơ chế cuộn trang và thanh chọn mục ngang.
+
 Không tạo tab quản trị riêng và không có nút tự bật/tắt giá vốn. Tài khoản có `order.analysis.view` tự thấy phần định mức/giá vốn/lợi nhuận theo các quyền dữ liệu tương ứng; tài khoản thiếu quyền tự ẩn toàn bộ phần đó.
 
 - Kế toán vẫn thấy sản phẩm, ghi chú kích thước, kiểu gia công, số lượng, đơn vị, đơn giá, chiết khấu và thành tiền; giao hàng/thu cọc giữ quyền nghiệp vụ hiện có.

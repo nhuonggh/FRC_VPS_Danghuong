@@ -24,7 +24,7 @@ export interface OrderDetailPerms { canEdit: boolean; canCancel: boolean; canRes
 
 export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; perms: OrderDetailPerms; today: string }) {
   const router = useRouter();
-  const nav = useDetailNav(["info", "lines", "delivery", "deposits", "history"]);
+  const nav = useDetailNav(["all", "info", "lines", "delivery", "deposits", "history"]);
   const [cancelOpen, setCancelOpen] = useState(false);
   async function cancelOrder(reason: string) { await apiFetch(`/api/orders/${order.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
   const [busy, setBusy] = useState(false);
@@ -92,7 +92,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
   );
 
   return (
-    <div className="space-y-4">
+    <div className="order-detail-page space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
       {order.isDraft && !order.isCancelled && (
         <div role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">
           Đơn NHÁP — chưa xuất kho, chưa ghi công nợ. Bấm “Xác nhận đơn” để xuất kho{perms.canConfirm ? "" : " (cần người có quyền lập đơn)"}.
@@ -110,7 +110,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
         badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : order.isDraft ? [{ label: "Nháp", tone: "warning" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
         facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : []), ...(Number(order.depositTotal) > 0 ? [{ label: "Đã cọc", value: formatCurrency(order.depositTotal) }] : [])],
       }}
-      stacked compact
+      stacked compact sectionFilter
       tabs={[
         { key: "info", label: "Thông tin cơ bản", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
@@ -119,6 +119,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
         { key: "history", label: "Lịch sử", count: order.history.length, render: () => history() },
       ]}
       {...nav}
+      onTabChange={(key) => router.push(`/sales/orders/${order.id}?tab=${key}`, { scroll: false })}
     />
       <ReasonDialog open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Hủy đơn ${order.code}?`}
         description="Hàng được hoàn kho và giá vốn các đơn sau được tính lại. Đơn còn phiếu giao phải hủy phiếu giao trước." confirmLabel="Hủy đơn" onConfirm={cancelOrder} />

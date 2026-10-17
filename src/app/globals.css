@@ -8,6 +8,15 @@
 html, body { height: 100%; }
 body { font-size: var(--text-base); }
 
+/* Order document owns its desktop scroll areas; other pages keep shell scrolling. */
+@media (min-width: 1024px) {
+  .app-shell-main:has(.order-detail-page) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+}
+
 /* focus rõ cho mọi control (a11y) */
 :focus-visible { outline: 2px solid var(--accent-500); outline-offset: 2px; }
 
