@@ -18,7 +18,7 @@ describe("trip list tabs and filters", () => {
     render(<TripList {...props} params={parseListParams({ customer: "1,2", route: "3,4", collection: "unpaid", vehicle: "5", timePreset: "today", page: "3" }, TRIP_FILTER_KEYS)} />);
     const nav = screen.getByRole("navigation", { name: "Trạng thái chuyến" });
     expect(within(nav).getAllByRole("link")).toHaveLength(7);
-    const tab = within(nav).getByRole("link", { name: "Đã về (đủ kết quả) 2" });
+    const tab = within(nav).getByRole("link", { name: /Đã về \(đủ kết quả\)\s*2/ });
     const url = new URL(tab.getAttribute("href")!, "https://example.test");
     expect(url.searchParams.get("status")).toBe("RETURNED");
     expect(url.searchParams.get("customer")).toBe("1,2");
@@ -27,7 +27,7 @@ describe("trip list tabs and filters", () => {
     expect(url.searchParams.get("timePreset")).toBe("today");
     expect(url.searchParams.has("page")).toBe(false);
     expect(tab.firstElementChild).toHaveTextContent("Đã về (đủ kết quả)");
-    expect(within(nav).getByRole("link", { name: "Tất cả 10" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: /Tất cả\s*10/ })).toHaveAttribute("aria-current", "true");
     expect(screen.getAllByText("Chưa thu")).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "CH000001" })).toHaveLength(2);
   });
