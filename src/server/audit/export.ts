@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { truncateText } from "@/lib/audit-format";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { redactDeep } from "@/lib/permissions/redact";
+import { redactOrderData } from "@/lib/permissions/order-analysis";
 import type { ListParams } from "@/lib/query-params";
 import { auditWhere } from "@/server/audit/queries";
 import { buildXlsxBatched, type XlsxColumn } from "@/server/export/xlsx";
@@ -76,8 +77,8 @@ export async function exportAuditXlsx(
         action: r.action,
         entity: r.entity,
         entityId: r.entityId,
-        before: cellJson(redactDeep(r.beforeJson, perms)),
-        after: cellJson(redactDeep(r.afterJson, perms)),
+        before: cellJson((r.entity === "SaleOrder" ? redactOrderData : redactDeep)(r.beforeJson, perms)),
+        after: cellJson((r.entity === "SaleOrder" ? redactOrderData : redactDeep)(r.afterJson, perms)),
       }));
       if (rows.length < take) return; // hết dữ liệu
     }

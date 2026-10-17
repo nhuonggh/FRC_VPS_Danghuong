@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
+import { canViewOrderAnalysis } from "@/lib/permissions/order-analysis";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import type { ListParams } from "@/lib/query-params";
 import { resolveTimeRange, timeRangeWhere, type TimeRange } from "@/lib/time-presets";
@@ -105,7 +106,8 @@ async function salesBy(db: Db, actor: Actor, range: TimeRange, by: "customer" | 
 
 /** 71 — Xuất kho theo đơn: từng dòng hàng (và NVL của dòng gia công); giá vốn chỉ hiện với người có cost.view. */
 async function issueByOrder(db: Db, actor: Actor, params: ListParams, range: TimeRange): Promise<ReportResult> {
-  const showCost = actor.perms.has("cost.view");
+  const showDetails = canViewOrderAnalysis(actor.perms);
+  const showCost = showDetails && actor.perms.has("cost.view");
   const q = (params.q ?? "").trim();
   const orders = await db.saleOrder.findMany({
     where: { isCancelled: false, isDraft: false, orderDate: timeRangeWhere(range), partner: partnerScopeWhere(actor), ...(q ? { OR: [{ code: { contains: q.toUpperCase() } }, { partner: { name: { contains: q, mode: "insensitive" } } }] } : {}) },
@@ -115,7 +117,7 @@ async function issueByOrder(db: Db, actor: Actor, params: ListParams, range: Tim
   const rows: Record<string, string | number | null>[] = [];
   for (const o of orders) for (const l of o.lines) {
     const base = { order: o.code, date: ymd(o.orderDate), customer: o.partner.name };
-    if (l.processingType && l.issues.length) for (const i of l.issues) rows.push({ ...base, code: i.product.code, name: `${i.product.name} (NVL cho ${l.product.code})`, qty: i.qtyBase.toString(), unit: i.product.baseUnit, cost: null, note: l.processingType.name });
+    if (showDetails && l.processingType && l.issues.length) for (const i of l.issues) rows.push({ ...base, code: i.product.code, name: `${i.product.name} (NVL cho ${l.product.code})`, qty: i.qtyBase.toString(), unit: i.product.baseUnit, cost: null, note: l.processingType.name });
     else rows.push({ ...base, code: l.product.code, name: l.product.name, qty: l.qtyBase.toString(), unit: l.product.baseUnit, cost: showCost ? r2(l.unitCostFifo.times(l.qtyBase)).toString() : null, note: l.isProvisional ? "Thiếu tồn (giá vốn tạm)" : "" });
   }
   return {
@@ -164,6 +166,10 @@ export async function runReport(db: Db, actor: Actor, key: string, params: ListP
   const def = REPORTS.find((r) => r.key === key);
   if (!def) throw new DomainError("Không tìm thấy báo cáo.", 404);
   assertCan(actor.perms, def.perm);
+  if (key === "order-profit" || key === "period-pnl") {
+    assertCan(actor.perms, "order.analysis.view");
+    assertCan(actor.perms, "profit.view");
+  }
   const range = reportRange(params, now);
   const k = key as ReportKey;
   const res = k === "order-profit" ? await orderProfit(db, actor, params, range)

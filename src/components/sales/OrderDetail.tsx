@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Badge, DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
+import { DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
-import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
-import { pricePerM2 } from "@/lib/length-expr";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { OrderLines } from "./OrderLines";
 import type { OrderDetailDTO } from "@/server/sales/queries";
 import { SALE_PAYMENT_LABELS } from "@/server/sales/schemas";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
@@ -41,12 +41,10 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
     try { await apiFetch(`/api/orders/${order.id}`, { method: "DELETE" }); router.push("/sales/orders"); router.refresh(); } finally { setBusy(false); }
   }
   const showPrice = order.orderTotal !== undefined;
-  const showCost = order.lines.some((l) => l.unitCostFifo !== undefined);
-  const showProfit = order.lines.some((l) => l.lineProfit !== undefined);
   const delivery = DELIVERY_LABEL[order.deliveryStatus], payment = PAYMENT_LABEL[order.paymentStatus];
 
   const info = () => (
-    <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
+    <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
       <DetailField label="Khách hàng">{order.partnerCode} — {order.partnerName}</DetailField>
       {(order.walkInName || order.walkInPhone) && <DetailField label="Khách lẻ">{[order.walkInName, order.walkInPhone].filter(Boolean).join(" · ")}</DetailField>}
       <DetailField label="Ngày đơn">{formatDate(order.orderDate)}</DetailField>
@@ -62,68 +60,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
       <DetailField label="Báo giá nguồn">{order.quote ? <Link href={`/sales/quotes/${order.quote.id}`} className="text-accent hover:underline">{order.quote.code}</Link> : null}</DetailField>
     </dl>
   );
-  const lines = () => (
-    <div className="overflow-x-auto rounded-sm border border-border">
-      <table className="w-full min-w-[720px] text-sm">
-        <thead>
-          <tr className="bg-hover text-left text-xs font-semibold text-fg-secondary">
-            <th className="px-3 py-2">Sản phẩm</th><th className="px-3 py-2 text-right">SL</th><th className="px-3 py-2">ĐVT</th>
-            {showPrice && <><th className="px-3 py-2 text-right">Đơn giá</th><th className="px-3 py-2 text-right">CK trừ ngay</th><th className="px-3 py-2 text-right">CK tích lũy</th><th className="px-3 py-2 text-right">Thành tiền</th></>}
-            {showCost && <th className="px-3 py-2 text-right">Giá vốn/ĐV gốc</th>}
-            {showProfit && <th className="px-3 py-2 text-right">Lãi dòng</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {order.lines.map((l) => (
-            <tr key={l.id} className="border-t border-border align-top">
-              <td className="px-3 py-2">
-                <strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>
-                {l.note && <span className="block text-xs text-fg-secondary">Ghi chú: {l.note}</span>}
-                {l.processingType && <span className="block text-xs text-fg-secondary">Gia công: {l.processingType}</span>}
-                {l.processingType && l.issues.length > 0 && (
-                  <div className="mt-1 text-xs text-fg-secondary">
-                    {l.bomVersionLabel && <span className="block">{l.bomVersionLabel}</span>}
-                    <ul aria-label={`Nguyên vật liệu đã trừ cho ${l.productCode}`}>
-                      {l.issues.map((i) => (
-                        <li key={i.productCode}>
-                          Trừ {formatQty(i.qtyBase)} {i.baseUnit} {i.productName}
-                          {Number(i.qtyProvisional) > 0 && <span className="text-warning"> · thiếu tồn {formatQty(i.qtyProvisional)}</span>}
-                          {i.materialCost !== undefined && <span> · vốn {formatCurrency(i.materialCost)}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {l.isProvisional && <Badge tone="warning">Chưa đủ tồn</Badge>}
-              </td>
-              <td className="px-3 py-2 text-right tabular">{formatQty(l.qty)}{l.areaRatio && <span className="block text-xs text-fg-muted">= {formatQty(Math.round(Number(l.qty) * l.areaRatio * 1000) / 1000)} m²</span>}</td>
-              <td className="px-3 py-2">{l.unit}</td>
-              {showPrice && <>
-                <td className="px-3 py-2 text-right tabular">{l.salePrice !== undefined && (l.areaRatio ? `${formatCurrency(pricePerM2(Number(l.salePrice), l.areaRatio))}/m²` : formatCurrency(l.salePrice))}</td>
-                <td className="px-3 py-2 text-right tabular">{l.discountNow !== undefined && formatCurrency(l.discountNow)}</td>
-                <td className="px-3 py-2 text-right tabular">{l.discountAccum !== undefined && formatCurrency(l.discountAccum)}</td>
-                <td className="px-3 py-2 text-right tabular">{l.lineAmount !== undefined && formatCurrency(l.lineAmount)}</td>
-              </>}
-              {showCost && <td className="px-3 py-2 text-right tabular">{l.isProvisional ? "—" : l.unitCostFifo !== undefined && formatCurrency(l.unitCostFifo)}</td>}
-              {showProfit && <td className="px-3 py-2 text-right tabular">{l.lineProfit == null ? "—" : formatCurrency(l.lineProfit)}</td>}
-            </tr>
-          ))}
-        </tbody>
-        {showPrice && (Number(order.shippingFee ?? 0) > 0 || Number(order.orderDiscount ?? 0) > 0) && (
-          <tfoot>
-            <tr className="border-t-2 border-border text-sm">
-              <td colSpan={6} className="px-3 py-2 text-right text-fg-muted">
-                Hàng {formatCurrency(order.lines.reduce((s, l) => s + Number(l.lineAmount ?? 0), 0))}
-                {Number(order.orderDiscount ?? 0) > 0 && <> · CK cả đơn (đã tính trong CK trừ ngay) {formatCurrency(order.orderDiscount!)}</>}
-                {Number(order.shippingFee ?? 0) > 0 && <> · Phí vận chuyển {formatCurrency(order.shippingFee!)}</>}
-              </td>
-              <td className="px-3 py-2 text-right font-semibold tabular">{formatCurrency(order.orderTotal!)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-    </div>
-  );
+  const lines = () => <OrderLines order={order} />;
   const history = () => (
     <ul className="divide-y divide-border text-sm">
       {order.history.map((h) => (
@@ -173,7 +110,7 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
         badges: order.isCancelled ? [{ label: "Đã hủy", tone: "danger" as const }] : order.isDraft ? [{ label: "Nháp", tone: "warning" as const }] : [{ label: delivery.label, tone: delivery.tone }, { label: payment.label, tone: payment.tone }, ...(order.delayDays > 0 ? [{ label: `Trễ ${order.delayDays} ngày`, tone: "danger" as const }] : [])],
         facts: [{ label: "Ngày đơn", value: formatDate(order.orderDate) }, { label: "Số dòng", value: order.lines.length }, ...(showPrice ? [{ label: "Phải thu", value: formatCurrency(order.orderTotal!) }] : []), ...(Number(order.depositTotal) > 0 ? [{ label: "Đã cọc", value: formatCurrency(order.depositTotal) }] : [])],
       }}
-      stacked
+      stacked compact
       tabs={[
         { key: "info", label: "Thông tin cơ bản", render: () => info() },
         { key: "lines", label: "Dòng hàng", count: order.lines.length, render: () => lines() },
@@ -187,4 +124,8 @@ export function OrderDetail({ order, perms, today }: { order: OrderDetailDTO; pe
         description="Hàng được hoàn kho và giá vốn các đơn sau được tính lại. Đơn còn phiếu giao phải hủy phiếu giao trước." confirmLabel="Hủy đơn" onConfirm={cancelOrder} />
     </div>
   );
+}
+
+function DetailField({ label, children }: { label: string; children?: React.ReactNode }) {
+  return <div className="min-w-0 space-y-1"><dt className="text-xs text-fg-secondary">{label}</dt><dd className="break-words text-sm font-medium">{children === null || children === undefined || children === "" ? "\u2014" : children}</dd></div>;
 }

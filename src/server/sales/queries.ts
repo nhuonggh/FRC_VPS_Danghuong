@@ -1,6 +1,7 @@
 import { areaRatiosOf } from "@/server/processing/area-ratio";
 import { Prisma, type DeliveryStatus, type PaymentStatus, type PrismaClient } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
+import { canViewOrderAnalysis, redactOrderData } from "@/lib/permissions/order-analysis";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { escapeLike, normalizeSearch } from "@/lib/search";
@@ -148,7 +149,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
 
 export interface OrderLineDTO {
   id: number; productId: number; productCode: string; productName: string; baseUnit: string;
-  qty: string; unit: string; qtyBase: string; processingType: string | null; bomVersionId: number | null;
+  qty: string; unit: string; qtyBase: string; processingType: string | null; bomVersionId?: number | null;
   isProvisional: boolean; deliveredQty: string;
   /** Tỷ lệ m²/md khi dòng tính giá theo m² (kiểu gia công AREA); null = hiển thị theo md. Giá lưu vẫn là giá/md. */
   areaRatio: number | null;
@@ -157,15 +158,16 @@ export interface OrderLineDTO {
   note: string | null;
   unitCostFifo?: string; lineProfit?: string | null;
   /** Định mức đã dùng (snapshot): "v2 · từ 01/10/2026". Chỉ dòng gia công. */
-  bomVersionLabel: string | null;
+  bomVersionLabel?: string | null;
   /** NVL đã trừ: SL gốc, phần thiếu tồn (đơn treo) và vốn FIFO (chỉ người có cost.view thấy `materialCost`). */
-  issues: { productCode: string; productName: string; baseUnit: string; qtyBase: string; qtyProvisional: string; materialCost?: string }[];
+  issues?: { productCode: string; productName: string; baseUnit: string; qtyBase: string; qtyProvisional: string; materialCost?: string }[];
 }
 export interface OrderDeliveryDTO {
   id: number; code: string; at: Date; isCancelled: boolean; note: string | null;
   lines: { orderLineId: number; productName: string; unit: string; qty: string }[];
 }
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
+  canViewAnalysis?: boolean;
   note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; shippingFee?: string; orderDiscount?: string; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null; reviewed: boolean }[]; depositTotal: string;
@@ -207,7 +209,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
   const hasProvisional = o.lines.some((l) => l.isProvisional);
   // Vốn + phần thiếu tồn TỪNG NVL của dòng gia công: cộng từ sổ kho (engine là nơi duy nhất ghi giá vốn)
   const bomLineIds = o.lines.filter((l) => l.bomVersionId !== null).map((l) => l.id);
-  const ledgerRows = bomLineIds.length
+  const ledgerRows = canViewOrderAnalysis(actor.perms) && bomLineIds.length
     ? await db.stockLedger.findMany({ where: { docType: "SALE", docLineId: { in: bomLineIds }, qtyOut: { gt: 0 } }, select: { docLineId: true, productId: true, qtyOut: true, unitCostOut: true, qtyProvisional: true } })
     : [];
   const perMaterial = new Map<string, { cost: Prisma.Decimal; prov: Prisma.Decimal }>();
@@ -233,6 +235,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     };
   });
   const dto: OrderDetailDTO = {
+    canViewAnalysis: canViewOrderAnalysis(actor.perms),
     id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
     deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
@@ -249,7 +252,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     })),
     history: audit.map((a) => ({ id: a.id, action: a.action, at: a.at, userName: a.userId === null ? null : auditUsers.get(a.userId) ?? null })),
   };
-  return redactDeep(dto, actor.perms);
+  return redactOrderData(dto, actor.perms);
 }
 
 export interface PendingLineDTO {

@@ -76,7 +76,7 @@ describe("SENSITIVE_FIELDS phủ đủ các quyền xem dữ liệu nhạy cảm
   it("mỗi quyền *.view đánh dấu sensitive có ít nhất 1 field trong SENSITIVE_FIELDS", () => {
     const viewSensitive = PERMISSIONS.filter((p) => p.code.endsWith(".view") && "sensitive" in p && p.sensitive);
     expect(viewSensitive.map((p) => p.code).sort()).toEqual(
-      ["cost.view", "profit.view", "purchase_price.view", "sale_price.view"],
+      ["cost.view", "order.analysis.view", "profit.view", "purchase_price.view", "sale_price.view"],
     );
     const mapped = new Set(Object.values(SENSITIVE_FIELDS));
     for (const p of viewSensitive) expect(mapped.has(p.code), p.code).toBe(true);

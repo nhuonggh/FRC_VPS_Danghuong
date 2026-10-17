@@ -206,8 +206,8 @@ export const APP_NAV: readonly NavModule[] = [
       {
         key: "management", label: "Báo cáo quản trị", hideTitle: true,
         functions: [
-          { key: "rp-order-profit", label: "Lãi từng đơn", desc: "Lãi âm bôi đỏ", icon: "bar-chart-3", view: "report", path: "/reports/order-profit", codes: ["67"], perm: "profit.view" },
-          { key: "rp-period-pnl", label: "Lãi lỗ toàn xưởng", desc: "DT − giá vốn − chiết khấu tích lũy − chi phí", icon: "bar-chart-3", view: "report", path: "/reports/period-pnl", codes: ["68"], perm: "profit.view" },
+          { key: "rp-order-profit", label: "Lãi từng đơn", desc: "Lãi âm bôi đỏ", icon: "bar-chart-3", view: "report", path: "/reports/order-profit", codes: ["67"], perm: "order.analysis.view" },
+          { key: "rp-period-pnl", label: "Lãi lỗ toàn xưởng", desc: "DT − giá vốn − chiết khấu tích lũy − chi phí", icon: "bar-chart-3", view: "report", path: "/reports/period-pnl", codes: ["68"], perm: "order.analysis.view" },
           { key: "rp-by-customer", label: "Bán hàng theo khách", desc: "", icon: "users", view: "report", path: "/reports/by-customer", codes: ["69"], perm: "report.view" },
           { key: "rp-by-group", label: "Bán hàng theo nhóm khách", desc: "", icon: "users", view: "report", path: "/reports/by-group", codes: ["70"], perm: "report.view" },
           { key: "rp-issue-by-order", label: "Xuất kho theo đơn", desc: "", icon: "package", view: "report", path: "/reports/issue-by-order", codes: ["71"], perm: "report.view" },

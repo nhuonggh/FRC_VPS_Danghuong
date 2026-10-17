@@ -36,6 +36,7 @@ export const PERMISSIONS = [
   { code: "stocktake.manage", label: "Kiểm kho", group: "Kho" },
   { code: "stock_adjust.manage", label: "Điều chỉnh hao hụt / xuất hủy", group: "Kho" },
   // Bán hàng
+  { code: "order.analysis.view", label: "Xem định mức, giá vốn và lợi nhuận đơn hàng", group: "Bán hàng", sensitive: true },
   { code: "order.view", label: "Xem đơn hàng", group: "Bán hàng" },
   { code: "order.create", label: "Tạo đơn hàng", group: "Bán hàng" },
   { code: "order.edit", label: "Sửa đơn hàng", group: "Bán hàng" },
@@ -87,6 +88,7 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 // (price, unitPrice, amount, total...) — luôn dùng tên riêng (salePrice, unitCostFifo, lineProfit...) rồi
 // đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
+  costReference: "order.analysis.view",
   unitCostFifo: "cost.view",
   materialCost: "cost.view",
   unitCostOut: "cost.view",
@@ -128,7 +130,7 @@ type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly 
 // Phân quyền MẪU (spec 6.6) — khách tự chỉnh được sau. `// TODO: confirm` với khách chi tiết từng vai trò.
 export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   "Giám đốc": "*",
-  "Kế toán": { except: ["period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
+  "Kế toán": { except: ["order.analysis.view", "period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
   "Thủ kho": {
     allow: ["product.view", "stock.view", "stocktake.manage", "stock_adjust.manage", "order.view", "print.use"],
   },

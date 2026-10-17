@@ -188,6 +188,8 @@ interface Props {
   initialEditing?: string | null;
   /** Hiện mọi phần xếp dọc trên MỘT màn hình (nav bên trái cuộn tới phần) thay vì chuyển tab. */
   stacked?: boolean;
+  /** Compact document layout; summary stays visible beside long sections. */
+  compact?: boolean;
   /** Mặc định router.refresh(). */
   onSaved?: () => void;
 }
@@ -198,10 +200,14 @@ function TabBody({ tab, ctx }: { tab: DetailTab; ctx: TabRenderCtx }) {
 }
 
 export function DetailPage({
-  backHref, backLabel, headerActions, summary, tabs, activeTab, onTabChange, initialEditing = null, onSaved, stacked = false,
+  backHref, backLabel, headerActions, summary, tabs, activeTab, onTabChange, initialEditing = null, onSaved, stacked = false, compact = false,
 }: Props) {
   const router = useRouter();
   const selected = tabs.some((t) => t.key === activeTab) ? activeTab : tabs[0]!.key;
+  const firstTab = tabs[0]?.key;
+  useEffect(() => {
+    if (compact && stacked && selected !== firstTab) document.getElementById(`sec-${selected}`)?.scrollIntoView?.({ block: "start" });
+  }, [compact, stacked, selected, firstTab]);
   const [editing, setEditing] = useState<string | null>(initialEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -241,6 +247,11 @@ export function DetailPage({
     if (key === selected || saving) return;
     if (await guard()) { reset(null); onTabChange(key); }
   }
+  function navigateSection(key: string) {
+    if (!stacked) { void changeTab(key); return; }
+    document.getElementById(`sec-${key}`)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    if (compact) onTabChange(key);
+  }
 
   async function onBackClick(e: React.MouseEvent) {
     if (saving) { e.preventDefault(); return; } // đang lưu: không rời trang (như tab/Hủy)
@@ -258,7 +269,7 @@ export function DetailPage({
         <Link href={backHref} onClick={onBackClick} className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg">
           <ArrowLeft size={16} aria-hidden /> {backLabel}
         </Link>
-        <div className="flex items-center gap-2">{headerActions}</div>
+        <div className="flex flex-wrap items-center gap-2">{headerActions}</div>
       </div>
 
       {error && (
@@ -270,7 +281,7 @@ export function DetailPage({
 
       {/* ≥ 1024: 2 panel stretch cùng chiều cao hàng grid + min-height chung → không lệch/nhảy khi đổi tab */}
       <div className="grid gap-4 lg:min-h-[calc(100dvh-11rem)] lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="rounded-sm border border-border bg-surface">
+        <aside className={clsx("border border-border bg-surface", compact ? "rounded-md lg:sticky lg:top-4 lg:max-h-[calc(100dvh-12rem)] lg:self-start lg:overflow-y-auto" : "rounded-sm")}>
           {summary.imageUrl && (
             <div className="aspect-video overflow-hidden rounded-t-sm bg-hover">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -297,19 +308,19 @@ export function DetailPage({
           {/* Nav tab dọc — chỉ ≥ 1024. < 1024 dùng thanh tab ngang trong <main>. */}
           <nav className="hidden border-t border-border p-2 lg:block" aria-label="Các phần">
             {tabs.map((t) => (
-              <button key={t.key} type="button" onClick={() => (stacked ? document.getElementById(`sec-${t.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }) : void changeTab(t.key))} aria-current={!stacked && selected === t.key ? "page" : undefined}
-                className={clsx("flex min-h-10 w-full items-center rounded-sm px-3 text-left text-sm", !stacked && selected === t.key ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary hover:bg-hover hover:text-fg")}>
+              <button key={t.key} type="button" onClick={() => navigateSection(t.key)} aria-current={(!stacked || compact) && selected === t.key ? "page" : undefined}
+                className={clsx("flex w-full items-center rounded-sm px-3 text-left text-sm", compact ? "min-h-11" : "min-h-10", (!stacked || compact) && selected === t.key ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary hover:bg-hover hover:text-fg")}>
                 {label(t)}
               </button>
             ))}
           </nav>
         </aside>
 
-        <div className="min-w-0 rounded-sm border border-border bg-surface">
+        <div className={clsx("min-w-0 border border-border bg-surface", compact ? "rounded-md" : "rounded-sm")}>
           <div className="flex overflow-x-auto border-b border-border px-2 lg:hidden">
             {tabs.map((t) => (
-              <button key={t.key} type="button" onClick={() => (stacked ? document.getElementById(`sec-${t.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }) : void changeTab(t.key))} aria-current={!stacked && selected === t.key ? "page" : undefined}
-                className={clsx("min-h-12 shrink-0 border-b-2 px-3 text-sm font-medium", !stacked && selected === t.key ? "border-accent text-accent" : "border-transparent text-fg-secondary")}>
+              <button key={t.key} type="button" onClick={() => navigateSection(t.key)} aria-current={(!stacked || compact) && selected === t.key ? "page" : undefined}
+                className={clsx("min-h-12 shrink-0 border-b-2 px-3 text-sm font-medium", (!stacked || compact) && selected === t.key ? "border-accent text-accent" : "border-transparent text-fg-secondary")}>
                 {label(t)}
               </button>
             ))}
@@ -317,7 +328,7 @@ export function DetailPage({
           {stacked ? (
             <div className="divide-y divide-border">
               {tabs.map((t) => (
-                <section key={t.key} id={`sec-${t.key}`} className="scroll-mt-4 space-y-4 p-4 sm:p-6">
+                <section key={t.key} id={`sec-${t.key}`} className={clsx("scroll-mt-4 space-y-4 p-4", compact ? "sm:p-5" : "sm:p-6")}>
                   <h2 className="text-base font-semibold">{label(t)}</h2>
                   <TabBody tab={t} ctx={ctx} />
                 </section>

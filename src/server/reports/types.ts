@@ -11,8 +11,8 @@ export interface ReportResult {
   notes?: string[];
 }
 export const REPORTS = [
-  { key: "order-profit", code: "67", title: "Lãi từng đơn", perm: "profit.view" },
-  { key: "period-pnl", code: "68", title: "Lãi lỗ toàn xưởng", perm: "profit.view" },
+  { key: "order-profit", code: "67", title: "Lãi từng đơn", perm: "order.analysis.view" },
+  { key: "period-pnl", code: "68", title: "Lãi lỗ toàn xưởng", perm: "order.analysis.view" },
   { key: "by-customer", code: "69", title: "Bán hàng theo khách", perm: "report.view" },
   { key: "by-group", code: "70", title: "Bán hàng theo nhóm khách", perm: "report.view" },
   { key: "issue-by-order", code: "71", title: "Xuất kho theo đơn", perm: "report.view" },

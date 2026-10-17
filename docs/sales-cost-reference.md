@@ -8,6 +8,7 @@
 - Thiếu giá nguyên liệu thì báo rõ nguyên liệu còn thiếu, không tự coi bằng 0 hoặc thay bằng giá của sản phẩm gốc. Đổi ngày đơn hoặc cách xuất kho thì tải lại giá tham khảo.
 - Giá hiển thị theo đúng đơn vị bán, bao gồm quy đổi m² qua tỷ lệ đã khai báo. Thông tin nguyên liệu thu gọn mặc định, chỉ mở khi người dùng cần đối chiếu.
 - Giá nhập tuân theo `purchase_price.view`; giá thành sản xuất theo `cost.view`; dự kiến định mức cần cả hai quyền. Liên kết chứng từ chỉ hiện khi có quyền xem màn hình tương ứng.
+- Toàn bộ phần giá vốn tham khảo trong bán hàng còn cần `order.analysis.view`: admin mặc định được xem, kế toán mặc định tự ẩn; quyền nhập hàng của kế toán vẫn giữ nguyên.
 - Cảnh báo giá bán thấp hơn giá vốn dùng cùng nguồn tham khảo đang hiển thị. Giá tham khảo không tự đặt giá bán, không ghi tồn kho và không sửa giá vốn FIFO/chứng từ cũ.
 
 Không thay đổi cấu trúc cơ sở dữ liệu, không cần migration mới.

@@ -10,7 +10,7 @@ import { makeBomVersion, makePartner, makeProcessingType, makeProduct } from "..
 import { assertLedgerBalanced, buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 // Bán tôn xốp: xuất NVL theo định mức hiệu lực tại NGÀY ĐƠN (mã 15). Không phải gia công thuê (plan 06-E3).
-const PERMS = ["order.create", "order.cancel", "sale_price.view", "cost.view", "order.edit_price", "partner.view_all", "order.view"];
+const PERMS = ["order.analysis.view", "order.create", "order.cancel", "sale_price.view", "cost.view", "order.edit_price", "partner.view_all", "order.view"];
 let w: World; let actor: Actor; let customer: { id: number };
 let fg: { id: number; code: string; baseUnit: string }; let m1: { id: number }; let m2: { id: number }; let pt: { id: number };
 let n = 0;
@@ -41,12 +41,12 @@ describe("issueByBom — định mức theo ngày đơn", () => {
     const a = await bomOrder("2026-09-30", 10, new Date("2026-09-30T03:00:00Z"));
     const b = await bomOrder("2026-10-01", 10, new Date("2026-10-01T03:00:00Z"));
     const da = await getOrder(prisma, actor, a.id); const db = await getOrder(prisma, actor, b.id);
-    expect(da.lines[0]!.issues.map((i) => i.qtyBase)).toEqual(["12", "5"]);
+    expect(da.lines[0]!.issues!.map((i) => i.qtyBase)).toEqual(["12", "5"]);
     expect(da.lines[0]!.bomVersionLabel).toBe("Định mức v1 · từ 01/09/2026");
-    expect(db.lines[0]!.issues.map((i) => i.qtyBase)).toEqual(["20", "10"]);
+    expect(db.lines[0]!.issues!.map((i) => i.qtyBase)).toEqual(["20", "10"]);
     expect(db.lines[0]!.bomVersionLabel).toBe("Định mức v2 · từ 01/10/2026");
     // đọc lại đơn cũ SAU khi đơn mới đã dùng v2: vẫn v1
-    expect((await getOrder(prisma, actor, a.id)).lines[0]!.issues.map((i) => i.qtyBase)).toEqual(["12", "5"]);
+    expect((await getOrder(prisma, actor, a.id)).lines[0]!.issues!.map((i) => i.qtyBase)).toEqual(["12", "5"]);
     expect(await onHand(m1.id)).toBe("68"); // 100 − 12 − 20
     await assertLedgerBalanced(m1.id, w.periodId);
   });
@@ -54,10 +54,10 @@ describe("issueByBom — định mức theo ngày đơn", () => {
   it("chi tiết từng NVL: SL, vốn FIFO (chỉ cost.view thấy), không có dòng xuất của thành phẩm", async () => {
     const o = await bomOrder("2026-09-15", 10, new Date("2026-09-15T03:00:00Z"));
     const d = await getOrder(prisma, actor, o.id);
-    expect(d.lines[0]!.issues.map((i) => [i.qtyBase, i.materialCost])).toEqual([["12", "120000"], ["5", "10000"]]);
+    expect(d.lines[0]!.issues!.map((i) => [i.qtyBase, i.materialCost])).toEqual([["12", "120000"], ["5", "10000"]]);
     expect(d.lines[0]!.unitCostFifo).toBe("13000");
     const blind = await getOrder(prisma, { userId: w.userId, perms: new Set(["order.view", "sale_price.view", "partner.view_all"]) }, o.id);
-    expect(JSON.stringify(blind.lines[0]!.issues)).not.toMatch(/materialCost/);
+    expect(blind.lines[0]!.issues).toBeUndefined();
     expect(JSON.stringify(blind.lines[0]!)).not.toMatch(/unitCostFifo/);
     expect(await prisma.stockLedger.count({ where: { docType: "SALE", productId: fg.id } })).toBe(0);
   });
@@ -73,11 +73,11 @@ describe("issueByBom — định mức theo ngày đơn", () => {
     const o = await bomOrder("2026-09-15", 10, new Date("2026-09-15T03:00:00Z"));
     const d = await getOrder(prisma, actor, o.id);
     expect(d.lines[0]!.isProvisional).toBe(true);
-    expect(d.lines[0]!.issues.map((i) => i.qtyProvisional)).toEqual(["0", "2"]);
+    expect(d.lines[0]!.issues!.map((i) => i.qtyProvisional)).toEqual(["0", "2"]);
     await run([m2.id], (ctx) => buy(ctx, m2.id, 50, 2_200, new Date("2026-09-16T03:00:00Z"), 3));
     const after = await getOrder(prisma, actor, o.id);
     expect(after.lines[0]!.isProvisional).toBe(false);
-    expect(after.lines[0]!.issues.map((i) => i.qtyProvisional)).toEqual(["0", "0"]);
+    expect(after.lines[0]!.issues!.map((i) => i.qtyProvisional)).toEqual(["0", "0"]);
   });
 
   it("hủy đơn hoàn đủ mọi NVL", async () => {

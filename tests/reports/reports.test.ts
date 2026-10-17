@@ -20,7 +20,7 @@ import { makeCashAccount, makePartner, makePartnerGroup } from "../helpers/facto
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
 
 const NOW = new Date("2026-09-15T03:00:00Z");
-const ALL = ["profit.view", "report.view", "cost.view", "order.create", "order.edit", "order.cancel", "sale_price.view", "order.edit_price", "return.manage", "partner.view_all", "expense.manage", "receipt.manage", "payment.manage", "cash.transaction.create", "purchase_price.view"];
+const ALL = ["order.analysis.view", "profit.view", "report.view", "cost.view", "order.create", "order.edit", "order.cancel", "sale_price.view", "order.edit_price", "return.manage", "partner.view_all", "expense.manage", "receipt.manage", "payment.manage", "cash.transaction.create", "purchase_price.view"];
 const tx = <R,>(fn: (t: Prisma.TransactionClient) => Promise<R>) => prisma.$transaction(fn);
 let w: World; let actor: Actor; let a: { id: number }; let b: { id: number }; let cash: { id: number };
 let n = 0;

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { MAX_CHANGES, formatAuditValue, type AuditDetailDto } from "@/lib/audit-format";
 import { diffJson } from "@/lib/json-diff";
 import { redactDeep } from "@/lib/permissions/redact";
+import { redactOrderData } from "@/lib/permissions/order-analysis";
 import { escapeLike } from "@/lib/search";
 import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { timeRangeWhere } from "@/lib/time-presets";
@@ -82,8 +83,9 @@ type AuditRowFull = {
  * (bí mật đã bị bỏ lúc ghi), rồi mới so sánh + định dạng. DTO không chứa JSON thô nào.
  */
 export function toAuditDetail(row: AuditRowFull, by: string, perms: ReadonlySet<string>): AuditDetailDto {
-  const before = redactDeep(row.beforeJson, perms);
-  const after = redactDeep(row.afterJson, perms);
+  const redact = row.entity === "SaleOrder" ? redactOrderData : redactDeep;
+  const before = redact(row.beforeJson, perms);
+  const after = redact(row.afterJson, perms);
   const hiddenByPermission =
     JSON.stringify(before) !== JSON.stringify(row.beforeJson) || JSON.stringify(after) !== JSON.stringify(row.afterJson);
   const all = diffJson(before, after);

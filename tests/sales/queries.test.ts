@@ -117,12 +117,17 @@ describe("getOrder", () => {
     expect(d.lines[0]).toMatchObject({ isProvisional: false, lineAmount: "119000" });
     expect("unitCostFifo" in d.lines[0]!).toBe(false); // writer không có cost.view → bị lược
     expect("lineProfit" in d.lines[0]!).toBe(false); // và không có profit.view
-    const boss: Actor = { userId: w.userId, perms: new Set([...WRITER, "cost.view", "profit.view"]) };
+    const boss: Actor = { userId: w.userId, perms: new Set([...WRITER, "cost.view", "profit.view", "order.analysis.view"]) };
     const full = await getOrder(prisma, boss, o.id, NOW);
     expect(full.lines[0]!.unitCostFifo).toBe("10000");
     expect(full.lines[0]!.lineProfit).toBe("77000"); // 119.000 − 2.000 − 40.000
     expect(full.history.map((h) => h.action)).toEqual(["sale.create"]);
     expect(full.deliveryStatus).toBe("READY");
+    const accountant: Actor = { userId: w.userId, perms: new Set([...WRITER, "cost.view", "profit.view", "purchase_price.view"]) };
+    const restricted = await getOrder(prisma, accountant, o.id, NOW);
+    expect(restricted.canViewAnalysis).toBe(false);
+    expect(restricted.lines[0]!.lineAmount).toBe("119000");
+    expect(JSON.stringify(restricted)).not.toMatch(/unitCostFifo|lineProfit|bomVersion|issues|materialCost/);
 
     const pending = await make(30);
     expect((await getOrder(prisma, boss, pending.id, NOW)).lines[0]!.lineProfit).toBeNull();

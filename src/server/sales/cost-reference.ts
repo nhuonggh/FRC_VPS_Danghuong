@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Actor } from "@/lib/permissions/scope";
+import { canViewOrderAnalysis } from "@/lib/permissions/order-analysis";
 import { BomNotFoundError, resolveBom } from "@/server/bom";
 
 export interface CostSource {
@@ -19,6 +20,7 @@ export type IssueMode = "LEGACY" | "STOCK" | "BOM";
 
 /** Read-only: estimates never post inventory, replace FIFO, or set selling prices. */
 export async function costReference(db: PrismaClient, actor: Actor, productId: number, processingTypeId: number | null, at: Date, mode: IssueMode = "LEGACY"): Promise<CostReference | undefined> {
+  if (!canViewOrderAnalysis(actor.perms)) return undefined;
   const purchaseAllowed = actor.perms.has("purchase_price.view"), costAllowed = actor.perms.has("cost.view");
   if (!purchaseAllowed && !costAllowed) return undefined;
   const useBom = !!processingTypeId && mode !== "STOCK" && (mode === "BOM" || await db.bom.count({ where: { productId, processingTypeId, versions: { some: { status: "ACTIVE" } } } }) > 0);

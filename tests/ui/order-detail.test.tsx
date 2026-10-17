@@ -23,7 +23,7 @@ beforeEach(() => { refresh.mockReset(); apiFetch.mockReset(); confirmFn.mockRese
 afterEach(cleanup);
 
 const order = (over: Partial<OrderDetailDTO> = {}): OrderDetailDTO => ({
-  id: 1, code: "DH000001", orderDate: new Date("2026-09-10T03:00:00Z"), partnerId: 1, partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt",
+  canViewAnalysis: true, id: 1, code: "DH000001", orderDate: new Date("2026-09-10T03:00:00Z"), partnerId: 1, partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt",
   deliveryStatus: "PARTIAL", paymentStatus: "UNPAID", expectedDeliveryDate: "2026-09-20", originalDeliveryDate: "2026-09-20", delayDays: 0,
   hasProvisional: false, isCancelled: false, isDraft: false, deposits: [], depositTotal: "0", quote: null, note: null, cancelReason: null, createdByName: "An", walkInName: null, walkInPhone: null, salesUserName: null, warehouseName: null, paymentMethod: "NONE", orderTotal: "300000", history: [],
   lines: [{ note: null,
@@ -135,18 +135,32 @@ describe("OrderDetail — NVL đã trừ khi bán tôn xốp (mã 15)", () => {
       { productCode: "PU01", productName: "Foam PU", baseUnit: "lít", qtyBase: "5", qtyProvisional: "2", ...(cost ? { materialCost: "10000" } : {}) },
     ],
   });
-  it("hiện phiên bản định mức, từng NVL, phần thiếu tồn và vốn (khi có cost.view)", () => {
+  it("hiện phiên bản định mức, từng NVL, phần thiếu tồn và vốn (khi có cost.view)", async () => {
     search = "tab=lines";
     view(order({ lines: [bomLine(true)] }));
+    expect(screen.queryByRole("list", { name: /Nguyên vật liệu đã trừ/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Định mức & nguyên liệu" }));
     const list = screen.getByRole("list", { name: /Nguyên vật liệu đã trừ/ });
     expect(screen.getByText("Định mức v2 · từ 01/10/2026")).toBeInTheDocument();
-    expect(within(list).getByText(/Trừ 12 kg Tôn cuộn/)).toHaveTextContent("vốn");
-    expect(within(list).getByText(/Trừ 5 lít Foam PU/)).toHaveTextContent("thiếu tồn 2");
+    expect(within(list).getByText(/Trừ 12 kg/)).toHaveTextContent("vốn");
+    expect(within(list).getByText(/Trừ 5 lít/)).toHaveTextContent("thiếu tồn 2");
   });
-  it("không có vốn NVL khi thiếu cost.view", () => {
+  it("không có vốn NVL khi thiếu cost.view", async () => {
     search = "tab=lines";
     view(order({ lines: [bomLine(false)] }));
+    await userEvent.click(screen.getByRole("button", { name: "Định mức & nguyên liệu" }));
     expect(within(screen.getByRole("list", { name: /Nguyên vật liệu đã trừ/ })).queryByText(/vốn/)).toBeNull();
+  });
+  it("kế toán chỉ thấy dữ liệu bán hàng; tự ẩn định mức, vốn và lãi dù dữ liệu cũ còn trong trình duyệt", () => {
+    const line = { ...bomLine(true), unitCostFifo: "13000", lineProfit: "170000" };
+    view(order({ canViewAnalysis: false, lines: [line] }));
+    expect(screen.getByRole("columnheader", { name: "Đơn giá" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Thành tiền" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Giá vốn/ĐV gốc" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Lãi dòng" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Định mức & nguyên liệu" })).toBeNull();
+    expect(screen.queryByText(/Định mức v2/)).toBeNull();
+    expect(screen.queryByText("Tổng lãi dòng")).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { can } from "@/lib/permissions/guard";
+import { canViewOrderAnalysis } from "@/lib/permissions/order-analysis";
 import type { Actor } from "@/lib/permissions/scope";
 import { getOpenPeriod } from "@/server/period/guard";
 import { lastPurchaseCost } from "@/server/purchase/last-cost";
@@ -70,7 +71,7 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
     ]);
     out.onHand = (layers._sum.qtyRemaining ?? new Prisma.Decimal(0)).minus(pending._sum.qtyProvisional ?? 0).toString();
   }
-  if (can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, productId))?.toString() ?? null;
+  if (canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, productId))?.toString() ?? null;
   const reference = await costReference(db, actor, productId, processingTypeId ?? null, at, mode);
   if (reference) out.costReference = reference;
   return out;

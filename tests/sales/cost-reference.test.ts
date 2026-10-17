@@ -10,7 +10,7 @@ let w: World, actor: Actor, supplier: number, n = 0;
 const at = new Date("2026-09-20T16:59:59Z");
 beforeEach(async () => {
   await resetDb(); w = await newWorld(1);
-  actor = { userId: w.userId, perms: new Set(["purchase.create", "purchase.cancel", "purchase_price.view", "cost.view", "production.manage", "bom.manage"]) };
+  actor = { userId: w.userId, perms: new Set(["order.analysis.view", "purchase.create", "purchase.cancel", "purchase_price.view", "cost.view", "production.manage", "bom.manage"]) };
   supplier = (await makePartner({ isSupplier: true })).id;
 });
 const buy = (productId: number, price: number, date = "2026-09-15") => createPurchaseIdempotent(prisma, actor, `buy-${++n}`, { partnerId: supplier, date, freightCost: 0, note: "", lines: [{ productId, qty: 100, unit: "md", factor: 1, purchasePrice: price, rollInfo: "" }] });
@@ -61,9 +61,10 @@ it("respects permissions and excludes cancelled or later purchases", async () =>
   await cancelPurchaseTx(prisma, actor, second.id, "Hủy thử");
   expect((await costReference(prisma, actor, w.p.id, null, at))?.primary?.perBase).toBe("100");
   expect(await costReference(prisma, { ...actor, perms: new Set() }, w.p.id, null, at)).toBeUndefined();
+  expect(await costReference(prisma, { ...actor, perms: new Set(["cost.view", "purchase_price.view"]) }, w.p.id, null, at)).toBeUndefined();
   const type = await makeProcessingType();
   const material = await makeProduct({ baseUnit: "md", kind: "NVL" });
   await makeBomVersion({ productId: w.p.id, processingTypeId: type.id, createdBy: w.userId, lines: [{ materialProductId: material.id, qtyPerUnit: 2 }] });
-  const restricted = await costReference(prisma, { ...actor, perms: new Set(["purchase_price.view"]) }, w.p.id, type.id, at);
+  const restricted = await costReference(prisma, { ...actor, perms: new Set(["order.analysis.view", "purchase_price.view"]) }, w.p.id, type.id, at);
   expect(restricted?.primary).toBeNull(); expect(restricted?.materials).toBeUndefined();
 });
