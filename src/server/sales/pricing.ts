@@ -3,6 +3,7 @@ import { can } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { getOpenPeriod } from "@/server/period/guard";
 import { lastPurchaseCost } from "@/server/purchase/last-cost";
+import { costReference, type CostReference, type IssueMode } from "./cost-reference";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 
@@ -29,6 +30,7 @@ export const priceForUnit = (perBase: Prisma.Decimal, factor: Prisma.Decimal.Val
   perBase.div(factor).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
 export interface SalePricingDTO {
+  costReference?: CostReference;
   productId: number;
   baseUnit: string;
   /** `suggestedPrice`: giá gần nhất quy ra đơn vị này (đúng giá server chấp nhận khi thiếu quyền sửa giá). */
@@ -45,7 +47,7 @@ export interface SalePricingDTO {
 }
 
 /** Dữ liệu gợi ý cho màn bán hàng (31): tồn, giá bán gần nhất, giá nhập gần nhất — mỗi thứ chỉ khi đủ quyền. */
-export async function salePricing(db: PrismaClient, actor: Actor, partnerId: number, productId: number, processingTypeId?: number | null): Promise<SalePricingDTO | null> {
+export async function salePricing(db: PrismaClient, actor: Actor, partnerId: number, productId: number, processingTypeId?: number | null, at = new Date(), mode: IssueMode = "LEGACY"): Promise<SalePricingDTO | null> {
   if (!can(actor.perms, "sale_price.view")) return null;
   const product = await db.product.findUnique({ where: { id: productId }, include: { units: { orderBy: { unit: "asc" } } } });
   if (!product) return null;
@@ -69,5 +71,7 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
     out.onHand = (layers._sum.qtyRemaining ?? new Prisma.Decimal(0)).minus(pending._sum.qtyProvisional ?? 0).toString();
   }
   if (can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, productId))?.toString() ?? null;
+  const reference = await costReference(db, actor, productId, processingTypeId ?? null, at, mode);
+  if (reference) out.costReference = reference;
   return out;
 }

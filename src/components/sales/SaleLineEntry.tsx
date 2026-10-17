@@ -1,5 +1,6 @@
 "use client";
 
+import { CostReferenceInfo, referencePerBase } from "./CostReferenceInfo";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Combobox, type ComboOption, NumberInput } from "@/components/ui";
@@ -23,8 +24,8 @@ const info = "flex min-h-11 items-center gap-2 rounded-sm border border-dashed b
  * Chiều dài / Số lượng / Đơn giá → Ghi chú → "Thêm vào đơn". Chiều dài dạng `7.1*7+6.8*1` sinh mỗi số hạng một dòng
  * (SL tính theo md = đơn vị gốc, nên kho/BOM/FIFO không đổi); bỏ trống thì thêm 1 dòng theo SL × đơn giá.
  */
-export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, disabled, warehouses, warehouseId, onWarehouse, onAdd }: {
-  loadProducts: (q: string) => Promise<ProductOption[]>; pricingPartnerId: number | null | undefined; canEditPrice: boolean; disabled: boolean;
+export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPrice, disabled, warehouses, warehouseId, onWarehouse, onAdd }: {
+  date?: string; loadProducts: (q: string) => Promise<ProductOption[]>; pricingPartnerId: number | null | undefined; canEditPrice: boolean; disabled: boolean;
   warehouses: ComboOption[]; warehouseId: number | null; onWarehouse: (id: number | null) => void;
   onAdd: (product: ProductOption, rows: SaleOrderInput["lines"]) => void;
 }) {
@@ -74,18 +75,20 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
   const perM2 = (v: number | string) => (areaMode ? `${formatCurrency(pricePerM2(Number(v), ratio))}/m²` : null);
   // Đơn giá thấp hơn giá nhập gần nhất (cùng đơn vị gốc) ⇒ báo đỏ để kế toán xem lại
   const lineFactor = useLength || !product ? 1 : Number(product.units?.find((u) => u.unit === unit)?.factor ?? 1) || 1;
-  const belowCost = dto?.lastPurchasePrice != null && num(price) > 0 && num(price) * lineFactor < Number(dto.lastPurchasePrice) - 0.005;
+  const referenceCost = referencePerBase(dto);
+  const belowCost = referenceCost != null && num(price) > 0 && num(price) * lineFactor < Number(referenceCost) - 0.005;
   const redInput = belowCost ? "!border-danger !text-danger" : "";
-  const costNote = belowCost && dto?.lastPurchasePrice != null ? <p role="alert" className="text-sm font-medium text-danger md:col-span-2 xl:col-span-3">Đơn giá thấp hơn giá nhập gần nhất ({perM2(dto.lastPurchasePrice) ?? `${formatCurrency(dto.lastPurchasePrice)}/${dto.baseUnit}`}) — kiểm tra lại giá bán.</p> : null;
+  const costNote = belowCost && referenceCost != null ? <p role="alert" className="text-sm font-medium text-danger md:col-span-2 xl:col-span-3">Đơn giá thấp hơn giá vốn tham khảo ({perM2(referenceCost) ?? `${formatCurrency(Number(referenceCost) / lineFactor)}/${useLength ? product?.baseUnit : unit}`}) — kiểm tra lại giá bán.</p> : null;
 
   // Tồn + giá gần nhất (theo đúng kiểu gia công đang chọn); đổi khách → tải lại
   useEffect(() => {
     if (!product || !pricingPartnerId) { setDto(null); return; }
     let live = true;
-    apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${product.value}${typeId ? `&processingTypeId=${typeId}` : ""}`)
+    setDto(null);
+    apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${product.value}${date ? `&date=${date}` : ""}${typeId ? `&processingTypeId=${typeId}` : ""}`)
       .then((d) => { if (live) setDto(d); }).catch(() => { if (live) setDto(null); });
     return () => { live = false; };
-  }, [product?.value, typeId, pricingPartnerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [product?.value, typeId, pricingPartnerId, date]); // eslint-disable-line react-hooks/exhaustive-deps
   // Giá gợi ý: chưa sửa tay thì điền giá gần nhất của đơn vị đang chọn (dòng chiều dài luôn tính theo đơn vị gốc); không có quyền sửa giá thì luôn ép theo gợi ý
   useEffect(() => {
     const u = useLength ? product?.baseUnit : unit;
@@ -139,10 +142,7 @@ export function SaleLineEntry({ loadProducts, pricingPartnerId, canEditPrice, di
       ) : <span className="hidden xl:block" />}
 
       {product && (<>
-        <p className={`${info} justify-between`}>
-          <span>Giá nhập gần nhất</span>
-          <b className="tabular">{dto?.lastPurchasePrice != null ? (perM2(dto.lastPurchasePrice) ?? formatCurrency(dto.lastPurchasePrice)) : "—"}</b>
-        </p>
+        <CostReferenceInfo dto={dto} unit={areaMode ? "m²" : (useLength ? product.baseUnit : unit)} divisor={areaMode ? ratio : lineFactor} />
         <InlineField id="se-type" label="Kiểu gia công" labelClass={LABEL}>
           <select id="se-type" value={typeId ?? ""} onChange={(e) => {
             const id = e.target.value ? Number(e.target.value) : null; setTypeId(id); setPriceTouched(false); setError("");

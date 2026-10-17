@@ -1,0 +1,69 @@
+import { beforeEach, expect, it } from "vitest";
+import { prisma, resetDb } from "../helpers/db";
+import { makeBomVersion, makePartner, makeProcessingType, makeProduct } from "../helpers/factories";
+import { newWorld, type World } from "../inventory/helpers";
+import { costReference } from "@/server/sales/cost-reference";
+import { createPurchaseIdempotent, cancelPurchaseTx } from "@/server/purchase/service";
+import { createProductionOrderIdempotent, cancelProductionOrderTx } from "@/server/production/service";
+import type { Actor } from "@/lib/permissions/scope";
+let w: World, actor: Actor, supplier: number, n = 0;
+const at = new Date("2026-09-20T16:59:59Z");
+beforeEach(async () => {
+  await resetDb(); w = await newWorld(1);
+  actor = { userId: w.userId, perms: new Set(["purchase.create", "purchase.cancel", "purchase_price.view", "cost.view", "production.manage", "bom.manage"]) };
+  supplier = (await makePartner({ isSupplier: true })).id;
+});
+const buy = (productId: number, price: number, date = "2026-09-15") => createPurchaseIdempotent(prisma, actor, `buy-${++n}`, { partnerId: supplier, date, freightCost: 0, note: "", lines: [{ productId, qty: 100, unit: "md", factor: 1, purchasePrice: price, rollInfo: "" }] });
+it("shows a produced accessory's actual unit cost without requiring a purchase of the accessory", async () => {
+  const accessory = await makeProduct({ kind: "PHU_KIEN", baseUnit: "md", canProduce: true });
+  await buy(w.p.id, 100);
+  const p = await createProductionOrderIdempotent(prisma, actor, "produce", { productId: accessory.id, qty: 10, date: "2026-09-16", note: "", materials: [{ productId: w.p.id, qty: 20 }] });
+  const reference = await costReference(prisma, actor, accessory.id, null, at);
+  expect(reference?.primary).toMatchObject({ kind: "PRODUCTION", perBase: "200", code: p.code });
+  await cancelProductionOrderTx(prisma, actor, p.id, "Hủy thử");
+  expect((await costReference(prisma, actor, accessory.id, null, at))?.primary).toBeNull();
+});
+it("keeps purchase and production sources separate and chooses the most recent source for stock", async () => {
+  const accessory = await makeProduct({ kind: "PHU_KIEN", baseUnit: "md", canProduce: true });
+  await buy(w.p.id, 100); await buy(accessory.id, 300);
+  await createProductionOrderIdempotent(prisma, actor, "produce", { productId: accessory.id, qty: 10, date: "2026-09-16", note: "", materials: [{ productId: w.p.id, qty: 20 }] });
+  const result = await costReference(prisma, actor, accessory.id, null, at);
+  expect(result?.primary?.kind).toBe("PRODUCTION");
+  expect(result?.alternatives).toMatchObject([{ kind: "PURCHASE", perBase: "300" }]);
+});
+it("calculates the effective BOM using each material's last purchase price; stock mode uses the product cost", async () => {
+  const type = await makeProcessingType(), material = await makeProduct({ baseUnit: "md", kind: "NVL" });
+  const finished = await makeProduct({ baseUnit: "md", kind: "THANH_PHAM", canProduce: true });
+  await buy(w.p.id, 100); await buy(material.id, 50);
+  await buy(finished.id, 300);
+  await makeBomVersion({ productId: finished.id, processingTypeId: type.id, createdBy: w.userId, validFrom: "2026-09-01", lines: [{ materialProductId: w.p.id, qtyPerUnit: 2 }, { materialProductId: material.id, qtyPerUnit: "0.5" }] });
+  await makeBomVersion({ productId: finished.id, processingTypeId: type.id, createdBy: w.userId, validFrom: "2026-10-01", lines: [{ materialProductId: w.p.id, qtyPerUnit: 9 }] });
+  const count = await prisma.stockLedger.count();
+  expect((await costReference(prisma, actor, finished.id, type.id, at))?.primary).toMatchObject({ kind: "BOM", perBase: "225", code: "Định mức v1" });
+  expect((await costReference(prisma, actor, finished.id, type.id, at, "STOCK"))?.primary).toMatchObject({ kind: "PURCHASE", perBase: "300" });
+  expect(await prisma.stockLedger.count()).toBe(count);
+});
+it("does not substitute raw product cost when material pricing or effective BOM is missing", async () => {
+  const type = await makeProcessingType(), missing = await makeProduct({ baseUnit: "md", kind: "NVL" });
+  await buy(w.p.id, 100);
+  await makeBomVersion({ productId: w.p.id, processingTypeId: type.id, createdBy: w.userId, validFrom: "2026-09-01", lines: [{ materialProductId: missing.id, qtyPerUnit: 1 }] });
+  const result = await costReference(prisma, actor, w.p.id, type.id, at);
+  expect(result?.primary?.perBase).toBeNull(); expect(result?.materials?.[0].price).toBeNull();
+  expect(result?.message).toContain(missing.name);
+  const noType = await makeProcessingType();
+  expect((await costReference(prisma, actor, w.p.id, noType.id, at, "BOM"))?.primary).toBeNull();
+});
+it("respects permissions and excludes cancelled or later purchases", async () => {
+  await buy(w.p.id, 100);
+  const second = await buy(w.p.id, 120, "2026-09-16");
+  await buy(w.p.id, 150, "2026-09-21");
+  expect((await costReference(prisma, actor, w.p.id, null, at))?.primary?.perBase).toBe("120");
+  await cancelPurchaseTx(prisma, actor, second.id, "Hủy thử");
+  expect((await costReference(prisma, actor, w.p.id, null, at))?.primary?.perBase).toBe("100");
+  expect(await costReference(prisma, { ...actor, perms: new Set() }, w.p.id, null, at)).toBeUndefined();
+  const type = await makeProcessingType();
+  const material = await makeProduct({ baseUnit: "md", kind: "NVL" });
+  await makeBomVersion({ productId: w.p.id, processingTypeId: type.id, createdBy: w.userId, lines: [{ materialProductId: material.id, qtyPerUnit: 2 }] });
+  const restricted = await costReference(prisma, { ...actor, perms: new Set(["purchase_price.view"]) }, w.p.id, type.id, at);
+  expect(restricted?.primary).toBeNull(); expect(restricted?.materials).toBeUndefined();
+});

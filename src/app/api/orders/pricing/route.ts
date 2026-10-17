@@ -3,6 +3,8 @@ import { ForbiddenError } from "@/lib/permissions/guard";
 import { requireActorApi } from "@/server/auth/session";
 import { apiHandler } from "@/server/http/handler";
 import { salePricing } from "@/server/sales/pricing";
+import { docTimestamp } from "@/server/inventory/time";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +17,7 @@ export const GET = apiHandler(async (req) => {
   const sp = new URL(req.url).searchParams;
   const partnerId = positiveInt(sp.get("partnerId")), productId = positiveInt(sp.get("productId")), processingTypeId = positiveInt(sp.get("processingTypeId"));
   if (!partnerId || !productId) return null;
-  return salePricing(prisma, actor, partnerId, productId, processingTypeId);
+  const mode = z.enum(["LEGACY", "STOCK", "BOM"]).parse(sp.get("issueMode") ?? "LEGACY");
+  const at = sp.get("date") ? docTimestamp(sp.get("date")!, new Date()) : new Date();
+  return salePricing(prisma, actor, partnerId, productId, processingTypeId, at, mode);
 }, { noStore: true });

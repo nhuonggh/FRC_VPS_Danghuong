@@ -1,4 +1,5 @@
 "use client";
+import { CostReferenceInfo, referencePerBase } from "./CostReferenceInfo";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarDays, ChevronDown, Package, Plus, Printer, Save, ShoppingCart, Store, Trash2, UserRound, Wallet } from "lucide-react";
@@ -63,6 +64,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const { fields, append, remove, update, insert } = useFieldArray({ control, name: "lines", keyName: "_key" });
   const lines = watch("lines");
   const partnerId = watch("partnerId");
+  const pricingDate = watch("date");
 
   // Bán tại quầy: khách lẻ / thu tiền ngay / giao ngay (chỉ khi LẬP đơn mới và có quyền thu tiền)
   const canCheckout = !edit && options.canCollect;
@@ -95,7 +97,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const [products, setProducts] = useState(() => new Map<number, ProductOption>((edit?.products ?? []).map((p) => [p.value, p] as const)));
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const requested = useRef(new Set<string>());
-  const key = (productId: number, typeId?: number | null) => `${pricingPartnerId}:${productId}:${typeId ?? 0}`;
+  const key = (productId: number, typeId?: number | null, mode = "LEGACY") => `${pricingPartnerId}:${productId}:${typeId ?? 0}:${pricingDate}:${mode}`;
 
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
@@ -103,18 +105,19 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     if (!pricingPartnerId) return;
     for (const l of lines) {
       const pid = l?.productId, tid = l?.processingTypeId ?? null;
-      if (!pid || requested.current.has(key(pid, tid))) continue;
-      requested.current.add(key(pid, tid));
-      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${pid}${tid ? `&processingTypeId=${tid}` : ""}`)
-        .then((dto) => setPricing((m) => new Map(m).set(key(pid, tid), dto)))
-        .catch(() => requested.current.delete(key(pid, tid)));
+      const mode = l.issueMode ?? "LEGACY", requestKey = key(pid, tid, mode);
+      if (!pid || requested.current.has(requestKey)) continue;
+      requested.current.add(requestKey);
+      apiFetch<SalePricingDTO | null>(`/api/orders/pricing?partnerId=${pricingPartnerId}&productId=${pid}&date=${pricingDate}&issueMode=${mode}${tid ? `&processingTypeId=${tid}` : ""}`)
+        .then((dto) => setPricing((m) => new Map(m).set(requestKey, dto)))
+        .catch(() => requested.current.delete(requestKey));
     }
-  }, [pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricingPartnerId, pricingDate, lines.map((l) => `${l?.productId}:${l?.processingTypeId ?? 0}:${l?.issueMode ?? "LEGACY"}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Có giá gợi ý mới → điền vào ô giá còn trống (hoặc luôn ép khi không có quyền sửa giá)
   useEffect(() => {
     lines.forEach((l, i) => {
-      const dto = l?.productId && pricingPartnerId ? pricing.get(key(l.productId, l.processingTypeId)) : null;
+      const dto = l?.productId && pricingPartnerId ? pricing.get(key(l.productId, l.processingTypeId, l.issueMode)) : null;
       const suggested = dto?.units.find((u) => u.unit === l.unit)?.suggestedPrice;
       if (suggested == null) return;
       const current = getValues(`lines.${i}.salePrice`);
@@ -326,7 +329,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
       {/* 3. Thông tin sản phẩm (dải nhập) */}
       <section className={card}>
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Package size={16} aria-hidden className="text-accent" /> Thông tin sản phẩm</h2>
-        <SaleLineEntry loadProducts={loadProducts} pricingPartnerId={pricingPartnerId} canEditPrice={canEditPrice} disabled={fields.length >= SALE_MAX_LINES}
+        <SaleLineEntry date={pricingDate} loadProducts={loadProducts} pricingPartnerId={pricingPartnerId} canEditPrice={canEditPrice} disabled={fields.length >= SALE_MAX_LINES}
           warehouses={options.warehouses} warehouseId={watch("warehouseId") ?? null} onWarehouse={(id) => setValue("warehouseId", id, { shouldDirty: true })} onAdd={addDimensionRows} />
         {!canEditPrice && <p className="mt-2 text-xs text-fg-muted">Bạn không có quyền sửa giá: đơn giá được lấy theo giá bán gần nhất.</p>}
       </section>
@@ -356,7 +359,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
-                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId, lines[index]!.processingTypeId)) ?? null : null}
+                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId, lines[index]!.processingTypeId, lines[index]!.issueMode)) ?? null : null}
                   onExpand={(terms, ratio) => expandDimensions(index, terms, ratio)}
                   canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
@@ -459,7 +462,8 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const qtyBase = num(line?.qty) / factor;
   const short = dto?.onHand !== undefined && qtyBase > num(dto.onHand);
   // Đơn giá thấp hơn giá nhập gần nhất (quy về đơn vị gốc) ⇒ báo đỏ
-  const belowCost = dto?.lastPurchasePrice != null && num(line?.salePrice) > 0 && num(line?.salePrice) * factor < num(dto.lastPurchasePrice) - 0.005;
+  const referenceCost = referencePerBase(dto);
+  const belowCost = referenceCost != null && num(line?.salePrice) > 0 && num(line?.salePrice) * factor < Number(referenceCost) - 0.005;
   const red = belowCost ? "!border-danger !text-danger" : "";
   const amount = grossAmount(num(line?.qty), num(line?.salePrice)) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
@@ -539,7 +543,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
               )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
               {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
-              {dto?.lastPurchasePrice != null && <p>Giá nhập gần nhất: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastPurchasePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastPurchasePrice)}/${dto.baseUnit}`}</p>}
+              <CostReferenceInfo dto={dto} unit={areaRow ? "m²" : line?.unit || dto?.baseUnit || ""} divisor={areaRow ? rowRatio : factor} compact />
             </div>
           </div>
         </div>
@@ -561,7 +565,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
         <p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p>
         </> : <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} readOnly={!canEditPrice} maxFrac={2} control={control} name={`lines.${index}.salePrice`}
           className={`${inputClass(err?.salePrice)} tabular text-right ${canEditPrice ? "" : "bg-hover"} ${red}`} />}
-        {belowCost && <p role="alert" className="mt-0.5 text-xs font-medium text-danger">Thấp hơn giá nhập gần nhất</p>}
+        {belowCost && <p role="alert" className="mt-0.5 text-xs font-medium text-danger">Thấp hơn giá vốn tham khảo</p>}
       </td>
       <td data-label="CK trừ ngay" className={cell}>
         <RhfNumberInput aria-label={`Chiết khấu trừ ngay dòng ${index + 1}`} control={control} name={`lines.${index}.discountNow`} className={`${inputClass(err?.discountNow)} tabular text-right`} />
