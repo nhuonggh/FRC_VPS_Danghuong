@@ -1,3 +1,4 @@
+import type { CostReference } from "./cost-reference";
 import { areaRatiosOf } from "@/server/processing/area-ratio";
 import { Prisma, type DeliveryStatus, type PaymentStatus, type PrismaClient } from "@prisma/client";
 import { redactDeep } from "@/lib/permissions/redact";
@@ -156,6 +157,7 @@ export interface OrderLineDTO {
   salePrice?: string; discountNow?: string; discountAccum?: string; lineAmount?: string;
   /** Ghi chú theo dòng hàng. */
   note: string | null;
+  referenceCost?: CostReference;
   unitCostFifo?: string; lineProfit?: string | null;
   /** Định mức đã dùng (snapshot): "v2 · từ 01/10/2026". Chỉ dòng gia công. */
   bomVersionLabel?: string | null;
@@ -222,6 +224,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     const amount = lineAmountOf(l);
     const profit = l.isProvisional ? null : amount.minus(l.discountAccum).minus(l.unitCostFifo.times(l.qtyBase));
     return {
+      referenceCost: canViewOrderAnalysis(actor.perms) && actor.perms.has("cost.view") && actor.perms.has("purchase_price.view") && l.referenceCostSnapshot ? l.referenceCostSnapshot as unknown as CostReference : undefined,
       id: l.id, note: l.note, productId: l.productId, productCode: l.product.code, productName: l.product.name, baseUnit: l.product.baseUnit,
       qty: l.qty.toString(), unit: l.unit, qtyBase: l.qtyBase.toString(), processingType: l.processingType?.name ?? null, bomVersionId: l.bomVersionId,
       areaRatio: areaRatios[lineIdx] ?? null, isProvisional: l.isProvisional, deliveredQty: l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0)).toString(),
@@ -310,6 +313,11 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     orderId: o.id, code: o.code, isDraft: o.isDraft,
     customer: { value: o.partnerId, label: `${o.partner.code} — ${o.partner.name}`, ...(o.partner.phone ? { hint: o.partner.phone } : {}), ...(o.partner.address ? { address: o.partner.address } : {}) },
     products: await productOptionsByIds(db, o.lines.map((l) => l.productId)),
+    ...(canViewOrderAnalysis(actor.perms) && actor.perms.has("cost.view") && actor.perms.has("purchase_price.view") && o.lines.some(l => l.referenceCostSnapshot)
+      ? { referenceCosts: Object.fromEntries(o.lines.filter(l => l.referenceCostSnapshot).map(l => [l.id, {
+        productId: l.productId, processingTypeId: l.processingTypeId, issueMode: l.issueMode,
+        reference: l.referenceCostSnapshot as unknown as CostReference,
+      }])) } : {}),
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,

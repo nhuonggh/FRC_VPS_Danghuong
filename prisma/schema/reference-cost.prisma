@@ -1,0 +1,23 @@
+/// Phiên bản dự toán. productId null = phí gia công mặc định của kiểu; không sửa đè bản cũ.
+model ReferenceCostPlan {
+  id                 Int      @id @default(autoincrement())
+  productId          Int?
+  processingTypeId   Int
+  validFrom          DateTime @db.Date
+  tonProductId       Int?
+  /// Giá tôn đ/m² theo khổ thành phẩm; null = giá nhập nguyên liệu gần nhất.
+  fixedPricePerM2    Decimal? @db.Decimal(18, 4)
+  /// Lượng tôn/1 mét dài thành phẩm, theo ĐVT gốc nguyên liệu; dùng khi BOM chưa có tôn.
+  tonQtyPerMeter     Decimal  @default(1) @db.Decimal(18, 6)
+  /// null = kế thừa phí mặc định của kiểu; 0 = đã xác nhận không tính phí.
+  feePerMeter        Decimal? @db.Decimal(18, 4)
+  note               String?
+  createdBy          Int
+  createdAt          DateTime @default(now())
+  product            Product? @relation("ReferenceCostTarget", fields: [productId], references: [id], onDelete: Restrict)
+  tonProduct         Product? @relation("ReferenceCostTon", fields: [tonProductId], references: [id], onDelete: Restrict)
+  processingType     ProcessingType @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+  @@unique([productId, processingTypeId, validFrom])
+  @@index([processingTypeId, validFrom])
+  @@map("reference_cost_plans")
+}

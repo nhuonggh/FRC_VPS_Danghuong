@@ -1,3 +1,4 @@
+import { referenceCostSnapshot } from "./reference-cost-snapshot";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan, can } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
@@ -167,6 +168,7 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
   const partner = await loadCustomer(tx, actor, input.partnerId);
   const at = docTimestamp(input.date, now);
   const lines = await planLines(tx, input, at);
+  const referenceSnapshots = await Promise.all(lines.map(l => referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, at, l.bomVersionId === null ? "STOCK" : "BOM")));
   await assertPrices(tx, actor, input.partnerId, lines);
   const period = await getOpenPeriod(tx);
   const extras = await orderExtras(tx, actor, input, "create");
@@ -180,7 +182,7 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
       note: input.note || null, createdBy: actor.userId, ...extras,
       lines: {
         create: lines.map((l, i) => ({
-          productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
+          referenceCostSnapshot: referenceSnapshots[i], productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
           discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", at,
         })),
       },
@@ -202,6 +204,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   const partner = await loadCustomer(tx, actor, input.partnerId);
   const at = docTimestamp(input.date, now);
   const lines = await planLines(tx, input, at);
+  const referenceSnapshots = await Promise.all(lines.map(l => referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, at, l.bomVersionId === null ? "STOCK" : "BOM")));
   // Mã cần xuất phải nằm trong danh sách đã khoá (BOM có thể vừa đổi giữa lúc lập kế hoạch và lúc vào giao dịch)
   for (const l of lines) for (const i of l.issues) {
     if (!ctx.locked.has(i.productId)) throw new DomainError("Định mức hoặc dữ liệu vừa thay đổi, hãy tải lại trang rồi thử lại.", 409);
@@ -222,7 +225,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   for (const [li, l] of lines.entries()) {
     const row = await tx.saleOrderLine.create({
       data: {
-        orderId: id, productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
+        referenceCostSnapshot: referenceSnapshots[li], orderId: id, productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
         salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
         processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", bomVersionId: l.bomVersionId, at,
       },

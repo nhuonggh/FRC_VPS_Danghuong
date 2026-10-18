@@ -5,7 +5,7 @@ export function orderDisclosurePermissions(perms: ReadonlySet<string>): Readonly
   if (canViewOrderAnalysis(perms)) return perms;
   return new Set([...perms].filter(p => !["cost.view", "profit.view", "purchase_price.view"].includes(p)));
 }
-const INTERNAL_FIELDS = new Set(["issues", "bomVersionId", "bomVersionLabel", "bomSnapshot", "costReference"]);
+const INTERNAL_FIELDS = new Set(["issues", "bomVersionId", "bomVersionLabel", "bomSnapshot", "costReference", "referenceCostSnapshot", "referenceCost"]);
 export function redactOrderData<T>(value: T, perms: ReadonlySet<string>): T {
   const redacted = redactDeep(value, orderDisclosurePermissions(perms));
   if (canViewOrderAnalysis(perms)) return redacted;

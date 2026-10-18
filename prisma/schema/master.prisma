@@ -104,6 +104,8 @@ model Partner {
 }
 
 model Product {
+  referenceCostPlans ReferenceCostPlan[] @relation("ReferenceCostTarget")
+  referenceTonPlans ReferenceCostPlan[] @relation("ReferenceCostTon")
   id          Int         @id @default(autoincrement())
   code        String      @unique
   name        String
@@ -244,6 +246,7 @@ enum PriceBasis {
 }
 
 model ProcessingType {
+  referenceCostPlans ReferenceCostPlan[]
   id       Int     @id @default(autoincrement())
   name     String  @unique
   note     String?
