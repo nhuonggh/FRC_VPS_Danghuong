@@ -50,7 +50,7 @@ export function resolveBreadcrumb(nav: readonly NavModule[], pathname: string): 
   const moduleGuide = /^\/guide\/modules\/([^/]+)\/?$/.exec(pathname);
   if (moduleGuide) {
     const navModule = nav.find((m) => m.key === moduleGuide[1]);
-    return navModule ? [{ label: navModule.label, href: `/m/${navModule.key}` }, { label: "Hướng dẫn sử dụng" }] : [];
+    return navModule ? [{ label: navModule.label, href: `/m/${navModule.key}` }, { label: "Hướng dẫn sử dụng", href: "/guide" }] : [];
   }
   const roleGuide = /^\/guide\/roles\/([^/]+)\/?$/.exec(pathname);
   if (roleGuide) {

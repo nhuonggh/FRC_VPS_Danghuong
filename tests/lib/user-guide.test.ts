@@ -35,7 +35,7 @@ describe("hướng dẫn sử dụng — nội dung và quyền truy cập", () 
     expect(moduleForPath(nav, moduleGuideHref("delivery"))?.module.key).toBe("delivery");
     expect(moduleForPath(nav, moduleGuideHref("sales"))).toBeNull();
     expect(resolveBreadcrumb(nav, moduleGuideHref("delivery"))).toEqual([
-      { label: "Giao hàng", href: "/m/delivery" }, { label: "Hướng dẫn sử dụng" },
+      { label: "Giao hàng", href: "/m/delivery" }, { label: "Hướng dẫn sử dụng", href: "/guide" },
     ]);
     expect(resolveBreadcrumb(nav, "/guide").at(-1)?.label).toBe("Hướng dẫn sử dụng");
     expect(resolveBreadcrumb(nav, "/guide/roles/cashier").at(-1)?.label).toBe("Thủ quỹ");
