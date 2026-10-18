@@ -32,7 +32,13 @@ describe("AuditTable", () => {
     expect(screen.getAllByText("23:50 30/09/2026").length).toBeGreaterThan(0);
     expect(screen.getAllByText("00:00 01/10/2026").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Nguyễn Văn Nam").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("order.update").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Cập nhật").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Đơn bán hàng").length).toBeGreaterThan(0);
+    expect(screen.queryByText("order.update")).toBeNull();
+    for (const label of ["Nguyễn Văn Nam", "Cập nhật", "Đơn bán hàng"]) {
+      expect(screen.getAllByText(label)[0]).toHaveClass("rounded-full");
+      expect(screen.getAllByText(label)[0]).not.toHaveClass("font-mono");
+    }
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
@@ -92,7 +98,9 @@ const entry = {
 describe("AuditDetail", () => {
   it("tab Thông tin: hành động, đối tượng, mã, người, giờ ICT, IP; chỉ xem — không nút sửa", () => {
     render(<AuditDetail entry={entry} />);
-    expect(screen.getAllByText("product.update").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Cập nhật").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sản phẩm").length).toBeGreaterThan(0);
+    expect(screen.queryByText("product.update")).toBeNull();
     expect(screen.getAllByText("23:50 30/09/2026").length).toBeGreaterThan(0);
     expect(screen.getByText("10.0.0.1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /chỉnh sửa|Sửa|Lưu|Hủy/i })).toBeNull();

@@ -6,11 +6,13 @@ import { AuditDetail } from "@/app/(app)/system/audit-log/[id]/AuditDetail";
 import { AuditTable } from "@/app/(app)/system/audit-log/AuditTable";
 import { EmptyState, ExportButton, MultiSelectFilter, PaginationFooter, SearchBox } from "@/components/ui";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
+import { StatCard } from "@/components/ui/StatCard";
 import { MAX_EXPORT_ROWS } from "@/server/audit/export";
 import { DomainError } from "@/server/http/errors";
 
 const requireActor = vi.fn();
 const listAudit = vi.fn();
+const auditStats = vi.fn();
 const listAuditEntities = vi.fn();
 const getAuditEntry = vi.fn();
 const userFindMany = vi.fn();
@@ -21,6 +23,7 @@ vi.mock("@/server/auth/session", () => ({ requireActor: (...a: unknown[]) => req
 vi.mock("@/server/audit/queries", async (orig) => ({
   ...(await orig<typeof import("@/server/audit/queries")>()),
   listAudit: (...a: unknown[]) => listAudit(...a),
+  auditStats: (...a: unknown[]) => auditStats(...a),
   listAuditEntities: (...a: unknown[]) => listAuditEntities(...a),
   getAuditEntry: (...a: unknown[]) => getAuditEntry(...a),
 }));
@@ -33,7 +36,8 @@ const actor = (...perms: string[]) => ({ userId: 7, perms: new Set(perms) });
 const row = { id: 1, userId: 3, action: "order.update", entity: "SaleOrder", entityId: "12", at: new Date("2026-09-30T16:50:00Z") };
 
 beforeEach(() => {
-  for (const m of [requireActor, listAudit, listAuditEntities, getAuditEntry, userFindMany, userFindUnique, notFound]) m.mockReset();
+  for (const m of [requireActor, listAudit, auditStats, listAuditEntities, getAuditEntry, userFindMany, userFindUnique, notFound]) m.mockReset();
+  auditStats.mockResolvedValue({ users: 2, entities: 3, actions: 4 });
   notFound.mockImplementation((): never => { throw new Error("NOT_FOUND"); });
   userFindMany.mockResolvedValue([{ id: 3, fullName: "Nguyễn Văn Nam" }, { id: 4, fullName: "Trần Thị Lan" }]);
   userFindUnique.mockResolvedValue({ fullName: "Nguyễn Văn Nam" });
@@ -58,6 +62,7 @@ describe("/system/audit-log (server)", () => {
     expect(requireActor).toHaveBeenCalledWith("audit.view");
     expect(listAudit).not.toHaveBeenCalled();
     expect(userFindMany).not.toHaveBeenCalled();
+    expect(auditStats).not.toHaveBeenCalled();
   });
 
   it("đọc URL bằng parseListParams (user, entity, q, thời gian, trang) rồi gọi listAudit", async () => {
@@ -67,6 +72,7 @@ describe("/system/audit-log (server)", () => {
     expect(listAudit.mock.calls[0]![1]).toMatchObject({
       q: "lock", timePreset: "today", page: 2, sort: "-action", filters: { user: ["3", "4"], entity: ["User"] },
     });
+    expect(auditStats.mock.calls[0]![1]).toEqual(listAudit.mock.calls[0]![1]);
   });
 
   it("DTO cho bảng: chỉ id/thời gian ISO/tên người/hành động/đối tượng/mã — không JSON, không ip", async () => {
@@ -103,7 +109,17 @@ describe("/system/audit-log (server)", () => {
     const ms = findAll(tree, MultiSelectFilter).map((m) => m.props);
     expect(ms.map((m) => m.paramKey)).toEqual(["user", "entity"]);
     expect(ms[0]!.options).toEqual([{ value: "3", label: "Nguyễn Văn Nam" }, { value: "4", label: "Trần Thị Lan" }]);
-    expect(ms[1]!.options).toEqual([{ value: "Role", label: "Role" }, { value: "SaleOrder", label: "SaleOrder" }, { value: "User", label: "User" }]);
+    expect(ms[1]!.options).toEqual([{ value: "Role", label: "Nhóm quyền" }, { value: "SaleOrder", label: "Đơn bán hàng" }, { value: "User", label: "Người dùng" }]);
+  });
+
+  it("thống kê lấy tổng kết quả và các nhóm từ server, không đếm dòng của trang", async () => {
+    requireActor.mockResolvedValue(actor("audit.view"));
+    listAudit.mockResolvedValue({ rows: [row], total: 500 });
+    const tree = await page({ page: "2" });
+    expect(findAll(tree, StatCard).map(el => ({ label: el.props.label, value: el.props.value }))).toEqual([
+      { label: "Tổng thao tác", value: 500 }, { label: "Người thao tác", value: 2 },
+      { label: "Loại hành động", value: 4 }, { label: "Loại đối tượng", value: 3 },
+    ]);
   });
 
   it("phân trang: tổng/trang/cỡ trang từ server; đổi trang giữ bộ lọc", async () => {
