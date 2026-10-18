@@ -24,10 +24,23 @@ describe("hướng dẫn sử dụng — màn hình và đường vào", () => {
     expect(screen.getByRole("link", { name: "Theo công việc của bạn" })).toHaveAttribute("href", "/guide?view=roles");
   });
   it("mục lục chỉ hiện nhóm được giao; hai cách đọc có địa chỉ riêng", () => {
-    render(<GuideIndex nav={nav} byRole={false} />);
+    render(<GuideIndex nav={nav} />);
     expect(screen.getByRole("link", { name: "Giao hàng" })).toHaveAttribute("href", "/guide/modules/delivery");
     expect(screen.queryByRole("link", { name: "Hệ thống" })).toBeNull();
     expect(screen.getByRole("link", { name: "Theo chức năng" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "FAQ" })).toHaveAttribute("href", "/guide?view=faq");
+    expect(screen.queryByText(/Mới sử dụng/)).toBeNull();
+    expect(screen.queryByText("Khi cần trợ giúp")).toBeNull();
+    expect(screen.queryByText("Bạn muốn làm việc gì? Chọn theo chức năng hoặc theo công việc của bạn để xem các bước.")).toBeNull();
+  });
+  it("FAQ mở bằng địa chỉ riêng và chứa các câu hỏi thay vì danh sách chức năng", async () => {
+    requireActor.mockResolvedValue({ perms: new Set(["order.view"]) });
+    render(await GuidePage({ searchParams: Promise.resolve({ view: "faq" }) }));
+    expect(screen.getByRole("link", { name: "FAQ" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Không thấy một chức năng hoặc nút thao tác?").closest("summary")).not.toBeNull();
+    expect(document.querySelectorAll("details")).toHaveLength(4);
+    expect(screen.queryByRole("link", { name: "Bán hàng" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Theo chức năng" })).not.toHaveAttribute("aria-current");
   });
   it("đọc đúng bài được liên kết, mở đúng màn hình và có thể quay lại module", () => {
     render(<ModuleGuide module={nav.find((m) => m.key === "delivery")!} topic="trip-result" />);
