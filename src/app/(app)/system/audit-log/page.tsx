@@ -1,3 +1,5 @@
+import { StatCard } from "@/components/ui/StatCard";
+import { auditEntityLabel } from "@/lib/audit-labels";
 import Link from "next/link";
 import { EmptyState, ExportButton, ListPageLayout, MultiSelectFilter, PaginationFooter, SearchBox } from "@/components/ui";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
@@ -5,7 +7,7 @@ import { formatNumber } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { buildExportHref, buildListHref, parseListParams } from "@/lib/query-params";
 import { MAX_EXPORT_ROWS } from "@/server/audit/export";
-import { AUDIT_FILTER_KEYS, listAudit, listAuditEntities } from "@/server/audit/queries";
+import { AUDIT_FILTER_KEYS, auditStats, listAudit, listAuditEntities } from "@/server/audit/queries";
 import { requireActor } from "@/server/auth/session";
 import { AuditTable } from "./AuditTable";
 
@@ -14,10 +16,11 @@ const BASE = "/system/audit-log";
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireActor("audit.view");
   const params = parseListParams(await searchParams, AUDIT_FILTER_KEYS);
-  const [{ rows, total }, users, entities] = await Promise.all([
+  const [{ rows, total }, users, entities, stats] = await Promise.all([
     listAudit(prisma, params),
     prisma.user.findMany({ select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
     listAuditEntities(prisma),
+    auditStats(prisma, params),
   ]);
   const names = new Map(users.map((u) => [u.id, u.fullName]));
   const filtered = !!(params.q || params.timePreset || params.filters.user || params.filters.entity);
@@ -36,12 +39,15 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
           <ExportButton href={buildExportHref("/api/audit-log/export", params)} />
         </>
       }
+      description="Thống kê theo bộ lọc hiện tại"
+      statsClassName="!grid grid-cols-1 md:grid-cols-4"
+      stats={<><StatCard label="Tổng thao tác" value={total} /><StatCard label="Người thao tác" value={stats.users} /><StatCard label="Loại hành động" value={stats.actions} /><StatCard label="Loại đối tượng" value={stats.entities} /></>}
       filters={
         <div className="flex flex-wrap items-center gap-2">
           <SearchBox basePath={BASE} params={params} placeholder="Tìm hành động, đối tượng, mã…" />
           <QuickTimeFilter basePath={BASE} params={params} />
           <MultiSelectFilter label="Người thao tác" paramKey="user" basePath={BASE} params={params} options={users.map((u) => ({ value: String(u.id), label: u.fullName }))} />
-          <MultiSelectFilter label="Đối tượng" paramKey="entity" basePath={BASE} params={params} options={entities.map((e) => ({ value: e, label: e }))} />
+          <MultiSelectFilter label="Đối tượng" paramKey="entity" basePath={BASE} params={params} options={entities.map((e) => ({ value: e, label: auditEntityLabel(e) }))} />
         </div>
       }
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(BASE, params, patch)} />}

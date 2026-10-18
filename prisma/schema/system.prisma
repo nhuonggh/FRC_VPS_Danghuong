@@ -16,6 +16,7 @@ model User {
   updatedAt             DateTime  @updatedAt
 
   supplierOrders SupplierOrder[]
+  advancedPayments Payment[] @relation("PaymentAdvancedBy")
   supplierOrderNotices SupplierOrderNotice[]
   roles           UserRole[]
   ownedPartners   Partner[]        @relation("PartnerOwner")

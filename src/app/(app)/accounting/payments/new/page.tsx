@@ -10,5 +10,5 @@ export const dynamic = "force-dynamic";
 export default async function NewPaymentPage() {
   const actor = await requireActor("payment.manage");
   assertCan(actor.perms, "cash.transaction.create");
-  return <VoucherForm doc="PAYMENT" today={ictYmd(new Date())} accounts={await listActiveCashAccounts(prisma)} />;
+  return <VoucherForm doc="PAYMENT" today={ictYmd(new Date())} accounts={await listActiveCashAccounts(prisma)} people={(await prisma.user.findMany({ where: { isLocked: false }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } })).map(u => ({ value: u.id, label: u.fullName }))} />;
 }

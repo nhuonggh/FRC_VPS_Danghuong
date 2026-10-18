@@ -2421,3 +2421,8 @@ WHERE p.code='order.analysis.view' AND (r.name='Giám đốc' OR EXISTS (
   SELECT 1 FROM role_permissions rp JOIN permissions a ON a.id=rp."permissionId"
   WHERE rp."roleId"=r.id AND a.code='role.manage'
 )) ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20261018120000_payment_advanced_by/migration.sql
+ALTER TABLE "payments" ADD COLUMN "advancedById" INTEGER;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_advancedById_fkey"
+  FOREIGN KEY ("advancedById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

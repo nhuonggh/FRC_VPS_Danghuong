@@ -25,7 +25,7 @@ export interface Voucher {
   cashAccountId: number; amount: Prisma.Decimal; at: Date; note: string | null;
   reviewStatus: CashReviewStatus; isCancelled: boolean; createdBy: number;
   /** Phiếu thu sinh từ xác nhận chuyến giao (công nợ đã ghi ở TRIP_COLLECT) — chỉ đổi qua nghiệp vụ chuyến. */
-  tripId: number | null;
+  tripId: number | null; advancedById?: number | null;
 }
 
 /** Khoá dòng phiếu (`FOR UPDATE`) rồi đọc: hai thủ quỹ kiểm cùng phiếu / sửa & kiểm đồng thời chỉ một bên thắng. */
@@ -39,7 +39,7 @@ export async function lockVoucher(tx: Tx, doc: VoucherDoc, id: number): Promise<
   await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
   const p = await tx.payment.findUnique({ where: { id } });
   if (!p) throw new DomainError("Không tìm thấy phiếu chi.", 404);
-  return { id, doc, periodId: p.periodId, code: p.code, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy, tripId: null };
+  return { id, doc, periodId: p.periodId, code: p.code, advancedById: p.advancedById, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy, tripId: null };
 }
 
 type VoucherPatch = Partial<{ amount: Prisma.Decimal; cashAccountId: number; at: Date; note: string | null; partnerId: number | null; orderId: number | null; reviewStatus: CashReviewStatus; reviewedBy: number | null; reviewedAt: Date | null; isCancelled: boolean; cancelledAt: Date | null; cancelledBy: number | null }>;
@@ -77,6 +77,11 @@ function assertVoucherPerm(actor: Actor, doc: VoucherDoc, action: "create" | "ed
 async function checkAccount(tx: Tx, id: number) {
   const a = await tx.cashAccount.findUnique({ where: { id }, select: { isActive: true } });
   if (!a || !a.isActive) throw new DomainError("Quỹ/tài khoản không hợp lệ hoặc đã tắt.", 400);
+}
+async function checkAdvancedBy(tx: Tx, id: number | null | undefined, existing?: number | null) {
+  if (id == null || id === existing) return;
+  const user = await tx.user.findUnique({ where: { id }, select: { isLocked: true } });
+  if (!user || user.isLocked) throw new DomainError("Người ứng tiền không tồn tại hoặc tài khoản đã khóa.", 400);
 }
 async function checkPartner(tx: Tx, id: number, role: "customer" | "supplier" | "any") {
   const p = await tx.partner.findUnique({ where: { id }, select: { isCustomer: true, isSupplier: true, mergedIntoId: true, isActive: true } });
@@ -122,13 +127,14 @@ export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInp
   assertDocDateInPeriod(period, at);
   await checkAccount(tx, input.cashAccountId);
   if (input.partnerId !== null) await checkPartner(tx, input.partnerId, input.kind === "TRA_NCC" ? "supplier" : "customer");
+  await checkAdvancedBy(tx, input.advancedById);
   const id = await nextDocId(tx, "payments");
   const code = formatDocCode(VOUCHER_PREFIX.PAYMENT, id);
   const amount = D(input.amount);
-  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, goodsReturnId: input.goodsReturnId ?? null, createdBy: actor.userId } });
+  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, advancedById: input.advancedById ?? null, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, goodsReturnId: input.goodsReturnId ?? null, createdBy: actor.userId } });
   await postVoucherLedgers(tx, { doc: "PAYMENT", id, periodId: period.id, type: input.kind, partnerId: input.partnerId, cashAccountId: input.cashAccountId, amount, at }, actor.userId);
   await addReviewEvent(tx, "PAYMENT", id, "SUBMIT", actor.userId);
-  await writeAudit(tx, { userId: actor.userId, action: "payment.create", entity: "Payment", entityId: id, after: { code, kind: input.kind, amount: input.amount, cashAccountId: input.cashAccountId } });
+  await writeAudit(tx, { userId: actor.userId, action: "payment.create", entity: "Payment", entityId: id, after: { advancedById: input.advancedById ?? null, code, kind: input.kind, amount: input.amount, cashAccountId: input.cashAccountId } });
   return { id, code };
 }
 
@@ -175,11 +181,13 @@ export async function editPayment(tx: Tx, actor: Actor, id: number, input: Payme
   if (input.partnerId !== null) await checkPartner(tx, input.partnerId, input.kind === "TRA_NCC" ? "supplier" : "customer");
   await removeVoucherLedgers(tx, "PAYMENT", id);
   const amount = D(input.amount);
+  await checkAdvancedBy(tx, input.advancedById, v.advancedById);
+  await tx.payment.update({ where: { id }, data: { advancedById: input.advancedById ?? null } });
   await updateVoucher(tx, "PAYMENT", id, { amount, cashAccountId: input.cashAccountId, at, note: input.note || null, partnerId: input.partnerId });
   await postVoucherLedgers(tx, { doc: "PAYMENT", id, periodId: v.periodId, type: v.type, partnerId: input.partnerId, cashAccountId: input.cashAccountId, amount, at }, actor.userId);
   await addReviewEvent(tx, "PAYMENT", id, v.reviewStatus === "RETURNED" ? "RESUBMIT" : "EDIT", actor.userId);
   if (v.reviewStatus === "RETURNED") await updateVoucher(tx, "PAYMENT", id, { reviewStatus: "PENDING_REVIEW", reviewedBy: null, reviewedAt: null });
-  await writeAudit(tx, { userId: actor.userId, action: "payment.update", entity: "Payment", entityId: id, before: { amount: v.amount.toString(), cashAccountId: v.cashAccountId, partnerId: v.partnerId }, after: { amount: input.amount, cashAccountId: input.cashAccountId, partnerId: input.partnerId } });
+  await writeAudit(tx, { userId: actor.userId, action: "payment.update", entity: "Payment", entityId: id, before: { advancedById: v.advancedById ?? null, amount: v.amount.toString(), cashAccountId: v.cashAccountId, partnerId: v.partnerId }, after: { advancedById: input.advancedById ?? null, amount: input.amount, cashAccountId: input.cashAccountId, partnerId: input.partnerId } });
 }
 
 /** Hủy phiếu CHƯA kiểm tra: gỡ sổ quỹ + công nợ (về 0). Phiếu đã REVIEWED phải qua điều chỉnh (VOID). */

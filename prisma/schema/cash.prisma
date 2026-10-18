@@ -39,6 +39,7 @@ model Payment {
   code          String           @unique
   kind          PaymentKind
   partnerId     Int?
+  advancedById  Int?
   amount        Decimal          @db.Decimal(18, 2)
   cashAccountId Int
   at            DateTime
@@ -56,6 +57,7 @@ model Payment {
 
   period      Period              @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner     Partner?            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  advancedBy  User?               @relation("PaymentAdvancedBy", fields: [advancedById], references: [id], onDelete: Restrict)
   cashAccount CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
   goodsReturn GoodsReturn?        @relation(fields: [goodsReturnId], references: [id], onDelete: Restrict)
   expense     OperatingExpense?

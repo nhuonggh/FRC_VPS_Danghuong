@@ -69,6 +69,7 @@ export async function listVouchers(db: Db, actor: Actor, doc: VoucherDoc, params
 }
 
 export interface VoucherDetailDTO extends VoucherRowDTO {
+  advancedById?: number | null; advancedByName?: string | null;
   /** Khoản chi phí hoạt động tương ứng (phiếu chi loại CHI_PHI) — sửa ở màn Chi phí. */
   expenseId: number | null;
   partnerId: number | null; orderId: number | null; cashAccountId: number; dateYmd: string; reviewedByName: string | null; reviewedAt: Date | null;
@@ -88,10 +89,13 @@ export async function getVoucher(db: Db, actor: Actor, doc: VoucherDoc, id: numb
   if (!base) throw new DomainError(doc === "RECEIPT" ? "Không tìm thấy phiếu thu." : "Không tìm thấy phiếu chi.", 404);
   const accounts = new Map((await db.cashAccount.findMany({ where: { id: { in: adjustments.flatMap((a) => (a.newCashAccountId ? [a.newCashAccountId] : [])) } }, select: { id: true, name: true } })).map((a) => [a.id, a.name]));
   const names = await fullName(db, [base.createdBy, ...(base.reviewedBy ? [base.reviewedBy] : []), ...events.map((e) => e.userId), ...adjustments.flatMap((a) => [a.requestedBy, ...(a.decidedBy ? [a.decidedBy] : [])])]);
+  const advancedById = "advancedById" in base ? base.advancedById : null;
+  const advancedBy = advancedById ? await db.user.findUnique({ where: { id: advancedById }, select: { fullName: true } }) : null;
   const type = "type" in base ? base.type : base.kind;
   const expense = type === "CHI_PHI" ? await db.operatingExpense.findUnique({ where: { paymentId: id }, select: { id: true, expenseType: { select: { name: true } } } }) : null;
   const at = base.at; const t = new Date(at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
   return {
+    advancedById, advancedByName: advancedBy?.fullName ?? null,
     id, doc, code: base.code, at, type, typeLabel: expense ? `Chi phí — ${expense.expenseType.name}` : (doc === "RECEIPT" ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL)[type] ?? type, expenseId: expense?.id ?? null, partnerId: base.partnerId, partnerName: base.partner?.name ?? null,
     orderId: "orderId" in base ? base.orderId : null, orderCode: "order" in base ? (base.order?.code ?? null) : null, amount: base.amount.toString(), cashAccountId: base.cashAccountId, cashAccountName: base.cashAccount.name,
     reviewStatus: base.reviewStatus, isCancelled: base.isCancelled, note: base.note, createdByName: names.get(base.createdBy) ?? null, dateYmd: t,

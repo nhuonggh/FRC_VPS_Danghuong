@@ -4,17 +4,20 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserRound, Wallet } from "lucide-react";
 import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
+import { filterComboOptions } from "@/components/ui/Combobox";
 import { apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { PAYMENT_KIND_LABEL, PAYMENT_KINDS, RECEIPT_TYPE_LABEL, RECEIPT_TYPES, type VoucherDoc } from "@/server/cash/schemas";
 
 export interface VoucherFormInitial {
+  advancedBy?: ComboOption | null;
   type: string; partner: ComboOption | null; order: ComboOption | null; cashAccountId: number; amount: string; date: string; note: string;
 }
 const URL_KIND: Record<VoucherDoc, string> = { RECEIPT: "receipts", PAYMENT: "payments" };
 
 /** Lập / sửa phiếu thu (57) và phiếu chi (59). Sửa: chỉ khi chưa kiểm tra; sửa xong phiếu bị trả lại tự gửi lại. */
-export function VoucherForm({ doc, id, code, today, accounts, initial }: {
+export function VoucherForm({ doc, id, code, today, accounts, initial, people = [] }: {
+  people?: ComboOption[];
   doc: VoucherDoc; id?: number; code?: string; today: string; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; initial?: VoucherFormInitial;
 }) {
   const router = useRouter();
@@ -28,6 +31,8 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
   const [amount, setAmount] = useState(initial?.amount ?? "");
   const [date, setDate] = useState(initial?.date ?? today);
   const [note, setNote] = useState(initial?.note ?? "");
+  // ASSUMPTION: người ứng tiền là tài khoản nhân viên, không phát sinh công nợ riêng.
+  const [advancedBy, setAdvancedBy] = useState<ComboOption | null>(initial?.advancedBy ?? null);
   const editing = id !== undefined;
 
   const partnerRole = receipt ? (type === "THU_NO" ? "customer" : "any") : type === "TRA_NCC" ? "supplier" : "customer";
@@ -50,7 +55,7 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
     if (!accountId) throw new Error("Chọn quỹ/tài khoản.");
     const body = receipt
       ? { type, partnerId: partner ? Number(partner.value) : null, orderId: type === "THU_NO" && order !== "" ? order : null, cashAccountId: accountId, amount: Number(amount), date, note }
-      : { kind: type, partnerId: needsPartner && partner ? Number(partner.value) : null, cashAccountId: accountId, amount: Number(amount), date, note };
+      : { kind: type, partnerId: needsPartner && partner ? Number(partner.value) : null, cashAccountId: accountId, amount: Number(amount), date, note, advancedById: advancedBy ? Number(advancedBy.value) : null };
     const res = editing
       ? await apiFetch<{ id: number }>(`/api/vouchers/${URL_KIND[doc]}/${id}`, { method: "PATCH", json: body })
       : await apiFetch<{ id: number }>(`/api/vouchers/${URL_KIND[doc]}`, { method: "POST", json: body, idempotencyKey: idem.key });
@@ -61,9 +66,9 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
   const labels: Record<string, string> = receipt ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL;
   const listHref = `/accounting/${URL_KIND[doc]}`;
   return (
-    <NewPage bare backHref={editing ? `${listHref}/${id}` : listHref} backLabel={editing ? "Quay lại phiếu" : "Quay lại danh sách"}
+    <NewPage wide backHref={editing ? `${listHref}/${id}` : listHref} backLabel={editing ? "Quay lại phiếu" : "Quay lại danh sách"}
       title={editing ? `Sửa ${receipt ? "phiếu thu" : "phiếu chi"} ${code}` : receipt ? "Lập phiếu thu" : "Lập phiếu chi"} submitLabel={editing ? "Lưu thay đổi" : "Lưu phiếu"}
-      isDirty={() => Boolean(amount || note)} onSubmit={submit}
+      isDirty={() => Boolean(amount || note || advancedBy)} onSubmit={submit}
       footerInfo={amount ? <span className="text-sm font-semibold">Số tiền: <b className="ml-1 text-lg text-accent tabular">{Number(amount).toLocaleString("vi-VN")}</b></span> : undefined}>
       <FormCard icon={UserRound} title="Thông tin phiếu">
         <FormGrid cols={2}>
@@ -102,6 +107,12 @@ export function VoucherForm({ doc, id, code, today, accounts, initial }: {
           <InlineField id="amount" label="Số tiền" required>
             <NumberInput id="amount" value={amount} onValueChange={setAmount} className={`${igInput} tabular text-right`} />
           </InlineField>
+          {!receipt && <InlineField id="advancedBy" label="Người ứng tiền" className="md:col-span-2">
+            <div className={igCombo}>
+              <Combobox hideLabel label="Người ứng tiền" value={advancedBy} onChange={setAdvancedBy}
+                loadOptions={async (q) => filterComboOptions(people, q)} placeholder="Tìm và chọn người ứng tiền…" />
+            </div>
+          </InlineField>}
           <InlineField id="note" label="Ghi chú" multiline className="md:col-span-2">
             <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} />
           </InlineField>

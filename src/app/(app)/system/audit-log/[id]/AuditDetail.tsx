@@ -1,4 +1,7 @@
 "use client";
+import { Badge } from "@/components/ui/Badge";
+import { auditActionLabel, auditEntityLabel } from "@/lib/audit-labels";
+
 
 import { DetailField, DetailPage, DetailSection, useDetailNav } from "@/components/ui/DetailPage";
 import { MAX_CHANGES, truncateText, type AuditDetailDto } from "@/lib/audit-format";
@@ -15,7 +18,7 @@ function Value({ text }: { text: string }) {
         <span data-preview>{truncateText(text, PREVIEW_CHARS)}</span>{" "}
         <span className="text-xs font-medium text-accent">Xem đầy đủ ({formatNumber(text.length)} ký tự)</span>
       </summary>
-      <div className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-hover p-2 font-mono text-xs">{text}</div>
+      <div className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-hover p-2 text-xs">{text}</div>
     </details>
   );
 }
@@ -28,7 +31,7 @@ export function AuditDetail({ entry }: { entry: AuditDetailDto }) {
     <DetailPage
       backHref="/system/audit-log" backLabel="Quay lại nhật ký"
       summary={{
-        title: entry.action, code: `#${entry.id}`, badges: [{ label: entry.entity }],
+        title: auditActionLabel(entry.action), code: `#${entry.id}`, badges: [{ label: auditEntityLabel(entry.entity) }],
         facts: [{ label: "Thời gian", value: formatDateTime(entry.at) }, { label: "Người thao tác", value: entry.by }],
       }}
       tabs={[
@@ -37,10 +40,10 @@ export function AuditDetail({ entry }: { entry: AuditDetailDto }) {
           render: () => (
             <DetailSection title="Thao tác" action={null}>
               <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                <DetailField label="Hành động">{entry.action}</DetailField>
-                <DetailField label="Đối tượng">{entry.entity}</DetailField>
+                <DetailField label="Hành động"><Badge tone="info">{auditActionLabel(entry.action)}</Badge></DetailField>
+                <DetailField label="Đối tượng"><Badge>{auditEntityLabel(entry.entity)}</Badge></DetailField>
                 <DetailField label="Mã đối tượng">{entry.entityId}</DetailField>
-                <DetailField label="Người thao tác">{entry.by}</DetailField>
+                <DetailField label="Người thao tác"><Badge>{entry.by}</Badge></DetailField>
                 <DetailField label="Thời gian">{formatDateTime(entry.at)}</DetailField>
                 <DetailField label="Địa chỉ IP">{entry.ip}</DetailField>
               </dl>
@@ -77,7 +80,7 @@ export function AuditDetail({ entry }: { entry: AuditDetailDto }) {
                     <tbody className="max-md:block">
                       {changes.map((c) => (
                         <tr key={c.path} className="border-b border-border align-top last:border-b-0 max-md:block max-md:py-2">
-                          <td className="break-words py-2 pr-3 font-mono text-xs max-md:block max-md:py-0.5">{c.path || "(toàn bộ)"}</td>
+                          <td className="break-words py-2 pr-3 text-xs max-md:block max-md:py-0.5">{c.path || "(toàn bộ)"}</td>
                           <td className="break-words py-2 pr-3 text-danger max-md:block max-md:py-0.5 max-md:before:mr-1 max-md:before:text-fg-muted max-md:before:content-['Cũ:']"><Value text={c.before} /></td>
                           <td className="break-words py-2 text-success max-md:block max-md:py-0.5 max-md:before:mr-1 max-md:before:text-fg-muted max-md:before:content-['Mới:']"><Value text={c.after} /></td>
                         </tr>

@@ -74,6 +74,7 @@ export function VoucherDetail({ v, perms, accounts }: { v: VoucherDetailDTO; per
           <DetailField label="Đối tác">{v.partnerName}</DetailField>
           {v.doc === "RECEIPT" && <DetailField label="Đơn hàng">{v.orderId ? <Link href={`/sales/orders/${v.orderId}`} className="text-accent hover:underline">{v.orderCode}</Link> : null}</DetailField>}
           <DetailField label="Người lập">{v.createdByName}</DetailField>
+          {v.doc === "PAYMENT" && <DetailField label="Người ứng tiền">{v.advancedByName}</DetailField>}
           <DetailField label="Người kiểm tra">{v.reviewedByName ? `${v.reviewedByName} · ${formatDateTime(v.reviewedAt!)}` : null}</DetailField>
           <DetailField label="Ghi chú">{v.note}</DetailField>
         </dl>
