@@ -48,6 +48,8 @@ describe("hướng dẫn sử dụng — màn hình và đường vào", () => {
     expect(screen.getByRole("link", { name: "Mở Nhập kết quả giao" })).toHaveAttribute("href", "/delivery/results");
     expect(screen.getByRole("link", { name: "Quay lại Giao hàng" })).toHaveAttribute("href", "/m/delivery");
     expect(screen.getByRole("heading", { name: "Làm xong thì thấy gì?" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Tất cả hướng dẫn" })).toBeNull();
+    expect(screen.queryByText("Chọn việc cần làm và làm lần lượt theo các bước. Các mục hiển thị tùy quyền được giao cho tài khoản của bạn.")).toBeNull();
   });
   it("chủ đề không còn quyền trở về bài đầu được xem, không có đường mở chức năng bị ẩn", () => {
     render(<ModuleGuide module={nav.find((m) => m.key === "sales")!} topic="order-new" />);
