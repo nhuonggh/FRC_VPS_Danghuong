@@ -11,7 +11,7 @@ const link = `inline-flex min-h-11 items-center gap-2 rounded-sm px-3 py-2 text-
 const card = `flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-surface p-4 hover:bg-hover ${focus}`;
 
 function GuideHeader({ title, intro, backHref = "/guide", backLabel = "Tất cả hướng dẫn" }: { title: string; intro: string; backHref?: string; backLabel?: string }) {
-  return <header className="space-y-3"><Link href={backHref} className={link}><ArrowLeft size={16} aria-hidden />{backLabel}</Link><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm leading-relaxed text-fg-secondary">{intro}</p></header>;
+  return <header className="shrink-0 space-y-3"><Link href={backHref} className={link}><ArrowLeft size={16} aria-hidden />{backLabel}</Link><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm leading-relaxed text-fg-secondary">{intro}</p></header>;
 }
 
 export function GuideIndex({ nav, byRole }: { nav: NavModule[]; byRole: boolean }) {
@@ -69,14 +69,14 @@ export function ModuleGuide({ module, topic }: { module: NavModule; topic?: stri
   if (!current) return null;
   const { fn, article } = current;
   const topicLinks = topics.map(({ fn: item }, n) => <Link key={item.key} href={moduleGuideHref(module.key, item.key)} aria-current={fn.key === item.key ? "page" : undefined} className={`flex min-h-11 items-center gap-3 rounded-sm px-3 py-2 text-sm ${focus} ${fn.key === item.key ? "bg-accent-soft font-semibold text-accent" : "text-fg-secondary hover:bg-hover"}`}><span className="tabular-nums">{n + 1}.</span>{item.label}</Link>);
-  return <div className="space-y-6">
+  return <div className="module-guide-page flex flex-col gap-4 lg:h-full lg:min-h-0">
     <GuideHeader title={`Hướng dẫn ${module.label}`} intro="Chọn việc cần làm và làm lần lượt theo các bước. Các mục hiển thị tùy quyền được giao cho tài khoản của bạn." />
-    <Link href={`/m/${module.key}`} className={link}><ArrowLeft size={16} aria-hidden />Quay lại {module.label}</Link>
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
-      <nav aria-label={`Bài hướng dẫn ${module.label}`} className="hidden space-y-1 rounded-md border border-border bg-surface p-3 lg:block">{topicLinks}</nav>
-      <div className="flex min-w-0 flex-col gap-4">
-        <details key={fn.key} className="rounded-md border border-border bg-surface p-3 lg:hidden"><summary className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 text-sm font-medium ${focus}`}><span>Bài {index + 1}: {fn.label} · Chọn bài khác</span><ChevronDown size={18} className="shrink-0" aria-hidden /></summary><nav aria-label="Chọn bài hướng dẫn" className="mt-3 space-y-1">{topicLinks}</nav></details>
-        <article aria-labelledby="guide-article-title" className="space-y-6 rounded-md border border-border bg-surface p-4 md:p-6">
+    <Link href={`/m/${module.key}`} className={`${link} shrink-0 self-start`}><ArrowLeft size={16} aria-hidden />Quay lại {module.label}</Link>
+    <details key={fn.key} className="rounded-md border border-border bg-surface p-3 lg:hidden"><summary className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 text-sm font-medium ${focus}`}><span>Bài {index + 1}: {fn.label} · Chọn bài khác</span><ChevronDown size={18} className="shrink-0" aria-hidden /></summary><nav aria-label="Chọn bài hướng dẫn" className="mt-3 space-y-1">{topicLinks}</nav></details>
+    <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
+      <nav aria-label={`Bài hướng dẫn ${module.label}`} className="hidden space-y-1 rounded-md border border-border bg-surface p-3 [scrollbar-color:var(--border-strong)_transparent] [scrollbar-width:thin] lg:block lg:w-56 lg:shrink-0 lg:overflow-y-auto">{topicLinks}</nav>
+      <div className="guide-reading-panel flex min-w-0 flex-col rounded-md border border-border bg-surface lg:min-h-0 lg:flex-1">
+        <article key={fn.key} aria-labelledby="guide-article-title" tabIndex={0} className={`space-y-6 p-4 [scrollbar-color:var(--border-strong)_transparent] [scrollbar-width:thin] md:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto ${focus}`}>
           <header className="space-y-2"><p className="text-sm text-fg-secondary">Bài {index + 1} / {topics.length}</p><h2 id="guide-article-title" className="text-lg font-semibold">{fn.label}</h2><p className="text-sm leading-relaxed">{article.when}</p></header>
           {article.prepare && <section className="space-y-2"><h3 className="font-semibold">Cần chuẩn bị</h3><p className="text-sm leading-relaxed">{article.prepare}</p></section>}
           <section className="space-y-3"><h3 className="font-semibold">Các bước thực hiện</h3><ol className="list-decimal space-y-4 pl-5 text-sm leading-relaxed marker:font-semibold marker:text-accent">{article.steps.map((step) => <li key={step} className="pl-2">{step}</li>)}</ol></section>
@@ -84,7 +84,7 @@ export function ModuleGuide({ module, topic }: { module: NavModule; topic?: stri
           {article.note && <aside className="space-y-2 rounded-sm border border-border bg-hover p-4"><h3 className="text-sm font-semibold">Lưu ý</h3><p className="text-sm leading-relaxed">{article.note}</p></aside>}
           <Link href={fn.path} className={`${link} bg-accent-soft`}><ArrowRight size={18} aria-hidden />Mở {fn.label}</Link>
         </article>
-        <nav aria-label="Bài trước và bài tiếp theo" className="flex flex-wrap justify-between gap-3">
+        <nav aria-label="Bài trước và bài tiếp theo" className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-border p-3">
           {topics[index - 1] ? <Link href={moduleGuideHref(module.key, topics[index - 1]!.fn.key)} className={link}><ArrowLeft size={16} aria-hidden />{topics[index - 1]!.fn.label}</Link> : <span />}
           {topics[index + 1] && <Link href={moduleGuideHref(module.key, topics[index + 1]!.fn.key)} className={link}>{topics[index + 1]!.fn.label}<ArrowRight size={16} aria-hidden /></Link>}
         </nav>
