@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { findActiveFunction } from "@/lib/nav";
+import { moduleForPath } from "@/lib/workspace";
+import { moduleGuideHref } from "@/lib/guide-links";
 import { GuardedLink as Link } from "./GuardedLink";
 import { Icon } from "./icons";
 import { BOTTOM_NAV_HEIGHT } from "./layout-constants";
@@ -16,13 +18,14 @@ const hrefOf = (m: NavModule) => (m.type === "flat" ? m.path! : `/m/${m.key}`);
 export function BottomNav({ nav }: { nav: NavModule[] }) {
   const pathname = usePathname();
   const active = findActiveFunction(nav, pathname);
+  const activeModuleKey = moduleForPath(nav, pathname)?.module.key;
   const [sheet, setSheet] = useState(false);
   const shown = nav.slice(0, 4); // Trang chủ đầu tiên + 3 module hay dùng nhất theo thứ tự nghiệp vụ
 
   return (
     <nav aria-label="Điều hướng nhanh" className={clsx("fixed inset-x-0 bottom-0 z-sidebar flex border-t border-border bg-surface md:hidden", BOTTOM_NAV_HEIGHT)}>
       {shown.map((m) => {
-        const on = active?.module.key === m.key || (m.type === "flat" && pathname === m.path);
+        const on = activeModuleKey === m.key || active?.module.key === m.key || (m.type === "flat" && pathname === m.path);
         return (
           <Link key={m.key} href={hrefOf(m)} className={clsx("flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-xs", on ? "text-accent" : "text-fg-secondary")}>
             <Icon name={m.icon} />
@@ -51,6 +54,7 @@ export function BottomNav({ nav }: { nav: NavModule[] }) {
                     {f.label}
                   </Link>
                 ))}
+                {m.type === "accordion" && <Link href={moduleGuideHref(m.key)} onClick={() => setSheet(false)} className="ml-8 flex min-h-11 items-center gap-2 text-sm text-accent"><Icon name="book-open" size={16} />Hướng dẫn sử dụng</Link>}
               </div>
             ))}
           </Dialog.Content>

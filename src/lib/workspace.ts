@@ -51,6 +51,8 @@ const fnsOf = (m: NavModule) => m.categories.flatMap((c) => c.functions);
 export function moduleForPath(nav: readonly NavModule[], pathname: string): { module: NavModule; fn: NavFunction | null } | null {
   const landing = /^\/m\/([^/]+)\/?$/.exec(pathname);
   if (landing) { const found = nav.find((m) => m.key === landing[1] && m.type === "accordion"); return found ? { module: found, fn: null } : null; }
+  const guide = /^\/guide\/modules\/([^/]+)\/?$/.exec(pathname);
+  if (guide) { const found = nav.find((m) => m.key === guide[1] && m.type === "accordion"); return found ? { module: found, fn: null } : null; }
   const hit = findActiveFunction(nav, pathname);
   return hit && hit.module.type === "accordion" ? { module: hit.module, fn: hit.fn } : null;
 }

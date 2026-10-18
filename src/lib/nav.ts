@@ -1,4 +1,5 @@
 import type { NavCategory, NavFunction, NavModule } from "@/config/app.config";
+import { GUIDE_ROLES } from "@/config/guide-roles";
 
 /** Lọc menu theo quyền: ẩn HẲN (không hiện xám) — global-rules.md mục 8. */
 export function buildNav(nav: readonly NavModule[], perms: ReadonlySet<string>): NavModule[] {
@@ -45,6 +46,17 @@ export interface Crumb {
 
 export function resolveBreadcrumb(nav: readonly NavModule[], pathname: string): Crumb[] {
   if (pathname === "/") return [{ label: "Trang chủ" }];
+  if (pathname === "/guide") return [{ label: "Trang chủ", href: "/" }, { label: "Hướng dẫn sử dụng" }];
+  const moduleGuide = /^\/guide\/modules\/([^/]+)\/?$/.exec(pathname);
+  if (moduleGuide) {
+    const navModule = nav.find((m) => m.key === moduleGuide[1]);
+    return navModule ? [{ label: navModule.label, href: `/m/${navModule.key}` }, { label: "Hướng dẫn sử dụng" }] : [];
+  }
+  const roleGuide = /^\/guide\/roles\/([^/]+)\/?$/.exec(pathname);
+  if (roleGuide) {
+    const role = GUIDE_ROLES.find((r) => r.key === roleGuide[1]);
+    return role ? [{ label: "Hướng dẫn sử dụng", href: "/guide?view=roles" }, { label: role.label }] : [];
+  }
   const hit = findActiveFunction(nav, pathname);
   if (!hit) return [];
   const rest = pathname.slice(hit.fn.path.length).split("/").filter(Boolean);

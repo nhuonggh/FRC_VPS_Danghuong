@@ -7,6 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type { NavModule } from "@/config/app.config";
 import { confirmLeaveIfDirty } from "@/lib/dirty-guard";
+import { moduleGuideHref } from "@/lib/guide-links";
 import { FUNCTIONS_TAB, moduleForPath, reorderPins, setActive, tabsFor, togglePin } from "@/lib/workspace";
 import { useWorkspace } from "@/lib/workspace-store";
 import { GuardedLink } from "./GuardedLink";
@@ -28,16 +29,17 @@ export function ModuleTabs({ nav }: { nav: NavModule[] }) {
   const listRef = useRef<HTMLDivElement>(null);
   const moduleKey = here?.module.key;
   const fnKey = here?.fn?.key ?? null;
+  const isGuide = pathname.startsWith("/guide/modules/");
 
   // Nhớ chức năng đang làm (khôi phục khi quay lại module) và dọn trạng thái "đang chuyển tab".
-  useEffect(() => { setPending(null); if (moduleKey) update((p) => setActive(p, moduleKey, fnKey ?? undefined)); }, [pathname, moduleKey, fnKey, update]);
+  useEffect(() => { setPending(null); if (moduleKey && !isGuide) update((p) => setActive(p, moduleKey, fnKey ?? undefined)); }, [pathname, moduleKey, fnKey, isGuide, update]);
   // Cuộn tab đang hoạt động vào vùng nhìn thấy khi thanh tab tràn.
   useEffect(() => { listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [pathname, prefs]);
 
   if (!here) return null;
   const { module } = here;
   const tabs = tabsFor(module, prefs, fnKey);
-  const activeKey = fnKey ?? FUNCTIONS_TAB;
+  const activeKey = isGuide ? "__guide" : fnKey ?? FUNCTIONS_TAB;
   const pinnedKeys = tabs.filter((t) => t.kind === "pinned").map((t) => t.key);
 
   const move = (key: string, to: number) => { const order = pinnedKeys.filter((k) => k !== key); order.splice(Math.max(0, Math.min(to, order.length)), 0, key); update((p) => reorderPins(p, module.key, order)); };
@@ -79,6 +81,9 @@ export function ModuleTabs({ nav }: { nav: NavModule[] }) {
             </div>
           );
         })}
+        <GuardedLink href={moduleGuideHref(module.key)} role="tab" aria-selected={isGuide} className={`${tabCls(isGuide)} shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}>
+          <Icon name="book-open" size={16} /><span>Hướng dẫn sử dụng</span>
+        </GuardedLink>
       </div>
       <Dropdown.Root>
         <Dropdown.Trigger aria-label="Tất cả tab" title="Tất cả tab" className="flex w-9 shrink-0 items-center justify-center text-fg-secondary hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
