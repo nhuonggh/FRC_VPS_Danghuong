@@ -1,4 +1,5 @@
 import { DashboardView } from "@/components/home/dashboard/DashboardView";
+import { GuideHomeSection } from "@/components/guide/GuideHomeSection";
 import { BankReceiptsOverview } from "@/components/home/dashboard/BankReceiptsOverview";
 import { RefreshDashboard } from "@/components/home/dashboard/RefreshDashboard";
 import { ReportExportButton } from "@/components/home/dashboard/ReportExportButton";
@@ -58,7 +59,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     const itemKey = Array.isArray(sp.item) ? sp.item[0] : sp.item;
     const effective = { ...params, filters: { ...params.filters, ...(itemKey ? { state: params.filters.state ?? ["active"], ...(itemKey === "loss" ? { type: params.filters.type ?? ["LOSS"] } : {}) } : {}) }, timePreset: params.timePreset ?? "today" as const };
     const review = Array.isArray(sp.review) ? sp.review[0] : sp.review;
-    return <div className="space-y-4"><HomeTabs tabs={tabItems} active="daily" /><DailyCheckView actor={actor} params={effective} itemKey={itemKey} now={now} review={review} /></div>;
+    return <div className="space-y-4"><HomeTabs tabs={tabItems} active="daily" /><DailyCheckView actor={actor} params={effective} itemKey={itemKey} now={now} review={review} /><GuideHomeSection /></div>;
   }
 
   if (tab === null) {
@@ -68,6 +69,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <div className="space-y-6">
         {(visible.length > 0 || dailyVisible) && <HomeTabs tabs={tabItems} active="functions" />}
         <HomeView fullName={actor.fullName} now={now} modules={nav.filter((m) => m.type === "accordion")} widgets={widgets} />
+        <GuideHomeSection />
       </div>
     );
   }
@@ -105,6 +107,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <a href={buildListHref(`/?tab=${tab}`, effective, {})} className="mt-2 inline-block text-sm font-medium text-accent hover:underline">Thử lại</a>
         </div>
       )}
+      <GuideHomeSection />
     </div>
   );
 }

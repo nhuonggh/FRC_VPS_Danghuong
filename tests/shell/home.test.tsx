@@ -57,7 +57,9 @@ describe("Trang chủ — Level 0 (module selector)", () => {
   it("không quyền nào → thông báo trống, không có thẻ", async () => {
     requireActor.mockResolvedValue(actor([]));
     await renderHome();
-    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryAllByRole("link")).toHaveLength(2); // Hướng dẫn vẫn dùng được khi chưa được giao chức năng.
+    expect(screen.getByRole("link", { name: "Theo chức năng" })).toHaveAttribute("href", "/guide");
+    expect(screen.getByRole("link", { name: "Theo công việc của bạn" })).toHaveAttribute("href", "/guide?view=roles");
     expect(screen.queryByRole("region", { name: "Số liệu nhanh" })).toBeNull();
     expect(loadWidget).not.toHaveBeenCalled();
     expect(screen.getByText(/chưa được cấp quyền vào chức năng nào/)).toBeInTheDocument();

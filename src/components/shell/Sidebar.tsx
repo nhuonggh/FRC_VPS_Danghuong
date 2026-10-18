@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { findActiveFunction } from "@/lib/nav";
-import { allPinned, restoreHref, setSidebarCollapsed } from "@/lib/workspace";
+import { allPinned, moduleForPath, restoreHref, setSidebarCollapsed } from "@/lib/workspace";
+import { moduleGuideHref } from "@/lib/guide-links";
 import { useWorkspace } from "@/lib/workspace-store";
 import { APP_NAME } from "@/lib/version";
 import { GuardedLink as Link } from "./GuardedLink";
@@ -17,6 +18,7 @@ const OPEN_KEY = "nav-open"; // trạng thái mở accordion: persist theo PHIÊ
 export function Sidebar({ nav }: { nav: NavModule[] }) {
   const pathname = usePathname();
   const active = findActiveFunction(nav, pathname);
+  const activeModuleKey = moduleForPath(nav, pathname)?.module.key;
   const prefs = useWorkspace((s) => s.prefs);
   const update = useWorkspace((s) => s.update);
   const collapsed = !!prefs.sidebarCollapsed; // lưu theo tài khoản (DB), không còn theo trình duyệt
@@ -34,8 +36,8 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
 
   // Module chứa chức năng đang active tự expand
   useEffect(() => {
-    if (active) setOpen((o) => (o[active.module.key] ? o : { ...o, [active.module.key]: true }));
-  }, [active?.module.key]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeModuleKey) setOpen((o) => (o[activeModuleKey] ? o : { ...o, [activeModuleKey]: true }));
+  }, [activeModuleKey]);
 
   const toggleModule = (key: string) =>
     setOpen((o) => {
@@ -94,7 +96,7 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
           </div>
         )}
         {nav.map((m) => {
-          const isActiveModule = active?.module.key === m.key || (m.type === "flat" && pathname === m.path);
+          const isActiveModule = activeModuleKey === m.key || (m.type === "flat" && pathname === m.path);
           const expanded = !collapsed && m.type === "accordion" && open[m.key];
           const href = m.type === "flat" ? m.path! : restoreHref(m, prefs); // về lại chức năng đang làm dở nếu còn hợp lệ
           return (
@@ -163,6 +165,10 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
                       })}
                     </div>
                   ))}
+                  <Link href={moduleGuideHref(m.key)} aria-current={pathname === moduleGuideHref(m.key) ? "page" : undefined}
+                    className={clsx("mt-1 flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent", pathname === moduleGuideHref(m.key) ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary hover:bg-hover")}>
+                    <Icon name="book-open" size={16} />Hướng dẫn sử dụng
+                  </Link>
                 </div>
               )}
             </div>

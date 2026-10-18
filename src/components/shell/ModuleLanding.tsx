@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Search, Star } from "lucide-react";
+import { ArrowLeft, BookOpen, Search, Star } from "lucide-react";
 import { useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { normalizeSearch } from "@/lib/search";
+import { moduleGuideHref } from "@/lib/guide-links";
 import { isPinned, togglePin } from "@/lib/workspace";
 import { useWorkspace } from "@/lib/workspace-store";
 import { GuardedLink } from "./GuardedLink";
@@ -22,6 +23,9 @@ export function ModuleLanding({ module }: { module: NavModule }) {
           <ArrowLeft size={16} aria-hidden /> Trang chủ
         </Link>
         <h1 className="text-xl font-semibold">{module.label}</h1>
+        <GuardedLink href={moduleGuideHref(module.key)} className="flex min-h-11 items-center gap-2 rounded-sm px-3 text-sm font-medium text-accent hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+          <BookOpen size={18} aria-hidden />Hướng dẫn sử dụng
+        </GuardedLink>
         <label className="relative ml-auto w-full sm:w-72">
           <Search size={16} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted" />
           <input
