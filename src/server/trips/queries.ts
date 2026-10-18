@@ -201,7 +201,7 @@ export async function listTripOptions(db: Db): Promise<TripOptionsDTO> {
 
 // ── hàng không giao được (42) ────────────────────────────────────────────────────────────────────────────────────────
 export interface UndeliveredRowDTO { stopId: number; tripId: number; tripCode: string; orderId: number; orderCode: string; partnerName: string; phone: string | null; address: string | null; result: TripResultKind; resultLabel: string; note: string | null; remainingQty: string; at: Date | null; handledNote: string | null; handledAt: Date | null; returnedQty: string; activeTripId: number | null; activeTripCode: string | null }
-export async function listUndelivered(db: Db, actor: Actor, params: ListParams): Promise<{ rows: UndeliveredRowDTO[]; total: number }> {
+export async function listUndelivered(db: Db, actor: Actor, params: ListParams) {
   assertCan(actor.perms, "trip.manage");
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const results = (params.filters.result ?? []).filter((r) => r === "KHONG_GIAO" || r === "GIAO_MOT_PHAN") as TripResultKind[];
@@ -214,6 +214,7 @@ export async function listUndelivered(db: Db, actor: Actor, params: ListParams):
   const rows = all.map((s) => ({ s, remaining: s.order.lines.reduce((a, l) => a.plus(remainingToDeliver(l)), D(0)), returned: s.order.lines.reduce((a, l) => a.plus(l.returnLines.reduce((x, d) => x.plus(d.qty), D(0))), D(0)) })).filter((x) => states.includes(x.remaining.lte(0) ? "completed" : x.s.handledAt ? "handled" : "pending"));
   return {
     total: rows.length,
+    stats: { orders: new Set(rows.map(({ s }) => s.orderId)).size, failed: rows.filter(({ s }) => s.result === "KHONG_GIAO").length, partial: rows.filter(({ s }) => s.result === "GIAO_MOT_PHAN").length, trips: new Set(rows.map(({ s }) => s.tripId)).size },
     rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize).map(({ s, remaining, returned }) => ({
       stopId: s.id, tripId: s.tripId, tripCode: s.trip.code, orderId: s.orderId, orderCode: s.order.code, partnerName: s.order.partner.name, phone: s.order.partner.phone, address: s.order.partner.address,
       result: s.result!, resultLabel: RESULT_LABEL[s.result!], note: s.resultNote, remainingQty: remaining.toString(), at: s.resultAt, handledNote: s.handledNote, handledAt: s.handledAt, returnedQty: returned.toString(), activeTripId: s.order.tripStops[0]?.tripId ?? null, activeTripCode: s.order.tripStops[0]?.trip.code ?? null,

@@ -1,6 +1,6 @@
 import { ReviewQueue } from "@/components/cash/ReviewQueue";
 import Link from "next/link";
-import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
+import { StatCard, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
@@ -12,11 +12,13 @@ const BASE = "/accounting/cash-review";
 export default async function CashReviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("cash.review");
   const params = parseListParams(await searchParams, QUEUE_FILTER_KEYS);
-  const { rows, total } = await listReviewQueue(prisma, actor, params);
+  const { rows, total, stats } = await listReviewQueue(prisma, actor, params);
   const filtered = !!(params.q || params.filters.kind || params.filters.status || params.timePreset);
   return (
     <ListPageLayout
       title="Chờ kiểm tra quỹ"
+      statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
+      stats={<><StatCard label="Tổng mục chờ xử lý" value={total} /><StatCard label="Phiếu thu" value={stats.receipts} /><StatCard label="Phiếu chi" value={stats.payments} tone="warning" /><StatCard label="Yêu cầu điều chỉnh" value={stats.adjustments} tone="info" /></>}
       filters={<div className="flex flex-wrap items-center gap-2">
         <SearchBox basePath={BASE} params={params} placeholder="Tìm mã phiếu, đối tác…" />
         <MultiSelectFilter label="Loại" paramKey="kind" basePath={BASE} params={params} options={[{ value: "RECEIPT", label: "Phiếu thu" }, { value: "PAYMENT", label: "Phiếu chi" }, { value: "ADJUSTMENT", label: "Điều chỉnh" }]} />

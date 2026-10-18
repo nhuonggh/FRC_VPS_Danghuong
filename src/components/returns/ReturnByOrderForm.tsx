@@ -13,7 +13,7 @@ import type { ReturnableOrderDTO } from "@/server/returns/queries";
  * Trả theo đơn (mã 43): chọn SL trả từng dòng đã giao. Vốn nhập lại + tiền trừ công nợ do server tính từ dòng bán gốc.
  * Chế độ `order.undelivered` (từ “Hàng không giao được”): trả về kho phần CHƯA giao — chỉ nhập kho, không trừ công nợ.
  */
-export function ReturnByOrderForm({ order, today, refundAccounts }: { order: ReturnableOrderDTO; today: string; /** Quỹ/ngân hàng để hoàn tiền khách (thiếu quyền chi hoặc trả hàng chưa giao ⇒ không có ô hoàn tiền). */ refundAccounts?: (ComboOption & { type: "CASH" | "BANK" })[] }) {
+export function ReturnByOrderForm({ order, today, refundAccounts, selection }: { selection?: React.ReactNode; order: ReturnableOrderDTO; today: string; /** Quỹ/ngân hàng để hoàn tiền khách (thiếu quyền chi hoặc trả hàng chưa giao ⇒ không có ô hoàn tiền). */ refundAccounts?: (ComboOption & { type: "CASH" | "BANK" })[] }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const [qty, setQty] = useState<Record<number, string>>({});
@@ -22,7 +22,7 @@ export function ReturnByOrderForm({ order, today, refundAccounts }: { order: Ret
   const cashList = (refundAccounts ?? []).filter((a) => a.type === "CASH"), bankList = (refundAccounts ?? []).filter((a) => a.type === "BANK");
   const [cashRefund, setCashRefund] = useState(""), [cashAcc, setCashAcc] = useState<number | "">(cashList[0] ? Number(cashList[0].value) : "");
   const [bankRefund, setBankRefund] = useState(""), [bankAcc, setBankAcc] = useState<number | "">(bankList[0] ? Number(bankList[0].value) : "");
-  const isDirty = () => Object.values(qty).some((v) => v !== "") || note !== "" || cashRefund !== "" || bankRefund !== "";
+  const isDirty = () => Object.values(qty).some((v) => v !== "") || date !== today || note !== "" || cashRefund !== "" || bankRefund !== "";
 
   async function submit() {
     const lines = order.lines.flatMap((l) => (Number(qty[l.id]) > 0 ? [{ orderLineId: l.id, qty: Number(qty[l.id]) }] : []));
@@ -37,8 +37,9 @@ export function ReturnByOrderForm({ order, today, refundAccounts }: { order: Ret
 
   return (
     <NewPage wide bare backHref={`/sales/orders/${order.id}`} backLabel={`Quay lại đơn ${order.code}`} title={order.undelivered ? `Trả hàng chưa giao về kho — đơn ${order.code}` : `Trả hàng theo đơn ${order.code}`} submitLabel="Lập phiếu trả" isDirty={isDirty} onSubmit={submit}>
+      {selection}
       <FormCard icon={Undo2} title="Thông tin trả hàng">
-        {order.undelivered && <p className="mb-3 rounded-sm border border-border bg-hover px-3 py-2 text-sm text-fg-secondary">Trả về kho phần hàng <strong>chưa giao</strong>. Sau khi lưu phiếu, số lượng trả kho không còn được xếp giao lại trong đơn này; nếu trả một phần thì chỉ phần còn lại được giao. Chỉ nhập lại kho theo giá vốn; công nợ của khách không đổi vì chưa ghi nợ phần này.</p>}
+
         <p className="mb-3 text-sm text-fg-secondary">{order.partnerCode} — {order.partnerName} · đơn ngày {formatDate(order.orderDate)}</p>
         <FormGrid cols={2}>
           <InlineField id="date" label="Ngày trả" required>
@@ -51,7 +52,7 @@ export function ReturnByOrderForm({ order, today, refundAccounts }: { order: Ret
       </FormCard>
       {refundAccounts && (
         <FormCard icon={Undo2} title="Hoàn tiền cho khách">
-          <p className="mb-3 text-sm text-fg-secondary">{order.partnerIsRetail ? "Khách lẻ không ghi nợ — nhập số tiền hoàn lại ngay (bằng giá trị hàng trả); nếu để trống, giá trị hàng trả sẽ thành khoản mình nợ khách." : "Tuỳ chọn: hoàn tiền mặt/chuyển khoản cho khách ngay. Phần không hoàn được trừ vào công nợ của khách."} Số tiền hoàn tối đa bằng giá trị hàng trả (hệ thống tính theo đơn gốc).</p>
+
           <FormGrid cols={2}>
             <InlineField id="ret-cash" label="Hoàn tiền mặt"><NumberInput id="ret-cash" value={cashRefund} placeholder="0" onValueChange={setCashRefund} className={`${igInput} tabular text-right`} /></InlineField>
             {cashList.length > 1 ? <InlineField id="ret-cash-acc" label="Quỹ tiền mặt"><select id="ret-cash-acc" value={cashAcc} onChange={(e) => setCashAcc(Number(e.target.value))} className={igInput}>{cashList.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}</select></InlineField> : <span />}
@@ -85,6 +86,8 @@ export function ReturnByOrderForm({ order, today, refundAccounts }: { order: Ret
           </table>
         </div>
       </FormCard>
+      {order.undelivered && <p className="mb-3 rounded-sm border border-border bg-hover px-3 py-2 text-sm text-fg-secondary">Trả về kho phần hàng <strong>chưa giao</strong>. Sau khi lưu phiếu, số lượng trả kho không còn được xếp giao lại trong đơn này; nếu trả một phần thì chỉ phần còn lại được giao. Chỉ nhập lại kho theo giá vốn; công nợ của khách không đổi vì chưa ghi nợ phần này.</p>}
+      {refundAccounts && <p className="mb-3 text-sm text-fg-secondary">{order.partnerIsRetail ? "Khách lẻ không ghi nợ — nhập số tiền hoàn lại ngay (bằng giá trị hàng trả); nếu để trống, giá trị hàng trả sẽ thành khoản mình nợ khách." : "Tuỳ chọn: hoàn tiền mặt/chuyển khoản cho khách ngay. Phần không hoàn được trừ vào công nợ của khách."} Số tiền hoàn tối đa bằng giá trị hàng trả (hệ thống tính theo đơn gốc).</p>}
     </NewPage>
   );
 }

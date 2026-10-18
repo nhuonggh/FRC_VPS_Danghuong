@@ -18,9 +18,9 @@ export async function listSupplierOrders(db: PrismaClient, actor: Actor, p: { q:
   if (p.overdue) conditions.push(Prisma.sql`o.state='SENT' AND EXISTS(SELECT 1 FROM supplier_order_lines l WHERE l."orderId"=o.id AND l."expectedDate"<${ictYmd(new Date())}::date AND ${received}<l.qty)`);
   const from = Prisma.sql`FROM supplier_orders o JOIN partners n ON n.id=o."partnerId" JOIN users u ON u.id=o."createdBy" WHERE ${Prisma.join(conditions, " AND ")}`;
   const [counts, ids] = await Promise.all([
-    db.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total ${from}`),
+    db.$queryRaw<{ total: number; sent: number; partial: number; received: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE ${status}='SENT')::int AS sent, COUNT(*) FILTER (WHERE ${status}='PARTIAL')::int AS partial, COUNT(*) FILTER (WHERE ${status}='RECEIVED')::int AS received ${from}`),
     db.$queryRaw<{ id: number }[]>(Prisma.sql`SELECT o.id ${from} ORDER BY o.id DESC LIMIT 20 OFFSET ${(p.page - 1) * 20}`),
   ]);
   const rows = await db.supplierOrder.findMany({ where: { id: { in: ids.map(r => r.id) } }, omit: { attachments: true }, include: orderInclude, orderBy: { id: "desc" } });
-  return { total: counts[0].total, rows };
+  return { total: counts[0].total, stats: counts[0], rows };
 }

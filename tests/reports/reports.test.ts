@@ -177,8 +177,10 @@ describe("52/53 — tiêu hao thực tế và đối chiếu định mức", () 
     const r = await runReport(prisma, actor2, "actual-consumption", P(), NOW);
     expect(r.rows).toHaveLength(1);
     expect(r.rows[0]).toMatchObject({ stocktake: st.code, code: w.p.code, norm: "4", shortage: "3", actual: "7" });
+    expect(r.summary).toContainEqual({ label: "Dòng thiếu khi kiểm", value: 1, tone: "warning" });
     const c = await runReport(prisma, actor2, "consumption-compare", P(), NOW);
     expect(c.rows[0]).toMatchObject({ norm: "4", actual: "7", diff: "-3", count: 1 }); expect(c.rows[0]!.pct).toBe(-75); expect(c.negativeKey).toBe("diff");
+    expect(c.summary).toContainEqual({ label: "Mã vượt định mức", value: 1, tone: "danger" });
     expect((await runReport(prisma, actor2, "consumption-compare", P({ neg: "1" }), NOW)).rows).toHaveLength(1);
     // lần kiểm sau: mốc trước là lần kiểm này ⇒ chỉ tính xuất sau đó
     await order(a.id, { qty: 2, date: "2026-09-14" });

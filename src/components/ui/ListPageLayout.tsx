@@ -1,7 +1,7 @@
 import clsx from "clsx";
 
 export function ListPageLayout({
-  title, description, actions, stats, statsClassName, filters, footer, children,
+  title, description, actions, stats, statsClassName, filters, footer, children, notes,
 }: {
   title: string;
   description?: string;
@@ -13,6 +13,7 @@ export function ListPageLayout({
   filters?: React.ReactNode;
   footer: React.ReactNode;
   children: React.ReactNode;
+  notes?: React.ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -27,6 +28,7 @@ export function ListPageLayout({
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
         {footer}
       </div>
+      {notes && <section aria-label="Ghi chú" className="rounded-md border border-border bg-surface p-3 text-sm text-fg-secondary">{notes}</section>}
     </div>
   );
 }

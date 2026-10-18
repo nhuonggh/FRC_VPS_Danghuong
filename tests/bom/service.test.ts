@@ -182,6 +182,8 @@ describe("listBoms / getBom", () => {
 
     const all = await listBoms(prisma, parseListParams({}, ["processingType"]), NOW);
     expect(all.total).toBe(2);
+    expect(all.stats.current + all.stats.noCurrent).toBe(all.total);
+    expect(all.stats.upcoming).toBe(1);
     const row = all.rows.find((r) => r.productId === fg.id)!;
     expect(row).toMatchObject({ versionCount: 2, upcomingFrom: "2026-10-01", current: { versionNo: 1, lineCount: 2 } });
 

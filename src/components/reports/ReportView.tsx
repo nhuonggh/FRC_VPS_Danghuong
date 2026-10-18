@@ -21,7 +21,7 @@ const fmt = (kind: string, v: Cell): string => {
 export function ReportView({ report, params, base, showSearch = true, negFilter = false }: { report: ReportResult & { range: { start: Date; end: Date } }; params: ListParams; base: string; showSearch?: boolean; negFilter?: boolean }) {
   const neg = (row: Record<string, Cell>) => report.negativeKey !== undefined && Number(row[report.negativeKey] ?? 0) < 0;
   const orderProfit = report.key === "order-profit";
-  const notesBelow = ["period-pnl", "debt-reconciliation"].includes(report.key);
+  const notesBelow = true;
   const closeHref = buildListHref(base, params, { filters: { order: [] } });
   return (
     <div className="flex min-w-0 flex-col gap-4 xl:flex-row">

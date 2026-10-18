@@ -44,6 +44,7 @@ describe("supplier orders", () => {
     expect(await prisma.supplierOrderNotice.count({ where: { userId: actor.userId } })).toBe(1);
     const filter = { q: "", status: "PARTIAL", mine: true, overdue: true, page: 1 };
     expect((await listSupplierOrders(prisma, actor, filter)).total).toBe(1);
+    expect((await listSupplierOrders(prisma, actor, filter)).stats).toEqual({ total: 1, sent: 0, partial: 1, received: 0 });
     expect((await listSupplierOrders(prisma, receiver, filter)).total).toBe(0);
     const second = await receiveSupplierOrder(prisma, receiver, o.id, "r2", receipt(lineId, 6));
     updated = await prisma.supplierOrder.findUniqueOrThrow({ where: { id: o.id }, include: orderInclude });

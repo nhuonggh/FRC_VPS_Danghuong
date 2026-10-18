@@ -102,7 +102,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
     <NewPage wide bare backHref={c.back} backLabel="Quay lại danh sách" title={c.title} submitLabel="Lập phiếu trả" isDirty={() => isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}
       footerInfo={<span className="text-sm font-semibold">{c.totalLabel}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>}>
       <FormCard icon={Undo2} title="Thông tin trả hàng">
-        <p className="mb-3 text-sm text-fg-secondary">{c.hint}</p>
+
         <FormGrid cols={2}>
           <InlineField id="partnerId" label={c.partnerLabel} required error={errors.partnerId?.message}>
             <Controller control={control} name="partnerId" render={({ field }) => (
@@ -200,6 +200,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
           </div>
         </div>
       </FormCard>
+      <p className="mb-3 text-sm text-fg-secondary">{c.hint}</p>
     </NewPage>
   );
 }

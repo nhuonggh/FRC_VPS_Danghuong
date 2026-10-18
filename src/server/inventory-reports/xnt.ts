@@ -38,7 +38,7 @@ export async function xntReport(db: PrismaClient, actor: Actor, from: Date, to: 
 }
 
 /** Danh sách XNT có tìm kiếm và phân trang; totals luôn tính trên toàn bộ tập đã lọc. */
-export async function xntList(db: PrismaClient, actor: Actor, options: XntListOptions): Promise<{ rows: XntRow[]; total: number; totals: XntTotals }> {
+export async function xntList(db: PrismaClient, actor: Actor, options: XntListOptions) {
   const report = await xntReport(db, actor, options.from, options.to);
   const needle = options.q?.trim().toLocaleLowerCase("vi-VN");
   const matched = needle ? report.rows.filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("vi-VN").includes(needle)) : report.rows;
@@ -47,5 +47,5 @@ export async function xntList(db: PrismaClient, actor: Actor, options: XntListOp
     ...(row.openingValue !== undefined ? { openingValue: new Prisma.Decimal(sum.openingValue ?? 0).plus(row.openingValue).toString(), inValue: new Prisma.Decimal(sum.inValue ?? 0).plus(row.inValue ?? 0).toString(), outValue: new Prisma.Decimal(sum.outValue ?? 0).plus(row.outValue ?? 0).toString(), closingValue: new Prisma.Decimal(sum.closingValue ?? 0).plus(row.closingValue ?? 0).toString() } : {}),
   }), { opening: "0", inQty: "0", outQty: "0", closing: "0" });
   const start = (options.page - 1) * options.pageSize;
-  return { rows: matched.slice(start, start + options.pageSize), total: matched.length, totals };
+  return { rows: matched.slice(start, start + options.pageSize), total: matched.length, totals, stats: { incoming: matched.filter((r) => new Prisma.Decimal(r.inQty).gt(0)).length, outgoing: matched.filter((r) => new Prisma.Decimal(r.outQty).gt(0)).length, inStock: matched.filter((r) => new Prisma.Decimal(r.closing).gt(0)).length } };
 }
