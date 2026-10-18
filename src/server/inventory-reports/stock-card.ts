@@ -19,5 +19,8 @@ export async function stockCardList(db: PrismaClient, actor: Actor, productId: n
   const rows = await stockCard(db, actor, productId);
   const filtered = rows.filter((row) => (!options.from || row.at >= options.from) && (!options.to || row.at < options.to));
   const start = (options.page - 1) * options.pageSize;
-  return { rows: filtered.slice(start, start + options.pageSize), total: filtered.length };
+  const sum = (key: "qtyIn" | "qtyOut") => filtered.reduce((s, r) => s.plus(r[key]), new Prisma.Decimal(0));
+  const before = rows.filter((r) => options.from && r.at < options.from);
+  const opening = before.at(-1)?.balance ?? "0";
+  return { rows: filtered.slice(start, start + options.pageSize), total: filtered.length, stats: { opening, incoming: sum("qtyIn").toString(), outgoing: sum("qtyOut").toString(), closing: new Prisma.Decimal(opening).plus(sum("qtyIn")).minus(sum("qtyOut")).toString() } };
 }

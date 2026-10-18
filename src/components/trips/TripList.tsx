@@ -24,6 +24,8 @@ export function TripList({ title, base, rows, total, stats, params, vehicles, cu
   const referenceFilters = [{ key: "customer", label: "Khách hàng", options: customers }, { key: "route", label: "Tuyến", options: routes }];
   const clearFilters = href({ q: undefined, timePreset: undefined, timeStart: undefined, timeEnd: undefined, filters: Object.fromEntries(Object.keys(params.filters).map((key) => [key, []])) });
   return <ListPageLayout title={title}
+    statsClassName="grid grid-cols-1 sm:grid-cols-3"
+    stats={fixedStatus ? <><StatCard label="Tổng chuyến" value={stats.all} /><StatCard label="Chờ đối soát" value={stats.returned} tone="warning" /><StatCard label="Đã đối soát" value={stats.settled} tone="success" /></> : undefined}
     description={!fixedStatus ? "Theo dõi chuyến giao hàng theo trạng thái và thu tiền" : undefined}
     actions={canCreate ? <Link href="/delivery/trips/new" className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Xếp chuyến</Link> : undefined}
     filters={<div className="space-y-3">

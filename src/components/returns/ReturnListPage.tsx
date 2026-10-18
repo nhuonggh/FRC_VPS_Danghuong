@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { ReturnKind } from "@prisma/client";
-import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
+import { StatCard, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
 import type { Actor } from "@/lib/permissions/scope";
@@ -13,11 +13,13 @@ export async function ReturnListPage({ actor, title, base, kinds, newHref, searc
   actor: Actor; title: string; base: string; kinds: ReturnKind[]; newHref: string; searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = parseListParams(await searchParams, RETURN_FILTER_KEYS);
-  const { rows, total } = await listReturns(prisma, actor, kinds, params);
+  const { rows, total, stats } = await listReturns(prisma, actor, kinds, params);
   const filtering = Boolean(params.q || params.filters.state || params.timePreset);
   return (
     <ListPageLayout
       title={title}
+      statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
+      stats={<><StatCard label="Tổng phiếu trả" value={total} /><StatCard label="Phiếu hiệu lực" value={stats.active} tone="success" /><StatCard label="Phiếu đã hủy" value={stats.cancelled} />{stats.amount !== undefined && <StatCard label="Giá trị trả hiệu lực" value={stats.amount} money />}</>}
       actions={<Link href={newHref} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Plus size={16} aria-hidden />Lập phiếu trả</Link>}
       filters={
         <div className="flex flex-wrap items-center gap-2">

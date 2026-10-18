@@ -59,7 +59,7 @@ export function bomWhere(params: ListParams): Prisma.BomWhereInput {
 export async function listBoms(db: Db, params: ListParams, now: Date = new Date()) {
   const where = bomWhere(params);
   const today = ictYmd(now);
-  const [rows, total] = await Promise.all([
+  const [rows, total, current, upcoming] = await Promise.all([
     db.bom.findMany({
       where,
       orderBy: params.sort ? sortToOrderBy(params.sort, ["createdAt"], { createdAt: "desc" }) : { product: { code: "asc" } },
@@ -72,6 +72,8 @@ export async function listBoms(db: Db, params: ListParams, now: Date = new Date(
       },
     }),
     db.bom.count({ where }),
+    db.bom.count({ where: { AND: [where, { versions: { some: { status: "ACTIVE", validFrom: { lte: new Date(`${today}T00:00:00Z`) } } } }] } }),
+    db.bom.count({ where: { AND: [where, { versions: { some: { status: "ACTIVE", validFrom: { gt: new Date(`${today}T00:00:00Z`) } } } }] } }),
   ]);
   const out: BomListRow[] = rows.map((b) => {
     const current = b.versions.find((v) => ymd(v.validFrom) <= today) ?? null;
@@ -88,7 +90,7 @@ export async function listBoms(db: Db, params: ListParams, now: Date = new Date(
       upcomingFrom: upcoming ? ymd(upcoming.validFrom) : null,
     };
   });
-  return { rows: out, total };
+  return { rows: out, total, stats: { current, upcoming, noCurrent: total - current } };
 }
 
 export async function getBom(db: Db, id: number, now: Date = new Date()): Promise<BomDetailDTO> {

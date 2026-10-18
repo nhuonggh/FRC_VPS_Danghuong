@@ -61,8 +61,15 @@ describe("báo cáo kho", () => {
     const card = await stockCardList(prisma, actor, w.p.id, { from: T(5), to: T(20), page: 1, pageSize: 1 });
     expect(card).toMatchObject({ total: 1 });
     expect(card.rows[0]).toMatchObject({ qtyOut: "3", balance: "7" });
+    expect(card.stats).toEqual({ opening: "10", incoming: "0", outgoing: "3", closing: "7" });
+    const emptyPage = await stockCardList(prisma, actor, w.p.id, { from: T(5), to: T(20), page: 2, pageSize: 1 });
+    expect(emptyPage.rows).toHaveLength(0);
+    expect(emptyPage.stats).toEqual(card.stats);
+    const noMovements = await stockCardList(prisma, actor, w.p.id, { from: T(15), to: T(20), page: 1, pageSize: 20 });
+    expect(noMovements.stats).toEqual({ opening: "7", incoming: "0", outgoing: "0", closing: "7" });
     const xnt = await xntList(prisma, actor, { from: T(0), to: T(20), q: w.p.code, page: 1, pageSize: 1 });
     expect(xnt).toMatchObject({ total: 1 });
     expect(xnt.rows[0]).toMatchObject({ opening: "0", inQty: "10", outQty: "3", closing: "7" });
+    expect(xnt.stats).toEqual({ incoming: 1, outgoing: 1, inStock: 1 });
   });
 });

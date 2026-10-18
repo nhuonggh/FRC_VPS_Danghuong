@@ -50,6 +50,7 @@ export async function actualConsumption(db: Db, range: TimeRange): Promise<Repor
   const rows = await lines(db, range);
   return {
     key: "actual-consumption", title: "Tiêu hao thực tế (từ kiểm kho)", total: rows.length, notes: [NOTE],
+    summary: [{ label: "Phiếu kiểm kho", value: new Set(rows.map((r) => r.stocktake)).size }, { label: "Mã nguyên vật liệu", value: new Set(rows.map((r) => r.productId)).size }, { label: "Dòng thiếu khi kiểm", value: rows.filter((r) => r.shortage.gt(0)).length, tone: "warning" }, { label: "Dòng thừa khi kiểm", value: rows.filter((r) => r.shortage.lt(0)).length, tone: "info" }],
     columns: [{ key: "stocktake", label: "Phiếu kiểm", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "code", label: "Mã NVL", kind: "text" }, { key: "name", label: "Nguyên vật liệu", kind: "text", align: "left" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "norm", label: "Theo định mức", kind: "qty" }, { key: "shortage", label: "Thiếu (+) / thừa (−) khi kiểm", kind: "qty" }, { key: "actual", label: "Thực tế", kind: "qty" }],
     rows: rows.map((r) => ({ stocktake: r.stocktake, date: ymd(r.at), code: r.code, name: r.name, unit: r.unit, norm: r.norm.toString(), shortage: r.shortage.toString(), actual: r.actual.toString() })),
   };
@@ -66,6 +67,7 @@ export async function consumptionCompare(db: Db, range: TimeRange, onlyOver: boo
   if (onlyOver) rows = rows.filter((r) => r.diff.lt(0));
   return {
     key: "consumption-compare", title: "Đối chiếu định mức và thực tế", total: rows.length, negativeKey: "diff", notes: [NOTE, "Chênh lệch = định mức − thực tế; số âm là nguyên vật liệu dùng vượt định mức (hao hụt)."],
+    summary: [{ label: "Mã nguyên vật liệu", value: rows.length }, { label: "Mã vượt định mức", value: rows.filter((r) => r.diff.lt(0)).length, tone: "danger" }, { label: "Mã đúng định mức", value: rows.filter((r) => r.diff.isZero()).length, tone: "success" }, { label: "Mã dưới định mức", value: rows.filter((r) => r.diff.gt(0)).length, tone: "info" }],
     columns: [{ key: "code", label: "Mã NVL", kind: "text" }, { key: "name", label: "Nguyên vật liệu", kind: "text", align: "left" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "count", label: "Số lần kiểm", kind: "int" }, { key: "norm", label: "Theo định mức", kind: "qty" }, { key: "actual", label: "Thực tế", kind: "qty" }, { key: "diff", label: "Chênh lệch", kind: "qty" }, { key: "pct", label: "% chênh", kind: "pct" }],
     rows: rows.map((r) => ({ code: r.code, name: r.name, unit: r.unit, count: r.count, norm: r.norm.toString(), actual: r.actual.toString(), diff: r.diff.toString(), pct: pct(r.diff, r.norm) })),
   };

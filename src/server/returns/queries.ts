@@ -43,19 +43,22 @@ function where(actor: Actor, kinds: ReturnKind[], params: ListParams): Prisma.Go
 
 export async function listReturns(db: Db, actor: Actor, kinds: ReturnKind[], params: ListParams) {
   const w = where(actor, kinds, params);
-  const [rows, total] = await Promise.all([
+  const [rows, total, active, amount] = await Promise.all([
     db.goodsReturn.findMany({
       where: w, orderBy: sortToOrderBy(params.sort, ["at", "code"], { at: "desc" }), skip: (params.page - 1) * params.pageSize, take: params.pageSize,
       include: { partner: { select: { code: true, name: true } }, order: { select: { code: true } }, _count: { select: { lines: true } } },
     }),
     db.goodsReturn.count({ where: w }),
+    db.goodsReturn.count({ where: { AND: [w, { isCancelled: false }] } }),
+    db.goodsReturn.aggregate({ where: { AND: [w, { isCancelled: false }] }, _sum: { totalAmount: true } }),
   ]);
   const out: ReturnRowDTO[] = rows.map((r) => ({
     id: r.id, code: r.code, kind: r.kind, at: r.at, partnerCode: r.partner.code, partnerName: r.partner.name, orderId: r.orderId, orderCode: r.order?.code ?? null,
     lineCount: r._count.lines, isCancelled: r.isCancelled,
     ...(r.kind === "SUPPLIER" ? { purchaseTotal: r.totalAmount.toString() } : { returnTotal: r.totalAmount.toString() }),
   }));
-  return { rows: redactDeep(out, actor.perms), total };
+  const canPrice = actor.perms.has(kinds.includes("SUPPLIER") ? "purchase_price.view" : "sale_price.view");
+  return { rows: redactDeep(out, actor.perms), total, stats: { active, cancelled: total - active, amount: canPrice ? (amount._sum.totalAmount ?? D(0)).toString() : undefined } };
 }
 
 export async function getReturn(db: Db, actor: Actor, id: number): Promise<ReturnDetailDTO> {
@@ -82,21 +85,21 @@ export async function getReturn(db: Db, actor: Actor, id: number): Promise<Retur
 }
 
 /** Đơn có thể trả (đã giao ít nhất một phần), tìm theo mã đơn / khách — cho bước chọn đơn ở màn 43. */
-export async function searchReturnableOrders(db: Db, actor: Actor, q: string) {
+export async function searchReturnableOrders(db: Db, actor: Actor, q: string, partnerId?: number, undelivered = false) {
   const terms = normalizeSearch(q).split(" ").filter(Boolean);
   const rows = await db.saleOrder.findMany({
     where: {
-      isCancelled: false, isDraft: false, partner: partnerScopeWhere(actor), deliveryStatus: { in: ["PARTIAL", "DELIVERED"] },
+      isCancelled: false, isDraft: false, partner: partnerScopeWhere(actor), ...(partnerId !== undefined ? { partnerId } : {}), ...(!undelivered ? { deliveryStatus: { in: ["PARTIAL", "DELIVERED"] as ("PARTIAL" | "DELIVERED")[] } } : {}),
       AND: terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] })),
     },
     orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 20,
-    select: { id: true, code: true, orderDate: true, partner: { select: { code: true, name: true } } },
+    select: { id: true, code: true, orderDate: true, partner: { select: { id: true, code: true, name: true } } },
   });
-  return rows.map((o) => ({ id: o.id, code: o.code, orderDate: o.orderDate, partnerCode: o.partner.code, partnerName: o.partner.name }));
+  return rows.map((o) => ({ id: o.id, code: o.code, orderDate: o.orderDate, partnerId: o.partner.id, partnerCode: o.partner.code, partnerName: o.partner.name }));
 }
 
 export interface ReturnableOrderDTO {
-  id: number; code: string; partnerName: string; partnerCode: string; orderDate: Date;
+  id: number; code: string; partnerId?: number; partnerName: string; partnerCode: string; orderDate: Date;
   /** Khách lẻ (KHL hoặc khách lẻ thân quen): không ghi nợ ⇒ nên hoàn tiền ngay khi trả hàng. */
   partnerIsRetail: boolean;
   /** true: trả về kho phần HÀNG CHƯA GIAO (hàng không giao được). */
@@ -123,7 +126,7 @@ export async function getOrderForReturn(db: Db, actor: Actor, orderId: number, u
   if (!o) throw new DomainError("Không tìm thấy đơn hàng.", 404);
   if (o.isCancelled || o.isDraft) throw new DomainError("Đơn đã hủy hoặc còn là nháp, không trả hàng được.", 409);
   return {
-    id: o.id, code: o.code, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate, partnerIsRetail: o.partner.isRegularRetail || (!o.partner.allowCredit && o.partner.code === "KHL"), undelivered,
+    id: o.id, code: o.code, partnerId: o.partnerId, partnerName: o.partner.name, partnerCode: o.partner.code, orderDate: o.orderDate, partnerIsRetail: o.partner.isRegularRetail || (!o.partner.allowCredit && o.partner.code === "KHL"), undelivered,
     lines: o.lines.map((l) => {
       const delivered = l.deliveryLines.reduce((s, d) => s.plus(d.qty), D(0));
       const returned = l.returnLines.filter((d) => d.goodsReturn.undelivered === undelivered).reduce((s, d) => s.plus(d.qty), D(0));

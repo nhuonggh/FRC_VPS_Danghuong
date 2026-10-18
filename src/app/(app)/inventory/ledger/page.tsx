@@ -1,3 +1,4 @@
+import { OperationalStats } from "@/components/ui/OperationalStats";
 import { notFound } from "next/navigation";
 import { ProductPicker } from "@/components/inventory/ProductPicker";
 import { StockCardTable } from "@/components/inventory/StockCardTable";
@@ -21,7 +22,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const params = parseListParams(allParams);
   const range = listTimeRange(params);
   const result = await stockCardList(prisma, actor, product.id, { from: range?.start, to: range?.end, page: params.page, pageSize: params.pageSize });
-  return <ListPageLayout title="Thẻ kho" actions={<ExportButton href={buildExportHref(`/api/inventory/ledger/export?product=${product.id}`, params)} />} filters={<div className="flex flex-wrap items-end gap-2"><ProductPicker productId={product.id} label={`${product.code} — ${product.name}`} /><QuickTimeFilter basePath={`/inventory/ledger?product=${product.id}`} params={params} /></div>} footer={<PaginationFooter total={result.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(`/inventory/ledger?product=${product.id}`, params, patch)} />}>
+  return <ListPageLayout title="Thẻ kho" statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" stats={<OperationalStats kind="ledger" data={result.stats} unit={product.baseUnit} />} actions={<ExportButton href={buildExportHref(`/api/inventory/ledger/export?product=${product.id}`, params)} />} filters={<div className="flex flex-wrap items-end gap-2"><ProductPicker productId={product.id} label={`${product.code} — ${product.name}`} /><QuickTimeFilter basePath={`/inventory/ledger?product=${product.id}`} params={params} /></div>} footer={<PaginationFooter total={result.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(`/inventory/ledger?product=${product.id}`, params, patch)} />}>
     {result.total ? <StockCardTable rows={result.rows} baseUnit={product.baseUnit} /> : <EmptyState kind="empty" title="Chưa có phát sinh kho trong khoảng này" />}
   </ListPageLayout>;
 }

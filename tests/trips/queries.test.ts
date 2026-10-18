@@ -185,6 +185,7 @@ describe("hàng không giao được (42)", () => {
     const list = await listUndelivered(prisma, KT, P({}, UNDELIVERED_FILTER_KEYS));
     expect(list.rows.map((r) => [r.orderCode, r.result, r.remainingQty])).toEqual(expect.arrayContaining([[b.code, "GIAO_MOT_PHAN", "3"], [a.code, "KHONG_GIAO", "4"]]));
     expect(list.total).toBe(2);
+    expect(list.stats).toEqual({ orders: 2, failed: 1, partial: 1, trips: 1 });
     expect((await listUndelivered(prisma, KT, P({ result: "KHONG_GIAO" }, UNDELIVERED_FILTER_KEYS))).rows.map((r) => r.orderCode)).toEqual([a.code]);
     expect((await listUndelivered(prisma, KT, P({ q: "dat" }, UNDELIVERED_FILTER_KEYS))).total).toBe(2);
     // giao nốt phần còn lại ở chuyến sau ⇒ đơn b rời danh sách

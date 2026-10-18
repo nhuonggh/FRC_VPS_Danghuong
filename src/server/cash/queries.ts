@@ -108,7 +108,7 @@ export interface QueueRowDTO {
 }
 
 /** Việc thủ quỹ cần làm: phiếu thu/chi chưa kiểm tra (chờ + bị trả lại) và yêu cầu điều chỉnh đang chờ duyệt. Lọc: kind, status, q, thời gian. */
-export async function listReviewQueue(db: Db, actor: Actor, params: ListParams): Promise<{ rows: QueueRowDTO[]; total: number }> {
+export async function listReviewQueue(db: Db, actor: Actor, params: ListParams) {
   assertCan(actor.perms, "cash.review");
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const range = (params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null);
@@ -119,9 +119,9 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams):
   const textWhere = terms.map((t) => ({ OR: [{ code: { contains: escapeLike(t.toUpperCase()) } }, { partner: { searchText: { contains: escapeLike(t) } } }] }));
   const common = { ...accountScope(params), isCancelled: false, ...(range ? { at: timeRangeWhere(range) } : {}), AND: textWhere };
   const [receipts, payments, adjs] = await Promise.all([
-    want("RECEIPT") && statusIn.length ? db.receipt.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } }, take: 500 }) : [],
-    want("PAYMENT") && statusIn.length ? db.payment.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } }, take: 500 }) : [],
-    want("ADJUSTMENT") && wantStatus("ADJUST_REQUESTED") ? db.cashAdjustment.findMany({ where: { status: "REQUESTED", ...(range ? { requestedAt: timeRangeWhere(range) } : {}) }, take: 500 }) : [],
+    want("RECEIPT") && statusIn.length ? db.receipt.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } } }) : [],
+    want("PAYMENT") && statusIn.length ? db.payment.findMany({ where: { ...common, reviewStatus: { in: statusIn } }, include: { partner: { select: { name: true } } } }) : [],
+    want("ADJUSTMENT") && wantStatus("ADJUST_REQUESTED") ? db.cashAdjustment.findMany({ where: { status: "REQUESTED", ...(range ? { requestedAt: timeRangeWhere(range) } : {}) } }) : [],
   ]);
   const adjVouchers = await Promise.all(adjs.map((a) => (a.docType === "RECEIPT" ? db.receipt.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } }, cashAccount: { select: { type: true } } } }) : db.payment.findUnique({ where: { id: a.docId }, include: { partner: { select: { name: true } }, cashAccount: { select: { type: true } } } }))));
   const names = await fullName(db, [...receipts.map((r) => r.createdBy), ...payments.map((r) => r.createdBy), ...adjs.map((a) => a.requestedBy)]);
@@ -130,7 +130,7 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams):
     ...payments.map((r) => ({ key: `P${r.id}`, kind: "PAYMENT" as const, id: r.id, doc: "PAYMENT" as const, code: r.code, at: r.at, label: `Chi — ${PAYMENT_KIND_LABEL[r.kind] ?? r.kind}`, partnerName: r.partner?.name ?? null, amount: r.amount.toString(), status: r.reviewStatus, statusLabel: REVIEW_LABEL[r.reviewStatus], createdByName: names.get(r.createdBy) ?? null, detail: r.note, adjustmentId: null })),
     ...adjs.flatMap((a, i) => { const v = adjVouchers[i]; const scope = accountScope(params); if (!v || (scope.cashAccountId !== undefined && v.cashAccountId !== scope.cashAccountId) || (scope.cashAccount && v.cashAccount.type !== scope.cashAccount.type)) return []; const doc = a.docType as VoucherDoc; return [{ key: `A${a.id}`, kind: "ADJUSTMENT" as const, id: a.docId, doc, code: v.code, at: a.requestedAt, label: a.kind === "VOID" ? "Điều chỉnh — hủy phiếu" : "Điều chỉnh — đổi số tiền/quỹ", partnerName: v.partner?.name ?? null, amount: (a.newAmount ?? v.amount).toString(), status: "ADJUST_REQUESTED" as const, statusLabel: "Chờ duyệt điều chỉnh", createdByName: names.get(a.requestedBy) ?? null, detail: a.reason, adjustmentId: a.id }]; }),
   ].sort((x, y) => y.at.getTime() - x.at.getTime());
-  return { total: rows.length, rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize) };
+  return { total: rows.length, stats: { receipts: rows.filter((r) => r.kind === "RECEIPT").length, payments: rows.filter((r) => r.kind === "PAYMENT").length, adjustments: rows.filter((r) => r.kind === "ADJUSTMENT").length }, rows: rows.slice((params.page - 1) * params.pageSize, params.page * params.pageSize) };
 }
 
 // ───────────────────────────── SỔ QUỸ / SỔ NGÂN HÀNG (60, 61) ─────────────────────────────

@@ -4,11 +4,12 @@ import { formatCurrency, formatNumber } from "@/lib/format";
 
 /** Dải tóm tắt theo trạng thái; là `<Link>` khi có `href` để bấm lọc. `value` null → "—" (không phải 0). */
 export function StatCard({
-  label, value, tone = "neutral", href, active, money = false,
+  label, value, tone = "neutral", href, active, money = false, maxFrac = 0,
 }: {
   label: string;
   value: number | string | null;
   money?: boolean;
+  maxFrac?: number;
   tone?: "neutral" | "success" | "warning" | "danger" | "info";
   href?: string;
   active?: boolean;
@@ -17,7 +18,7 @@ export function StatCard({
   const body = (
     <>
       <span className="text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary">{label}</span>
-      <span className={clsx("tabular text-2xl font-bold", valueColor)}>{money ? formatCurrency(value) : formatNumber(value)}</span>
+      <span className={clsx("tabular text-2xl font-bold", valueColor)}>{money ? formatCurrency(value) : formatNumber(value, maxFrac)}</span>
     </>
   );
   const cls = clsx(

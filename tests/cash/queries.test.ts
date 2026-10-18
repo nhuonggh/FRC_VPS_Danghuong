@@ -78,6 +78,7 @@ describe("hàng chờ kiểm tra", () => {
     await tx((t) => reviewVoucher(t, tre, "PAYMENT", c.id));
     await tx((t) => requestAdjustment(t, acc, "PAYMENT", c.id, adjustmentRequestSchema.parse({ kind: "VOID", reason: "nhầm" })));
     const q = await listReviewQueue(prisma, tre, P({}, QUEUE_FILTER_KEYS));
+    expect(q.stats).toEqual({ receipts: 2, payments: 0, adjustments: 1 });
     expect(q.rows.map((r) => [r.kind, r.status]).sort()).toEqual([["ADJUSTMENT", "ADJUST_REQUESTED"], ["RECEIPT", "PENDING_REVIEW"], ["RECEIPT", "RETURNED"]]);
     expect(q.rows.find((r) => r.kind === "ADJUSTMENT")).toMatchObject({ code: c.code, detail: "nhầm", adjustmentId: expect.any(Number) });
     expect((await listReviewQueue(prisma, tre, P({ kind: "ADJUSTMENT" }, QUEUE_FILTER_KEYS))).total).toBe(1);

@@ -144,12 +144,17 @@ describe("trả theo đơn (43)", () => {
     const o = await deliveredOrder();
     const r = await retOrder(o.id, o.lineId, 1);
     expect((await searchReturnableOrders(prisma, actor, "")).map((x) => x.id)).toContain(o.id);
+    expect((await searchReturnableOrders(prisma, actor, "", customer.id)).map((x) => x.id)).toContain(o.id);
+    expect(await searchReturnableOrders(prisma, actor, "", supplier.id)).toEqual([]);
+    expect(await searchReturnableOrders(prisma, { userId: -1, perms: new Set(["return.manage"]) }, "", customer.id)).toEqual([]);
     const info = await getOrderForReturn(prisma, actor, o.id);
     expect(info.lines[0]).toMatchObject({ delivered: "4", returned: "1", remaining: "3", returnable: true });
     const list = await listReturns(prisma, actor, ["BY_ORDER"], parseListParams({}, ["state"]));
     expect(list.rows[0]).toMatchObject({ code: r.code, returnTotal: "45000", orderCode: o.code });
+    expect(list.stats).toEqual({ active: 1, cancelled: 0, amount: "45000" });
     const blind: Actor = { userId: w.userId, perms: new Set(["return.manage", "partner.view_all"]) };
     expect("returnTotal" in (await listReturns(prisma, blind, ["BY_ORDER"], parseListParams({}, ["state"]))).rows[0]!).toBe(false);
+    expect((await listReturns(prisma, blind, ["BY_ORDER"], parseListParams({}, ["state"]))).stats.amount).toBeUndefined();
     expect(JSON.stringify(await getReturn(prisma, blind, r.id))).not.toMatch(/salePrice|lineAmount|returnTotal/);
     await expect(createReturnByOrderIdempotent(prisma, blind, "k", returnByOrderSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: [{ orderLineId: o.lineId, qty: 1 }] }), NOW)).resolves.toBeTruthy(); // trả theo đơn không cần xem giá
   });
