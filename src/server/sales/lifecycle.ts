@@ -1,3 +1,4 @@
+import { referenceCostSnapshot } from "./reference-cost-snapshot";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
@@ -111,7 +112,10 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
   const extras = await orderExtras(tx, actor, input, "edit");
   const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? Number(order.orderDiscount));
   for (const [li, l] of lines.entries()) {
+    const previous = l.input.id === undefined ? undefined : existing.get(l.input.id);
+    const snapshot = previous && previous.productId === l.input.productId && previous.processingTypeId === l.input.processingTypeId && previous.issueMode === (l.bomVersionId === null ? "STOCK" : "BOM") ? previous.referenceCostSnapshot ?? Prisma.JsonNull : await referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, at, l.bomVersionId === null ? "STOCK" : "BOM");
     const data = {
+      referenceCostSnapshot: snapshot,
       productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
       salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
       processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", bomVersionId: l.bomVersionId, at,
@@ -252,6 +256,13 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
   await tx.saleOrderLine.deleteMany({ where: { orderId: id } });
   const extras = await orderExtras(tx, actor, input, "edit");
   const shares = allocateOrderDiscount(planned, extras.orderDiscount ?? Number(order.orderDiscount));
+  const snapshots = await Promise.all(planned.map(l => {
+    const previous = l.input.id === undefined ? undefined : existing.get(l.input.id);
+    const mode = l.bomVersionId === null ? "STOCK" : "BOM";
+    return previous && previous.productId === l.input.productId && previous.processingTypeId === l.input.processingTypeId && previous.issueMode === mode
+      ? previous.referenceCostSnapshot ?? Prisma.JsonNull
+      : referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, order.orderDate, mode);
+  }));
   await tx.saleOrder.update({
     where: { id },
     data: {
@@ -259,6 +270,7 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
       expectedDeliveryDate: dateOnly(input.expectedDeliveryDate), originalDeliveryDate: dateOnly(input.expectedDeliveryDate),
       lines: {
         create: planned.map((l, i) => ({
+          referenceCostSnapshot: snapshots[i],
           productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase, salePrice: D(l.input.salePrice),
           discountNow: D(l.input.discountNow).plus(shares[i]!), discountOrder: shares[i]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null, processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", at: now,
         })),
@@ -293,7 +305,7 @@ export async function confirmDraftOrder(ctx: EngineCtx, actor: Actor, id: number
 
   const accum = new Map<number, Prisma.Decimal>();
   for (const l of lines) {
-    const row = await tx.saleOrderLine.update({ where: { id: l.input.id! }, data: { at, bomVersionId: l.bomVersionId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM" } });
+    const row = await tx.saleOrderLine.update({ where: { id: l.input.id! }, data: { referenceCostSnapshot: await referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, at, l.bomVersionId === null ? "STOCK" : "BOM"), at, bomVersionId: l.bomVersionId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM" } });
     await tx.saleLineIssue.deleteMany({ where: { orderLineId: row.id } });
     for (const issue of l.issues) {
       const { seq } = await postIssue(ctx, { productId: issue.productId, qty: issue.qtyBase, docType: "SALE", docId: id, docLineId: row.id, at });

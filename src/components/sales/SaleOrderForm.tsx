@@ -38,6 +38,7 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  * Thiếu quyền `order.edit_price` → ô giá khoá ở giá gần nhất; server cũng kiểm lại (không tin UI).
  */
 export interface SaleOrderEdit {
+  referenceCosts?: Record<number, { productId: number; processingTypeId: number | null; issueMode: string; reference: import("@/server/sales/cost-reference").CostReference }>;
   orderId: number;
   code: string;
   /** Đơn nháp: chưa xuất kho → không có nút In, "Lưu thay đổi" chỉ sửa nháp. */
@@ -98,6 +99,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const [pricing, setPricing] = useState(() => new Map<string, SalePricingDTO | null>());
   const requested = useRef(new Set<string>());
   const key = (productId: number, typeId?: number | null, mode = "LEGACY") => `${pricingPartnerId}:${productId}:${typeId ?? 0}:${pricingDate}:${mode}`;
+  const pricingForLine = (line: SaleOrderInput["lines"][number] | undefined) => {
+    const dto = line?.productId && pricingPartnerId ? pricing.get(key(line.productId, line.processingTypeId, line.issueMode)) ?? null : null;
+    const saved = line?.id === undefined ? undefined : edit?.referenceCosts?.[line.id];
+    return dto && saved && saved.productId === line?.productId && saved.processingTypeId === line.processingTypeId && saved.issueMode === line.issueMode
+      ? { ...dto, costReference: saved.reference } : dto;
+  };
 
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
@@ -359,7 +366,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
               {fields.map((field, index) => (
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
-                  dto={lines[index]?.productId && pricingPartnerId ? pricing.get(key(lines[index]!.productId, lines[index]!.processingTypeId, lines[index]!.issueMode)) ?? null : null}
+                  dto={pricingForLine(lines[index])}
                   onExpand={(terms, ratio) => expandDimensions(index, terms, ratio)}
                   canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
@@ -543,7 +550,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
               )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
               {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
-              <CostReferenceInfo dto={dto} unit={areaRow ? "m²" : line?.unit || dto?.baseUnit || ""} divisor={areaRow ? rowRatio : factor} compact />
+              <CostReferenceInfo dto={dto} unit={areaRow ? "m²" : line?.unit || dto?.baseUnit || ""} divisor={areaRow ? Number(dto?.costReference?.areaRatio ?? rowRatio) : factor} compact />
             </div>
           </div>
         </div>

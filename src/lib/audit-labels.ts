@@ -1,4 +1,5 @@
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
+  "ReferenceCostPlan": "Dự toán giá vốn gia công",
   "Bom": "Định mức sản xuất",
   "CashClose": "Chốt quỹ",
   "CompanySetting": "Cấu hình công ty",

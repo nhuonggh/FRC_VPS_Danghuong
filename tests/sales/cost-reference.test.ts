@@ -6,6 +6,10 @@ import { costReference } from "@/server/sales/cost-reference";
 import { createPurchaseIdempotent, cancelPurchaseTx } from "@/server/purchase/service";
 import { createProductionOrderIdempotent, cancelProductionOrderTx } from "@/server/production/service";
 import type { Actor } from "@/lib/permissions/scope";
+import { createReferenceCostPlan, referenceCostPlanSchema } from "@/server/processing/reference-cost-plans";
+import { createSaleOrderIdempotent } from "@/server/sales/service";
+import { getOrder, getOrderForEdit } from "@/server/sales/queries";
+import { editSaleOrderTx } from "@/server/sales/lifecycle";
 let w: World, actor: Actor, supplier: number, n = 0;
 const at = new Date("2026-09-20T16:59:59Z");
 beforeEach(async () => {
@@ -14,6 +18,105 @@ beforeEach(async () => {
   supplier = (await makePartner({ isSupplier: true })).id;
 });
 const buy = (productId: number, price: number, date = "2026-09-15") => createPurchaseIdempotent(prisma, actor, `buy-${++n}`, { partnerId: supplier, date, freightCost: 0, note: "", lines: [{ productId, qty: 100, unit: "md", factor: 1, purchasePrice: price, rollInfo: "" }] });
+
+async function plannedWorld(includeTon = true) {
+  actor.perms = new Set([...actor.perms, "product.view", "product.manage", "catalog.manage", "order.create", "order.view", "partner.view_all", "sale_price.view", "order.edit_price"]);
+  const type = await makeProcessingType();
+  await prisma.processingType.update({ where: { id: type.id }, data: { ratio: "1.08", priceBasis: "AREA" } });
+  const aux = await makeProduct({ baseUnit: "md", kind: "NVL", canUseAsMaterial: true });
+  const finished = await makeProduct({ baseUnit: "md", kind: "THANH_PHAM", canProduce: true });
+  await prisma.productProcessingRatio.create({ data: { productId: finished.id, processingTypeId: type.id, updatedBy: w.userId } });
+  await buy(w.p.id, 100); await buy(aux.id, 50);
+  await makeBomVersion({ productId: finished.id, processingTypeId: type.id, createdBy: w.userId, validFrom: "2026-09-01", lines: [
+    ...(includeTon ? [{ materialProductId: w.p.id, qtyPerUnit: 2 }] : []), { materialProductId: aux.id, qtyPerUnit: "0.5" },
+  ] });
+  const save = (over: Record<string, unknown> = {}) => prisma.$transaction(tx => createReferenceCostPlan(tx, actor, finished.id, referenceCostPlanSchema.parse({
+    processingTypeId: type.id, scope: "PRODUCT", validFrom: "2026-09-20", tonProductId: w.p.id, fixedPricePerM2: 44322,
+    feePerMeter: 2000, ...over,
+  }), new Date("2026-09-20T01:00:00Z")));
+  return { type, aux, finished, save };
+}
+
+it("adds finished-width ton price and per-meter fee, replacing the ton already present in BOM", async () => {
+  const { type, finished, save } = await plannedWorld(); await save();
+  const before = await prisma.stockLedger.count();
+  const ref = await costReference(prisma, actor, finished.id, type.id, at);
+  expect(ref?.primary?.perBase).toBe("49892.76"); // 44322*1.08 + 0.5*50 + 2000; no extra 2*100
+  expect(ref?.materials).toHaveLength(1);
+  expect(ref?.components?.map(c => c.perBase)).toEqual(["47867.76", "25", "2000"]);
+  expect(ref?.message).toContain("một lần");
+  expect(await prisma.stockLedger.count()).toBe(before);
+});
+
+it("inherits default fee by effective date; explicit zero overrides the default", async () => {
+  const { type, finished, save } = await plannedWorld();
+  await save({ scope: "TYPE", tonProductId: null, fixedPricePerM2: null, feePerMeter: 2000 });
+  await save({ feePerMeter: null });
+  expect((await costReference(prisma, actor, finished.id, type.id, at))?.primary?.perBase).toBe("49892.76");
+  await save({ validFrom: "2026-09-21", feePerMeter: 0 });
+  expect((await costReference(prisma, actor, finished.id, type.id, new Date("2026-09-21T05:00:00Z")))?.primary?.perBase).toBe("47892.76");
+  expect((await costReference(prisma, actor, finished.id, type.id, new Date("2026-09-19T05:00:00Z")))?.primary?.perBase).toBe("225");
+});
+
+it("uses last purchase and BOM consumption, or configured consumption when ton is absent; keeps a stock warning", async () => {
+  const { type, finished, save } = await plannedWorld(false); await save({ fixedPricePerM2: null, tonQtyPerMeter: 3 });
+  const ref = await costReference(prisma, actor, finished.id, type.id, at);
+  expect(ref?.primary?.perBase).toBe("2325");
+  expect(ref?.message).toContain("chưa có trong BOM");
+});
+
+it("does not treat missing fee, ratio or auxiliary price as zero", async () => {
+  const { type, aux, finished, save } = await plannedWorld(); await save({ feePerMeter: null });
+  expect((await costReference(prisma, actor, finished.id, type.id, at))?.primary?.perBase).toBeNull();
+  await prisma.processingType.update({ where: { id: type.id }, data: { ratio: null } });
+  expect((await costReference(prisma, actor, finished.id, type.id, at))?.message).toContain("tỷ lệ");
+  await prisma.processingType.update({ where: { id: type.id }, data: { ratio: "1.08" } });
+  await save({ validFrom: "2026-09-21", feePerMeter: 0 });
+  const missing = await makeProduct({ baseUnit: "md", kind: "NVL" });
+  await makeBomVersion({ productId: finished.id, processingTypeId: type.id, createdBy: w.userId, validFrom: "2026-09-21", lines: [{ materialProductId: missing.id, qtyPerUnit: 1 }, { materialProductId: aux.id, qtyPerUnit: 1 }] });
+  await save({ validFrom: "2026-09-22", feePerMeter: 0 });
+  expect((await costReference(prisma, actor, finished.id, type.id, new Date("2026-09-22T05:00:00Z")))?.primary?.perBase).toBeNull();
+  expect(await costReference(prisma, { ...actor, perms: new Set(["order.analysis.view", "cost.view"]) }, finished.id, type.id, at)).toMatchObject({ primary: null });
+});
+
+it("enforces write permissions, valid dates, nonnegative fees and immutable same-day versions", async () => {
+  const { save } = await plannedWorld();
+  expect(referenceCostPlanSchema.safeParse({}).success).toBe(false);
+  await expect(save({ feePerMeter: -1 })).rejects.toThrow();
+  await expect(save({ validFrom: "2026-09-19" })).rejects.toThrow("trước hôm nay");
+  const original = actor.perms; actor.perms = new Set(["product.view", "cost.view", "purchase_price.view"]);
+  await expect(save()).rejects.toThrow(); actor.perms = original;
+  await save(); await expect(save()).rejects.toThrow();
+});
+
+it("does not substitute stock purchase cost for a configured processing estimate with no effective BOM", async () => {
+  const { type, finished, save } = await plannedWorld(); await save(); await buy(finished.id, 90000);
+  await prisma.bomVersion.updateMany({ where: { bom: { productId: finished.id, processingTypeId: type.id } }, data: { status: "CANCELLED" } });
+  const ref = await costReference(prisma, actor, finished.id, type.id, at);
+  expect(ref?.primary).toBeNull(); expect(ref?.message).toContain("Chưa có định mức");
+});
+
+it("preserves the order's stored estimate when future plans change and hides it without cost permissions", async () => {
+  const { type, finished, save } = await plannedWorld(); await save();
+  const customer = await makePartner({ isCustomer: true });
+  const created = await createSaleOrderIdempotent(prisma, actor, `reference-order-${++n}`, {
+    partnerId: customer.id, date: "2026-09-20", expectedDeliveryDate: "2026-09-20", note: "",
+    lines: [{ productId: finished.id, processingTypeId: type.id, issueMode: "BOM", unit: "md", qty: 1, salePrice: 100000, discountNow: 0, discountAccum: 0 }],
+  }, at);
+  const line = await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId: created.id } });
+  expect(line.referenceCostSnapshot).toMatchObject({ primary: { perBase: "49892.76" } });
+  await save({ validFrom: "2026-09-21", fixedPricePerM2: 50000 });
+  actor.perms = new Set([...actor.perms, "order.edit"]);
+  await editSaleOrderTx(prisma, actor, created.id, {
+    partnerId: customer.id, date: "2026-09-21", expectedDeliveryDate: "2026-09-21", note: "Đổi số lượng",
+    lines: [{ id: line.id, productId: finished.id, processingTypeId: type.id, issueMode: "BOM", unit: "md", qty: 2, salePrice: 100000, discountNow: 0, discountAccum: 0 }],
+  }, new Date("2026-09-21T05:00:00Z"));
+  expect((await getOrder(prisma, actor, created.id)).lines[0]?.referenceCost?.primary?.perBase).toBe("49892.76");
+  expect((await getOrderForEdit(prisma, actor, created.id)).referenceCosts?.[line.id]?.reference.primary?.perBase).toBe("49892.76");
+  const restricted = { ...actor, perms: new Set([...actor.perms].filter(p => p !== "cost.view")) };
+  expect((await getOrder(prisma, restricted, created.id)).lines[0]?.referenceCost).toBeUndefined();
+  expect((await getOrderForEdit(prisma, restricted, created.id)).referenceCosts).toBeUndefined();
+});
 it("shows a produced accessory's actual unit cost without requiring a purchase of the accessory", async () => {
   const accessory = await makeProduct({ kind: "PHU_KIEN", baseUnit: "md", canProduce: true });
   await buy(w.p.id, 100);

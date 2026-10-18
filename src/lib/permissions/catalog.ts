@@ -88,6 +88,10 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 // (price, unitPrice, amount, total...) — luôn dùng tên riêng (salePrice, unitCostFifo, lineProfit...) rồi
 // đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
+  referenceCostSnapshot: "cost.view",
+  referenceCost: "cost.view",
+  fixedPricePerM2: "purchase_price.view",
+  feePerMeter: "cost.view",
   costReference: "order.analysis.view",
   unitCostFifo: "cost.view",
   materialCost: "cost.view",

@@ -1,5 +1,6 @@
 "use client";
 
+import { ReferenceCostPlans } from "./ReferenceCostPlans";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { inputClass } from "@/components/ui";
@@ -15,7 +16,7 @@ const trim = (v: string | null) => v?.replace(/\.?0+$/, "") ?? "";
  * Kiểu gia công của riêng sản phẩm này: chỉ các kiểu đã gắn mới hiện ở màn bán hàng. Chọn thêm từ danh sách chung
  * (Cài đặt danh mục → Kiểu gia công). Tỷ lệ m²/md để trống ⇒ dùng mặc định của kiểu (chưa có nữa thì màn bán dùng 1).
  */
-export function ProcessingRatiosTab({ productId, canManage }: { productId: number; canManage: boolean }) {
+export function ProcessingRatiosTab({ productId, canManage, canViewReference = false, canManageReference = false, canDefaultReference = false }: { canViewReference?: boolean; canManageReference?: boolean; canDefaultReference?: boolean; productId: number; canManage: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [draft, setDraft] = useState<Record<number, string>>({});
   const [pick, setPick] = useState("");
@@ -87,6 +88,7 @@ export function ProcessingRatiosTab({ productId, canManage }: { productId: numbe
           </tbody>
         </table>
       </div>
+      {canViewReference && <ReferenceCostPlans productId={productId} types={linked.map(r => ({ value: r.processingTypeId, label: r.name }))} canManage={canManageReference} canDefault={canDefaultReference} />}
     </div>
   );
 }

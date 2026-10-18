@@ -29,6 +29,17 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+it("editing an unchanged line displays its saved cost estimate instead of a newer configuration", async () => {
+  pricing = { ...(pricing as object), costReference: { primary: { kind: "BOM", perBase: "99999", at: "2026-09-20", code: "Mới" }, alternatives: [] } };
+  render(<SaleOrderForm today="2026-09-20" canEditPrice options={OPTS} edit={{
+    orderId: 5, code: "DH000005", customer: { value: 7, label: "Khách A" }, products: [PRODUCT],
+    referenceCosts: { 1: { productId: 10, processingTypeId: 3, issueMode: "BOM", reference: { primary: { kind: "BOM", perBase: "11111", at: "2026-09-19", code: "Đã lưu" }, alternatives: [] } } },
+    defaults: { partnerId: 7, date: "2026-09-19", expectedDeliveryDate: "2026-09-20", note: "", lines: [{ id: 1, productId: 10, processingTypeId: 3, issueMode: "BOM", qty: 1, unit: "md", salePrice: 30000, discountNow: 0, discountAccum: 0 }] },
+  }} />);
+  await waitFor(() => expect(screen.getByText("11.111 ₫/md")).toBeInTheDocument());
+  expect(screen.queryByText("99.999 ₫/md")).toBeNull();
+});
+
 async function pick(name: string, text: string) {
   const box = screen.getByRole("combobox", { name });
   await userEvent.click(box);

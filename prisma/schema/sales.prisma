@@ -80,6 +80,8 @@ model SaleOrder {
 }
 
 model SaleOrderLine {
+  /// Dự toán tại lúc lập/sửa dòng; không dùng để ghi sổ/FIFO.
+  referenceCostSnapshot Json?
   id               Int      @id @default(autoincrement())
   orderId          Int
   productId        Int
