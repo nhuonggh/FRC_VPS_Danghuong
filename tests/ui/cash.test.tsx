@@ -26,6 +26,15 @@ async function pick(name: string, text: string) {
 }
 
 describe("VoucherForm", () => {
+  it("phiếu chi gửi người ứng tiền đã chọn cùng dữ liệu phiếu", async () => {
+    render(<VoucherForm doc="PAYMENT" today="2026-09-15" accounts={accounts} people={[{ value: 8, label: "Nguyễn Văn An" }]} />);
+    await userEvent.selectOptions(screen.getByLabelText(/Loại phiếu chi/), "KHAC");
+    await pick("Người ứng tiền", "An");
+    await userEvent.type(screen.getByLabelText(/Số tiền/), "50000");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu phiếu" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/accounting/payments/5"));
+    expect(apiFetch.mock.calls.find(c => c[0] === "/api/vouchers/payments")![1].json).toMatchObject({ advancedById: 8, amount: 50000 });
+  });
   it("phiếu thu: thiếu khách/số tiền ⇒ báo lỗi, không gọi API; đủ ⇒ POST kèm khoá idempotency và chuyển tới chi tiết", async () => {
     render(<VoucherForm doc="RECEIPT" today="2026-09-15" accounts={accounts} />);
     await userEvent.click(screen.getByRole("button", { name: "Lưu phiếu" }));

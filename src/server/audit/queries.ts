@@ -1,3 +1,4 @@
+import { AUDIT_ENTITY_LABELS, auditActionSearch, auditEntityLabel } from "@/lib/audit-labels";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { MAX_CHANGES, formatAuditValue, type AuditDetailDto } from "@/lib/audit-format";
 import { diffJson } from "@/lib/json-diff";
@@ -26,7 +27,14 @@ export function auditWhere(params: ListParams, now: Date): Prisma.AuditLogWhereI
   if (params.q) {
     // Prisma `contains` KHÔNG escape % và _ (xem src/lib/search.ts) → tự escape để chúng là chữ thường
     const needle = escapeLike(params.q);
+    const normalized = params.q.toLocaleLowerCase("vi");
+    const entityMatches = Object.keys(AUDIT_ENTITY_LABELS).filter((key) => auditEntityLabel(key).toLocaleLowerCase("vi").includes(normalized));
     where.OR = [
+      ...auditActionSearch(params.q).flatMap((key) => [
+        { action: { endsWith: `.${escapeLike(key)}`, mode: "insensitive" as const } },
+        { action: { equals: key, mode: "insensitive" as const } },
+      ]),
+      ...(entityMatches.length ? [{ entity: { in: entityMatches } }] : []),
       { action: { contains: needle, mode: "insensitive" } },
       { entity: { contains: needle, mode: "insensitive" } },
       { entityId: { contains: needle, mode: "insensitive" } },
@@ -101,4 +109,15 @@ export function toAuditDetail(row: AuditRowFull, by: string, perms: ReadonlySet<
     hiddenByPermission,
     truncated: all.length > MAX_CHANGES,
   };
+}
+
+/** Tổng hợp toàn bộ kết quả đang lọc, không phụ thuộc phân trang. */
+export async function auditStats(db: PrismaClient, params: ListParams, now: Date = new Date()) {
+ const where = auditWhere(params, now);
+ const [users, entities, actions] = await Promise.all([
+  db.auditLog.groupBy({ by: ["userId"], where: { AND: [where, { userId: { not: null } }] } }),
+  db.auditLog.groupBy({ by: ["entity"], where }),
+  db.auditLog.groupBy({ by: ["action"], where }),
+ ]);
+ return { users: users.length, entities: entities.length, actions: actions.length };
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { DataTable, type Column } from "@/components/ui";
+import { Badge, DataTable, type Column } from "@/components/ui";
+import { auditActionLabel, auditEntityLabel } from "@/lib/audit-labels";
 import { formatDateTime } from "@/lib/format";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 
@@ -8,9 +9,9 @@ export interface AuditRow { id: number; at: string; by: string; action: string; 
 
 const columns: Column<AuditRow>[] = [
   { key: "at", label: "Thời gian", sortable: true, render: (r) => <span className="tabular">{formatDateTime(r.at)}</span> },
-  { key: "by", label: "Người thao tác", primaryOnMobile: true, render: (r) => r.by },
-  { key: "action", label: "Hành động", sortable: true, render: (r) => <span className="font-mono text-xs">{r.action}</span> },
-  { key: "entity", label: "Đối tượng", sortable: true, render: (r) => r.entity },
+  { key: "by", label: "Người thao tác", primaryOnMobile: true, render: (r) => <Badge>{r.by}</Badge> },
+  { key: "action", label: "Hành động", sortable: true, render: (r) => <Badge tone="info">{auditActionLabel(r.action)}</Badge> },
+  { key: "entity", label: "Đối tượng", sortable: true, render: (r) => <Badge>{auditEntityLabel(r.entity)}</Badge> },
   { key: "entityId", label: "Mã", render: (r) => r.entityId },
 ];
 
