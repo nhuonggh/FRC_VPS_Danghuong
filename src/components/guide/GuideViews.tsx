@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BookOpen, ChevronDown } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, Minus, Plus } from "lucide-react";
 import type { NavModule } from "@/config/app.config";
 import type { GuideRole } from "@/config/user-guide";
 import { moduleGuideHref, roleGuideHref } from "@/lib/guide-links";
@@ -14,50 +14,44 @@ function GuideHeader({ title, intro, backHref = "/guide", backLabel = "Tất c�
   return <header className="shrink-0 space-y-3"><Link href={backHref} className={link}><ArrowLeft size={16} aria-hidden />{backLabel}</Link><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm leading-relaxed text-fg-secondary">{intro}</p></header>;
 }
 
-export function GuideIndex({ nav, byRole }: { nav: NavModule[]; byRole: boolean }) {
+export function GuideIndex({ nav, view = "functions" }: { nav: NavModule[]; view?: "functions" | "roles" | "faq" }) {
+  const byRole = view === "roles";
   const modules = nav.filter((m) => m.type === "accordion" && guideTopics(m).length);
   const roles = visibleGuideRoles(nav);
-  return <div className="space-y-6">
-    <GuideHeader title="Hướng dẫn sử dụng" intro="Bạn muốn làm việc gì? Chọn theo chức năng hoặc theo công việc của bạn để xem các bước." backHref="/" backLabel="Trang chủ" />
+  return <div className="flex flex-col gap-4">
+    <h1 className="sr-only">Hướng dẫn sử dụng</h1>
+    <Link href="/" className={`${link} self-start`}><ArrowLeft size={16} aria-hidden />Trang chủ</Link>
     <nav aria-label="Cách xem hướng dẫn" className="flex flex-wrap gap-2 border-b border-border pb-3">
-      {[{ href: "/guide", label: "Theo chức năng", on: !byRole }, { href: "/guide?view=roles", label: "Theo công việc của bạn", on: byRole }].map((tab) => <Link key={tab.href} href={tab.href} aria-current={tab.on ? "page" : undefined} className={`${link} ${tab.on ? "bg-accent-soft" : "text-fg-secondary"}`}>{tab.label}</Link>)}
+      {[{ href: "/guide", label: "Theo chức năng", on: view === "functions" }, { href: "/guide?view=roles", label: "Theo công việc của bạn", on: byRole }, { href: "/guide?view=faq", label: "FAQ", on: view === "faq" }].map((tab) => <Link key={tab.href} href={tab.href} aria-current={tab.on ? "page" : undefined} className={`${link} ${tab.on ? "bg-accent-soft" : "text-fg-secondary"}`}>{tab.label}</Link>)}
     </nav>
-    <GettingStarted />
-    <section aria-labelledby="guide-choices" className="space-y-3">
+    {view === "faq" ? <CommonQuestions /> : <section aria-labelledby="guide-choices" className="space-y-3">
       <h2 id="guide-choices" className="text-lg font-semibold">{byRole ? "Chọn công việc của bạn" : "Chọn phần cần xem"}</h2>
       {byRole ? <>
         <p className="text-sm text-fg-secondary">Chọn công việc để xem thứ tự nên làm. Mỗi tài khoản có thể được giao thêm hoặc bớt việc.</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{roles.map((role) => <Link key={role.key} href={roleGuideHref(role.key)} className={card}><span className="space-y-2"><span className="block font-semibold">{role.label}</span><span className="block text-sm text-fg-secondary">{role.intro}</span></span><ArrowRight size={18} className="shrink-0 text-accent" aria-hidden /></Link>)}</div>
       </> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{modules.map((m) => <Link key={m.key} href={moduleGuideHref(m.key)} className={card}><span className="flex items-center gap-3"><Icon name={m.icon} /><span className="font-semibold">{m.label}</span></span><ArrowRight size={18} className="shrink-0 text-accent" aria-hidden /></Link>)}</div>}
       {(byRole ? !roles.length : !modules.length) && <p className="rounded-md border border-border bg-surface p-4 text-sm text-fg-secondary">Tài khoản chưa được giao chức năng nào. Hãy liên hệ người quản lý để được hướng dẫn và cấp quyền phù hợp.</p>}
-    </section>
-    <CommonQuestions />
+    </section>}
   </div>;
-}
-
-function GettingStarted() {
-  return <details className="rounded-md border border-border bg-surface p-4">
-    <summary className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 font-semibold ${focus}`}>Mới sử dụng? Bắt đầu ở đây<ChevronDown size={18} aria-hidden /></summary>
-    <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-relaxed">
-      <li>Đăng nhập bằng tài khoản được cấp. Nếu được yêu cầu đổi mật khẩu, đổi trước khi bắt đầu. Quên mật khẩu thì liên hệ người quản lý.</li>
-      <li>Ở Trang chủ, chọn phần cần làm. Trên điện thoại, bấm Thêm ở thanh dưới nếu chưa thấy phần đó.</li>
-      <li>Trong danh sách, gõ tên hoặc mã để tìm. Không thấy kết quả thì kiểm tra ngày và các điều kiện lọc đang chọn.</li>
-      <li>Bấm mã hoặc tên để mở chi tiết. Trên máy tính, đưa chuột lên nút chỉ có hình để xem tên thao tác.</li>
-      <li>Khi nhập, chọn đúng tên từ danh sách gợi ý và điền các ô có dấu bắt buộc. Kiểm tra số lượng, đơn vị, ngày và tiền trước khi lưu.</li>
-      <li>Bấm lưu một lần, chờ thông báo. Nếu có lỗi, đọc thông báo và sửa ô được chỉ ra trước khi thử lại.</li>
-    </ol>
-  </details>;
 }
 
 function CommonQuestions() {
   return <section aria-labelledby="guide-questions" className="space-y-3">
-    <h2 id="guide-questions" className="text-lg font-semibold">Khi cần trợ giúp</h2>
+    <h2 id="guide-questions" className="sr-only">Câu hỏi thường gặp</h2>
     {[
       ["Không thấy một chức năng hoặc nút thao tác?", "Có thể tài khoản chưa được giao quyền hoặc chứng từ chưa ở bước phù hợp. Kiểm tra tình trạng chứng từ; nếu vẫn cần, liên hệ người quản lý."],
       ["Tìm không thấy đơn hoặc phiếu?", "Kiểm tra tên, mã, khoảng thời gian và các điều kiện đang lọc. Thử bỏ lọc rồi tìm lại."],
       ["Bấm lưu nhưng chưa rõ đã thành công chưa?", "Chờ thông báo, rồi tìm lại đơn hoặc phiếu trong danh sách trước khi tạo thêm để tránh trùng."],
       ["Thông báo vẫn chưa xử lý được?", "Ghi lại bạn đang làm gì, mã đơn hoặc phiếu và nội dung thông báo. Gửi thông tin đó cho người hỗ trợ; không gửi mật khẩu."],
-    ].map(([title, body]) => <details key={title} className="rounded-md border border-border bg-surface p-4"><summary className={`min-h-11 cursor-pointer py-2 text-sm font-medium ${focus}`}>{title}</summary><p className="mt-2 text-sm leading-relaxed text-fg-secondary">{body}</p></details>)}
+    ].map(([title, body]) => <details key={title} className="group overflow-hidden rounded-md border border-border bg-surface">
+      <summary className={`flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-base font-medium [&::-webkit-details-marker]:hidden ${focus}`}>
+        <span>{title}</span>
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden="true">
+          <Plus size={16} className="group-open:hidden" /><Minus size={16} className="hidden group-open:block" />
+        </span>
+      </summary>
+      <p className="border-t border-border px-5 py-4 text-sm leading-relaxed text-fg-secondary">{body}</p>
+    </details>)}
   </section>;
 }
 

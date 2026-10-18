@@ -6,5 +6,5 @@ import { requireActor } from "@/server/auth/session";
 export default async function GuidePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const actor = await requireActor();
   const { view } = await searchParams;
-  return <GuideIndex nav={buildNav(APP_NAV, actor.perms)} byRole={view === "roles"} />;
+  return <GuideIndex nav={buildNav(APP_NAV, actor.perms)} view={view === "roles" || view === "faq" ? view : "functions"} />;
 }
