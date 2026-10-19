@@ -15,16 +15,22 @@ describe("PrintButton", () => {
   it("bấm In: chỉ nút này bận (không khoá màn hình), xong hiện liên kết mở bản in + mở tab mới; bấm lại thành 'In lại'", async () => {
     let done: (v: unknown) => void = () => undefined;
     apiFetch.mockReturnValueOnce(new Promise((r) => { done = r; }));
-    render(<><PrintButton docType="SALE_INVOICE" docId={5} label="In hóa đơn" /><button type="button">Nút khác</button></>);
-    await userEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    render(<><PrintButton docType="QUOTE" docId={5} label="In báo giá" /><button type="button">Nút khác</button></>);
+    await userEvent.click(screen.getByRole("button", { name: /In báo giá/ }));
     expect(screen.getByRole("button", { name: /Đang tạo bản in/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Nút khác" })).toBeEnabled();
     done({ url: "https://docs.google.com/document/d/F1/edit", name: "HoaDon_DH1", replaced: false });
     const link = await screen.findByRole("link", { name: /Mở bản in/ });
     expect(link).toHaveAttribute("href", "https://docs.google.com/document/d/F1/edit"); expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
-    expect(apiFetch).toHaveBeenCalledWith("/api/print/SALE_INVOICE/5", { method: "POST" });
+    expect(apiFetch).toHaveBeenCalledWith("/api/print/QUOTE/5", { method: "POST" });
     expect(open).toHaveBeenCalledWith("https://docs.google.com/document/d/F1/edit", "_blank", "noopener,noreferrer");
     expect(screen.getByRole("button", { name: /In lại/ })).toBeEnabled();
+  });
+  it.each(["SALE_INVOICE", "DELIVERY_NOTE", "PURCHASE_RECEIPT"])("%s mở mẫu HTML trực tiếp, không gọi webhook", (docType) => {
+    render(<PrintButton docType={docType} docId={12} label="In phiếu" />);
+    expect(screen.getByRole("link", { name: "In phiếu" })).toHaveAttribute("href", `/api/print/${docType}/12/html?auto=1`);
+    expect(screen.getByRole("link")).toHaveAttribute("target", "_blank");
+    expect(apiFetch).not.toHaveBeenCalled();
   });
   it("lỗi (chưa cấu hình mẫu / hết 12 giây) hiện ngay cạnh nút, nút dùng lại được", async () => {
     apiFetch.mockRejectedValueOnce(new Error("Chưa bật mẫu in cho “Báo giá”."));

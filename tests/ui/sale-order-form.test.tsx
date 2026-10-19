@@ -217,14 +217,15 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     expect(apiFetch.mock.calls.find((c) => c[0] === "/api/orders/draft")![1].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("Lập đơn và in: lập đơn rồi gọi API in hóa đơn", async () => {
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
+  it("Lập đơn và in: lập đơn rồi mở mẫu HTML", async () => {
+    const navigatePrint = vi.fn();
+    const closePrint = vi.fn();
+    const open = vi.spyOn(window, "open").mockReturnValue({ location: { replace: navigatePrint }, closed: false, close: closePrint } as unknown as Window);
     apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
       if (url.startsWith("/api/partner-lists/customers/search")) return [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt" }];
       if (url.startsWith("/api/products/search")) return [PRODUCT];
       if (url.startsWith("/api/orders/pricing")) return pricing;
       if (url === "/api/orders" && init?.method === "POST") return { id: 5, code: "DH000005" };
-      if (url === "/api/print/SALE_INVOICE/5") return { url: "https://docs.example/x", name: "x", replaced: false };
       return [];
     });
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
@@ -234,7 +235,9 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     await userEvent.click(screen.getByRole("button", { name: /In đơn hàng/ }));
     await userEvent.click(screen.getByRole("menuitem", { name: /Lập đơn và in/ }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
-    expect(open).toHaveBeenCalledWith("https://docs.example/x", "_blank", "noopener,noreferrer");
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(navigatePrint).toHaveBeenCalledWith("/api/print/SALE_INVOICE/5/html?auto=1");
+    expect(closePrint).not.toHaveBeenCalled();
     open.mockRestore();
   });
 
