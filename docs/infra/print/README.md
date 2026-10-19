@@ -1,5 +1,7 @@
 # In chứng từ qua Google Apps Script (plan 05 · D6)
 
+> Hóa đơn bán hàng (`SALE_INVOICE`), phiếu giao nhận (`DELIVERY_NOTE`), phiếu nhập hàng (`PURCHASE_RECEIPT`) hiện dùng [mẫu HTML in trực tiếp](./html-print.md), không cần Google Apps Script. Hướng dẫn bên dưới áp dụng cho luồng webhook còn lại/luồng cũ.
+
 Hệ thống **không tự dựng file in**: mỗi lần bấm **In**, server gửi dữ liệu chứng từ (JSON) tới một Google Apps Script của xưởng;
 script sao chép **Google Doc mẫu**, điền `<<placeholder>>`, lưu vào thư mục Drive và trả link. Mở link → in hoặc tải PDF.
 

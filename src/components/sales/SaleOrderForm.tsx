@@ -12,6 +12,7 @@ import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import { QuickCustomerDialog, type QuickCustomer } from "@/components/sales/QuickCustomerDialog";
 import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
 import { apiFetch } from "@/lib/api-fetch";
+import { localPrintHref } from "@/lib/local-print";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { normalizePhone } from "@/lib/phone";
@@ -135,12 +136,18 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     });
   }, [pricing, pricingPartnerId, lines.map((l) => `${l?.productId}:${l?.unit}:${l?.processingTypeId ?? 0}`).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sau khi lưu: tuỳ chọn in hóa đơn (lỗi in không làm mất đơn đã lập — báo rồi vẫn sang trang chi tiết)
+  const printTab = useRef<Window | null>(null);
+  // Reserve the tab during the click, before validation/API awaits lose browser user activation.
   const finish = async (id: number, print: boolean) => {
     if (print) {
       try {
-        const r = await apiFetch<{ url: string }>(`/api/print/SALE_INVOICE/${id}`, { method: "POST" });
-        window.open(r.url, "_blank", "noopener,noreferrer");
+        const tab = printTab.current;
+        if (tab && !tab.closed) {
+          tab.location.replace(localPrintHref("SALE_INVOICE", id));
+          printTab.current = null;
+        } else {
+          toast.error("Đã lưu đơn. Trình duyệt chặn cửa sổ in; bấm In hóa đơn tại chi tiết đơn để in.");
+        }
       } catch (e) { toast.error(`Đã lưu đơn nhưng chưa in được: ${e instanceof Error ? e.message : "lỗi không xác định"}`); }
     }
     router.replace(`/sales/orders/${id}`);
@@ -225,7 +232,20 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     return rows;
   };
 
-  const runWith = (mode: "save" | "print" | "draft") => async () => { entry.dropEmptyLines(); await submitWith(mode)(); };
+  const runWith = (mode: "save" | "print" | "draft") => async () => {
+    if (mode === "print") {
+      printTab.current = window.open("about:blank", "_blank");
+      if (printTab.current) printTab.current.opener = null;
+    }
+    try {
+      entry.dropEmptyLines();
+      await submitWith(mode)();
+    } finally {
+      // Close the reserved blank tab if validation or saving failed.
+      printTab.current?.close();
+      printTab.current = null;
+    }
+  };
   const canPrint = options.canPrint && !edit?.isDraft;
   const [printMenu, setPrintMenu] = useState(false);
   const lineCount = lines.filter((l) => l?.productId).length;

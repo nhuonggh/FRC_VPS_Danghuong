@@ -3,15 +3,17 @@
 import { Printer } from "lucide-react";
 import { useState } from "react";
 import { apiFetch } from "@/lib/api-fetch";
+import { hasLocalPrint, localPrintHref } from "@/lib/local-print";
 
 /**
- * Nút In (D-38): tạo bản in qua Apps Script (vài giây) — KHÔNG khoá màn hình, chỉ nút này bận. Xong hiện liên kết mở bản in (Google Doc);
- * in lại thay bản cũ. Lỗi hiện ngay cạnh nút (chưa cấu hình mẫu, Google không phản hồi trong 12 giây…).
+ * Three HTML forms open directly from the click. Other document types retain the Apps Script flow.
  */
 export function PrintButton({ docType, docId, label = "In", className }: { docType: string; docId: number; label?: string; className?: string }) {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<{ url: string; name: string; replaced: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  if (hasLocalPrint(docType)) return <a href={localPrintHref(docType, docId)} target="_blank" rel="noopener noreferrer" className={className ?? "inline-flex min-h-11 items-center gap-2 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover focus-visible:outline-accent"}><Printer size={16} aria-hidden />{label}</a>;
 
   async function print() {
     if (busy) return;

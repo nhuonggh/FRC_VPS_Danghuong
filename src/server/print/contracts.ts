@@ -59,7 +59,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
     case "DELIVERY_NOTE": {
       const n = await db.deliveryNote.findFirst({
         where: { id: docId, order: { partner: partnerScopeWhere(actor) } },
-        include: { order: { select: { code: true, partnerId: true, note: true } }, lines: { include: { orderLine: { include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } } } } } } },
+        include: { order: { select: { code: true, partnerId: true, note: true } }, lines: { orderBy: { id: "asc" }, include: { orderLine: { include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } } } } } } },
       });
       if (!n) throw new DomainError("Không tìm thấy phiếu giao.", 404);
       return {
