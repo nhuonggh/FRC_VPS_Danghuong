@@ -146,7 +146,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const script = `const ready=async()=>{await Promise.allSettled([400,600,700].map(w=>document.fonts.load(w+' 13px "Be Vietnam Pro"')));await document.fonts.ready;await Promise.all(Array.from(document.images).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r;i.onerror=r})));};document.getElementById('print-now').onclick=async()=>{await ready();window.print()};${auto ? "ready().then(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>window.print())));" : ""}`;
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[type][mono ? "mono" : "color"]}
   /* Print override preserves the supplied paper design, independently of app theme. */
-  :root{--tool-bg:#fff;--tool-fg:#1d2433;--tool-border:#d9dde5;--tool-space:12px;--tool-radius:6px}
+  :root{--tool-bg:var(--soft);--tool-fg:var(--ink);--tool-border:var(--line);--tool-space:12px;--tool-radius:6px}
   .toolbar{display:flex;flex-wrap:wrap;gap:var(--tool-space);align-items:center;max-width:210mm;margin:0 auto var(--tool-space);padding:var(--tool-space);background:var(--tool-bg);color:var(--tool-fg);border-radius:var(--tool-radius)}
   .toolbar button,.toolbar a{min-height:44px;padding:8px 12px;border:1px solid var(--tool-border);border-radius:var(--tool-radius);background:var(--tool-bg);color:var(--tool-fg);font:inherit;text-decoration:none;cursor:pointer}
   .toolbar :focus-visible{outline:2px solid currentColor;outline-offset:2px}.toolbar span{font-size:11px}
