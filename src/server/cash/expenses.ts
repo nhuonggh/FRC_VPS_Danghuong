@@ -7,11 +7,12 @@ import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp } from "@/server/inventory";
 import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { z } from "zod";
-import { addReviewEvent, lockVoucher, postVoucherLedgers, removeVoucherLedgers, updateVoucher, createPayment } from "./vouchers";
+import { addReviewEvent, lockVoucher, postVoucherLedgers, removeVoucherLedgers, updateVoucher, createPayment, checkAdvancedBy } from "./vouchers";
 
 type Tx = Prisma.TransactionClient;
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ.");
 export const expenseSchema = z.object({
+  advancedById: z.number({ invalid_type_error: "Người ứng tiền không hợp lệ." }).int().positive("Người ứng tiền không hợp lệ.").nullable().optional(),
   expenseTypeId: z.number({ invalid_type_error: "Chọn loại chi phí." }).int().positive("Chọn loại chi phí."),
   cashAccountId: z.number({ invalid_type_error: "Chọn quỹ/tài khoản." }).int().positive("Chọn quỹ/tài khoản."),
   amount: z.number({ invalid_type_error: "Nhập số tiền." }).finite().gt(0, "Số tiền phải lớn hơn 0.").max(99_999_999_999).refine((v) => Number(v.toFixed(2)) === v, "Tối đa 2 chữ số thập phân."),
@@ -29,10 +30,10 @@ async function checkType(tx: Tx, id: number) {
 export async function createExpense(tx: Tx, actor: Actor, input: ExpenseInput, now: Date = new Date()): Promise<{ id: number; paymentId: number; code: string }> {
   assertCan(actor.perms, "expense.manage");
   await checkType(tx, input.expenseTypeId);
-  const p = await createPayment(tx, actor, { kind: "CHI_PHI", partnerId: null, cashAccountId: input.cashAccountId, amount: input.amount, date: input.date, note: input.note }, now);
+  const p = await createPayment(tx, actor, { kind: "CHI_PHI", advancedById: input.advancedById, partnerId: null, cashAccountId: input.cashAccountId, amount: input.amount, date: input.date, note: input.note }, now);
   const period = await getOpenPeriod(tx);
   const e = await tx.operatingExpense.create({ data: { periodId: period.id, expenseTypeId: input.expenseTypeId, paymentId: p.id, createdBy: actor.userId }, select: { id: true } });
-  await writeAudit(tx, { userId: actor.userId, action: "expense.create", entity: "OperatingExpense", entityId: e.id, after: { code: p.code, expenseTypeId: input.expenseTypeId, amount: input.amount } });
+  await writeAudit(tx, { userId: actor.userId, action: "expense.create", entity: "OperatingExpense", entityId: e.id, after: { advancedById: input.advancedById ?? null, code: p.code, expenseTypeId: input.expenseTypeId, amount: input.amount } });
   return { id: e.id, paymentId: p.id, code: p.code };
 }
 
@@ -53,6 +54,8 @@ export async function editExpense(tx: Tx, actor: Actor, id: number, input: Expen
   const t = new Date(v.at.getTime() + 7 * 3600_000); const same = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}` === input.date;
   const at = same ? v.at : docTimestamp(input.date, now);
   assertDocDateInPeriod(period, at);
+  await checkAdvancedBy(tx, input.advancedById, v.advancedById);
+  await tx.payment.update({ where: { id: v.id }, data: { advancedById: input.advancedById ?? null } });
   await removeVoucherLedgers(tx, "PAYMENT", v.id);
   const amount = new Prisma.Decimal(input.amount);
   await updateVoucher(tx, "PAYMENT", v.id, { amount, cashAccountId: input.cashAccountId, at, note: input.note || null });
@@ -60,7 +63,7 @@ export async function editExpense(tx: Tx, actor: Actor, id: number, input: Expen
   await tx.operatingExpense.update({ where: { id }, data: { expenseTypeId: input.expenseTypeId } });
   await addReviewEvent(tx, "PAYMENT", v.id, v.reviewStatus === "RETURNED" ? "RESUBMIT" : "EDIT", actor.userId);
   if (v.reviewStatus === "RETURNED") await updateVoucher(tx, "PAYMENT", v.id, { reviewStatus: "PENDING_REVIEW", reviewedBy: null, reviewedAt: null });
-  await writeAudit(tx, { userId: actor.userId, action: "expense.update", entity: "OperatingExpense", entityId: id, before: { amount: v.amount.toString(), expenseTypeId: ex.expenseTypeId, cashAccountId: v.cashAccountId }, after: { amount: input.amount, expenseTypeId: input.expenseTypeId, cashAccountId: input.cashAccountId } });
+  await writeAudit(tx, { userId: actor.userId, action: "expense.update", entity: "OperatingExpense", entityId: id, before: { advancedById: v.advancedById ?? null, amount: v.amount.toString(), expenseTypeId: ex.expenseTypeId, cashAccountId: v.cashAccountId }, after: { advancedById: input.advancedById ?? null, amount: input.amount, expenseTypeId: input.expenseTypeId, cashAccountId: input.cashAccountId } });
 }
 
 const idem = <R,>(prisma: PrismaClient, actor: Actor, scope: string, key: string, run: (tx: Tx) => Promise<R>) => withIdempotency(prisma, { userId: actor.userId, scope, key }, run);

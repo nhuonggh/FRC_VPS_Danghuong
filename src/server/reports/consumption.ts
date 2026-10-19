@@ -77,21 +77,21 @@ export async function consumptionCompare(db: Db, range: TimeRange, onlyOver: boo
 export async function productionReport(db: Db, range: TimeRange, showCost: boolean): Promise<ReportResult> {
   const orders = await db.productionOrder.findMany({
     where: { isCancelled: false, at: timeRangeWhere(range) }, orderBy: [{ at: "desc" }, { id: "desc" }],
-    include: { product: { select: { code: true, name: true, baseUnit: true } }, _count: { select: { materials: true } } },
+    include: { outputs: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true, baseUnit: true } } } }, _count: { select: { materials: true } } },
   });
-  const layers = showCost && orders.length ? await db.costLayer.findMany({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: { in: orders.map((o) => o.id) } }, select: { sourceDocId: true, unitCost: true } }) : [];
-  const unitCost = new Map(layers.map((l) => [l.sourceDocId, l.unitCost]));
+  const layers = showCost && orders.length ? await db.costLayer.findMany({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: { in: orders.map(o => o.id) } }, select: { sourceDocId: true, productId: true, unitCost: true } }) : [];
+  const unitCost = new Map(layers.map(l => [`${l.sourceDocId}:${l.productId}`, l.unitCost]));
   let total = D(0);
-  const rows = orders.map((o) => {
-    const uc = unitCost.get(o.id), tot = uc ? uc.times(o.qty).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP) : null;
+  const rows = orders.flatMap(o => o.outputs.map(output => {
+    const uc = unitCost.get(`${o.id}:${output.productId}`), tot = uc ? uc.times(output.qty).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP) : null;
     if (tot) total = total.plus(tot);
-    return { code: o.code, date: ymd(o.at), product: `${o.product.code} — ${o.product.name}`, qty: o.qty.toString(), unit: o.product.baseUnit, materials: o._count.materials, unitCost: uc?.toString() ?? null, totalCost: tot?.toString() ?? null };
-  });
+    return { code: o.code, date: ymd(o.at), product: `${output.product.code} — ${output.product.name}`, qty: output.qty.toString(), unit: output.product.baseUnit, materials: o._count.materials, unitCost: uc?.toString() ?? null, totalCost: tot?.toString() ?? null };
+  }));
   const cost = showCost ? [{ key: "unitCost", label: "Giá thành/đv", kind: "money" as const }, { key: "totalCost", label: "Tổng giá thành", kind: "money" as const }] : [];
   return {
     key: "production", title: "Báo cáo sản xuất", total: rows.length,
-    summary: [{ label: "Lệnh sản xuất", value: orders.length }, { label: "Mã phụ kiện", value: new Set(orders.map((o) => o.productId)).size }, { label: "Dòng nguyên vật liệu", value: orders.reduce((sum, o) => sum + o._count.materials, 0) }, ...(showCost ? [{ label: "Tổng giá thành đã ghi nhận", value: total.toString(), money: true }] : [])],
-    columns: [{ key: "code", label: "Lệnh SX", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "product", label: "Phụ kiện", kind: "text", align: "left" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "materials", label: "Số NVL", kind: "int" }, ...cost],
+    summary: [{ label: "Lệnh sản xuất", value: orders.length }, { label: "Mã thành phẩm", value: new Set(orders.flatMap(o => o.outputs.map(output => output.productId))).size }, { label: "Dòng nguyên vật liệu", value: orders.reduce((sum, o) => sum + o._count.materials, 0) }, ...(showCost ? [{ label: "Tổng giá thành đã ghi nhận", value: total.toString(), money: true }] : [])],
+    columns: [{ key: "code", label: "Lệnh SX", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "product", label: "Thành phẩm", kind: "text", align: "left" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "materials", label: "Số NVL", kind: "int" }, ...cost],
     rows: showCost ? rows : rows.map(({ unitCost: _u, totalCost: _t, ...r }) => r),
     ...(showCost ? { totals: { code: "Tổng", totalCost: total.toString() } } : {}),
     notes: ["Chỉ tính lệnh còn hiệu lực (không gồm lệnh đã hủy)."],

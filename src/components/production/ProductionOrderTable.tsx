@@ -9,8 +9,8 @@ export function ProductionOrderTable({ rows, params }: { rows: ProductionRowDTO[
   const columns: Column<ProductionRowDTO>[] = [
     { key: "code", label: "Mã lệnh", sortable: true, primaryOnMobile: true, render: (x) => <span className="font-mono text-xs">{x.code}</span> },
     { key: "at", label: "Ngày", sortable: true, render: (x) => formatDate(x.at) },
-    { key: "product", label: "Phụ kiện Tôn", render: (x) => <><span className="font-mono text-xs">{x.productCode}</span> {x.productName}</> },
-    { key: "qty", label: "Số lượng", align: "right", render: (x) => `${formatQty(x.qty)} ${x.baseUnit}` },
+    { key: "product", label: "Sản phẩm đầu ra", render: (x) => <>{x.outputs?.length ? x.outputs.map(o => <div key={o.id}><span className="font-mono text-xs">{o.productCode}</span> {o.productName}</div>) : <>{x.productCode} {x.productName}</>}</> },
+    { key: "qty", label: "Số lượng", align: "right", render: (x) => <>{x.outputs?.length ? x.outputs.map(o => <div key={o.id} className="tabular">{formatQty(o.qty)} {o.baseUnit}</div>) : `${formatQty(x.qty)} ${x.baseUnit}`}</> },
     { key: "materialCount", label: "Số NVL", align: "right", render: (x) => x.materialCount },
     { key: "status", label: "Trạng thái", render: (x) => x.isCancelled ? <Badge tone="danger">Đã hủy</Badge> : <Badge tone="success">Hiệu lực</Badge> },
   ];

@@ -248,10 +248,10 @@ export async function listExpenses(db: Db, actor: Actor, params: ListParams, opt
 
 export async function getExpense(db: Db, actor: Actor, id: number) {
   assertCan(actor.perms, "expense.manage");
-  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: true, expenseType: { select: { name: true } } } });
+  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: { include: { advancedBy: { select: { id: true, fullName: true } } } }, expenseType: { select: { name: true } } } });
   if (!e) throw new DomainError("Không tìm thấy khoản chi phí.", 404);
   const at = new Date(e.payment.at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
-  return { id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
+  return { advancedBy: e.payment.advancedBy ? { value: e.payment.advancedBy.id, label: e.payment.advancedBy.fullName } : null, id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
 }
 
 export async function listExpenseTypes(db: Db): Promise<{ id: number; name: string }[]> {

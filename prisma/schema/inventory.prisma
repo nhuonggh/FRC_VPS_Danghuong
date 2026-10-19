@@ -66,6 +66,7 @@ model CostLayer {
   costRefType   StockDocType?
   costRefId     Int?
   costRefQty    Decimal?      @db.Decimal(18, 3)
+  costRefShare  Decimal       @default(1) @db.Decimal(18, 12)
   createdAt     DateTime      @default(now())
 
   period       Period            @relation(fields: [periodId], references: [id], onDelete: Restrict)

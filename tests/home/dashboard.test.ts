@@ -96,7 +96,7 @@ describe("loader dashboard (DB thật)", () => {
     });
 
     // ── Sản xuất: 1 lệnh 5 sản phẩm, tiêu hao 3 NVL
-    await prisma.productionOrder.create({ data: { ...base, code: "SX1", productId: p1.id, qty: 5, at: day("2026-09-08"), materials: { create: [{ materialProductId: p2.id, qty: 3 }] } } });
+    await prisma.productionOrder.create({ data: { ...base, code: "SX1", productId: p1.id, qty: 5, at: day("2026-09-08"), outputs: { create: [{ productId: p1.id, qty: 5, allocationWeight: 1 }] }, materials: { create: [{ materialProductId: p2.id, qty: 3 }] } } });
 
     // ── Kế toán: thu 400, chi 150; quỹ đầu kỳ 1.000
     await prisma.receipt.create({ data: { ...base, code: "PT1", type: "THU_NO", partnerId: customer.id, amount: 400, cashAccountId: cash.id, at: day("2026-09-11") } });

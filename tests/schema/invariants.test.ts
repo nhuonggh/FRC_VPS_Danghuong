@@ -96,6 +96,12 @@ describe("self-test checker với model vi phạm giả lập", () => {
       "FakeLedger.wrongPrecision: độ chính xác 10,2",
     ]);
   });
+  it("chỉ tỷ lệ phân bổ CostLayer.costRefShare dùng độ chính xác 18,12", () => {
+    const share = { name: "costRefShare", type: "Decimal", nativeType: ["Decimal", ["18", "12"]] as [string, string[]] };
+    expect(badDecimalFields([{ name: "CostLayer", fields: [share] }])).toEqual([]);
+    expect(badDecimalFields([{ name: "FakeLedger", fields: [share] }])).toEqual(["FakeLedger.costRefShare: độ chính xác 18,12"]);
+    expect(badDecimalFields([{ name: "CostLayer", fields: [{ ...share, nativeType: ["Decimal", ["18", "4"]] }] }])).toEqual(["CostLayer.costRefShare: độ chính xác 18,4"]);
+  });
 
   it("findModel ném lỗi khi model không tồn tại", () => {
     expect(() => findModel(models, "KhongTonTai")).toThrow(/Không thấy model/);
