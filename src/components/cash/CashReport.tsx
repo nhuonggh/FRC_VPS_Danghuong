@@ -10,9 +10,12 @@ export function CashReport({ report, params, base }: { report: CashReportDTO; pa
   const sel = report.selectedId;
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Báo cáo quỹ tiền mặt</h1>
-        <p className="text-xs text-fg-secondary">Kỳ {report.periodName}. Đầu ngày = cuối ngày trước. Ngày chưa chốt vẫn nhập phiếu và bổ sung quỹ bình thường; chốt quỹ lùi cho ngày hôm trước ở Sổ quỹ tiền mặt.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Báo cáo quỹ tiền mặt</h1>
+          <p className="text-xs text-fg-secondary">Kỳ {report.periodName}. Đầu ngày = cuối ngày trước. Ngày chưa chốt vẫn nhập phiếu và bổ sung quỹ bình thường; chốt quỹ lùi cho ngày hôm trước ở Sổ quỹ tiền mặt.</p>
+        </div>
+        {report.selectedId && <a href={buildListHref(`/api/cash/report/export?account=${report.selectedId}`, params, {})} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">Xuất Excel</a>}
       </div>
       {report.accounts.length === 0 ? <EmptyState kind="empty" title="Chưa có quỹ tiền mặt" description="Tạo ở Hệ thống → Cài đặt danh mục." /> : (
         <>

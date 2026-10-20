@@ -1,6 +1,6 @@
 # Sổ quỹ tiền mặt — yêu cầu khách chờ chốt (20/10/2026)
 
-**Trạng thái: ĐÃ CODE theo phương án A–D (21/10/2026), chưa deploy.** Các câu hỏi bên dưới vẫn mở: nếu khách trả lời khác thì chỉnh. Mặc định đã làm: người kiểm tra = người bấm kiểm phiếu (+ người chốt quỹ ở báo cáo); người nộp/nhận = đối tác, phiếu chi không đối tác thì lấy người ứng tiền; chưa có Excel cho báo cáo.
+**Trạng thái: ĐÃ CODE theo phương án A–D (21/10/2026), chưa deploy.** Các câu hỏi bên dưới vẫn mở: nếu khách trả lời khác thì chỉnh. Mặc định đã làm: người kiểm tra = người bấm kiểm phiếu (+ người chốt quỹ ở báo cáo); người nộp/nhận = đối tác, phiếu chi không đối tác thì lấy người ứng tiền; Excel báo cáo quỹ đã có (2 sheet); phiếu chi phí hiện tên loại chi phí ở cột người nộp/nhận (khách xác nhận 21/10).
 
 Đã làm: migration `20261021120000_cash_top_up` + `20261021120100_cash_top_up_constraint` (loại phiếu thu `BO_SUNG_QUY`, không đối tác/đơn/công nợ); 3 cột + Excel ở sổ quỹ; trang `/accounting/cashreport` ([report.ts](../../src/server/cash/report.ts)); test `tests/cash/report.test.ts`.
 
