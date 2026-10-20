@@ -35,6 +35,8 @@ describe("chi phí hoạt động (66)", () => {
   it("lưu và sửa người ứng tiền trên phiếu chi, trả lại dữ liệu khi sửa, không sinh công nợ", async () => {
     const e = await newExp({ advancedById: w.userId });
     expect((await getExpense(prisma, kt, e.id)).advancedBy?.value).toBe(w.userId);
+    const listed = (await listExpenses(prisma, kt, P())).rows.find(r => r.id === e.id)!;
+    expect(listed.advancedByName).toBe((await prisma.user.findUniqueOrThrow({ where: { id: w.userId } })).fullName);
     await tx(t => editExpense(t, kt, e.id, body({ advancedById: tq.userId }), NOW));
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: e.paymentId } })).advancedById).toBe(tq.userId);
     await tx(t => editExpense(t, kt, e.id, body({ advancedById: null }), NOW));

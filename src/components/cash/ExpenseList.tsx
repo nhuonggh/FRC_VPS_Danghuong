@@ -32,15 +32,15 @@ export function ExpenseList({ rows, total, summary, params, types, canCreate, ex
       footer={<PaginationFooter total={total} page={params.page} pageSize={params.pageSize} buildHref={(page) => buildListHref(BASE, params, page)} />}
     >
       {total === 0 ? <EmptyState kind={filtered ? "no-result" : "empty"} title={filtered ? "Không có khoản chi phí phù hợp" : "Chưa có chi phí"} action={filtered ? <Link href={BASE} className="text-sm font-medium text-accent">Xóa bộ lọc</Link> : undefined} /> : (
-        <table className="w-full min-w-[760px] text-sm">
-          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Phiếu chi</th><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Loại</th><th className="px-3 py-2 text-right">Số tiền</th><th className="px-3 py-2">Quỹ</th><th className="px-3 py-2">Ghi chú</th><th className="px-3 py-2">Trạng thái</th></tr></thead>
+        <table className="w-full min-w-[880px] text-sm">
+          <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Phiếu chi</th><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Loại</th><th className="px-3 py-2 text-right">Số tiền</th><th className="px-3 py-2">Quỹ</th><th className="px-3 py-2">Người ứng tiền</th><th className="px-3 py-2">Ghi chú</th><th className="px-3 py-2">Trạng thái</th></tr></thead>
           <tbody>
             {rows.map((r) => { const state = r.isCancelled ? "CANCELLED" : r.reviewStatus; return (
               <tr key={r.id} className="border-t border-border">
                 <td className="px-3 py-2 font-mono text-xs"><Link href={`/accounting/payments/${r.paymentId}`} className="text-accent hover:underline">{r.code}</Link></td>
                 <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.at)}</td><td className="px-3 py-2">{r.expenseTypeName}</td>
                 <td className={`px-3 py-2 text-right tabular ${r.isCancelled ? "text-fg-muted line-through" : ""}`}>{formatCurrency(r.amount)}</td>
-                <td className="px-3 py-2">{r.cashAccountName}</td><td className="px-3 py-2">{r.note}</td>
+                <td className="px-3 py-2">{r.cashAccountName}</td><td className="px-3 py-2">{r.advancedByName ?? "—"}</td><td className="px-3 py-2">{r.note}</td>
                 <td className="px-3 py-2"><Badge tone={TONE[state]}>{REVIEW_LABEL[state]}</Badge></td>
               </tr>
             ); })}

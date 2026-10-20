@@ -1,6 +1,6 @@
 "use client";
 
-import { Receipt } from "lucide-react";
+import { Receipt, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Combobox, type ComboOption, FormCard, FormGrid, igCombo, igArea, igInput, InlineField, NewPage, NumberInput } from "@/components/ui";
@@ -41,6 +41,10 @@ export function ExpenseForm({ id, code, today, types, accounts, initial, people 
             <div className={igCombo}><Combobox hideLabel label="Loại chi phí" value={types.find(t => t.id === typeId) ? { value: typeId, label: types.find(t => t.id === typeId)!.name } : null} onChange={o => setTypeId(o ? Number(o.value) : "")} loadOptions={async q => filterComboOptions(types.map(t => ({ value: t.id, label: t.name })), q)} placeholder="Chọn loại chi phí…" /></div>
           </InlineField>
           <InlineField id="date" label="Ngày" required><input id="date" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={igInput} /></InlineField>
+        </FormGrid>
+      </FormCard>
+      <FormCard icon={Wallet} title="Thanh toán">
+        <FormGrid cols={2}>
           <InlineField id="account" label="Chi từ quỹ / tài khoản" required>
             <div className={igCombo}><Combobox hideLabel label="Chi từ quỹ / tài khoản" value={accounts.find(a => a.id === accountId) ? { value: accountId, label: accounts.find(a => a.id === accountId)!.name } : null} onChange={o => setAccountId(o ? Number(o.value) : 0)} loadOptions={async q => filterComboOptions(accounts.map(a => ({ value: a.id, label: a.name, hint: a.type === "BANK" ? "Ngân hàng" : "Tiền mặt" })), q)} /></div>
           </InlineField>
