@@ -2474,3 +2474,14 @@ CREATE INDEX "production_outputs_productId_idx" ON production_outputs("productId
 -- Backfill historical outputs without changing their ledger references or sequence.
 INSERT INTO production_outputs ("orderId", "productId", qty, "allocationWeight", seq)
 SELECT id, "productId", qty, 1, "outSeq" FROM production_orders;
+
+-- >>> prisma/migrations/20261020120000_sale_cost_hint/migration.sql
+-- Con số giá vốn tham khảo (không chi tiết) cho màn bán hàng của kế toán, kèm cảnh báo bán dưới vốn.
+INSERT INTO "permissions" (code, label, "groupName", "isSensitive")
+VALUES ('sale.cost_hint.view', 'Xem giá vốn tham khảo khi bán (không chi tiết)', 'Bán hàng', true)
+ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, "groupName"=EXCLUDED."groupName", "isSensitive"=true;
+
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE p.code='sale.cost_hint.view' AND r.name='Kế toán'
+ON CONFLICT DO NOTHING;

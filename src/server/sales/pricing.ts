@@ -30,8 +30,14 @@ export async function lastSalePricePerBase(db: Db, productId: number, partnerId:
 export const priceForUnit = (perBase: Prisma.Decimal, factor: Prisma.Decimal.Value) =>
   perBase.div(factor).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
+/** Giá vốn tham khảo tóm tắt (đơn vị gốc) cho người không có `order.analysis.view`. */
+export interface CostHint { perBase: string | null; areaRatio?: string; message?: string }
+const HINT_ACTOR: Actor = { userId: 0, perms: new Set(["order.analysis.view", "cost.view", "purchase_price.view"]) };
+
 export interface SalePricingDTO {
   costReference?: CostReference;
+  /** Chỉ có khi actor có `sale.cost_hint.view` mà không có quyền xem đầy đủ (`costReference`). */
+  costHint?: CostHint;
   productId: number;
   baseUnit: string;
   /** `suggestedPrice`: giá gần nhất quy ra đơn vị này (đúng giá server chấp nhận khi thiếu quyền sửa giá). */
@@ -74,5 +80,11 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
   if (canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, productId))?.toString() ?? null;
   const reference = await costReference(db, actor, productId, processingTypeId ?? null, at, mode);
   if (reference) out.costReference = reference;
+  else if (can(actor.perms, "sale.cost_hint.view")) {
+    // Chỉ lấy MỘT con số tổng; nguồn, thành phần, định mức và giá nhập chi tiết không rời server.
+    const full = await costReference(db, HINT_ACTOR, productId, processingTypeId ?? null, at, mode);
+    const perBase = full?.primary?.perBase ?? null;
+    out.costHint = { perBase, ...(full?.areaRatio ? { areaRatio: full.areaRatio } : {}), ...(perBase === null ? { message: "Chưa đủ dữ liệu giá vốn tham khảo." } : {}) };
+  }
   return out;
 }

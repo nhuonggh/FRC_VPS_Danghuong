@@ -37,6 +37,7 @@ export const PERMISSIONS = [
   { code: "stock_adjust.manage", label: "Điều chỉnh hao hụt / xuất hủy", group: "Kho" },
   // Bán hàng
   { code: "order.analysis.view", label: "Xem định mức, giá vốn và lợi nhuận đơn hàng", group: "Bán hàng", sensitive: true },
+  { code: "sale.cost_hint.view", label: "Xem giá vốn tham khảo khi bán (không chi tiết)", group: "Bán hàng", sensitive: true },
   { code: "order.view", label: "Xem đơn hàng", group: "Bán hàng" },
   { code: "order.create", label: "Tạo đơn hàng", group: "Bán hàng" },
   { code: "order.edit", label: "Sửa đơn hàng", group: "Bán hàng" },
@@ -88,6 +89,7 @@ export const ALL_PERMISSION_CODES: readonly PermissionCode[] = PERMISSIONS.map((
 // (price, unitPrice, amount, total...) — luôn dùng tên riêng (salePrice, unitCostFifo, lineProfit...) rồi
 // đăng ký ở đây. Xem docs/conventions/sensitive-data.md.
 export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
+  costHint: "sale.cost_hint.view",
   referenceCostSnapshot: "cost.view",
   referenceCost: "cost.view",
   fixedPricePerM2: "purchase_price.view",

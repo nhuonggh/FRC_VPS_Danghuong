@@ -17,3 +17,12 @@ it("migration grants the new sales-analysis permission to administrators, preser
   for (const statement of sql.split(";").filter(s => s.trim())) await prisma.$executeRawUnsafe(statement);
   expect(await prisma.rolePermission.count({ where: { permission: { code: "order.analysis.view" } } })).toBe(2);
 });
+it("sale cost-hint migration grants the summary permission to accountants only, idempotently", async () => {
+  const accountant = await prisma.role.create({ data: { name: "Kế toán" } });
+  const warehouse = await prisma.role.create({ data: { name: "Thủ kho" } });
+  const sql = readFileSync("prisma/migrations/20261020120000_sale_cost_hint/migration.sql", "utf8");
+  for (let i = 0; i < 2; i++) for (const statement of sql.split(";").filter(s => s.replace(/--.*$/gm, "").trim())) await prisma.$executeRawUnsafe(statement);
+  const granted = await prisma.rolePermission.findMany({ where: { permission: { code: "sale.cost_hint.view" } }, select: { roleId: true } });
+  expect(granted.map(r => r.roleId)).toEqual([accountant.id]);
+  expect(granted.map(r => r.roleId)).not.toContain(warehouse.id);
+});

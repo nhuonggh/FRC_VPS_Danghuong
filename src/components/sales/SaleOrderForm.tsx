@@ -12,6 +12,7 @@ import { igCombo, igInput, InlineField } from "@/components/sales/InlineField";
 import { QuickCustomerDialog, type QuickCustomer } from "@/components/sales/QuickCustomerDialog";
 import { SaleLineEntry } from "@/components/sales/SaleLineEntry";
 import { apiFetch } from "@/lib/api-fetch";
+import { confirm } from "@/lib/confirm-store";
 import { localPrintHref } from "@/lib/local-print";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatQty } from "@/lib/format";
@@ -169,7 +170,15 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
       ...(amount > 0 ? { payments: [...(first > 0 ? [{ amount: first, cashAccountId: payAccount, note: payNote.trim() }] : []), ...(second > 0 ? [{ amount: second, cashAccountId: secAccount, note: payNote.trim() }] : [])] } : {}),
     };
   };
+  /** Số dòng có đơn giá (quy về đơn vị gốc) thấp hơn giá vốn tham khảo — dùng để hỏi lại trước khi lưu, tránh nhập nhầm giá. */
+  const belowCostCount = (rows: SaleOrderInput["lines"]) => rows.filter((l) => {
+    const dto = pricingForLine(l), ref = referencePerBase(dto);
+    const factor = num(dto?.units.find((u) => u.unit === l.unit)?.factor ?? (l.productId ? products.get(l.productId)?.units.find((u) => u.unit === l.unit)?.factor : undefined)) || 1;
+    return ref != null && num(l.salePrice) > 0 && num(l.salePrice) * factor < Number(ref) - 0.005;
+  }).length;
   const submitWith = (mode: "save" | "print" | "draft") => handleSubmit(async (value) => {
+    const low = mode === "draft" ? 0 : belowCostCount(value.lines);
+    if (low > 0 && !(await confirm({ title: "Có dòng bán thấp hơn giá vốn tham khảo", description: `${low} dòng có đơn giá thấp hơn giá vốn tham khảo (đang báo đỏ). Kiểm tra lại giá bán trước khi lưu?`, confirmLabel: "Vẫn lưu", danger: true }))) return;
     if (edit) {
       await apiFetch(`/api/orders/${edit.orderId}`, { method: "PATCH", json: value });
       await finish(edit.orderId, mode === "print" && !edit.isDraft);
@@ -570,7 +579,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
               )}
               {short && <p role="status" className="font-medium text-warning">Không đủ tồn — sẽ thành đơn treo</p>}
               {dto?.lastSalePrice != null && <p>Giá gần nhất{dto.lastSalePriceForPartner ? " (khách này)" : dto.lastSalePriceSource === "default" ? " (giá mặc định)" : " (cùng nhóm khách)"}: {areaRow ? `${formatCurrency(pricePerM2(Number(dto.lastSalePrice), rowRatio))}/m²` : `${formatCurrency(dto.lastSalePrice)}/${dto.baseUnit}`}</p>}
-              <CostReferenceInfo dto={dto} unit={areaRow ? "m²" : line?.unit || dto?.baseUnit || ""} divisor={areaRow ? Number(dto?.costReference?.areaRatio ?? rowRatio) : factor} compact />
+              <CostReferenceInfo dto={dto} unit={areaRow ? "m²" : line?.unit || dto?.baseUnit || ""} divisor={areaRow ? Number(dto?.costReference?.areaRatio ?? dto?.costHint?.areaRatio ?? rowRatio) : factor} compact />
             </div>
           </div>
         </div>
