@@ -9,9 +9,9 @@ const id = (msg: string) => z.number({ invalid_type_error: msg }).int().positive
 const note = z.string().trim().max(300, "Ghi chú tối đa 300 ký tự.");
 const reason = z.string().trim().min(1, "Nhập lý do.").max(300, "Lý do tối đa 300 ký tự.");
 
-export const RECEIPT_TYPES = ["THU_NO", "KHAC"] as const;
+export const RECEIPT_TYPES = ["THU_NO", "BO_SUNG_QUY", "KHAC"] as const;
 export const PAYMENT_KINDS = ["TRA_NCC", "HOAN_KHACH", "KHAC"] as const;
-export const RECEIPT_TYPE_LABEL: Record<string, string> = { THU_NO: "Thu nợ", COC: "Tiền cọc", KHAC: "Thu khác" };
+export const RECEIPT_TYPE_LABEL: Record<string, string> = { THU_NO: "Thu nợ", COC: "Tiền cọc", BO_SUNG_QUY: "Bổ sung quỹ", KHAC: "Thu khác" };
 export const PAYMENT_KIND_LABEL: Record<string, string> = { TRA_NCC: "Trả nhà cung cấp", HOAN_KHACH: "Hoàn tiền khách", CHI_PHI: "Chi phí hoạt động", TAT_TOAN_CK: "Tất toán chiết khấu", KHAC: "Chi khác" };
 
 /** Phiếu thu (56, 57): THU_NO cần khách (tuỳ chọn gắn đơn); KHAC không gắn đơn, đối tác tuỳ chọn. */
@@ -25,7 +25,8 @@ export const receiptSchema = z.object({
   note,
 }).superRefine((v, ctx) => {
   if (v.type === "THU_NO" && v.partnerId === null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["partnerId"], message: "Chọn khách hàng." });
-  if (v.type === "KHAC" && v.orderId !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["orderId"], message: "Thu khác không gắn đơn." });
+  if ((v.type === "KHAC" || v.type === "BO_SUNG_QUY") && v.orderId !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["orderId"], message: "Phiếu thu này không gắn đơn." });
+  if (v.type === "BO_SUNG_QUY" && v.partnerId !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["partnerId"], message: "Bổ sung quỹ không gắn đối tác." });
   if (v.orderId !== null && v.partnerId === null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["partnerId"], message: "Chọn khách của đơn." });
 });
 

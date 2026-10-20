@@ -54,14 +54,17 @@ export function CashBook({ book, type, base, canClose, canReopen, nowIso, params
           {s && (
             <div className="overflow-x-auto rounded-md border border-border bg-surface">
               {book.entries.length === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh" /> : (
-                <table className="w-full min-w-[720px] text-sm">
-                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Chứng từ</th><th className="px-3 py-2">Kiểm tra</th><th className="px-3 py-2 text-right">Thu</th><th className="px-3 py-2 text-right">Chi</th><th className="px-3 py-2 text-right">Số dư</th></tr></thead>
+                <table className="w-full min-w-[1040px] text-sm">
+                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Chứng từ</th><th className="px-3 py-2">Nội dung thu/chi</th><th className="px-3 py-2">Người nộp/nhận</th><th className="px-3 py-2">Kiểm tra</th><th className="px-3 py-2">Người kiểm tra</th><th className="px-3 py-2 text-right">Thu</th><th className="px-3 py-2 text-right">Chi</th><th className="px-3 py-2 text-right">Số dư</th></tr></thead>
                   <tbody>
                     {book.entries.map((e) => (
                       <tr key={e.id} className="border-t border-border">
                         <td className="px-3 py-2 whitespace-nowrap">{formatDate(e.at)}</td>
                         <td className="px-3 py-2">{e.docLabel} {e.docHref ? <Link href={e.docHref} className="font-mono text-xs text-accent hover:underline">{e.docCode}</Link> : e.docCode}</td>
+                        <td className="max-w-[260px] px-3 py-2 text-fg-secondary">{e.content ?? ""}</td>
+                        <td className="px-3 py-2">{e.counterparty ?? ""}</td>
                         <td className="px-3 py-2">{e.reviewStatus && <Badge tone={TONE[e.reviewStatus]}>{REVIEW_LABEL[e.reviewStatus]}</Badge>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{e.reviewerName ?? ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(e.amountIn) ? formatCurrency(e.amountIn) : ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(e.amountOut) ? formatCurrency(e.amountOut) : ""}</td>
                         <td className="px-3 py-2 text-right tabular">{formatCurrency(e.running)}</td>

@@ -1224,7 +1224,7 @@ ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_expected_chk" CHECK ("expe
 CREATE TYPE "quote_status" AS ENUM ('DRAFT', 'SENT', 'CONVERTED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "receipt_type" AS ENUM ('THU_NO', 'COC', 'KHAC');
+CREATE TYPE "receipt_type" AS ENUM ('THU_NO', 'COC', 'KHAC', 'BO_SUNG_QUY');
 
 -- AlterTable
 ALTER TABLE "sale_orders" ADD COLUMN     "isDraft" BOOLEAN NOT NULL DEFAULT false;
@@ -1674,7 +1674,7 @@ ALTER TABLE "payments" ADD CONSTRAINT "payments_cashAccountId_fkey" FOREIGN KEY 
 ALTER TABLE "payments" ADD CONSTRAINT "payments_amount_chk" CHECK ("amount" > 0);
 ALTER TABLE "payments" ADD CONSTRAINT "payments_partner_chk" CHECK (("kind" IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NOT NULL) OR ("kind" NOT IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NULL));
 ALTER TABLE "payments" ADD CONSTRAINT "payments_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" = 'KHAC');
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" IN ('KHAC', 'BO_SUNG_QUY'));
 ALTER TABLE "cash_review_events" ADD CONSTRAINT "cash_review_events_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT') AND "action" IN ('SUBMIT', 'EDIT', 'RESUBMIT', 'REVIEW', 'RETURN', 'CANCEL'));
 ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT'));
 ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_kind_chk" CHECK (("kind" = 'VOID' AND "newAmount" IS NULL AND "newCashAccountId" IS NULL) OR ("kind" = 'AMOUNT' AND ("newAmount" IS NOT NULL OR "newCashAccountId" IS NOT NULL) AND ("newAmount" IS NULL OR "newAmount" > 0)));

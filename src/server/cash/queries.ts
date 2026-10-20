@@ -139,7 +139,7 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams) 
 
 // ───────────────────────────── SỔ QUỸ / SỔ NGÂN HÀNG (60, 61) ─────────────────────────────
 export interface CashAccountSummaryDTO { id: number; name: string; bankNo: string | null; type: "CASH" | "BANK"; opening: string; in: string; out: string; balance: string; reviewed: string; pending: string }
-export interface CashEntryDTO { id: number; at: Date; docType: string; docLabel: string; docCode: string | null; docHref: string | null; reviewStatus: CashReviewStatus | null; amountIn: string; amountOut: string; running: string }
+export interface CashEntryDTO { id: number; at: Date; docType: string; docLabel: string; docCode: string | null; docHref: string | null; reviewStatus: CashReviewStatus | null; amountIn: string; amountOut: string; running: string; content: string | null; counterparty: string | null; reviewerName: string | null }
 export interface CashCloseDTO { id: number; closeAt: Date; expected: string; actual: string; diff: string; reason: string | null; createdByName: string | null; createdAt: Date; voided: boolean; voidReason: string | null }
 export interface CashBookDTO { accounts: CashAccountSummaryDTO[]; selected: CashAccountSummaryDTO | null; entries: CashEntryDTO[]; total: number; closes: CashCloseDTO[]; periodName: string }
 const DOC_LABEL: Record<string, string> = { RECEIPT: "Phiếu thu", PAYMENT: "Phiếu chi", CASH_ADJ: "Điều chỉnh phiếu" };
@@ -165,20 +165,22 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   const pageRows = filtered.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
   const idsOf = (t: string) => pageRows.filter((x) => x.r.docType === t).map((x) => x.r.docId);
   const [receipts, payments, adjs, closes] = await Promise.all([
-    db.receipt.findMany({ where: { id: { in: idsOf("RECEIPT") } }, select: { id: true, code: true, reviewStatus: true } }),
-    db.payment.findMany({ where: { id: { in: idsOf("PAYMENT") } }, select: { id: true, code: true, reviewStatus: true } }),
-    db.cashAdjustment.findMany({ where: { id: { in: idsOf("CASH_ADJ") } }, select: { id: true, docType: true, docId: true } }),
+    db.receipt.findMany({ where: { id: { in: idsOf("RECEIPT") } }, select: { id: true, code: true, reviewStatus: true, type: true, note: true, reviewedBy: true, partner: { select: { name: true } } } }),
+    db.payment.findMany({ where: { id: { in: idsOf("PAYMENT") } }, select: { id: true, code: true, reviewStatus: true, kind: true, note: true, reviewedBy: true, advancedById: true, partner: { select: { name: true } } } }),
+    db.cashAdjustment.findMany({ where: { id: { in: idsOf("CASH_ADJ") } }, select: { id: true, docType: true, docId: true, decidedBy: true } }),
     db.cashClose.findMany({ where: { cashAccountId: selected.id, periodId: period.id }, orderBy: { closeAt: "desc" }, take: 20 }),
   ]);
-  const adjDocs = await Promise.all(adjs.map(async (a) => (a.docType === "RECEIPT" ? db.receipt.findUnique({ where: { id: a.docId }, select: { code: true, id: true } }) : db.payment.findUnique({ where: { id: a.docId }, select: { code: true, id: true } }))));
-  const info = new Map<string, { code: string; href: string; status: CashReviewStatus | null }>();
-  receipts.forEach((r) => info.set(`RECEIPT:${r.id}`, { code: r.code, href: `/accounting/receipts/${r.id}`, status: r.reviewStatus }));
-  payments.forEach((r) => info.set(`PAYMENT:${r.id}`, { code: r.code, href: `/accounting/payments/${r.id}`, status: r.reviewStatus }));
-  adjs.forEach((a, i) => { const d = adjDocs[i]; if (d) info.set(`CASH_ADJ:${a.id}`, { code: d.code, href: `/accounting/${a.docType === "RECEIPT" ? "receipts" : "payments"}/${d.id}`, status: "REVIEWED" }); });
-  const names = await fullName(db, closes.map((c) => c.createdBy));
+  const adjDocs = await Promise.all(adjs.map(async (a) => (a.docType === "RECEIPT" ? db.receipt.findUnique({ where: { id: a.docId }, select: { code: true, id: true, type: true, note: true, partner: { select: { name: true } } } }) : db.payment.findUnique({ where: { id: a.docId }, select: { code: true, id: true, kind: true, note: true, advancedById: true, partner: { select: { name: true } } } }))));
+  const names = await fullName(db, [...closes.map((c) => c.createdBy), ...receipts.map((r) => r.reviewedBy ?? 0), ...payments.flatMap((p) => [p.reviewedBy ?? 0, p.advancedById ?? 0]), ...adjs.map((a) => a.decidedBy ?? 0), ...adjDocs.map((d) => (d && "advancedById" in d ? (d.advancedById ?? 0) : 0))]);
+  const nm = (id: number | null | undefined) => (id ? (names.get(id) ?? null) : null);
+  const contentOf = (label: string | undefined, note: string | null) => [label, note].filter(Boolean).join(" — ") || null;
+  const info = new Map<string, { code: string; href: string; status: CashReviewStatus | null; content: string | null; counterparty: string | null; reviewerName: string | null }>();
+  receipts.forEach((r) => info.set(`RECEIPT:${r.id}`, { code: r.code, href: `/accounting/receipts/${r.id}`, status: r.reviewStatus, content: contentOf(RECEIPT_TYPE_LABEL[r.type], r.note), counterparty: r.partner?.name ?? null, reviewerName: nm(r.reviewedBy) }));
+  payments.forEach((r) => info.set(`PAYMENT:${r.id}`, { code: r.code, href: `/accounting/payments/${r.id}`, status: r.reviewStatus, content: contentOf(PAYMENT_KIND_LABEL[r.kind], r.note), counterparty: r.partner?.name ?? nm(r.advancedById), reviewerName: nm(r.reviewedBy) }));
+  adjs.forEach((a, i) => { const d = adjDocs[i]; if (d) info.set(`CASH_ADJ:${a.id}`, { code: d.code, href: `/accounting/${a.docType === "RECEIPT" ? "receipts" : "payments"}/${d.id}`, status: "REVIEWED", content: contentOf("Điều chỉnh", d.note), counterparty: d.partner?.name ?? ("advancedById" in d ? nm(d.advancedById) : null), reviewerName: nm(a.decidedBy) }); });
   return {
     accounts, selected, total: filtered.length, periodName: periodRow.name,
-    entries: pageRows.map(({ r, running }) => { const i = info.get(`${r.docType}:${r.docId}`); return { id: r.id, at: r.at, docType: r.docType, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: i?.code ?? null, docHref: i?.href ?? null, reviewStatus: i?.status ?? null, amountIn: r.amountIn.toString(), amountOut: r.amountOut.toString(), running: running.toString() }; }),
+    entries: pageRows.map(({ r, running }) => { const i = info.get(`${r.docType}:${r.docId}`); return { id: r.id, at: r.at, docType: r.docType, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: i?.code ?? null, docHref: i?.href ?? null, reviewStatus: i?.status ?? null, amountIn: r.amountIn.toString(), amountOut: r.amountOut.toString(), running: running.toString(), content: i?.content ?? null, counterparty: i?.counterparty ?? null, reviewerName: i?.reviewerName ?? null }; }),
     closes: closes.map((c) => ({ id: c.id, closeAt: c.closeAt, expected: c.expected.toString(), actual: c.actual.toString(), diff: c.diff.toString(), reason: c.reason, createdByName: names.get(c.createdBy) ?? null, createdAt: c.createdAt, voided: c.voidedAt !== null, voidReason: c.voidReason })),
   };
 }

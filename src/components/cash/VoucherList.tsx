@@ -16,7 +16,7 @@ export function VoucherList({ doc, rows, total, stats, params, canCreate }: { do
   const status = params.filters.status?.[0];
   const href = (patch: Parameters<typeof buildListHref>[2]) => buildListHref(base, params, patch);
   const labels: Record<string, string> = receipt ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL;
-  const typeKeys = receipt ? ["THU_NO", "COC", "KHAC"] : ["TRA_NCC", "HOAN_KHACH", "CHI_PHI", "TAT_TOAN_CK", "KHAC"];
+  const typeKeys = receipt ? ["THU_NO", "COC", "BO_SUNG_QUY", "KHAC"] : ["TRA_NCC", "HOAN_KHACH", "CHI_PHI", "TAT_TOAN_CK", "KHAC"];
   const filtered = !!(params.q || params.filters.status || params.filters.type || params.timePreset);
   return (
     <ListPageLayout
