@@ -40,6 +40,17 @@ it("editing an unchanged line displays its saved cost estimate instead of a newe
   expect(screen.queryByText("99.999 ₫/md")).toBeNull();
 });
 
+it("accountant with only the cost hint sees one reference figure, no cost details, and a red warning below cost", async () => {
+  pricing = { ...(pricing as object), costHint: { perBase: "40000" } };
+  render(<SaleOrderForm today="2026-09-20" canEditPrice options={OPTS} edit={{
+    orderId: 5, code: "DH000005", customer: { value: 7, label: "Khách A" }, products: [PRODUCT],
+    defaults: { partnerId: 7, date: "2026-09-19", expectedDeliveryDate: "2026-09-20", note: "", lines: [{ id: 1, productId: 10, processingTypeId: 3, issueMode: "BOM", qty: 1, unit: "md", salePrice: 30000, discountNow: 0, discountAccum: 0 }] },
+  }} />);
+  await waitFor(() => expect(screen.getAllByText("40.000 ₫/md").length).toBeGreaterThan(0));
+  expect(screen.getAllByText("Thấp hơn giá vốn tham khảo").length).toBeGreaterThan(0);
+  expect(screen.queryByText("Chi tiết giá vốn")).toBeNull();
+});
+
 async function pick(name: string, text: string) {
   const box = screen.getByRole("combobox", { name });
   await userEvent.click(box);

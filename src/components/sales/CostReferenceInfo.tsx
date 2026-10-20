@@ -4,13 +4,20 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import type { CostSource } from "@/server/sales/cost-reference";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
 
-export const referencePerBase = (dto: SalePricingDTO | null | undefined) => dto?.costReference ? dto.costReference.primary?.perBase ?? null : dto?.lastPurchasePrice ?? null;
+export const referencePerBase = (dto: SalePricingDTO | null | undefined) => dto?.costReference ? dto.costReference.primary?.perBase ?? null : dto?.costHint ? dto.costHint.perBase : dto?.lastPurchasePrice ?? null;
 const labels = { PURCHASE: "Nhập mua gần nhất", PRODUCTION: "Sản xuất gần nhất", BOM: "Dự kiến theo định mức" };
 export function CostReferenceInfo({ dto, unit, divisor = 1, compact = false }: { dto: SalePricingDTO | null; unit: string; divisor?: number; compact?: boolean }) {
   const ref = dto?.costReference;
-  if (!ref && dto?.lastPurchasePrice == null) return null;
+  if (!ref && !dto?.costHint && dto?.lastPurchasePrice == null) return null;
   const divide = divisor > 0 ? divisor : 1;
   const money = (v: string | null) => v === null ? "Chưa đủ dữ liệu" : `${formatCurrency(Number(v) / divide)}/${unit}`;
+  if (!ref && dto?.costHint) {
+    const hint = dto.costHint;
+    return <div className={compact ? "text-xs text-fg-secondary" : "rounded-sm border border-dashed border-border bg-canvas px-3 py-2 text-sm"}>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1"><span>Giá vốn tham khảo</span><strong className="tabular">{money(hint.perBase)}</strong></div>
+      {hint.message && <p className="mt-1 text-xs text-warning">{hint.message}</p>}
+    </div>;
+  }
   const source = (s: CostSource) => <span>{labels[s.kind]} · {s.href ? <Link href={s.href} target="_blank" rel="noopener noreferrer" className="text-accent">{s.code}</Link> : s.code} · {s.kind === "BOM" ? "Hiệu lực " : ""}{formatDate(s.at)}</span>;
   return <div className={compact ? "text-xs text-fg-secondary" : "rounded-sm border border-dashed border-border bg-canvas px-3 py-2 text-sm"}>
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1"><span>Giá vốn tham khảo</span><strong className="tabular">{money(referencePerBase(dto))}</strong></div>
