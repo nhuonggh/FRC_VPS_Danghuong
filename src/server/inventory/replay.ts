@@ -16,8 +16,8 @@ type MoneyDec = InstanceType<typeof Money>;
 const mul = (a: Dec, b: Dec): MoneyDec => new Money(a.toString()).times(b.toString());
 
 /** Giá đơn vị = tổng tiền / số lượng, làm tròn HALF_UP 4 chữ số (Decimal(18,4)). */
-export function unitCostOf(total: Prisma.Decimal.Value, qty: Prisma.Decimal.Value): Dec {
-  const v = new Money(total.toString()).div(qty.toString()).toDecimalPlaces(4, Money.ROUND_HALF_UP);
+export function unitCostOf(total: Prisma.Decimal.Value, qty: Prisma.Decimal.Value, share: Prisma.Decimal.Value = 1): Dec {
+  const v = new Money(total.toString()).times(share.toString()).div(qty.toString()).toDecimalPlaces(4, Money.ROUND_HALF_UP);
   return new Prisma.Decimal(v.toFixed(4));
 }
 
@@ -26,7 +26,7 @@ const ZERO = new Prisma.Decimal(0);
 /** Lớp trong mô phỏng. `derived` ⇔ costRefType ≠ null (trả hàng / thành phẩm). */
 interface Avail {
   layerId: number; seq: bigint; at: Date; remaining: Dec; orig: Dec; unitCost: Dec; origCost: Dec;
-  derived: boolean; costRefType: StockDocType | null; costRefId: number | null; costRefQty: Dec | null;
+  derived: boolean; costRefType: StockDocType | null; costRefId: number | null; costRefQty: Dec | null; costRefShare: Dec;
 }
 /** `id` = id lớp / id dòng sổ (tra cứu); `seq` = khoá thứ tự ổn định của dòng sổ (lớp: dòng sổ nhập 1–1 của nó). */
 interface InEvent { kind: "in"; at: Date; id: number; seq: bigint; layer: Avail }
@@ -119,7 +119,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
   type LayerRow = (typeof scopeLayers)[number];
   const toAvail = (l: LayerRow, remaining: Dec): Avail => ({
     layerId: l.id, seq: l.ledger.seq, at: l.at, remaining, orig: remaining, unitCost: l.unitCost, origCost: l.unitCost,
-    derived: l.costRefType !== null, costRefType: l.costRefType, costRefId: l.costRefId, costRefQty: l.costRefQty,
+    derived: l.costRefType !== null, costRefType: l.costRefType, costRefId: l.costRefId, costRefQty: l.costRefQty, costRefShare: l.costRefShare,
   });
   const open = await tx.costLayer.findMany({
     where: { periodId, productId, at: { lt: fromAt }, qtyRemaining: { gt: 0 } },
@@ -246,7 +246,7 @@ export async function replayProduct(ctx: EngineCtx, productId: number, fromAt: D
     if (src.length === 0 || src.some((s) => s.productId !== productId) || !l.costRefQty) continue;
     let total = new Money(0);
     for (const s of src) total = total.plus(mul(s.qtyOut, result.get(s.id)?.unitCostOut ?? s.unitCostOut));
-    l.unitCost = unitCostOf(total, l.costRefQty);
+    l.unitCost = unitCostOf(total, l.costRefQty, l.costRefShare);
   }
 
   // ── Ghi kết quả ──

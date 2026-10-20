@@ -78,7 +78,7 @@ async function checkAccount(tx: Tx, id: number) {
   const a = await tx.cashAccount.findUnique({ where: { id }, select: { isActive: true } });
   if (!a || !a.isActive) throw new DomainError("Quỹ/tài khoản không hợp lệ hoặc đã tắt.", 400);
 }
-async function checkAdvancedBy(tx: Tx, id: number | null | undefined, existing?: number | null) {
+export async function checkAdvancedBy(tx: Tx, id: number | null | undefined, existing?: number | null) {
   if (id == null || id === existing) return;
   const user = await tx.user.findUnique({ where: { id }, select: { isLocked: true } });
   if (!user || user.isLocked) throw new DomainError("Người ứng tiền không tồn tại hoặc tài khoản đã khóa.", 400);

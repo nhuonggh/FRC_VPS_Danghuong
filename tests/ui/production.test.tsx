@@ -41,6 +41,28 @@ describe("ProductionOrderDetail", () => {
 });
 
 describe("ProductionOrderForm", () => {
+  it("xẻ 900 + 300 tính số lượng và gửi hai đầu ra trong một lệnh", async () => {
+    const option = (value: number, label: string) => ({ value, label, hint: "md", baseUnit: "md", units: [] });
+    apiFetch.mockImplementation(async (url: string) => url === "/api/production/orders" ? { id: 20 } : url.includes("canUseAsMaterial") ? [option(1, "TON1200")] : [option(2, "TON900"), option(3, "TON300")]);
+    render(<ProductionOrderForm today="2026-09-15" />);
+    await userEvent.selectOptions(screen.getByLabelText("Phân bổ giá vốn"), "AREA");
+    await userEvent.click(screen.getByRole("combobox", { name: "Nguyên vật liệu dòng 1" }));
+    await userEvent.click(await screen.findByRole("option", { name: /TON1200/ }));
+    await userEvent.type(screen.getByLabelText("Số lượng NVL dòng 1"), "10");
+    await userEvent.type(screen.getByLabelText("Khổ nguyên liệu dòng 1"), "1200");
+    await userEvent.click(screen.getByRole("combobox", { name: "Sản phẩm đầu ra" }));
+    await userEvent.click(await screen.findByRole("option", { name: /TON900/ }));
+    await userEvent.type(screen.getByLabelText("Khổ đầu ra dòng 1"), "900");
+    await userEvent.type(screen.getByLabelText("Chiều dài mỗi dải dòng 1"), "10");
+    await userEvent.click(screen.getByRole("button", { name: /Thêm sản phẩm đầu ra/ }));
+    await userEvent.click(screen.getByRole("combobox", { name: "Sản phẩm đầu ra dòng 2" }));
+    await userEvent.click(await screen.findByRole("option", { name: /TON300/ }));
+    await userEvent.type(screen.getByLabelText("Khổ đầu ra dòng 2"), "300");
+    await userEvent.type(screen.getByLabelText("Chiều dài mỗi dải dòng 2"), "10");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu lệnh" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/production/orders", expect.objectContaining({ json: expect.objectContaining({ allocationBasis: "AREA", outputs: [expect.objectContaining({ productId: 2, qty: 10, widthMm: 900 }), expect.objectContaining({ productId: 3, qty: 10, widthMm: 300 })] }) })));
+    expect(replace).toHaveBeenCalledWith("/production/orders/20");
+  });
   it("tạo phụ kiện tại chỗ với loại mặc định và chọn ngay phụ kiện vừa tạo", async () => {
     apiFetch.mockImplementation(async (url: string) => url === "/api/products" ? { id: 99 } : []);
     render(<ProductionOrderForm today="2026-09-15" quickProduct={{ groups: [], units: ["cái"], canSeePurchase: false }} />);

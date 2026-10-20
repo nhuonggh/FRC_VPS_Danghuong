@@ -210,7 +210,7 @@ export async function listActiveCashAccounts(db: Db): Promise<{ id: number; name
 
 // ───────────────────────────── CHI PHÍ HOẠT ĐỘNG (66) ─────────────────────────────
 export const EXPENSE_FILTER_KEYS = ["type", "status"] as const;
-export interface ExpenseRowDTO { id: number; paymentId: number; code: string; at: Date; expenseTypeId: number; expenseTypeName: string; amount: string; cashAccountName: string; note: string | null; reviewStatus: CashReviewStatus; isCancelled: boolean; createdByName: string | null }
+export interface ExpenseRowDTO { id: number; paymentId: number; code: string; at: Date; expenseTypeId: number; expenseTypeName: string; amount: string; cashAccountName: string; note: string | null; reviewStatus: CashReviewStatus; isCancelled: boolean; createdByName: string | null; advancedByName: string | null }
 export interface ExpenseSummaryDTO { total: string; count: number; byType: { expenseTypeId: number; name: string; amount: string }[]; byMonth: { month: string; amount: string }[] }
 
 /** Danh sách chi phí + tổng theo loại và theo tháng (chỉ tính khoản CHƯA hủy, trên toàn bộ tập đã lọc). Lọc: loại chi phí, trạng thái kiểm tra, q (mã phiếu/ghi chú), thời gian. */
@@ -232,7 +232,7 @@ export async function listExpenses(db: Db, actor: Actor, params: ListParams, opt
     db.operatingExpense.count({ where }),
     db.operatingExpense.findMany({ where: { ...where, payment: { ...paymentWhere, isCancelled: false } }, select: { expenseTypeId: true, expenseType: { select: { name: true } }, payment: { select: { amount: true, at: true } } } }),
   ]);
-  const names = await fullName(db, list.map((e) => e.payment.createdBy));
+  const names = await fullName(db, list.flatMap((e) => [e.payment.createdBy, ...(e.payment.advancedById ? [e.payment.advancedById] : [])]));
   const byType = new Map<number, { name: string; amount: Prisma.Decimal }>(); const byMonth = new Map<string, Prisma.Decimal>(); let sum = new Prisma.Decimal(0);
   for (const e of liveRows) {
     sum = sum.plus(e.payment.amount);
@@ -241,17 +241,17 @@ export async function listExpenses(db: Db, actor: Actor, params: ListParams, opt
   }
   return {
     total,
-    rows: list.map((e) => ({ id: e.id, paymentId: e.paymentId, code: e.payment.code, at: e.payment.at, expenseTypeId: e.expenseTypeId, expenseTypeName: e.expenseType.name, amount: e.payment.amount.toString(), cashAccountName: e.payment.cashAccount.name, note: e.payment.note, reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled, createdByName: names.get(e.payment.createdBy) ?? null })),
+    rows: list.map((e) => ({ id: e.id, paymentId: e.paymentId, code: e.payment.code, at: e.payment.at, expenseTypeId: e.expenseTypeId, expenseTypeName: e.expenseType.name, amount: e.payment.amount.toString(), cashAccountName: e.payment.cashAccount.name, note: e.payment.note, reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled, createdByName: names.get(e.payment.createdBy) ?? null, advancedByName: e.payment.advancedById ? names.get(e.payment.advancedById) ?? null : null })),
     summary: { total: sum.toString(), count: liveRows.length, byType: [...byType.entries()].map(([expenseTypeId, v]) => ({ expenseTypeId, name: v.name, amount: v.amount.toString() })).sort((a, b) => Number(b.amount) - Number(a.amount)), byMonth: [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([month, amount]) => ({ month, amount: amount.toString() })) },
   };
 }
 
 export async function getExpense(db: Db, actor: Actor, id: number) {
   assertCan(actor.perms, "expense.manage");
-  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: true, expenseType: { select: { name: true } } } });
+  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: { include: { advancedBy: { select: { id: true, fullName: true } } } }, expenseType: { select: { name: true } } } });
   if (!e) throw new DomainError("Không tìm thấy khoản chi phí.", 404);
   const at = new Date(e.payment.at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
-  return { id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
+  return { advancedBy: e.payment.advancedBy ? { value: e.payment.advancedBy.id, label: e.payment.advancedBy.fullName } : null, id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
 }
 
 export async function listExpenseTypes(db: Db): Promise<{ id: number; name: string }[]> {

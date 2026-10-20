@@ -42,7 +42,10 @@ export function badDecimalFields(list: readonly DmmfModelLike[]): string[] {
       if (f.type !== "Decimal") continue;
       if (!f.nativeType) {
         bad.push(`${m.name}.${f.name}: thiếu @db.Decimal`);
-      } else if (!ALLOWED_DECIMAL_PRECISION.has(f.nativeType[1].join(","))) {
+      } else if (!(m.name === "CostLayer" && f.name === "costRefShare"
+        // Tỷ lệ phân bổ cần 12 số để tổng vốn nhiều đầu ra không lệch do làm tròn tỷ lệ.
+        ? f.nativeType[1].join(",") === "18,12"
+        : ALLOWED_DECIMAL_PRECISION.has(f.nativeType[1].join(",")))) {
         bad.push(`${m.name}.${f.name}: độ chính xác ${f.nativeType[1].join(",")}`);
       }
     }

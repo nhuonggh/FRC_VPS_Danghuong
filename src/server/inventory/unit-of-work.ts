@@ -142,8 +142,8 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
     if (owner) await owner(ctx.tx, snap);
   }
 
-  const derived = await ctx.tx.$queryRaw<{ id: number; productId: number; at: Date; seq: bigint; unitCost: Prisma.Decimal; costRefQty: Prisma.Decimal | null; t: string; l: number }[]>`
-    SELECT c.id, c."productId", c.at, s.seq, c."unitCost", c."costRefQty", c."costRefType"::text AS t, c."costRefId" AS l
+  const derived = await ctx.tx.$queryRaw<{ id: number; productId: number; at: Date; seq: bigint; unitCost: Prisma.Decimal; costRefQty: Prisma.Decimal | null; costRefShare: Prisma.Decimal; t: string; l: number }[]>`
+    SELECT c.id, c."productId", c.at, s.seq, c."unitCost", c."costRefQty", c."costRefShare", c."costRefType"::text AS t, c."costRefId" AS l
       FROM cost_layers c
       JOIN stock_ledger s ON s.id = c."ledgerId"
       JOIN unnest(${types}::text[], ${lines}::int[]) AS k(t, l) ON c."costRefType" = k.t::stock_doc_type AND c."costRefId" = k.l
@@ -174,7 +174,7 @@ async function propagate(ctx: EngineCtx, touched: TouchedLine[]): Promise<void> 
     if (!refQty || !refQty.gt(0)) {
       throw new EngineInvariantError(`Lớp ${layer.id}: costRefQty phải > 0 để lan truyền giá vốn.`);
     }
-    const next = unitCostOf(snapOf.get(k)!.totalCost, refQty);
+    const next = unitCostOf(snapOf.get(k)!.totalCost, refQty, layer.costRefShare);
     if (!next.equals(new Prisma.Decimal(layer.unitCost))) {
       changed.push({ id: layer.id, unitCost: next });
       markDirty(ctx, layer.productId, layer.at);

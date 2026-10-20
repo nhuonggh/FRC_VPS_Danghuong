@@ -96,7 +96,7 @@ export interface ReceiptInput {
    * TRƯỚC lớp này (DerivedLayerOrderError); cùng `at` thì lớp xếp theo thứ tự ghi cùng các lệnh xuất. Lớp này KHÔNG
    * nuốt đơn treo; chỉ là tồn cho lệnh xuất xếp SAU nó — xem replay.ts.
    */
-  costRef?: { docType: StockDocType; docLineId: number; qty: DecInput };
+  costRef?: { docType: StockDocType; docLineId: number; qty: DecInput; share?: DecInput };
   /**
    * Khoá thứ tự ghi ỔN ĐỊNH đã lưu cùng dòng chứng từ (như `at`) — truyền lại khi KHÔI PHỤC chứng từ ở giao dịch khác.
    * Bỏ trống: sửa trong cùng giao dịch (removeDocument rồi ghi lại) tự dùng lại seq cũ; chứng từ mới nhận seq mới.
@@ -114,6 +114,8 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
   let unitCost = requireNonNegativeCost(i.unitCost);
   // costRef.qty là mẫu số khi lan truyền giá vốn (flush/propagate) → phải > 0, không được lẳng lặng bỏ qua
   const costRefQty = i.costRef ? D(i.costRef.qty) : null;
+  const costRefShare = D(i.costRef?.share ?? 1).toDecimalPlaces(12);
+  if (!costRefShare.isFinite() || !costRefShare.gt(0) || costRefShare.gt(1)) throw new InvalidCostRefError();
   if (costRefQty && !costRefQty.gt(0)) throw new InvalidCostRefError();
   // Giá lớp phụ thuộc = giá XUẤT của dòng gốc (lineSnapshot chỉ cộng dòng xuất) → trỏ chứng từ nhập là sai, và sẽ
   // lẳng lặng giữ giá người gọi truyền
@@ -135,7 +137,7 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     for (const r of refRows) assertLocked(ctx, r.productId);
     // seq mới do DB cấp luôn lớn hơn mọi dòng gốc đã có; seq dùng lại / truyền vào thì phải kiểm
     assertDerivedAfterSource({ at: i.at, ...(seq === undefined ? {} : { seq }) }, refRows);
-    if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty);
+    if (refRows.length > 0) unitCost = unitCostOf((await lineSnapshot(ctx.tx, i.costRef.docType, i.costRef.docLineId)).totalCost, costRefQty, costRefShare);
   }
   choice.commit(); // mọi kiểm tra đã qua → mới rút seq dùng lại khỏi ctx
 
@@ -150,7 +152,7 @@ export async function postReceipt(ctx: EngineCtx, i: ReceiptInput): Promise<{ le
     data: {
       periodId: ctx.period.id, productId: i.productId, sourceDocType: i.docType, sourceDocId: i.docId, sourceLineId: i.docLineId,
       ledgerId: ledger.id, qtyIn: qty, qtyRemaining: qty, unitCost, at: i.at,
-      costRefType: i.costRef?.docType ?? null, costRefId: i.costRef?.docLineId ?? null, costRefQty,
+      costRefType: i.costRef?.docType ?? null, costRefId: i.costRef?.docLineId ?? null, costRefQty, costRefShare,
     },
   });
   markDirty(ctx, i.productId, i.at);

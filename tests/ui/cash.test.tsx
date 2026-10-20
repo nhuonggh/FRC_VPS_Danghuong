@@ -159,13 +159,24 @@ describe("CashBook", () => {
 
 describe("ExpenseForm", () => {
   const types = [{ id: 3, name: "Điện" }, { id: 4, name: "Lương" }];
+  it("chọn và lưu người ứng tiền; sửa hiển thị người đã lưu", async () => {
+    const { unmount } = render(<ExpenseForm today="2026-09-15" types={types} accounts={accounts} people={[{ value: 8, label: "Nguyễn Văn An" }]} />);
+    await pick("Loại chi phí", "Điện");
+    await pick("Người ứng tiền", "An");
+    await userEvent.type(screen.getByLabelText(/Số tiền/), "120000");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/expenses", expect.objectContaining({ json: expect.objectContaining({ advancedById: 8, amount: 120000 }) })));
+    unmount();
+    render(<ExpenseForm id={5} today="2026-09-15" types={types} accounts={accounts} initial={{ expenseTypeId: 3, cashAccountId: 1, amount: "120000", date: "2026-09-15", note: "", advancedBy: { value: 8, label: "Nguyễn Văn An" } }} />);
+    expect(screen.getByRole("combobox", { name: "Người ứng tiền" })).toHaveValue("Nguyễn Văn An");
+  });
   it("thiếu loại ⇒ báo lỗi; đủ ⇒ POST /api/expenses kèm khoá idempotency rồi về danh sách", async () => {
     render(<ExpenseForm today="2026-09-15" types={types} accounts={accounts} />);
     await userEvent.type(screen.getByLabelText(/Số tiền/), "800000");
     await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
     expect(await screen.findByText("Chọn loại chi phí.")).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
-    await userEvent.selectOptions(screen.getByLabelText(/Loại chi phí/), "3");
+    await pick("Loại chi phí", "Điện");
     await userEvent.type(screen.getByLabelText(/Ghi chú/), "Điện tháng 9");
     await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/accounting/expenses"));

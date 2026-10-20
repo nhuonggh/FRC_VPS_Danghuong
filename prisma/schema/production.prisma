@@ -9,6 +9,7 @@ model ProductionOrder {
   at           DateTime
   note         String?
   outSeq       BigInt?
+  allocationBasis String @default("WEIGHT")
   isCancelled  Boolean   @default(false)
   cancelledAt  DateTime?
   cancelledBy  Int?
@@ -19,6 +20,7 @@ model ProductionOrder {
   period    Period               @relation(fields: [periodId], references: [id], onDelete: Restrict)
   product   Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
   materials ProductionMaterial[]
+  outputs   ProductionOutput[]
 
   @@index([periodId, at])
   @@map("production_orders")
@@ -31,12 +33,32 @@ model ProductionMaterial {
   /// Lượng NVL thực dùng (đơn vị gốc của NVL)
   qty               Decimal @db.Decimal(18, 3)
   seq               BigInt?
+  widthMm           Decimal? @db.Decimal(18, 3)
 
   order           ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   materialProduct Product         @relation(fields: [materialProductId], references: [id], onDelete: Restrict)
 
   @@unique([orderId, materialProductId])
   @@map("production_materials")
+}
+
+/// Một lệnh có nhiều đầu ra; productId/qty trên header giữ đầu ra đầu tiên để tương thích chứng từ cũ.
+model ProductionOutput {
+  id Int @id @default(autoincrement())
+  orderId Int
+  productId Int
+  qty Decimal @db.Decimal(18, 3)
+  widthMm Decimal? @db.Decimal(18, 3)
+  stripCount Int @default(1)
+  lengthM Decimal? @db.Decimal(18, 3)
+  allocationWeight Decimal @db.Decimal(18, 3)
+  seq BigInt?
+  order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, productId])
+  @@index([productId])
+  @@map("production_outputs")
 }
 
 // Plan 06-E4: kiểm kho (spec 2.6, mục 26–27). DRAFT → DONE (chốt: sinh nhập/xuất chênh lệch) | CANCELLED.

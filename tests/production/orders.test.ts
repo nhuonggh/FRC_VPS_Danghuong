@@ -4,6 +4,9 @@ import { getProductionOrder, listProductionOrders } from "@/server/production/qu
 import { parseListParams } from "@/lib/query-params";
 import { cancelProductionOrderTx, createProductionOrderIdempotent } from "@/server/production/service";
 import { productionOrderSchema } from "@/server/production/schemas";
+import { updateLayerCost } from "@/server/inventory/ports";
+import { postIssue } from "@/server/inventory";
+import { productionReport } from "@/server/reports/consumption";
 import { prisma, resetDb } from "../helpers/db";
 import { makeProduct } from "../helpers/factories";
 import { buy, engine, newWorld, T, type World } from "../inventory/helpers";
@@ -25,6 +28,71 @@ beforeEach(async () => {
 });
 
 describe("lệnh sản xuất phụ kiện", () => {
+  const slitInput = (secondId: number, width = 300) => productionOrderSchema.parse({ date: "2026-09-15", note: "Xẻ 900 + 300", allocationBasis: "AREA", materials: [{ productId: w.p.id, qty: 10, widthMm: 1200 }], outputs: [{ productId: pk.id, qty: 10, widthMm: 900, stripCount: 1, lengthM: 10 }, { productId: secondId, qty: 10, widthMm: width, stripCount: 1, lengthM: 10 }] });
+  async function slit() {
+    await prisma.product.update({ where: { id: pk.id }, data: { baseUnit: "md" } });
+    const second = await makeProduct({ kind: "PHU_KIEN", code: "TON300", baseUnit: "md" });
+    const input = slitInput(second.id);
+    const order = await createProductionOrderIdempotent(prisma, actor, `slit-${++n}`, input);
+    return { ...order, second, input };
+  }
+  it("xẻ 10m khổ 1200 thành 10m khổ 900 + 10m khổ 300, giá vốn 75%/25%, báo cáo đủ hai mã", async () => {
+    const o = await slit();
+    const layers = await prisma.costLayer.findMany({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: o.id }, orderBy: { productId: "asc" } });
+    expect(layers.map(l => [l.productId, String(l.qtyIn), String(l.unitCost), String(l.costRefShare)])).toEqual([[pk.id, "10", "7500", "0.75"], [o.second.id, "10", "2500", "0.25"]]);
+    expect(layers.reduce((sum, l) => sum + Number(l.qtyIn) * Number(l.unitCost), 0)).toBe(100000);
+    const detail = await getProductionOrder(prisma, actor, o.id);
+    expect(detail.outputs?.map(x => x.productCode)).toEqual(["PK1", "TON300"]);
+    expect(detail.totalCost).toBe("100000");
+    const list = await listProductionOrders(prisma, actor, parseListParams({ q: "TON300" }, ["status"]));
+    expect(list.rows.map(r => r.id)).toEqual([o.id]);
+    const report = await productionReport(prisma, { start: new Date("2026-09-01"), end: new Date("2026-10-01") }, true);
+    expect(report.rows).toHaveLength(2);
+    expect(report.totals?.totalCost).toBe("100000");
+    const hidden = await getProductionOrder(prisma, { ...actor, perms: new Set(["production.manage"]) }, o.id);
+    expect(hidden.outputs?.every(x => x.unitCost === undefined && x.totalCost === undefined)).toBe(true);
+  });
+  it("đổi giá nguyên liệu lan truyền lại cả hai đầu ra, giữ tổng vốn và tỷ lệ", async () => {
+    const o = await slit();
+    const source = await prisma.costLayer.findFirstOrThrow({ where: { productId: w.p.id, sourceDocType: "PURCHASE" } });
+    await engine(w)([w.p.id, giay.id], ctx => updateLayerCost(ctx, { docType: "PURCHASE", docId: source.sourceDocId, unitCost: 20000 }));
+    const layers = await prisma.costLayer.findMany({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: o.id }, orderBy: { productId: "asc" } });
+    expect(layers.map(l => String(l.unitCost))).toEqual(["15000", "5000"]);
+  });
+  it("xẻ khổ 300: bốn dải 10m nhập 40m, không so tổng mét với nguyên liệu", async () => {
+    await prisma.product.update({ where: { id: pk.id }, data: { baseUnit: "md" } });
+    const input = productionOrderSchema.parse({ date: "2026-09-15", note: "", allocationBasis: "AREA", materials: [{ productId: w.p.id, qty: 10, widthMm: 1200 }], outputs: [{ productId: pk.id, qty: 40, stripCount: 4, lengthM: 10, widthMm: 300 }] });
+    const o = await createProductionOrderIdempotent(prisma, actor, "four-strips", input);
+    expect(String((await layer(o.id)).unitCost)).toBe("2500");
+    expect(String((await layer(o.id)).qtyIn)).toBe("40");
+  });
+  it("chặn vượt khổ, chiều dài sai, mã đầu ra lặp, số lượng sai và đơn vị không phải mét dài", async () => {
+    expect(() => slitInput(999, 400)).toThrow("Tổng khổ đầu ra vượt");
+    expect(() => slitInput(pk.id)).toThrow("bị lặp");
+    const good = slitInput(999);
+    expect(productionOrderSchema.safeParse({ ...good, outputs: [{ ...good.outputs![0], qty: 11 }] }).success).toBe(false);
+    expect(productionOrderSchema.safeParse({ ...good, outputs: [{ ...good.outputs![0], lengthM: 9, qty: 9 }] }).success).toBe(false);
+    const second = await makeProduct({ kind: "PHU_KIEN", code: "TON300", baseUnit: "md" });
+    await prisma.product.update({ where: { id: pk.id }, data: { baseUnit: "cái" } });
+    await expect(createProductionOrderIdempotent(prisma, actor, "wrong-unit", slitInput(second.id))).rejects.toMatchObject({ status: 400 });
+    expect(await prisma.productionOrder.count()).toBe(0);
+  });
+  it("nhiều đầu ra cần trọng số rõ ràng; giữ idempotency, hủy hoàn NVL và gỡ mọi đầu ra", async () => {
+    const o = await slit();
+    const again = await createProductionOrderIdempotent(prisma, actor, `slit-${n}`, o.input);
+    expect(again.id).toBe(o.id);
+    expect(await prisma.productionOutput.count()).toBe(2);
+    expect(productionOrderSchema.safeParse({ ...o.input, allocationBasis: "WEIGHT" }).success).toBe(false);
+    await cancelProductionOrderTx(prisma, actor, o.id, "nhập nhầm");
+    expect(await prisma.costLayer.count({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: o.id } })).toBe(0);
+    expect(String((await prisma.costLayer.findFirstOrThrow({ where: { productId: w.p.id } })).qtyRemaining)).toBe("100");
+  });
+  it("đầu ra phụ đã dùng cũng chặn hủy toàn bộ lệnh", async () => {
+    const o = await slit();
+    await engine(w)([o.second.id], ctx => postIssue(ctx, { productId: o.second.id, qty: 1, docType: "ADJ_LOSS", docId: 999, docLineId: 999, at: new Date("2026-09-16T03:00:00Z") }));
+    await expect(cancelProductionOrderTx(prisma, actor, o.id, "nhập nhầm")).rejects.toMatchObject({ code: "PRODUCTION_OUTPUT_CONSUMED" });
+    expect(await prisma.costLayer.count({ where: { sourceDocType: "PRODUCTION_OUT", sourceDocId: o.id } })).toBe(2);
+  });
   it("xuất NVL theo FIFO, nhập thành phẩm với giá = Σ vốn NVL / SL", async () => {
     const o = await create(); // 20×10.000 + 5×4.000 = 220.000 / 10 = 22.000
     expect(o.code).toMatch(/^SX\d{6}$/);

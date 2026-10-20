@@ -32,6 +32,25 @@ beforeEach(async () => {
 });
 
 describe("chi phí hoạt động (66)", () => {
+  it("lưu và sửa người ứng tiền trên phiếu chi, trả lại dữ liệu khi sửa, không sinh công nợ", async () => {
+    const e = await newExp({ advancedById: w.userId });
+    expect((await getExpense(prisma, kt, e.id)).advancedBy?.value).toBe(w.userId);
+    const listed = (await listExpenses(prisma, kt, P())).rows.find(r => r.id === e.id)!;
+    expect(listed.advancedByName).toBe((await prisma.user.findUniqueOrThrow({ where: { id: w.userId } })).fullName);
+    await tx(t => editExpense(t, kt, e.id, body({ advancedById: tq.userId }), NOW));
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: e.paymentId } })).advancedById).toBe(tq.userId);
+    await tx(t => editExpense(t, kt, e.id, body({ advancedById: null }), NOW));
+    expect((await getExpense(prisma, kt, e.id)).advancedBy).toBeNull();
+    expect(await prisma.cashLedger.count()).toBe(1);
+    expect(await prisma.partnerLedger.count()).toBe(0);
+  });
+  it("từ chối người ứng tiền không tồn tại hoặc bị khóa khi lập và sửa", async () => {
+    await expect(newExp({ advancedById: 999999 })).rejects.toMatchObject({ status: 400 });
+    const e = await newExp();
+    await prisma.user.update({ where: { id: tq.userId }, data: { isLocked: true } });
+    await expect(tx(t => editExpense(t, kt, e.id, body({ advancedById: tq.userId }), NOW))).rejects.toMatchObject({ status: 400 });
+    expect((await getExpense(prisma, kt, e.id)).advancedBy).toBeNull();
+  });
   it("một khoản = một phiếu chi CHI_PHI: quỹ ra, KHÔNG đụng công nợ, chờ kiểm tra, có audit", async () => {
     const e = await newExp();
     expect(e.code).toMatch(/^PC\d{6}$/);
