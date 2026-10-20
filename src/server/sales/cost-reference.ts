@@ -39,21 +39,26 @@ export async function costReference(db: PrismaClient | Prisma.TransactionClient,
   if (useBom) {
     // Do not substitute the raw product's purchase price when the selected operation consumes a BOM.
     if (!costAllowed || !purchaseAllowed) return { primary: null, alternatives: [], message: "Cần quyền xem giá vốn và giá nhập để xem giá theo định mức." };
-    let bom;
+    let bom: Awaited<ReturnType<typeof resolveBom>> | null = null;
     try { bom = await resolveBom(db, productId, processingTypeId!, at); }
-    catch (e) { if (e instanceof BomNotFoundError) return { primary: null, alternatives: [], message: "Chưa có định mức hiệu lực cho ngày đơn này." }; throw e; }
-    const ids = bom.lines.map(l => l.materialProductId);
+    catch (e) { if (!(e instanceof BomNotFoundError)) throw e; }
+    const { plan, defaults } = await effectiveReferenceCostPlans(db, productId, processingTypeId!, at);
+    // Không có BOM: vẫn tính được nếu có mức giá vốn (tôn + phí gia công), vật liệu phụ = 0.
+    if (!bom && !plan && !defaults) return { primary: null, alternatives: [], message: "Chưa có định mức hiệu lực cho ngày đơn này." };
+    const bomLines = bom?.lines ?? [];
+    const ids = bomLines.map(l => l.materialProductId);
     const [products, layers] = await Promise.all([
       db.product.findMany({ where: { id: { in: ids } }, select: { id: true, code: true, name: true, baseUnit: true } }),
       Promise.all(ids.map(id => db.costLayer.findFirst({ where: { productId: id, sourceDocType: "PURCHASE", at: { lte: at } }, orderBy: [{ at: "desc" }, { ledger: { seq: "desc" } }], select: { productId: true, unitCost: true, at: true } }))),
     ]);
-    const materials = bom.lines.map(l => {
+    const materials = bomLines.map(l => {
       const p = products.find(p => p.id === l.materialProductId)!, price = layers.find(p => p?.productId === l.materialProductId);
       return { code: p.code, name: p.name, unit: p.baseUnit, qty: l.qtyPerUnit, price: price?.unitCost.toString() ?? null, amount: price ? price.unitCost.times(l.qtyPerUnit).toString() : null, at: price?.at.toISOString() ?? null };
     });
-    const { plan, defaults } = await effectiveReferenceCostPlans(db, productId, processingTypeId!, at);
     if (plan || defaults) {
-      const source: CostSource = { kind: "BOM", perBase: null, at: bom.validFrom, code: `Định mức v${bom.versionNo}` };
+      const source: CostSource = bom
+        ? { kind: "BOM", perBase: null, at: bom.validFrom, code: `Định mức v${bom.versionNo}` }
+        : { kind: "BOM", perBase: null, at: (plan ?? defaults)!.validFrom.toISOString().slice(0, 10), code: "Chưa có định mức" };
       if (!plan?.tonProduct) return { primary: source, alternatives: [], message: "Đã có phí gia công nhưng chưa cấu hình tôn đầu vào cho sản phẩm/kiểu này." };
       const [target, ownRatio, processing] = await Promise.all([
         db.product.findUniqueOrThrow({ where: { id: productId }, select: { baseUnit: true } }),
@@ -63,10 +68,10 @@ export async function costReference(db: PrismaClient | Prisma.TransactionClient,
       const ratio = ownRatio?.ratio ?? processing.ratio;
       if (!isMeter(target.baseUnit)) return { primary: source, alternatives: [], message: "Chưa có quy đổi đơn vị sản phẩm về mét dài để tính dự toán." };
       if (plan.fixedPricePerM2 !== null && (!ratio || !ratio.gt(0))) return { primary: source, alternatives: [], message: "Chưa có tỷ lệ m²/m dài để quy đổi giá tôn theo khổ thành phẩm." };
-      const tonIndex = bom.lines.findIndex(l => l.materialProductId === plan.tonProductId);
+      const tonIndex = bomLines.findIndex(l => l.materialProductId === plan.tonProductId);
       // Tôn được chọn đã có trong BOM: thay thành phần đó, tuyệt đối không cộng thêm lần hai.
       const auxiliary = materials.filter((_m, index) => index !== tonIndex);
-      const quantity = tonIndex >= 0 ? new Prisma.Decimal(bom.lines[tonIndex]!.qtyPerUnit) : plan.tonQtyPerMeter;
+      const quantity = tonIndex >= 0 ? new Prisma.Decimal(bomLines[tonIndex]!.qtyPerUnit) : plan.tonQtyPerMeter;
       const layer = plan.fixedPricePerM2 === null ? await db.costLayer.findFirst({
         where: { productId: plan.tonProductId!, sourceDocType: "PURCHASE", at: { lte: at } },
         orderBy: [{ at: "desc" }, { ledger: { seq: "desc" } }], select: { unitCost: true, at: true },
@@ -81,10 +86,11 @@ export async function costReference(db: PrismaClient | Prisma.TransactionClient,
       ];
       const total = tonAmount !== null && auxiliaryAmount !== null && fee !== null ? tonAmount.plus(auxiliaryAmount).plus(fee).toDecimalPlaces(4).toString() : null;
       return { primary: { ...source, perBase: total }, alternatives: [], components, materials: auxiliary, planId: plan.id,
-        stockWarning: tonIndex < 0 ? "Tôn đầu vào chưa có trong BOM xuất kho. Dự toán không tự bổ sung dòng xuất tôn; cần rà soát định mức vật tư." : undefined,
+        stockWarning: bom && tonIndex < 0 ? "Tôn đầu vào chưa có trong BOM xuất kho. Dự toán không tự bổ sung dòng xuất tôn; cần rà soát định mức vật tư." : undefined,
         feePlanId: plan.feePerMeter === null ? defaults?.id : undefined, areaRatio: ratio?.toString(),
-        message: `${total === null ? "Chưa đủ giá tôn, vật liệu phụ hoặc phí gia công. " : "Gồm tôn, vật liệu phụ và phí gia công gộp. "}Giá kế hoạch hiệu lực ${formatDate(plan.validFrom)}.${tonIndex < 0 ? " Tôn chưa có trong BOM xuất kho; dự toán không tự bổ sung dòng xuất tôn." : " Tôn trong BOM đã được tính một lần."}` };
+        message: `${total === null ? "Chưa đủ giá tôn, vật liệu phụ hoặc phí gia công. " : "Gồm tôn, vật liệu phụ và phí gia công gộp. "}Giá kế hoạch hiệu lực ${formatDate(plan.validFrom)}.${!bom ? " Sản phẩm chưa có định mức nên không tính vật liệu phụ." : tonIndex < 0 ? " Tôn chưa có trong BOM xuất kho; dự toán không tự bổ sung dòng xuất tôn." : " Tôn trong BOM đã được tính một lần."}` };
     }
+    if (!bom) return { primary: null, alternatives: [], message: "Chưa có định mức hiệu lực cho ngày đơn này." };
     const complete = materials.length > 0 && materials.every(m => m.price !== null);
     const total = complete ? materials.reduce((s, m) => s.plus(m.amount!), new Prisma.Decimal(0)).toDecimalPlaces(4).toString() : null;
     return { primary: { kind: "BOM", perBase: total, at: bom.validFrom, code: `Định mức v${bom.versionNo}`, ...(actor.perms.has("bom.manage") ? { href: `/production/bom/${bom.bomId}` } : {}) }, alternatives: [], materials,

@@ -6,9 +6,10 @@ import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
 import { ictYmd } from "@/lib/time";
 import { toast } from "@/lib/toast";
+import { confirm } from "@/lib/confirm-store";
 
 interface Row {
-  id: number; productId: number | null; processingTypeId: number; typeName: string; validFrom: string;
+  id: number; used: boolean; productId: number | null; processingTypeId: number; typeName: string; validFrom: string;
   ton: ComboOption | null; fixedPricePerM2: string | null; tonQtyPerMeter: string; feePerMeter: string | null; note: string | null;
 }
 export function ReferenceCostPlans({ productId, types, canManage, canDefault }: {
@@ -44,6 +45,31 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được dự toán."); }
     finally { setBusy(false); }
   }
+  const canEdit = (r: Row) => r.productId === null ? canDefault : canManage;
+  // Bản đang hiệu lực = bản mới nhất có hiệu lực từ ≤ hôm nay, tính riêng cho từng kiểu gia công và từng loại (riêng sản phẩm / mặc định kiểu).
+  const effectiveIds = new Set<number>();
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = `${r.processingTypeId}:${r.productId === null ? "T" : "P"}`;
+    if (r.validFrom <= today && !seen.has(key)) { seen.add(key); effectiveIds.add(r.id); }
+  }
+  function applyTemplate(r: Row) {
+    setError("");
+    setType({ value: r.processingTypeId, label: r.typeName }); setScope(r.productId === null ? "TYPE" : "PRODUCT");
+    setDate(today); setTon(r.ton); setFixed(r.fixedPricePerM2 !== null); setPrice(r.fixedPricePerM2 ?? "");
+    setQty(r.tonQtyPerMeter); setFee(r.feePerMeter ?? ""); setNote(r.note ?? "");
+    document.getElementById("reference-type")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  async function remove(r: Row) {
+    if (busy) return;
+    if (!await confirm({ title: "Xoá phiên bản dự toán?", description: `${r.typeName} · hiệu lực từ ${formatDate(r.validFrom)}. Không hoàn tác được.`, confirmLabel: "Xoá", danger: true })) return;
+    setBusy(true); setError("");
+    try {
+      await apiFetch(`${url}/${r.id}`, { method: "DELETE" });
+      setRows(await apiFetch<Row[]>(url)); toast.success("Đã xoá phiên bản dự toán.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Không xoá được phiên bản."); }
+    finally { setBusy(false); }
+  }
   return <FormCard title="Giá vốn tham khảo theo khổ gia công">
     <p className="mb-3 text-sm text-fg-secondary">Tôn đầu vào + vật liệu phụ theo định mức + phí gia công gộp. Giá tôn cố định tính theo m² khổ thành phẩm; phí tính theo mét dài. Chọn đúng mã tôn để không tính trùng với BOM. Cấu hình mới không sửa dự toán đã lưu trên đơn cũ.</p>
     {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
@@ -70,7 +96,15 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
     </fieldset>}
     <div className="mt-4 space-y-3" aria-label="Lịch sử cấu hình dự toán">
       {loading ? <p role="status" className="text-sm text-fg-secondary">Đang tải cấu hình…</p> : rows.length === 0 ? <p className="text-sm text-fg-secondary">Chưa có cấu hình. Hiện hệ thống chỉ tham khảo vật liệu theo BOM; chưa tính đủ giá tôn và phí gia công.</p> : rows.map(r => <article key={r.id} className="rounded-sm border border-border p-3 text-sm">
-        <h3 className="font-semibold">{r.typeName} · {r.productId === null ? "Phí mặc định kiểu" : "Mức riêng sản phẩm"}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">{r.typeName} · {r.productId === null ? "Phí mặc định kiểu" : "Mức riêng sản phẩm"}</h3>
+          {effectiveIds.has(r.id) && <span className="rounded-sm bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Đang hiệu lực</span>}
+          {r.used && <span className="rounded-sm bg-hover px-2 py-0.5 text-xs text-fg-secondary">Đã dùng trên đơn</span>}
+          {canEdit(r) && <span className="ml-auto flex gap-2">
+            <button type="button" disabled={busy} onClick={() => applyTemplate(r)} className="h-9 rounded-sm border border-border px-3 text-xs font-medium hover:bg-hover disabled:opacity-50">Dùng làm mẫu</button>
+            {!r.used && <button type="button" disabled={busy} onClick={() => void remove(r)} className="h-9 rounded-sm border border-border px-3 text-xs font-medium text-danger hover:bg-hover disabled:opacity-50">Xoá</button>}
+          </span>}
+        </div>
         <dl className="mt-2 grid gap-2 md:grid-cols-2">
           <div><dt className="text-fg-secondary">Hiệu lực từ</dt><dd>{formatDate(r.validFrom)}</dd></div>
           {r.ton && <div><dt className="text-fg-secondary">Tôn đầu vào</dt><dd>{r.ton.label}</dd></div>}

@@ -29,10 +29,27 @@ export function assertReferenceCostRead(actor: Actor) {
   assertCan(actor.perms, "product.view"); assertCan(actor.perms, "cost.view"); assertCan(actor.perms, "purchase_price.view");
 }
 
-export async function createReferenceCostPlan(db: Prisma.TransactionClient, actor: Actor, productId: number, input: z.infer<typeof referenceCostPlanSchema>, now = new Date()) {
+function assertWriteScope(actor: Actor, scope: "PRODUCT" | "TYPE") {
   assertReferenceCostRead(actor);
-  if (input.scope === "TYPE") assertCan(actor.perms, "catalog.manage");
+  if (scope === "TYPE") assertCan(actor.perms, "catalog.manage");
   else if (!actor.perms.has("bom.manage")) assertCan(actor.perms, "product.manage");
+}
+
+/** Id các bản đã được chụp vào dòng đơn bán (planId/feePlanId) — bản đó không được xoá/ghi đè. */
+export async function usedReferenceCostPlanIds(db: Db, ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const keys = ids.map(String);
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT DISTINCT x AS id FROM (
+      SELECT "referenceCostSnapshot"->>'planId' AS x FROM sale_order_lines WHERE "referenceCostSnapshot"->>'planId' = ANY(${keys}::text[])
+      UNION
+      SELECT "referenceCostSnapshot"->>'feePlanId' AS x FROM sale_order_lines WHERE "referenceCostSnapshot"->>'feePlanId' = ANY(${keys}::text[])
+    ) t`;
+  return new Set(rows.map(r => Number(r.id)));
+}
+
+export async function createReferenceCostPlan(db: Prisma.TransactionClient, actor: Actor, productId: number, input: z.infer<typeof referenceCostPlanSchema>, now = new Date()) {
+  assertWriteScope(actor, input.scope);
   if (input.validFrom < ictYmd(now)) throw new DomainError("Ngày hiệu lực không được trước hôm nay; không thay đổi dự toán đơn cũ.", 400);
   await db.$queryRaw`SELECT id FROM processing_types WHERE id = ${input.processingTypeId} FOR UPDATE`;
   const [product, type, link] = await Promise.all([
@@ -46,14 +63,37 @@ export async function createReferenceCostPlan(db: Prisma.TransactionClient, acto
     const ton = await db.product.findUnique({ where: { id: input.tonProductId }, select: { isActive: true, canUseAsMaterial: true } });
     if (!ton?.isActive || !ton.canUseAsMaterial) throw new DomainError("Mã tôn phải đang sử dụng và có khả năng làm nguyên liệu.", 400);
   }
-  const row = await db.referenceCostPlan.create({ data: {
-    productId: input.scope === "PRODUCT" ? productId : null, processingTypeId: input.processingTypeId,
+  const target = input.scope === "PRODUCT" ? productId : null;
+  const data = {
+    productId: target, processingTypeId: input.processingTypeId,
     validFrom: dateOnly(input.validFrom), tonProductId: input.tonProductId,
     fixedPricePerM2: input.fixedPricePerM2, tonQtyPerMeter: input.tonQtyPerMeter, feePerMeter: input.feePerMeter,
-    note: input.note || null, createdBy: actor.userId,
-  } });
+    note: input.note || null,
+  };
+  // Cùng (đích, kiểu, ngày): chưa dùng trên đơn → ghi đè; đã dùng → buộc chọn ngày hiệu lực khác.
+  const same = await db.referenceCostPlan.findFirst({ where: { productId: target, processingTypeId: input.processingTypeId, validFrom: data.validFrom } });
+  if (same) {
+    if ((await usedReferenceCostPlanIds(db, [same.id])).has(same.id)) throw new DomainError("Phiên bản cùng ngày này đã được dùng trên đơn hàng; chọn ngày hiệu lực khác.", 409);
+    await db.referenceCostPlan.update({ where: { id: same.id }, data });
+    await writeAudit(db, { userId: actor.userId, action: "reference-cost.update", entity: "ReferenceCostPlan", entityId: same.id, before: same, after: input });
+    return { id: same.id };
+  }
+  const row = await db.referenceCostPlan.create({ data: { ...data, createdBy: actor.userId } });
   await writeAudit(db, { userId: actor.userId, action: "reference-cost.create", entity: "ReferenceCostPlan", entityId: row.id, after: input });
   return { id: row.id };
+}
+
+export async function deleteReferenceCostPlan(db: Prisma.TransactionClient, actor: Actor, productId: number, planId: number) {
+  assertReferenceCostRead(actor);
+  const plan = await db.referenceCostPlan.findUnique({ where: { id: planId } });
+  if (!plan) throw new DomainError("Không tìm thấy phiên bản dự toán.", 404);
+  if (plan.productId !== null && plan.productId !== productId) throw new DomainError("Không tìm thấy phiên bản dự toán.", 404);
+  if (plan.productId === null && !await db.productProcessingRatio.findUnique({ where: { productId_processingTypeId: { productId, processingTypeId: plan.processingTypeId } } })) throw new DomainError("Không tìm thấy phiên bản dự toán.", 404);
+  assertWriteScope(actor, plan.productId === null ? "TYPE" : "PRODUCT");
+  if ((await usedReferenceCostPlanIds(db, [planId])).has(planId)) throw new DomainError("Phiên bản này đã được dùng trên đơn hàng nên không xoá được. Hãy lưu phiên bản mới.", 409);
+  await db.referenceCostPlan.delete({ where: { id: planId } });
+  await writeAudit(db, { userId: actor.userId, action: "reference-cost.delete", entity: "ReferenceCostPlan", entityId: planId, before: plan });
+  return { ok: true };
 }
 
 export const isMeter = (unit: string) => ["m", "md", "m dài", "mét", "mét dài"].includes(unit.trim().toLocaleLowerCase("vi"));

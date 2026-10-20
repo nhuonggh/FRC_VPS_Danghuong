@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireActorApi } from "@/server/auth/session";
 import { apiHandler } from "@/server/http/handler";
 import { idParam, readJson } from "@/server/http/read-json";
-import { assertReferenceCostRead, createReferenceCostPlan, referenceCostPlanSchema } from "@/server/processing/reference-cost-plans";
+import { assertReferenceCostRead, createReferenceCostPlan, referenceCostPlanSchema, usedReferenceCostPlanIds } from "@/server/processing/reference-cost-plans";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
@@ -16,7 +16,8 @@ export const GET = apiHandler(async (_req, ctx: Context) => {
     include: { tonProduct: { select: { id: true, code: true, name: true } }, processingType: { select: { name: true } } },
     take: 200,
   });
-  return rows.map(r => ({ id: r.id, productId: r.productId, processingTypeId: r.processingTypeId, typeName: r.processingType.name,
+  const used = await usedReferenceCostPlanIds(prisma, rows.map(r => r.id));
+  return rows.map(r => ({ id: r.id, used: used.has(r.id), productId: r.productId, processingTypeId: r.processingTypeId, typeName: r.processingType.name,
     validFrom: r.validFrom.toISOString().slice(0, 10), ton: r.tonProduct ? { value: r.tonProduct.id, label: `${r.tonProduct.code} — ${r.tonProduct.name}` } : null,
     fixedPricePerM2: r.fixedPricePerM2?.toString() ?? null, tonQtyPerMeter: r.tonQtyPerMeter.toString(), feePerMeter: r.feePerMeter?.toString() ?? null, note: r.note }));
 }, { noStore: true });
