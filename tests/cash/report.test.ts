@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { parseListParams } from "@/lib/query-params";
+import { createExpense } from "@/server/cash/expenses";
+import { exportCashReportXlsx } from "@/server/cash/report-export";
 import { createCashClose } from "@/server/cash/close";
 import { listCashBook } from "@/server/cash/queries";
 import { cashReport } from "@/server/cash/report";
@@ -65,6 +67,16 @@ describe("bổ sung quỹ + báo cáo quỹ", () => {
     const rep = await cashReport(prisma, acc, cash.id, P());
     expect(rep.reviewers.find((r) => r.name === "Thủ quỹ")).toMatchObject({ vouchers: 1, in: "10000000", out: "0" });
     expect(rep.reviewers.find((r) => r.reviewerId === null)).toMatchObject({ vouchers: 1, out: "1000000" });
+  });
+
+  it("phiếu chi phí: người nộp/nhận là tên loại chi phí; Excel báo cáo xuất được", async () => {
+    const type = await prisma.expenseType.create({ data: { name: "Xăng dầu" } });
+    const exp = { ...acc, perms: new Set([...acc.perms, "expense.manage"]) };
+    await topUp("2026-09-15", D2);
+    await tx((t) => createExpense(t, exp, { expenseTypeId: type.id, cashAccountId: cash.id, amount: 200_000, date: "2026-09-15", note: "Đổ xăng", advancedById: null }, D2));
+    const e = (await listCashBook(prisma, acc, "CASH", cash.id, P())).entries.find((x) => x.docLabel === "Phiếu chi")!;
+    expect(e.counterparty).toBe("Xăng dầu");
+    expect((await exportCashReportXlsx(prisma, acc, cash.id, P())).byteLength).toBeGreaterThan(1000);
   });
 
   it("cần cashbook.view", async () => {
