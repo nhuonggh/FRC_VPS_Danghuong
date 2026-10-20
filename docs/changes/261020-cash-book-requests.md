@@ -32,3 +32,7 @@
 2. "Số dư đầu ngày" kế toán nhập là số tiền mặt giám đốc đưa (bổ sung quỹ) hay số dư cuối ngày hôm trước? Có cần đối chiếu với số hệ thống tính ra?
 3. "Người nộp/nhận" với phiếu chi nhập hàng, chi phí: lấy NCC/đối tác hay người ứng tiền?
 4. Báo cáo cần xuất Excel không, và cần xem theo khoảng ngày nào?
+
+## Vòng quỹ mỗi ngày (khách chốt 21/10/2026)
+
+Sáng giám đốc đưa ~10tr (Bổ sung quỹ) → kế toán chi tiêu → giám đốc **lấy hết** tiền về, quỹ = 0; việc này làm **sáng hôm sau** lúc chủ quỹ chốt. Đã làm: loại phiếu chi `NOP_LAI_QUY` (migration `20261022120000_cash_hand_over`); hộp thoại Chốt quỹ có ô "Giám đốc nhận lại toàn bộ" tự lập phiếu nộp lại = số kiểm đếm, ghi vào ngày của mốc chốt (nút "Chốt cho cuối ngày hôm qua"); Bổ sung quỹ + Nộp lại quỹ **không tính** vào Thu/Chi ở dashboard kế toán và cột Tổng thu/chi của báo cáo quỹ; báo cáo có cột "Nộp lại giám đốc" và cảnh báo ngày cuối ngày còn tiền. Test: `tests/cash/report.test.ts`.

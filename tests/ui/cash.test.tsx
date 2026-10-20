@@ -149,7 +149,7 @@ describe("CashBook", () => {
     await userEvent.click(screen.getByRole("button", { name: "Chốt quỹ" }));
     await userEvent.type(screen.getByLabelText(/Tiền kiểm đếm/), "1300000");
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Chốt quỹ" }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/cash/closes", expect.objectContaining({ json: { cashAccountId: 1, closeAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:59\.999\+07:00$/), actual: 1300000, reason: "" } })));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/cash/closes", expect.objectContaining({ json: { cashAccountId: 1, closeAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:59\.999\+07:00$/), actual: 1300000, reason: "", handOver: false } })));
   });
   it("không có quyền chốt/hủy chốt ⇒ không hiện nút", () => {
     render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose={false} canReopen={false} nowIso="2026-09-15T10:30:00.000Z" />);

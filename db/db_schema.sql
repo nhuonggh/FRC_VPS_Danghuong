@@ -1542,7 +1542,7 @@ ON CONFLICT DO NOTHING;
 CREATE TYPE "cash_review_status" AS ENUM ('PENDING_REVIEW', 'REVIEWED', 'RETURNED');
 
 -- CreateEnum
-CREATE TYPE "payment_kind" AS ENUM ('TRA_NCC', 'HOAN_KHACH', 'CHI_PHI', 'TAT_TOAN_CK', 'KHAC');
+CREATE TYPE "payment_kind" AS ENUM ('TRA_NCC', 'HOAN_KHACH', 'CHI_PHI', 'TAT_TOAN_CK', 'KHAC', 'NOP_LAI_QUY');
 
 -- CreateEnum
 CREATE TYPE "cash_adjustment_kind" AS ENUM ('AMOUNT', 'VOID');

@@ -10,9 +10,9 @@ const note = z.string().trim().max(300, "Ghi chú tối đa 300 ký tự.");
 const reason = z.string().trim().min(1, "Nhập lý do.").max(300, "Lý do tối đa 300 ký tự.");
 
 export const RECEIPT_TYPES = ["THU_NO", "BO_SUNG_QUY", "KHAC"] as const;
-export const PAYMENT_KINDS = ["TRA_NCC", "HOAN_KHACH", "KHAC"] as const;
+export const PAYMENT_KINDS = ["TRA_NCC", "HOAN_KHACH", "NOP_LAI_QUY", "KHAC"] as const;
 export const RECEIPT_TYPE_LABEL: Record<string, string> = { THU_NO: "Thu nợ", COC: "Tiền cọc", BO_SUNG_QUY: "Bổ sung quỹ", KHAC: "Thu khác" };
-export const PAYMENT_KIND_LABEL: Record<string, string> = { TRA_NCC: "Trả nhà cung cấp", HOAN_KHACH: "Hoàn tiền khách", CHI_PHI: "Chi phí hoạt động", TAT_TOAN_CK: "Tất toán chiết khấu", KHAC: "Chi khác" };
+export const PAYMENT_KIND_LABEL: Record<string, string> = { TRA_NCC: "Trả nhà cung cấp", HOAN_KHACH: "Hoàn tiền khách", CHI_PHI: "Chi phí hoạt động", TAT_TOAN_CK: "Tất toán chiết khấu", NOP_LAI_QUY: "Nộp lại quỹ (giám đốc nhận)", KHAC: "Chi khác" };
 
 /** Phiếu thu (56, 57): THU_NO cần khách (tuỳ chọn gắn đơn); KHAC không gắn đơn, đối tác tuỳ chọn. */
 export const receiptSchema = z.object({
@@ -66,6 +66,8 @@ export const cashCloseSchema = z.object({
   closeAt: z.string().datetime({ offset: true, message: "Mốc chốt không hợp lệ." }),
   actual: z.number({ invalid_type_error: "Nhập số tiền kiểm đếm." }).finite().min(0, "Số tiền không được âm.").max(99_999_999_999).refine((v) => Number(v.toFixed(2)) === v, "Tối đa 2 chữ số thập phân."),
   reason: z.string().trim().max(300).default(""),
+  /** Giám đốc nhận lại toàn bộ tiền kiểm đếm: tự lập phiếu chi "Nộp lại quỹ" = số kiểm đếm, ghi vào ngày của mốc chốt. */
+  handOver: z.boolean().default(false),
 });
 
 export type ReceiptInput = z.infer<typeof receiptSchema>;

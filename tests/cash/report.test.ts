@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { parseListParams } from "@/lib/query-params";
+import { loadAccounting } from "@/server/home/dashboard/accounting";
+import { dashRange } from "@/server/home/dashboard/common";
 import { createExpense } from "@/server/cash/expenses";
 import { exportCashReportXlsx } from "@/server/cash/report-export";
 import { createCashClose } from "@/server/cash/close";
@@ -51,12 +53,12 @@ describe("bổ sung quỹ + báo cáo quỹ", () => {
     await topUp("2026-09-15", D2, 5_000_000); // hôm qua chưa chốt nhưng vẫn nhập được
     let rep = await cashReport(prisma, acc, cash.id, P());
     expect(rep.days.map((d) => d.ymd)).toEqual(["2026-09-15", "2026-09-14"]);
-    expect(rep.days[1]).toMatchObject({ opening: "1000000", topUp: "10000000", in: "10000000", out: "3000000", closing: "8000000", close: null });
+    expect(rep.days[1]).toMatchObject({ opening: "1000000", topUp: "10000000", in: "0", out: "3000000", closing: "8000000", close: null });
     expect(rep.days[0]).toMatchObject({ opening: "8000000", topUp: "5000000", closing: "13000000" });
     expect(rep.unclosedDays).toBe(2);
 
     // chốt sáng 16/09 cho số cuối ngày 15/09 ⇒ cả hai ngày trước đó có lần chốt bao phủ
-    await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt: "2026-09-16T08:00:59.999+07:00", actual: 12_900_000, reason: "Thiếu 100k" }, NEXT_MORNING));
+    await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt: "2026-09-16T08:00:59.999+07:00", actual: 12_900_000, reason: "Thiếu 100k", handOver: false }, NEXT_MORNING));
     rep = await cashReport(prisma, acc, cash.id, P());
     expect(rep.days[0]!.close).toMatchObject({ actual: "12900000", diff: "-100000", byName: "Thủ quỹ" });
   });
@@ -77,6 +79,32 @@ describe("bổ sung quỹ + báo cáo quỹ", () => {
     const e = (await listCashBook(prisma, acc, "CASH", cash.id, P())).entries.find((x) => x.docLabel === "Phiếu chi")!;
     expect(e.counterparty).toBe("Xăng dầu");
     expect((await exportCashReportXlsx(prisma, acc, cash.id, P())).byteLength).toBeGreaterThan(1000);
+  });
+
+  it("giám đốc nhận lại hết: phiếu Nộp lại quỹ do chốt quỹ tạo, quỹ về 0, thu/chi thật không gồm tiền luân chuyển", async () => {
+    await topUp("2026-09-14", D1); await spend("2026-09-14", D1, 3_000_000);
+    const pm = { ...tre, perms: new Set([...tre.perms]) };
+    await tx((t) => createCashClose(t, pm, { cashAccountId: cash.id, closeAt: "2026-09-14T23:59:59.999+07:00", actual: 8_000_000, reason: "", handOver: true }, NEXT_MORNING));
+    const rep = await cashReport(prisma, acc, cash.id, P());
+    expect(rep.days[0]).toMatchObject({ ymd: "2026-09-14", topUp: "10000000", in: "0", out: "3000000", handOver: "8000000", closing: "0" });
+    expect(rep.days[0]!.close).toMatchObject({ diff: "0" });
+    expect(rep.leftoverDays).toBe(0);
+  });
+
+  it("nộp lại thiếu so với sổ: cuối ngày còn dư và bị cảnh báo", async () => {
+    await topUp("2026-09-14", D1);
+    await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt: "2026-09-14T23:59:59.999+07:00", actual: 10_900_000, reason: "Thiếu 100k", handOver: true }, NEXT_MORNING));
+    const rep = await cashReport(prisma, acc, cash.id, P());
+    expect(rep.days[0]).toMatchObject({ handOver: "10900000", closing: "100000" });
+    expect(rep.leftoverDays).toBe(1);
+  });
+
+  it("dashboard Thu/Chi không tính bổ sung quỹ và nộp lại quỹ", async () => {
+    await topUp("2026-09-15", D2, 10_000_000); await spend("2026-09-15", D2, 300_000);
+    await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt: "2026-09-15T23:59:59.999+07:00", actual: 10_700_000, reason: "", handOver: true }, new Date("2026-09-16T01:00:00Z")));
+    const d = await loadAccounting(prisma, tre, dashRange("custom", { start: "2026-09-15", end: "2026-09-15" }, new Date("2026-09-16T01:00:00Z")));
+    const kpi = (k: string) => d.kpis.find((x) => x.key === k)?.value;
+    expect(kpi("in")).toBe(0); expect(kpi("out")).toBe(300_000); expect(kpi("cash")).toBe(0);
   });
 
   it("cần cashbook.view", async () => {
