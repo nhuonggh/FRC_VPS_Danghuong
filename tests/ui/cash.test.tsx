@@ -138,7 +138,7 @@ describe("CashBook", () => {
     periodName: "Kỳ 1", total: 1,
     accounts: [{ id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" }],
     selected: { id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" },
-    entries: [{ id: 1, at: new Date("2026-09-15T03:00:00Z"), docType: "RECEIPT", docLabel: "Phiếu thu", docCode: "PT000001", docHref: "/accounting/receipts/1", reviewStatus: "PENDING_REVIEW", amountIn: "500000", amountOut: "0", running: "1500000" }],
+    entries: [{ id: 1, at: new Date("2026-09-15T03:00:00Z"), docType: "RECEIPT", docLabel: "Phiếu thu", docCode: "PT000001", docHref: "/accounting/receipts/1", reviewStatus: "PENDING_REVIEW", amountIn: "500000", amountOut: "0", running: "1500000", content: "Thu nợ — test", counterparty: "Khách A", reviewerName: null }],
     closes: [{ id: 3, closeAt: new Date("2026-09-14T10:00:00Z"), expected: "1000000", actual: "990000", diff: "-10000", reason: "thiếu 10k", createdByName: "Thủ quỹ", createdAt: new Date(), voided: false, voidReason: null }],
   });
   it("3 chỉ số vận hành / đã kiểm / chờ kiểm, chi tiết có số dư chạy; chốt quỹ gửi mốc giờ VN + số kiểm đếm", async () => {

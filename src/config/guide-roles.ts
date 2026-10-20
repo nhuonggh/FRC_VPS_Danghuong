@@ -29,7 +29,7 @@ export const GUIDE_ROLES: readonly GuideRole[] = [
   { key: "cashier", label: "Thủ quỹ", intro: "Kiểm tra tiền thực nhận, thực chi và đối chiếu số quỹ mỗi ngày.", tasks: [
     { fn: "cash-review", label: "Kiểm tra phiếu còn chờ" }, { fn: "receipt-list", label: "Lập và xem phiếu thu" },
     { fn: "payment-list", label: "Lập và xem phiếu chi" }, { fn: "trip-settle", label: "Kiểm tra và xác nhận tiền giao hàng" },
-    { fn: "cashbook", label: "Đối chiếu tiền mặt và chốt quỹ khi được giao" }, { fn: "bankbook", label: "Kiểm tra tiền ngân hàng" },
+    { fn: "cashbook", label: "Đối chiếu tiền mặt và chốt quỹ khi được giao" }, { fn: "cashreport", label: "Xem báo cáo quỹ theo ngày và theo người kiểm tra" }, { fn: "bankbook", label: "Kiểm tra tiền ngân hàng" },
   ] },
   { key: "director", label: "Giám đốc", intro: "Xem tình hình hoạt động, kiểm tra các khoản cần xử lý và quản lý quyền sử dụng.", tasks: [
     { fn: "order-list", label: "Kiểm tra đơn hàng và việc giao, thu tiền" }, { fn: "debt-summary", label: "Theo dõi khoản phải thu, phải trả" },

@@ -239,6 +239,7 @@ enum ReceiptType {
   THU_NO
   COC
   KHAC
+  BO_SUNG_QUY
 
   @@map("receipt_type")
 }
