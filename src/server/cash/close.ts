@@ -5,8 +5,10 @@ import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
+import { ictYmd } from "@/lib/time";
 import { cashBalance } from "./balance";
 import type { CashCloseInput } from "./schemas";
+import { createPayment } from "./vouchers";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -35,6 +37,10 @@ export async function createCashClose(tx: Tx, actor: Actor, input: CashCloseInpu
     select: { id: true },
   });
   await writeAudit(tx, { userId: actor.userId, action: "cash.close", entity: "CashClose", entityId: row.id, after: { cashAccountId: input.cashAccountId, closeAt: closeAt.toISOString(), expected: expected.toString(), actual: actual.toString(), diff: diff.toString(), reason: input.reason } });
+  // Giám đốc nhận lại toàn bộ tiền kiểm đếm: phiếu chi lập SAU khi đã tính số sổ, cùng giao dịch với lần chốt.
+  if (input.handOver && actual.gt(0)) {
+    await createPayment(tx, actor, { kind: "NOP_LAI_QUY", partnerId: null, advancedById: null, cashAccountId: input.cashAccountId, amount: actual.toNumber(), date: ictYmd(closeAt), note: "Giám đốc nhận lại tiền quỹ khi chốt" }, now);
+  }
   return { id: row.id, expected: expected.toString(), diff: diff.toString() };
 }
 

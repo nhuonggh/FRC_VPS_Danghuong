@@ -13,7 +13,7 @@ export function CashReport({ report, params, base }: { report: CashReportDTO; pa
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Báo cáo quỹ tiền mặt</h1>
-          <p className="text-xs text-fg-secondary">Kỳ {report.periodName}. Đầu ngày = cuối ngày trước. Ngày chưa chốt vẫn nhập phiếu và bổ sung quỹ bình thường; chốt quỹ lùi cho ngày hôm trước ở Sổ quỹ tiền mặt.</p>
+          <p className="text-xs text-fg-secondary">Kỳ {report.periodName}. Đầu ngày = cuối ngày trước; Tổng thu/chi không gồm tiền giám đốc đưa vào và nhận về. Ngày chưa chốt vẫn nhập phiếu và bổ sung quỹ bình thường; chốt quỹ lùi cho ngày hôm trước ở Sổ quỹ tiền mặt.</p>
         </div>
         {report.selectedId && <a href={buildListHref(`/api/cash/report/export?account=${report.selectedId}`, params, {})} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">Xuất Excel</a>}
       </div>
@@ -27,12 +27,14 @@ export function CashReport({ report, params, base }: { report: CashReportDTO; pa
           <QuickTimeFilter basePath={`${base}?account=${sel}`} params={params} />
           {report.unclosedDays > 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft px-3 py-2 text-sm">Có {report.unclosedDays} ngày đã qua nhưng chưa chốt quỹ.</p>}
 
+          {report.leftoverDays > 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft px-3 py-2 text-sm">Có {report.leftoverDays} ngày cuối ngày quỹ còn tiền (chưa nộp lại giám đốc).</p>}
+
           <section className="space-y-2">
             <h2 className="text-sm font-semibold">Theo ngày — {report.accountName}</h2>
             <div className="overflow-x-auto rounded-md border border-border bg-surface">
               {report.days.length === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh trong khoảng này" /> : (
-                <table className="w-full min-w-[960px] text-sm">
-                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2 text-right">Đầu ngày</th><th className="px-3 py-2 text-right">Bổ sung quỹ</th><th className="px-3 py-2 text-right">Tổng thu</th><th className="px-3 py-2 text-right">Tổng chi</th><th className="px-3 py-2 text-right">Cuối ngày</th><th className="px-3 py-2 text-right">Chờ kiểm</th><th className="px-3 py-2">Chốt quỹ</th></tr></thead>
+                <table className="w-full min-w-[1080px] text-sm">
+                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2 text-right">Đầu ngày</th><th className="px-3 py-2 text-right">Bổ sung quỹ</th><th className="px-3 py-2 text-right">Tổng thu</th><th className="px-3 py-2 text-right">Tổng chi</th><th className="px-3 py-2 text-right">Nộp lại giám đốc</th><th className="px-3 py-2 text-right">Cuối ngày</th><th className="px-3 py-2 text-right">Chờ kiểm</th><th className="px-3 py-2">Chốt quỹ</th></tr></thead>
                   <tbody>
                     {report.days.map((d) => (
                       <tr key={d.ymd} className="border-t border-border">
@@ -41,7 +43,8 @@ export function CashReport({ report, params, base }: { report: CashReportDTO; pa
                         <td className="px-3 py-2 text-right tabular">{Number(d.topUp) ? formatCurrency(d.topUp) : ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(d.in) ? formatCurrency(d.in) : ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(d.out) ? formatCurrency(d.out) : ""}</td>
-                        <td className="px-3 py-2 text-right tabular font-medium">{formatCurrency(d.closing)}</td>
+                        <td className="px-3 py-2 text-right tabular">{Number(d.handOver) ? formatCurrency(d.handOver) : ""}</td>
+                        <td className={`px-3 py-2 text-right tabular font-medium ${Number(d.closing) !== 0 && d.ymd < report.todayYmd ? "text-warning" : ""}`}>{formatCurrency(d.closing)}</td>
                         <td className="px-3 py-2 text-right tabular">{d.pendingCount || ""}</td>
                         <td className="px-3 py-2">{d.close ? <span className="flex flex-wrap items-center gap-1"><Badge tone={Number(d.close.diff) === 0 ? "success" : "warning"}>{Number(d.close.diff) === 0 ? "Khớp" : `Chênh ${formatCurrency(d.close.diff)}`}</Badge><span className="text-xs text-fg-muted">{d.close.byName} · {formatDateTime(d.close.at)}</span></span> : <Badge tone="neutral">Chưa chốt</Badge>}</td>
                       </tr>

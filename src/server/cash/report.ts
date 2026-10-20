@@ -12,7 +12,8 @@ const DAY_MS = 24 * 3600_000;
 const dayStart = (ymd: string) => new Date(new Date(`${ymd}T00:00:00Z`).getTime() - ICT_OFFSET_MS);
 
 export interface CashDailyRowDTO {
-  ymd: string; opening: string; in: string; out: string; topUp: string; closing: string; pendingCount: number;
+  ymd: string; opening: string; topUp: string; in: string; out: string; handOver: string; closing: string; pendingCount: number;
+  /** Thu/chi thật: không gồm bổ sung quỹ (thu) và nộp lại giám đốc (chi). Đầu + bổ sung + thu − chi − nộp lại = cuối. */
   /** Lần chốt đầu tiên (chưa hủy) có mốc từ hết ngày này trở đi; null = ngày chưa chốt. */
   close: { at: Date; actual: string; diff: string; byName: string | null } | null;
 }
@@ -20,6 +21,8 @@ export interface CashReviewerRowDTO { reviewerId: number | null; name: string; v
 export interface CashReportDTO {
   accounts: { id: number; name: string }[]; selectedId: number | null; accountName: string; periodName: string;
   days: CashDailyRowDTO[]; reviewers: CashReviewerRowDTO[]; unclosedDays: number;
+  /** Số ngày đã qua mà cuối ngày quỹ còn tiền (chưa nộp lại giám đốc). */
+  leftoverDays: number; todayYmd: string;
 }
 
 /**
@@ -32,7 +35,7 @@ export async function cashReport(db: Db, actor: Actor, accountId: number | null,
   const periodRow = await db.period.findUniqueOrThrow({ where: { id: period.id }, select: { name: true } });
   const list = await db.cashAccount.findMany({ where: { type: "CASH", OR: [{ isActive: true }, ...(accountId ? [{ id: accountId }] : [])] }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const selected = list.find((a) => a.id === accountId) ?? list[0] ?? null;
-  const empty = { accounts: list, selectedId: selected?.id ?? null, accountName: selected?.name ?? "", periodName: periodRow.name, days: [], reviewers: [], unclosedDays: 0 };
+  const empty = { accounts: list, selectedId: selected?.id ?? null, accountName: selected?.name ?? "", periodName: periodRow.name, days: [], reviewers: [], unclosedDays: 0, leftoverDays: 0, todayYmd: ictYmd(new Date()) };
   if (!selected) return empty;
 
   const range = params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
@@ -44,19 +47,20 @@ export async function cashReport(db: Db, actor: Actor, accountId: number | null,
   const ids = (t: string) => [...new Set(ledger.filter((l) => l.docType === t).map((l) => l.docId))];
   const [receipts, payments] = await Promise.all([
     db.receipt.findMany({ where: { id: { in: ids("RECEIPT") } }, select: { id: true, type: true, reviewStatus: true, reviewedBy: true } }),
-    db.payment.findMany({ where: { id: { in: ids("PAYMENT") } }, select: { id: true, reviewStatus: true, reviewedBy: true } }),
+    db.payment.findMany({ where: { id: { in: ids("PAYMENT") } }, select: { id: true, kind: true, reviewStatus: true, reviewedBy: true } }),
   ]);
   const receiptOf = new Map(receipts.map((r) => [r.id, r])), paymentOf = new Map(payments.map((p) => [p.id, p]));
   const userIds = [...receipts.map((r) => r.reviewedBy ?? 0), ...payments.map((p) => p.reviewedBy ?? 0), ...closes.map((c) => c.createdBy)].filter(Boolean);
   const users = new Map((await db.user.findMany({ where: { id: { in: [...new Set(userIds)] } }, select: { id: true, fullName: true } })).map((u) => [u.id, u.fullName]));
 
   // ── theo ngày ──
-  const byDay = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal; topUp: Prisma.Decimal; pending: number }>();
+  const byDay = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal; topUp: Prisma.Decimal; handOver: Prisma.Decimal; pending: number }>();
   for (const l of ledger) {
     const ymd = ictYmd(l.at);
-    const d = byDay.get(ymd) ?? { in: D(0), out: D(0), topUp: D(0), pending: 0 };
+    const d = byDay.get(ymd) ?? { in: D(0), out: D(0), topUp: D(0), handOver: D(0), pending: 0 };
     d.in = d.in.plus(l.amountIn); d.out = d.out.plus(l.amountOut);
     if (l.docType === "RECEIPT" && receiptOf.get(l.docId)?.type === "BO_SUNG_QUY") d.topUp = d.topUp.plus(l.amountIn);
+    if (l.docType === "PAYMENT" && paymentOf.get(l.docId)?.kind === "NOP_LAI_QUY") d.handOver = d.handOver.plus(l.amountOut);
     const st = l.docType === "RECEIPT" ? receiptOf.get(l.docId)?.reviewStatus : l.docType === "PAYMENT" ? paymentOf.get(l.docId)?.reviewStatus : "REVIEWED";
     if (st && st !== "REVIEWED") d.pending += 1;
     byDay.set(ymd, d);
@@ -68,7 +72,7 @@ export async function cashReport(db: Db, actor: Actor, accountId: number | null,
     const closing = run.plus(d.in).minus(d.out);
     const c = closes.find((x) => x.closeAt >= new Date(end.getTime() - 1));
     if (!range || (start >= range.start && start < range.end)) {
-      days.push({ ymd, opening: run.toString(), in: d.in.toString(), out: d.out.toString(), topUp: d.topUp.toString(), closing: closing.toString(), pendingCount: d.pending,
+      days.push({ ymd, opening: run.toString(), topUp: d.topUp.toString(), in: d.in.minus(d.topUp).toString(), out: d.out.minus(d.handOver).toString(), handOver: d.handOver.toString(), closing: closing.toString(), pendingCount: d.pending,
         close: c ? { at: c.closeAt, actual: c.actual.toString(), diff: c.diff.toString(), byName: users.get(c.createdBy) ?? null } : null });
     }
     run = closing;
@@ -92,5 +96,5 @@ export async function cashReport(db: Db, actor: Actor, accountId: number | null,
   })).sort((a, b) => (a.reviewerId === null ? 1 : b.reviewerId === null ? -1 : a.name.localeCompare(b.name, "vi")));
 
   const today = ictYmd(new Date());
-  return { ...empty, days, reviewers, unclosedDays: days.filter((d) => !d.close && d.ymd < today).length };
+  return { ...empty, days, reviewers, unclosedDays: days.filter((d) => !d.close && d.ymd < today).length, leftoverDays: days.filter((d) => d.ymd < today && !D(d.closing).isZero()).length };
 }

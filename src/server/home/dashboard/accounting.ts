@@ -25,22 +25,25 @@ export async function loadAccounting(db: Db, actor: Actor, range: DashRange, ban
   const year = yearOfRange(range), yb = yearBounds(year);
   const days = daysOf(range);
   const rc = (from: Date, to: Date) => ({ isCancelled: false, at: { gte: from, lt: to } });
+  // Bổ sung quỹ / nộp lại quỹ là tiền luân chuyển với giám đốc, không tính vào thu chi.
+  const rcIn = (from: Date, to: Date) => ({ ...rc(from, to), type: { not: "BO_SUNG_QUY" as const } });
+  const rcOut = (from: Date, to: Date) => ({ ...rc(from, to), kind: { not: "NOP_LAI_QUY" as const } });
 
   const empty = Promise.resolve([] as never[]);
   const [thu, prevThu, chi, prevChi, monthlyIn, monthlyOut, dailyIn, dailyOut, thuMix, chiMix, rcReview, pmReview, rcCancel, pmCancel, openingCash, ledger, accounts, balances, bankReceipts] = await Promise.all([
-    sumOf(cash, db.receipt.aggregate({ where: rc(range.start, range.end), _sum: { amount: true } })),
-    sumOf(cash, db.receipt.aggregate({ where: rc(range.prevStart, range.prevEnd), _sum: { amount: true } })),
-    sumOf(cash, db.payment.aggregate({ where: rc(range.start, range.end), _sum: { amount: true } })),
-    sumOf(cash, db.payment.aggregate({ where: rc(range.prevStart, range.prevEnd), _sum: { amount: true } })),
-    cash ? db.$queryRaw<{ m: number; v: Prisma.Decimal }[]>`SELECT ${sqlMonth(Prisma.sql`"at"`)} AS m, COALESCE(SUM(amount),0) AS v FROM receipts WHERE "isCancelled" = false AND "at" >= ${yb.start} AND "at" < ${yb.end} GROUP BY 1` : empty,
-    cash ? db.$queryRaw<{ m: number; v: Prisma.Decimal }[]>`SELECT ${sqlMonth(Prisma.sql`"at"`)} AS m, COALESCE(SUM(amount),0) AS v FROM payments WHERE "isCancelled" = false AND "at" >= ${yb.start} AND "at" < ${yb.end} GROUP BY 1` : empty,
-    cash && days ? db.$queryRaw<{ d: string; v: Prisma.Decimal }[]>`SELECT ${sqlDay(Prisma.sql`"at"`)} AS d, COALESCE(SUM(amount),0) AS v FROM receipts WHERE "isCancelled" = false AND "at" >= ${range.start} AND "at" < ${range.end} GROUP BY 1` : empty,
-    cash && days ? db.$queryRaw<{ d: string; v: Prisma.Decimal }[]>`SELECT ${sqlDay(Prisma.sql`"at"`)} AS d, COALESCE(SUM(amount),0) AS v FROM payments WHERE "isCancelled" = false AND "at" >= ${range.start} AND "at" < ${range.end} GROUP BY 1` : empty,
-    cash ? db.$queryRaw<{ label: string; v: Prisma.Decimal }[]>`SELECT ${RECEIPT_TYPE_SQL} AS label, COALESCE(SUM(r.amount),0) AS v FROM receipts r WHERE r."isCancelled" = false AND r."at" >= ${range.start} AND r."at" < ${range.end} GROUP BY 1` : empty,
+    sumOf(cash, db.receipt.aggregate({ where: rcIn(range.start, range.end), _sum: { amount: true } })),
+    sumOf(cash, db.receipt.aggregate({ where: rcIn(range.prevStart, range.prevEnd), _sum: { amount: true } })),
+    sumOf(cash, db.payment.aggregate({ where: rcOut(range.start, range.end), _sum: { amount: true } })),
+    sumOf(cash, db.payment.aggregate({ where: rcOut(range.prevStart, range.prevEnd), _sum: { amount: true } })),
+    cash ? db.$queryRaw<{ m: number; v: Prisma.Decimal }[]>`SELECT ${sqlMonth(Prisma.sql`"at"`)} AS m, COALESCE(SUM(amount),0) AS v FROM receipts WHERE "isCancelled" = false AND "type"::text <> 'BO_SUNG_QUY' AND "at" >= ${yb.start} AND "at" < ${yb.end} GROUP BY 1` : empty,
+    cash ? db.$queryRaw<{ m: number; v: Prisma.Decimal }[]>`SELECT ${sqlMonth(Prisma.sql`"at"`)} AS m, COALESCE(SUM(amount),0) AS v FROM payments WHERE "isCancelled" = false AND "kind"::text <> 'NOP_LAI_QUY' AND "at" >= ${yb.start} AND "at" < ${yb.end} GROUP BY 1` : empty,
+    cash && days ? db.$queryRaw<{ d: string; v: Prisma.Decimal }[]>`SELECT ${sqlDay(Prisma.sql`"at"`)} AS d, COALESCE(SUM(amount),0) AS v FROM receipts WHERE "isCancelled" = false AND "type"::text <> 'BO_SUNG_QUY' AND "at" >= ${range.start} AND "at" < ${range.end} GROUP BY 1` : empty,
+    cash && days ? db.$queryRaw<{ d: string; v: Prisma.Decimal }[]>`SELECT ${sqlDay(Prisma.sql`"at"`)} AS d, COALESCE(SUM(amount),0) AS v FROM payments WHERE "isCancelled" = false AND "kind"::text <> 'NOP_LAI_QUY' AND "at" >= ${range.start} AND "at" < ${range.end} GROUP BY 1` : empty,
+    cash ? db.$queryRaw<{ label: string; v: Prisma.Decimal }[]>`SELECT ${RECEIPT_TYPE_SQL} AS label, COALESCE(SUM(r.amount),0) AS v FROM receipts r WHERE r."isCancelled" = false AND r."type"::text <> 'BO_SUNG_QUY' AND r."at" >= ${range.start} AND r."at" < ${range.end} GROUP BY 1` : empty,
     cash ? db.$queryRaw<{ label: string; v: Prisma.Decimal }[]>`
       SELECT ${PAYMENT_KIND_SQL} AS label, COALESCE(SUM(p.amount),0) AS v FROM payments p
       LEFT JOIN operating_expenses oe ON oe."paymentId" = p.id LEFT JOIN expense_types et ON et.id = oe."expenseTypeId"
-      WHERE p."isCancelled" = false AND p."at" >= ${range.start} AND p."at" < ${range.end} GROUP BY 1` : empty,
+      WHERE p."isCancelled" = false AND p."kind"::text <> 'NOP_LAI_QUY' AND p."at" >= ${range.start} AND p."at" < ${range.end} GROUP BY 1` : empty,
     cash ? db.receipt.groupBy({ by: ["reviewStatus"], where: rc(range.start, range.end), _count: { _all: true } }) : empty,
     cash ? db.payment.groupBy({ by: ["reviewStatus"], where: rc(range.start, range.end), _count: { _all: true } }) : empty,
     cash ? db.receipt.count({ where: { isCancelled: true, at: { gte: range.start, lt: range.end } } }) : Promise.resolve(0),

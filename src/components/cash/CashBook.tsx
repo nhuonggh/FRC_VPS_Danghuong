@@ -17,7 +17,7 @@ import { PaginationFooter } from "@/components/ui/PaginationFooter";
 const TONE = { PENDING_REVIEW: "warning", REVIEWED: "success", RETURNED: "danger" } as const;
 
 /** Sổ quỹ tiền mặt (60) / sổ tiền gửi ngân hàng (61): số dư vận hành = đã kiểm tra + chờ kiểm tra, chi tiết có số dư chạy, chốt quỹ. */
-export function CashBook({ book, type, base, canClose, canReopen, nowIso, params }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; nowIso: string; params?: ListParams }) {
+export function CashBook({ book, type, base, canClose, canReopen, canHandOver = false, nowIso, params }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; canHandOver?: boolean; nowIso: string; params?: ListParams }) {
   const router = useRouter();
   const s = book.selected;
   const [closing, setClosing] = useState(false);
@@ -91,7 +91,7 @@ export function CashBook({ book, type, base, canClose, canReopen, nowIso, params
           )}
         </>
       )}
-      {s && <CloseDialog open={closing} onClose={() => setClosing(false)} accountId={s.id} accountName={s.name} nowIso={nowIso} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />}
+      {s && <CloseDialog canHandOver={canHandOver && type === "CASH"} open={closing} onClose={() => setClosing(false)} accountId={s.id} accountName={s.name} nowIso={nowIso} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />}
       <ReasonDialog open={voiding !== null} onClose={() => setVoiding(null)} title="Hủy lần chốt quỹ?" description="Lần chốt được đánh dấu vô hiệu (vẫn giữ để truy vết). Sổ quỹ không đổi." confirmLabel="Hủy chốt"
         onConfirm={async (reason) => { await apiFetch(`/api/cash/closes/${voiding}`, { method: "DELETE", json: { reason }, idempotencyKey: `${idem.key}-v${voiding}` }); router.refresh(); }} />
     </div>
@@ -108,8 +108,8 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
   );
 }
 
-function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, onDone }: { open: boolean; onClose: () => void; accountId: number; accountName: string; nowIso: string; idemKey: string; onDone: () => void }) {
-  const [at, setAt] = useState(nowIso.slice(0, 16)); const [actual, setActual] = useState(""); const [reason, setReason] = useState("");
+function CloseDialog({ canHandOver, open, onClose, accountId, accountName, nowIso, idemKey, onDone }: { canHandOver: boolean; open: boolean; onClose: () => void; accountId: number; accountName: string; nowIso: string; idemKey: string; onDone: () => void }) {
+  const [at, setAt] = useState(nowIso.slice(0, 16)); const [actual, setActual] = useState(""); const [reason, setReason] = useState(""); const [handOver, setHandOver] = useState(false);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   // Mỗi lần mở hộp thoại lấy giờ hiện tại (giờ Việt Nam) — không dùng giờ lúc trang được dựng
   useEffect(() => { if (open) setAt(new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 16)); }, [open]);
@@ -119,8 +119,8 @@ function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, o
     setBusy(true); setError(null);
     try {
       // ô datetime-local theo giờ Việt Nam (UTC+7); mốc tính ĐẾN HẾT phút đã chọn (phiếu lập trong phút đó vẫn được tính)
-      await apiFetch("/api/cash/closes", { method: "POST", json: { cashAccountId: accountId, closeAt: `${at}:59.999+07:00`, actual: Number(actual), reason }, idempotencyKey: idemKey });
-      setActual(""); setReason(""); onDone(); onClose();
+      await apiFetch("/api/cash/closes", { method: "POST", json: { cashAccountId: accountId, closeAt: `${at}:59.999+07:00`, actual: Number(actual), reason, handOver: canHandOver && handOver }, idempotencyKey: idemKey });
+      setActual(""); setReason(""); setHandOver(false); onDone(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Không chốt được."); } finally { setBusy(false); }
   }
   return (
@@ -130,8 +130,10 @@ function CloseDialog({ open, onClose, accountId, accountName, nowIso, idemKey, o
           <Dialog.Title className="text-base font-semibold">Chốt quỹ — {accountName}</Dialog.Title>
           <Dialog.Description className="text-sm text-fg-secondary">Hệ thống tính tồn đầu + thu − chi đến mốc chốt rồi so với tiền kiểm đếm. Có chênh lệch vẫn chốt được nhưng phải ghi lý do.</Dialog.Description>
           <InlineField id="close-at" label="Mốc chốt — tính đến hết phút này (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={igInput} /></InlineField>
+          <button type="button" onClick={() => setAt(new Date(Date.now() + 7 * 3600_000 - 86_400_000).toISOString().slice(0, 10) + "T23:59")} className="text-xs text-accent hover:underline">Chốt cho cuối ngày hôm qua (23:59)</button>
           <InlineField id="close-actual" label="Tiền kiểm đếm thực tế" required><NumberInput maxFrac={3} id="close-actual" value={actual} onValueChange={setActual} className={`${igInput} tabular`} /></InlineField>
           <InlineField id="close-reason" label="Lý do chênh lệch (nếu có)" multiline><textarea id="close-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>
+          {canHandOver && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={handOver} onChange={(e) => setHandOver(e.target.checked)} className="mt-1" /><span>Giám đốc nhận lại toàn bộ tiền kiểm đếm — tự lập phiếu chi “Nộp lại quỹ” bằng số kiểm đếm, ghi vào ngày của mốc chốt (quỹ về 0).</span></label>}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Chốt quỹ</button></div>
         </Dialog.Content>

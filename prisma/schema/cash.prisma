@@ -11,6 +11,7 @@ enum PaymentKind {
   HOAN_KHACH
   CHI_PHI
   TAT_TOAN_CK
+  NOP_LAI_QUY
   KHAC
 
   @@map("payment_kind")
