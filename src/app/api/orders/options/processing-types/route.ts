@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export const GET = apiHandler(async (req) => {
   const actor = await requireActorApi();
-  if (!actor.perms.has("order.create") && !actor.perms.has("purchase.create") && !actor.perms.has("quote.manage")) throw new ForbiddenError("order.create");
+  if (!actor.perms.has("order.create") && !actor.perms.has("purchase.create") && !actor.perms.has("quote.manage") && !actor.perms.has("return.manage")) throw new ForbiddenError("order.create");
   const all = await listActiveOptions(prisma, "processing-types");
   const raw = new URL(req.url).searchParams.get("productId");
   if (raw === null) return all;

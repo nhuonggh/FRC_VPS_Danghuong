@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { Banknote, Package, Undo2 } from "lucide-react";
 import { addPickedLines, Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, inputClass, NewPage, ProductMultiPicker, useLineEntry, type ComboOption, NumberInput, RhfNumberInput } from "@/components/ui";
+import { ReturnDimensionEntry } from "@/components/returns/ReturnDimensionEntry";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -34,7 +35,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
   const idem = useIdempotencyKey();
   const form = useForm<ReturnByProductInput>({ resolver: zodResolver(returnByProductSchema), defaultValues: { partnerId: undefined, date: today, note: "", lines: [emptyLine] } });
   const { control, register, handleSubmit, setValue, getValues, watch, formState: { errors, isDirty } } = form;
-  const { fields, append, remove, update } = useFieldArray({ control, name: "lines", keyName: "_key" });
+  const { fields, append, remove, update, replace } =useFieldArray({ control, name: "lines", keyName: "_key" });
   const lines = watch("lines");
   const partnerId = watch("partnerId");
   const [partner, setPartner] = useState<ComboOption | null>(null);
@@ -96,6 +97,11 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) });
   };
+  const addDimensionRows = (product: ProductOption, rows: ReturnByProductInput["lines"]) => {
+    setProducts((m) => new Map(m).set(product.value, product));
+    // Bỏ dòng trống (chưa chọn sản phẩm) rồi nối các dòng kích thước
+    replace([...getValues("lines").filter((l) => l?.productId), ...rows]);
+  };
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
 
   return (
@@ -120,6 +126,7 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
       </FormCard>
       <FormCard icon={Package} title="Dòng hàng trả">
         <div className="space-y-3">
+          <ReturnDimensionEntry kind={c.kind} partnerId={partnerId} loadProducts={loadProducts} onAdd={addDimensionRows} />
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[760px] text-sm">
               <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -141,14 +148,16 @@ export function ReturnByProductForm({ mode, today, refundAccounts }: { mode: "BY
                               if (p) setProducts((m) => new Map(m).set(p.value, p));
                               setValue(`lines.${index}.unit`, p?.baseUnit ?? "", { shouldValidate: true });
                               setValue(`lines.${index}.unitPrice`, undefined as never);
+                              setValue(`lines.${index}.note`, undefined);
                               if (p) entry.onProductPicked(index);
                             }} />
                         )} />
-                        {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
+                        {l?.note && <p className="mt-1 text-xs text-fg-secondary">{l.note}</p>}
+                        {dup > 0 && !l?.note && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
                       </td>
                       <td className="px-2 py-2" data-label="ĐVT">
                         <select aria-label={`Đơn vị dòng ${index + 1}`} value={l?.unit ?? ""} className={`${inputClass(err?.unit)} min-w-20`}
-                          onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.unitPrice`, undefined as never); }}>
+                          onChange={(e) => { setValue(`lines.${index}.unit`, e.target.value, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.unitPrice`, undefined as never); setValue(`lines.${index}.note`, undefined); }}>
                           <option value="">—</option>{(product?.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
                         </select>
                       </td>

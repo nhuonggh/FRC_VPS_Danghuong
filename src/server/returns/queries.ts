@@ -23,7 +23,7 @@ export interface ReturnDetailDTO extends Omit<ReturnRowDTO, "lineCount"> {
   /** Khấu trừ khi khách trả (cần sale_price.view) và các khoản đã hoàn lại cho khách. */
   returnDeduction?: string; deductionNote?: string | null;
   refunds?: { id: number; code: string; refundAmount: string; accountName: string; isCancelled: boolean }[];
-  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; salePrice?: string; lineAmount?: string; purchasePrice?: string; purchaseAmount?: string }[];
+  lines: { id: number; productCode: string; productName: string; unit: string; qty: string; note: string | null; salePrice?: string; lineAmount?: string; purchasePrice?: string; purchaseAmount?: string }[];
 }
 
 function where(actor: Actor, kinds: ReturnKind[], params: ListParams): Prisma.GoodsReturnWhereInput {
@@ -77,7 +77,7 @@ export async function getReturn(db: Db, actor: Actor, id: number): Promise<Retur
     ...(supplier ? { purchaseTotal: r.totalAmount.toString() } : { returnTotal: r.totalAmount.toString(), returnDeduction: r.deductionAmount.toString(), deductionNote: r.deductionNote }),
     refunds: r.refunds.map((p) => ({ id: p.id, code: p.code, refundAmount: p.amount.toString(), accountName: p.cashAccount.name, isCancelled: p.isCancelled })),
     lines: r.lines.map((l) => ({
-      id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(),
+      id: l.id, productCode: l.product.code, productName: l.product.name, unit: l.unit, qty: l.qty.toString(), note: l.note,
       ...(supplier ? { purchasePrice: l.unitPrice.toString(), purchaseAmount: l.amount.toString() } : { salePrice: l.unitPrice.toString(), lineAmount: l.amount.toString() }),
     })),
   };

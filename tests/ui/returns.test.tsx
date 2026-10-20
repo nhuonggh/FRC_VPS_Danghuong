@@ -55,7 +55,7 @@ describe("ReturnByOrderForm (43)", () => {
 const ret = (over: Partial<ReturnDetailDTO> = {}): ReturnDetailDTO => ({
   id: 7, code: "TH000007", kind: "BY_ORDER", at: new Date("2026-09-15T03:00:00Z"), partnerCode: "KH000001", partnerName: "Nguyễn Văn Đạt", orderId: 1, orderCode: "DH000001",
   isCancelled: false, note: null, cancelReason: null, createdByName: "An", returnTotal: "45000",
-  lines: [{ id: 1, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "1", salePrice: "45000", lineAmount: "45000" }], ...over,
+  lines: [{ id: 1, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "1", note: null, salePrice: "45000", lineAmount: "45000" }], ...over,
 });
 
 describe("ReturnDetail", () => {
@@ -76,7 +76,7 @@ describe("ReturnDetail", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Lý do: Sai");
     cleanup();
     const { returnTotal: _t, ...rest } = ret();
-    render(<ReturnDetail ret={{ ...rest, lines: [{ id: 1, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "1" }] }} canManage={false} />);
+    render(<ReturnDetail ret={{ ...rest, lines: [{ id: 1, productCode: "TX01", productName: "Tôn xốp", unit: "md", qty: "1", note: null }] }} canManage={false} />);
     expect(screen.queryByRole("button", { name: "Hủy phiếu trả" })).toBeNull();
   });
 });

@@ -212,6 +212,21 @@ describe("trả hàng chưa giao về kho (hàng không giao được)", () => {
 });
 
 describe("trả theo sản phẩm (45)", () => {
+  it("nhập theo kích thước: mỗi số hạng một dòng md, ghi chú kích thước lưu và đọc lại được; kho + công nợ theo tổng md", async () => {
+    const { parseLengthExpr, termQty, termNote, pricePerMd } = await import("@/lib/length-expr");
+    await tx((t) => t.partnerLedger.create({ data: { periodId: w.periodId, partnerId: customer.id, debit: 1_000_000, docType: "DELIVERY", docId: 998, at: NOW, createdBy: w.userId } }));
+    const parsed = parseLengthExpr("7.1*7+6.8*1");
+    if ("error" in parsed) throw new Error(parsed.error);
+    const lines = parsed.terms.map((t) => ({ productId: w.p.id, unit: w.p.baseUnit, qty: termQty(t), unitPrice: pricePerMd(40_000, 1.08), note: termNote(t, 1.08) }));
+    const r = await createReturnByProductIdempotent(prisma, actor, "BY_PRODUCT", `rd-${++n}`, returnByProductSchema.parse({ partnerId: customer.id, date: "2026-09-15", note: "", lines }), NOW);
+    const saved = await prisma.goodsReturnLine.findMany({ where: { returnId: r.id }, orderBy: { id: "asc" } });
+    expect(saved.map((l) => l.qty.toString())).toEqual(["49.7", "6.8"]);
+    expect(saved.map((l) => l.note)).toEqual(["7,1 m × 1,08 × 7 = 53,676 m²", "6,8 m × 1,08 × 1 = 7,344 m²"]);
+    expect(await onHand()).toBe("156.5");
+    const dto = await getReturn(prisma, actor, r.id);
+    expect(dto.lines.map((l) => l.note)).toEqual(saved.map((l) => l.note));
+  });
+
   it("chưa từng bán cho khách ⇒ vốn = giá nhập gần nhất; công nợ giảm theo giá nhập tay", async () => {
     await tx((t) => t.partnerLedger.create({ data: { periodId: w.periodId, partnerId: customer.id, debit: 500_000, docType: "DELIVERY", docId: 999, at: NOW, createdBy: w.userId } }));
     await retProduct("BY_PRODUCT", customer.id, 2, 48_000);

@@ -156,7 +156,7 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
   const byId = new Map(products.map((p) => [p.id, p]));
   const need = new Map<number, Prisma.Decimal>(); // tổng SL gốc trả NCC theo mã (kiểm tồn)
   let total = D(0);
-  const rows = [] as { productId: number; unit: string; qty: Prisma.Decimal; factor: Prisma.Decimal; qtyBase: Prisma.Decimal; unitPrice: Prisma.Decimal; amount: Prisma.Decimal; cost: Prisma.Decimal }[];
+  const rows = [] as { productId: number; unit: string; qty: Prisma.Decimal; factor: Prisma.Decimal; qtyBase: Prisma.Decimal; unitPrice: Prisma.Decimal; amount: Prisma.Decimal; cost: Prisma.Decimal; note: string | null }[];
   for (const [i, l] of input.lines.entries()) {
     const product = byId.get(l.productId);
     if (!product) throw new DomainError(`Dòng ${i + 1}: sản phẩm không tồn tại.`, 400);
@@ -168,7 +168,7 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
     total = total.plus(amount);
     need.set(product.id, (need.get(product.id) ?? D(0)).plus(qtyBase));
     const cost = mode === "BY_PRODUCT" ? await resolveReturnCostByProduct(tx, partner.id, product.id, product.code) : D(0);
-    rows.push({ productId: product.id, unit: l.unit, qty: D(l.qty), factor, qtyBase, unitPrice: D(l.unitPrice), amount, cost });
+    rows.push({ productId: product.id, unit: l.unit, qty: D(l.qty), factor, qtyBase, unitPrice: D(l.unitPrice), amount, cost, note: l.note || null });
   }
   if (mode === "SUPPLIER") {
     for (const [productId, qty] of need) {
@@ -187,7 +187,7 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
   await tx.goodsReturn.create({ data: { id, code, periodId: ctx.period.id, kind: mode, partnerId: partner.id, at, note: input.note || null, totalAmount: total, deductionAmount: deduction, deductionNote: input.deduction?.reason || null, createdBy: actor.userId } });
   for (const r of rows) {
     const row = await tx.goodsReturnLine.create({
-      data: { returnId: id, productId: r.productId, qty: r.qty, unit: r.unit, factorUsed: r.factor, qtyBase: r.qtyBase, unitPrice: r.unitPrice, amount: r.amount, at },
+      data: { returnId: id, productId: r.productId, qty: r.qty, unit: r.unit, factorUsed: r.factor, qtyBase: r.qtyBase, unitPrice: r.unitPrice, amount: r.amount, at, note: r.note },
     });
     const { seq } = mode === "SUPPLIER"
       ? await postIssue(ctx, { productId: r.productId, qty: r.qtyBase, docType: "RETURN_SUPPLIER", docId: id, docLineId: row.id, at })

@@ -346,8 +346,10 @@ model GoodsReturnLine {
   discountAccumReversed Decimal  @default(0) @db.Decimal(18, 2)
   at                    DateTime
   seq                   BigInt?
+  /// Ghi chú dòng; trả theo kích thước ghi "7,1 m × 1,08 × 7 = 53,676 m²" (cùng mẫu dòng bán, xem length-expr.ts).
+  note                  String?
 
-  goodsReturn GoodsReturn    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  goodsReturn GoodsReturn   @relation(fields: [returnId], references: [id], onDelete: Cascade)
   product     Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
   orderLine   SaleOrderLine? @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
 

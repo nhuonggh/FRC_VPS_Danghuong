@@ -44,6 +44,8 @@ export const returnByProductSchema = z.object({
     unit: z.string().trim().min(1, "Chọn đơn vị.").max(10),
     qty,
     unitPrice: z.number({ invalid_type_error: "Nhập đơn giá." }).finite().min(0, "Đơn giá không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân."),
+    /** Nhập theo kích thước: ghi chú dạng "7,1 m × 1,08 × 7 = 53,676 m²" (SL đã quy ra md). */
+    note: z.string().trim().max(200, "Ghi chú dòng tối đa 200 ký tự.").optional(),
   })).min(1, "Nhập ít nhất một dòng hàng.").max(RETURN_MAX_LINES, `Tối đa ${RETURN_MAX_LINES} dòng.`),
 });
 

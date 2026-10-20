@@ -65,7 +65,7 @@ export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canMana
                       const price = l.salePrice ?? l.purchasePrice, amount = l.lineAmount ?? l.purchaseAmount;
                       return (
                         <tr key={l.id} className="border-t border-border">
-                          <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span></td>
+                          <td className="px-3 py-2"><strong>{l.productName}</strong><span className="block font-mono text-xs text-fg-muted">{l.productCode}</span>{l.note && <span className="block text-xs text-fg-secondary">{l.note}</span>}</td>
                           <td className="px-3 py-2 text-right tabular">{formatQty(l.qty)}</td><td className="px-3 py-2">{l.unit}</td>
                           {showPrice && <><td className="px-3 py-2 text-right tabular">{price !== undefined && formatCurrency(price)}</td><td className="px-3 py-2 text-right tabular">{amount !== undefined && formatCurrency(amount)}</td></>}
                         </tr>
