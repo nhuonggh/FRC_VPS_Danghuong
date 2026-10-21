@@ -126,6 +126,7 @@ export const APP_NAV: readonly NavModule[] = [
           { key: "product-list", label: "Danh sách sản phẩm", desc: "~1.300 mã, đơn vị tính & quy đổi", icon: "package", view: "table", path: "/inventory/products", codes: ["11", "12"], perm: "product.view" },
           { key: "product-unit-list", label: "Đơn vị tính", desc: "Danh mục đơn vị tính của sản phẩm", icon: "ruler", view: "table", path: "/inventory/units", codes: ["11"], perm: "catalog.manage" },
           { key: "product-processing-list", label: "Kiểu gia công hệ thống", desc: "Danh sách kiểu gia công & tỷ lệ mặc định", icon: "hammer", view: "table", path: "/inventory/processing-types", codes: ["13"], perm: "catalog.manage" },
+          { key: "product-processing-reference-cost", label: "Giá vốn gia công hàng loạt", desc: "Một kiểu gia công, giá tôn + phí áp cho nhiều sản phẩm", icon: "hammer", view: "table", path: "/inventory/processing-types/reference-cost", codes: ["13"], perm: "bom.manage" },
         ],
       },
     ],

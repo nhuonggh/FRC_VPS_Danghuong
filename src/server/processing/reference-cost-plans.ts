@@ -108,3 +108,47 @@ export async function effectiveReferenceCostPlans(db: Db, productId: number, pro
   ]);
   return { plan, defaults };
 }
+
+export const bulkReferenceCostPlanSchema = z.object({
+  processingTypeId: z.number().int().positive().max(2_147_483_647),
+  validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  tonProductId: z.number().int().positive().max(2_147_483_647),
+  fixedPricePerM2: money.nullable(),
+  tonQtyPerMeter: z.number().finite().positive().max(1_000_000).refine(n => Number(n.toFixed(6)) === n).default(1),
+  feePerMeter: money.nullable(),
+  auxFixedPerMeter: money.nullable().default(null),
+  note: z.string().trim().max(300).default(""),
+  productIds: z.array(z.number().int().positive().max(2_147_483_647)).max(500).optional(),
+  allLinked: z.boolean().optional(),
+}).refine(v => v.allLinked || (v.productIds?.length ?? 0) > 0, "Chưa chọn sản phẩm nào.");
+
+const METER_UNITS = ["m", "md", "m dài", "mét", "mét dài"];
+/** Sản phẩm đã gắn kiểu gia công, đang dùng, đơn vị gốc mét dài — đối tượng hợp lệ của dự toán theo khổ gia công. */
+export async function referenceCostCandidates(db: Db, processingTypeId: number, opts: { q?: string; limit?: number; ids?: number[] } = {}) {
+  const q = opts.q?.trim();
+  const rows = await db.product.findMany({
+    where: {
+      isActive: true, processingRatios: { some: { processingTypeId } },
+      ...(opts.ids ? { id: { in: opts.ids } } : {}),
+      ...(q ? { OR: [{ code: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}),
+    },
+    orderBy: { name: "asc" }, take: opts.limit ?? 50, select: { id: true, code: true, name: true, baseUnit: true },
+  });
+  return rows.filter(r => isMeter(r.baseUnit));
+}
+
+/** Một cấu hình (cùng tôn, giá, phí) áp cho nhiều sản phẩm của một kiểu gia công; sản phẩm không hợp lệ bị bỏ qua và báo lại. */
+export async function bulkCreateReferenceCostPlans(db: Prisma.TransactionClient, actor: Actor, input: z.infer<typeof bulkReferenceCostPlanSchema>, now = new Date()) {
+  assertWriteScope(actor, "PRODUCT");
+  const eligible = input.allLinked
+    ? await referenceCostCandidates(db, input.processingTypeId, { limit: 2000 })
+    : await referenceCostCandidates(db, input.processingTypeId, { ids: input.productIds!, limit: 500 });
+  const okIds = new Set(eligible.map(p => p.id));
+  const skipped = input.allLinked ? [] : (await db.product.findMany({ where: { id: { in: input.productIds!.filter(id => !okIds.has(id)) } }, select: { code: true, name: true } })).map(p => `${p.code} — ${p.name}`);
+  for (const p of eligible) {
+    const parsed = referenceCostPlanSchema.parse({ scope: "PRODUCT", processingTypeId: input.processingTypeId, validFrom: input.validFrom, tonProductId: input.tonProductId,
+      fixedPricePerM2: input.fixedPricePerM2, tonQtyPerMeter: input.tonQtyPerMeter, feePerMeter: input.feePerMeter, auxFixedPerMeter: input.auxFixedPerMeter, note: input.note });
+    await createReferenceCostPlan(db, actor, p.id, parsed, now);
+  }
+  return { created: eligible.length, skipped };
+}
