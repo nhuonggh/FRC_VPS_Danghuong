@@ -77,18 +77,20 @@ export async function costReference(db: PrismaClient | Prisma.TransactionClient,
         orderBy: [{ at: "desc" }, { ledger: { seq: "desc" } }], select: { unitCost: true, at: true },
       }) : null;
       const tonAmount = plan.fixedPricePerM2 !== null ? plan.fixedPricePerM2.times(ratio!) : layer?.unitCost.times(quantity) ?? null;
-      const auxiliaryAmount = auxiliary.every(m => m.amount !== null) ? auxiliary.reduce((s, m) => s.plus(m.amount!), new Prisma.Decimal(0)) : null;
+      // Vật liệu phụ: giá cố định (đ/m dài) thay toàn bộ dòng phụ của BOM; không có thì cộng theo giá nhập gần nhất.
+      const auxFixed = plan.auxFixedPerMeter;
+      const auxiliaryAmount = auxFixed !== null ? auxFixed : auxiliary.every(m => m.amount !== null) ? auxiliary.reduce((s, m) => s.plus(m.amount!), new Prisma.Decimal(0)) : null;
       const fee = plan.feePerMeter ?? defaults?.feePerMeter ?? null;
       const components = [
         { label: "Tôn đầu vào", perBase: tonAmount?.toString() ?? null, source: `${plan.tonProduct.code} · ${plan.fixedPricePerM2 !== null ? `Giá kế hoạch ${formatCurrency(plan.fixedPricePerM2.toString())}/m² theo khổ thành phẩm` : layer ? `Giá nhập ${formatDate(layer.at)}` : "Chưa có giá nhập"}` },
-        { label: "Vật liệu phụ theo định mức", perBase: auxiliaryAmount?.toString() ?? null, source: source.code },
+        { label: "Vật liệu phụ theo định mức", perBase: auxiliaryAmount?.toString() ?? null, source: auxFixed !== null ? `Giá cố định ${formatCurrency(auxFixed.toString())}/m dài` : source.code },
         { label: "Phí gia công gộp", perBase: fee?.toString() ?? null, source: plan.feePerMeter !== null ? "Mức riêng sản phẩm · đ/m dài" : defaults ? `Mặc định kiểu · hiệu lực ${formatDate(defaults.validFrom)} · đ/m dài` : "Chưa cấu hình" },
       ];
       const total = tonAmount !== null && auxiliaryAmount !== null && fee !== null ? tonAmount.plus(auxiliaryAmount).plus(fee).toDecimalPlaces(4).toString() : null;
-      return { primary: { ...source, perBase: total }, alternatives: [], components, materials: auxiliary, planId: plan.id,
+      return { primary: { ...source, perBase: total }, alternatives: [], components, materials: auxFixed !== null ? [] : auxiliary, planId: plan.id,
         stockWarning: bom && tonIndex < 0 ? "Tôn đầu vào chưa có trong BOM xuất kho. Dự toán không tự bổ sung dòng xuất tôn; cần rà soát định mức vật tư." : undefined,
         feePlanId: plan.feePerMeter === null ? defaults?.id : undefined, areaRatio: ratio?.toString(),
-        message: `${total === null ? "Chưa đủ giá tôn, vật liệu phụ hoặc phí gia công. " : "Gồm tôn, vật liệu phụ và phí gia công gộp. "}Giá kế hoạch hiệu lực ${formatDate(plan.validFrom)}.${!bom ? " Sản phẩm chưa có định mức nên không tính vật liệu phụ." : tonIndex < 0 ? " Tôn chưa có trong BOM xuất kho; dự toán không tự bổ sung dòng xuất tôn." : " Tôn trong BOM đã được tính một lần."}` };
+        message: `${total === null ? "Chưa đủ giá tôn, vật liệu phụ hoặc phí gia công. " : "Gồm tôn, vật liệu phụ và phí gia công gộp. "}Giá kế hoạch hiệu lực ${formatDate(plan.validFrom)}.${auxFixed !== null ? " Vật liệu phụ tính theo giá cố định." : !bom ? " Sản phẩm chưa có định mức nên không tính vật liệu phụ." : tonIndex < 0 ? " Tôn chưa có trong BOM xuất kho; dự toán không tự bổ sung dòng xuất tôn." : " Tôn trong BOM đã được tính một lần."}` };
     }
     if (!bom) return { primary: null, alternatives: [], message: "Chưa có định mức hiệu lực cho ngày đơn này." };
     const complete = materials.length > 0 && materials.every(m => m.price !== null);

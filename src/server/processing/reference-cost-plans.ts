@@ -19,10 +19,11 @@ export const referenceCostPlanSchema = z.object({
   fixedPricePerM2: money.nullable(),
   tonQtyPerMeter: z.number().finite().positive().max(1_000_000).refine(n => Number(n.toFixed(6)) === n).default(1),
   feePerMeter: money.nullable(),
+  auxFixedPerMeter: money.nullable().default(null),
   note: z.string().trim().max(300).default(""),
 }).superRefine((v, ctx) => {
   if (v.scope === "PRODUCT" && !v.tonProductId) ctx.addIssue({ code: "custom", path: ["tonProductId"], message: "Chọn mã tôn đầu vào để tránh tính trùng với BOM." });
-  if (v.scope === "TYPE" && (v.tonProductId !== null || v.fixedPricePerM2 !== null || v.feePerMeter === null)) ctx.addIssue({ code: "custom", path: ["feePerMeter"], message: "Mặc định của kiểu chỉ khai báo phí gia công." });
+  if (v.scope === "TYPE" && (v.tonProductId !== null || v.fixedPricePerM2 !== null || v.auxFixedPerMeter !== null || v.feePerMeter === null)) ctx.addIssue({ code: "custom", path: ["feePerMeter"], message: "Mặc định của kiểu chỉ khai báo phí gia công." });
 });
 
 export function assertReferenceCostRead(actor: Actor) {
@@ -68,6 +69,7 @@ export async function createReferenceCostPlan(db: Prisma.TransactionClient, acto
     productId: target, processingTypeId: input.processingTypeId,
     validFrom: dateOnly(input.validFrom), tonProductId: input.tonProductId,
     fixedPricePerM2: input.fixedPricePerM2, tonQtyPerMeter: input.tonQtyPerMeter, feePerMeter: input.feePerMeter,
+    auxFixedPerMeter: input.auxFixedPerMeter,
     note: input.note || null,
   };
   // Cùng (đích, kiểu, ngày): chưa dùng trên đơn → ghi đè; đã dùng → buộc chọn ngày hiệu lực khác.
