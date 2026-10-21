@@ -92,7 +92,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes,
 }
 
 /** Bảng dòng hàng + nút thêm dòng / chọn nhiều + tiền hàng. Trên mobile mỗi dòng là một thẻ. */
-export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, ordering = false, onlyLineId }: FormProps & { initialProducts?: ProductOption[]; ordering?: boolean; /** Có = chỉ hiện (và cho sửa) đúng dòng này của phiếu đã lập; các dòng khác giữ nguyên giá trị, ẩn khỏi bảng. */ onlyLineId?: number; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
+export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, ordering = false, onlyLineId, noAutoRow = false }: FormProps & { initialProducts?: ProductOption[]; /** Phiếu đã lập (đang sửa): không tự mở dòng trống khi chọn SP/Enter ở dòng cuối — dòng trống ẩn hoặc lẫn vào sẽ làm lưu thất bại. */ noAutoRow?: boolean; ordering?: boolean; /** Có = chỉ hiện (và cho sửa) đúng dòng này của phiếu đã lập; các dòng khác giữ nguyên giá trị, ẩn khỏi bảng. */ onlyLineId?: number; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
   const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
@@ -154,7 +154,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
                   setValue(`lines.${index}.factor`, 1, { shouldValidate: true });
                   setValue(`lines.${index}.processingTypeId`, null, { shouldDirty: true });
                   ensureTypes(selected ? Number(selected.value) : undefined);
-                  if (selected) entry.onProductPicked(index);
+                  if (selected && !noAutoRow && onlyLineId === undefined) entry.onProductPicked(index);
                 }} />} />
               {dup > 0 && <p role="status" className="mt-1 text-xs font-medium text-warning">Sản phẩm này đã có ở dòng {dup}</p>}
             </td>
@@ -166,7 +166,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
               if (u) { setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); setValue(`lines.${index}.factor`, Number(u.factor), { shouldValidate: true, shouldDirty: true }); }
             }} className={inputClass()}><option value="">Không</option>{typeOptions.get(line.productId)!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select> : <span className="text-fg-muted">—</span>}</td>
             <td className="px-2 py-2" data-label="Đơn vị"><select aria-label={`Đơn vị dòng ${index + 1}`} {...register(`lines.${index}.unit`)} onChange={(event) => { const unit = event.target.value; const factor = units.find((item) => item.unit === unit)?.factor ?? "1"; setValue(`lines.${index}.unit`, unit, { shouldValidate: true }); setValue(`lines.${index}.factor`, Number(factor), { shouldValidate: true }); }} className={inputClass(error?.unit)}><option value="">—</option>{units.map((unit) => <option key={unit.unit} value={unit.unit}>{unit.unit}</option>)}</select></td>
-            <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} />{areaCaption(line)}</td>
+            <td className="px-2 py-2" data-label="Số lượng"><RhfNumberInput aria-label={`Số lượng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.qty`} onKeyDown={noAutoRow || onlyLineId !== undefined ? undefined : entry.onQtyKeyDown(index)} className={`${inputClass(error?.qty)} tabular text-right`} />{areaCaption(line)}</td>
             {showFactor && <td className="px-2 py-2" data-label="Tỷ trọng"><RhfNumberInput aria-label={`Tỷ trọng dòng ${index + 1}`} maxFrac={3} control={control} name={`lines.${index}.factor`} className={`${inputClass(error?.factor)} tabular text-right`} /></td>}
             {showFactor && <td className="px-2 py-2 text-right tabular" data-label="SL gốc">{qtyBase ? formatQty(qtyBase) : "—"}</td>}
             <td className="px-2 py-2" data-label="Đơn giá">{(() => {
@@ -192,10 +192,10 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
   </div>;
 }
 
-export function PurchaseFormFields({ form, initialSupplier = null, initialProducts = [], maxDate }: { form: UseFormReturn<PurchaseInput>; initialSupplier?: ComboOption | null; initialProducts?: ProductOption[]; maxDate: string }) {
+export function PurchaseFormFields({ form, initialSupplier = null, initialProducts = [], maxDate, noAutoRow = false }: { noAutoRow?: boolean; form: UseFormReturn<PurchaseInput>; initialSupplier?: ComboOption | null; initialProducts?: ProductOption[]; maxDate: string }) {
   return <div className="space-y-5">
     <PurchaseHeaderFields form={form} initialSupplier={initialSupplier} maxDate={maxDate} />
-    <PurchaseLinesFields form={form} initialProducts={initialProducts} />
+    <PurchaseLinesFields form={form} initialProducts={initialProducts} noAutoRow={noAutoRow} />
     <PurchaseNoteField form={form} />
   </div>;
 }

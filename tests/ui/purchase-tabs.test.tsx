@@ -101,6 +101,20 @@ describe("PurchaseDetail — sửa theo dòng", () => {
     expect(screen.queryByLabelText("Số lượng dòng 1")).toBeNull();
     expect(screen.queryByRole("button", { name: "+ Thêm dòng" })).toBeNull();
   });
+  it("đổi sang sản phẩm khác ở một dòng rồi Lưu: gọi API với productId mới", async () => {
+    search = "tab=lines";
+    const other = { value: 9, label: "KS01 — Ke sắt", hint: "cái", baseUnit: "cái", units: [{ unit: "cái", factor: "1" }] };
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [other] : url.includes("section-update") ? { id: 1 } : []));
+    render(<PurchaseDetail purchase={two} canEdit canCancel={false} date="2026-09-15" products={prods as never} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Sửa dòng TX02" }));
+    const box = await screen.findByRole("combobox", { name: /Sản phẩm dòng 2/ });
+    await userEvent.click(box); await userEvent.type(box, "ke");
+    await userEvent.click((await within(await screen.findByRole("listbox")).findAllByRole("option"))[0]!);
+    await userEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+    await waitFor(() => expect(apiFetch.mock.calls.some((c) => String(c[0]).includes("section-update"))).toBe(true));
+    const call = apiFetch.mock.calls.find((c) => String(c[0]).includes("section-update"))!;
+    expect((call[1] as { json: { lines: { id: number; productId: number }[] } }).json.lines.find((l) => l.id === 12)?.productId).toBe(9);
+  });
   it("không có quyền sửa: không hiện nút sửa dòng", async () => {
     search = "tab=lines";
     render(<PurchaseDetail purchase={two} canEdit={false} canCancel={false} date="2026-09-15" products={prods as never} />);
