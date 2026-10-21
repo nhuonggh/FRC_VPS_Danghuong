@@ -201,3 +201,12 @@ it("respects permissions and excludes cancelled or later purchases", async () =>
   const restricted = await costReference(prisma, { ...actor, perms: new Set(["order.analysis.view", "purchase_price.view"]) }, w.p.id, type.id, at);
   expect(restricted?.primary).toBeNull(); expect(restricted?.materials).toBeUndefined();
 });
+
+it("uses a fixed auxiliary-material price instead of BOM purchase prices, even when a BOM price is missing", async () => {
+  const { type, finished, save } = await plannedWorld(); await save({ auxFixedPerMeter: 1000 });
+  const ref = await costReference(prisma, actor, finished.id, type.id, at);
+  expect(ref?.primary?.perBase).toBe("50867.76"); // 44322*1.08 + 1000 + 2000
+  expect(ref?.components?.map(c => c.perBase)).toEqual(["47867.76", "1000", "2000"]);
+  expect(ref?.materials).toEqual([]);
+  expect(referenceCostPlanSchema.safeParse({ processingTypeId: 1, scope: "TYPE", validFrom: "2026-09-20", tonProductId: null, fixedPricePerM2: null, feePerMeter: 1, auxFixedPerMeter: 5 }).success).toBe(false);
+});

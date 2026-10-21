@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Combobox, FormCard, FormGrid, InlineField, NumberInput, igCombo, igInput, type ComboOption } from "@/components/ui";
-import { filterComboOptions } from "@/components/ui/Combobox";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
 import { ictYmd } from "@/lib/time";
@@ -10,7 +9,7 @@ import { confirm } from "@/lib/confirm-store";
 
 interface Row {
   id: number; used: boolean; productId: number | null; processingTypeId: number; typeName: string; validFrom: string;
-  ton: ComboOption | null; fixedPricePerM2: string | null; tonQtyPerMeter: string; feePerMeter: string | null; note: string | null;
+  ton: ComboOption | null; fixedPricePerM2: string | null; tonQtyPerMeter: string; feePerMeter: string | null; auxFixedPerMeter: string | null; note: string | null;
 }
 export function ReferenceCostPlans({ productId, types, canManage, canDefault }: {
   productId: number; types: ComboOption[]; canManage: boolean; canDefault: boolean;
@@ -21,27 +20,30 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [type, setType] = useState<ComboOption | null>(null);
+  const [picked, setPicked] = useState<number[]>([]);
   const [scope, setScope] = useState(canManage ? "PRODUCT" : "TYPE");
   const [date, setDate] = useState(today);
   const [ton, setTon] = useState<ComboOption | null>(null);
   const [fixed, setFixed] = useState(true);
   const [price, setPrice] = useState("");
   const [qty, setQty] = useState("1");
+  const [auxFixed, setAuxFixed] = useState(false);
+  const [auxPrice, setAuxPrice] = useState("");
   const [fee, setFee] = useState("");
   const [note, setNote] = useState("");
   useEffect(() => { let active = true; setLoading(true); apiFetch<Row[]>(url).then(r => { if (active) setRows(r); }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [url]);
   async function save() {
     if (busy) return;
     setError("");
-    if (!type || !date || (scope === "PRODUCT" && (!ton || (fixed && price === ""))) || (scope === "TYPE" && fee === "")) { setError("Chọn kiểu, ngày hiệu lực và nhập đủ giá/phí bắt buộc."); return; }
+    if (picked.length === 0 || !date || (scope === "PRODUCT" && (!ton || (fixed && price === "") || (auxFixed && auxPrice === ""))) || (scope === "TYPE" && fee === "")) { setError("Chọn kiểu, ngày hiệu lực và nhập đủ giá/phí bắt buộc."); return; }
     setBusy(true);
     try {
-      await apiFetch(url, { method: "POST", json: { scope, processingTypeId: Number(type!.value), validFrom: date,
+      await apiFetch(url, { method: "POST", json: { scope, processingTypeIds: picked, validFrom: date,
         tonProductId: scope === "PRODUCT" ? Number(ton!.value) : null,
         fixedPricePerM2: scope === "PRODUCT" && fixed ? Number(price) : null,
-        tonQtyPerMeter: scope === "TYPE" || fixed ? 1 : Number(qty), feePerMeter: fee === "" ? null : Number(fee), note } });
-      setRows(await apiFetch<Row[]>(url)); toast.success("Đã lưu phiên bản dự toán.");
+        tonQtyPerMeter: scope === "TYPE" || fixed ? 1 : Number(qty), feePerMeter: fee === "" ? null : Number(fee),
+        auxFixedPerMeter: scope === "PRODUCT" && auxFixed ? Number(auxPrice) : null, note } });
+      setRows(await apiFetch<Row[]>(url)); toast.success(picked.length > 1 ? `Đã lưu phiên bản dự toán cho ${picked.length} kiểu gia công.` : "Đã lưu phiên bản dự toán.");
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được dự toán."); }
     finally { setBusy(false); }
   }
@@ -55,8 +57,9 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
   }
   function applyTemplate(r: Row) {
     setError("");
-    setType({ value: r.processingTypeId, label: r.typeName }); setScope(r.productId === null ? "TYPE" : "PRODUCT");
+    setPicked([r.processingTypeId]); setScope(r.productId === null ? "TYPE" : "PRODUCT");
     setDate(today); setTon(r.ton); setFixed(r.fixedPricePerM2 !== null); setPrice(r.fixedPricePerM2 ?? "");
+    setAuxFixed(r.auxFixedPerMeter !== null); setAuxPrice(r.auxFixedPerMeter ?? "");
     setQty(r.tonQtyPerMeter); setFee(r.feePerMeter ?? ""); setNote(r.note ?? "");
     document.getElementById("reference-type")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -75,7 +78,12 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
     {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
     {(canManage || canDefault) && <fieldset disabled={busy} className="space-y-3">
       <FormGrid cols={2}>
-        <InlineField id="reference-type" label="Kiểu gia công" required><div className={igCombo}><Combobox hideLabel label="Kiểu gia công dự toán" value={type} onChange={setType} loadOptions={async q => filterComboOptions(types, q)} /></div></InlineField>
+        <div id="reference-type" className="md:col-span-2" role="group" aria-label="Kiểu gia công dự toán">
+          <div className="mb-1 flex items-center justify-between text-sm"><span className="font-medium">Kiểu gia công <span className="text-danger">*</span> <span className="font-normal text-fg-secondary">(chọn một hoặc nhiều kiểu, cùng giá/phí)</span></span>
+            <button type="button" className="text-accent hover:underline" onClick={() => setPicked(picked.length === types.length ? [] : types.map(t => Number(t.value)))}>{picked.length === types.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}</button></div>
+          <div className="grid gap-1 sm:grid-cols-2">{types.map(t => { const id = Number(t.value), on = picked.includes(id); return <label key={id} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-sm border px-3 text-sm hover:bg-hover ${on ? "border-accent bg-accent-soft" : "border-border"}`}>
+            <input type="checkbox" checked={on} onChange={() => setPicked(p => on ? p.filter(x => x !== id) : [...p, id])} className="h-4 w-4" /><span className="min-w-0 truncate">{t.label}</span></label>; })}</div>
+        </div>
         <InlineField id="reference-date" label="Hiệu lực từ" required><input id="reference-date" type="date" min={today} value={date} onChange={e => setDate(e.target.value)} className={igInput} /></InlineField>
         <InlineField id="reference-scope" label="Áp dụng">
           <select id="reference-scope" value={scope} className={igInput} onChange={e => setScope(e.target.value)}>
@@ -88,6 +96,8 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
           <InlineField id="reference-source" label="Nguồn giá tôn"><select id="reference-source" value={fixed ? "FIXED" : "PURCHASE"} onChange={e => setFixed(e.target.value === "FIXED")} className={igInput}><option value="FIXED">Giá kế hoạch cố định theo khổ gia công</option><option value="PURCHASE">Giá nhập nguyên liệu gần nhất tại ngày đơn</option></select></InlineField>
           {fixed ? <InlineField id="reference-price" label="Giá tôn (đ/m²)" required><NumberInput id="reference-price" value={price} onValueChange={setPrice} maxFrac={4} className={`${igInput} tabular text-right`} /></InlineField>
             : <InlineField id="reference-qty" label="Lượng tôn / m dài" required hint="Theo đơn vị gốc mã tôn. Nếu BOM đã có mã tôn, dùng lượng theo BOM."><NumberInput id="reference-qty" value={qty} onValueChange={setQty} maxFrac={6} className={`${igInput} tabular text-right`} /></InlineField>}
+          <InlineField id="reference-aux-source" label="Nguồn vật liệu phụ"><select id="reference-aux-source" value={auxFixed ? "FIXED" : "PURCHASE"} onChange={e => setAuxFixed(e.target.value === "FIXED")} className={igInput}><option value="PURCHASE">Giá nhập gần nhất theo định mức (BOM)</option><option value="FIXED">Giá cố định (đ/m dài)</option></select></InlineField>
+          {auxFixed && <InlineField id="reference-aux-price" label="Vật liệu phụ (đ/m dài)" required hint="Một số gộp thay cho toàn bộ vật liệu phụ trong định mức."><NumberInput id="reference-aux-price" value={auxPrice} onValueChange={setAuxPrice} maxFrac={4} className={`${igInput} tabular text-right`} /></InlineField>}
         </>}
         <InlineField id="reference-fee" label="Phí gia công (đ/m dài)" required={scope === "TYPE"} hint={scope === "PRODUCT" ? "Để trống = dùng phí mặc định của kiểu; nhập 0 = không tính phí." : "Phí gộp nhân công và chi phí khác; áp dụng khi sản phẩm chưa khai báo mức riêng."}><NumberInput id="reference-fee" value={fee} onValueChange={setFee} maxFrac={4} className={`${igInput} tabular text-right`} /></InlineField>
         <InlineField id="reference-note" label="Ghi chú"><input id="reference-note" value={note} maxLength={300} onChange={e => setNote(e.target.value)} className={igInput} /></InlineField>
@@ -109,6 +119,7 @@ export function ReferenceCostPlans({ productId, types, canManage, canDefault }: 
           <div><dt className="text-fg-secondary">Hiệu lực từ</dt><dd>{formatDate(r.validFrom)}</dd></div>
           {r.ton && <div><dt className="text-fg-secondary">Tôn đầu vào</dt><dd>{r.ton.label}</dd></div>}
           {r.productId !== null && <div><dt className="text-fg-secondary">Giá tôn</dt><dd className="tabular">{r.fixedPricePerM2 === null ? `Giá nhập gần nhất · ${formatQty(r.tonQtyPerMeter)} ĐVT gốc/m dài (ưu tiên lượng BOM)` : `${formatCurrency(r.fixedPricePerM2)}/m² khổ gia công`}</dd></div>}
+          {r.productId !== null && <div><dt className="text-fg-secondary">Vật liệu phụ</dt><dd className="tabular">{r.auxFixedPerMeter === null ? "Giá nhập gần nhất theo định mức" : `${formatCurrency(r.auxFixedPerMeter)}/m dài (cố định)`}</dd></div>}
           <div><dt className="text-fg-secondary">Phí gia công</dt><dd className="tabular">{r.feePerMeter === null ? "Kế thừa mặc định kiểu" : `${formatCurrency(r.feePerMeter)}/m dài`}</dd></div>
         </dl>{r.note && <p className="mt-2 text-fg-secondary">{r.note}</p>}
       </article>)}

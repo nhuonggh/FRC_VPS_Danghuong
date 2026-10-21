@@ -94,6 +94,7 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
   referenceCost: "cost.view",
   fixedPricePerM2: "purchase_price.view",
   feePerMeter: "cost.view",
+  auxFixedPerMeter: "cost.view",
   costReference: "order.analysis.view",
   unitCostFifo: "cost.view",
   materialCost: "cost.view",
