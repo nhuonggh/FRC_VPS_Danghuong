@@ -6,7 +6,7 @@ import { costReference } from "@/server/sales/cost-reference";
 import { createPurchaseIdempotent, cancelPurchaseTx } from "@/server/purchase/service";
 import { createProductionOrderIdempotent, cancelProductionOrderTx } from "@/server/production/service";
 import type { Actor } from "@/lib/permissions/scope";
-import { createReferenceCostPlan, deleteReferenceCostPlan, referenceCostPlanSchema, usedReferenceCostPlanIds } from "@/server/processing/reference-cost-plans";
+import { bulkCreateReferenceCostPlans, bulkReferenceCostPlanSchema, createReferenceCostPlan, deleteReferenceCostPlan, referenceCostPlanSchema, usedReferenceCostPlanIds } from "@/server/processing/reference-cost-plans";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { getOrder, getOrderForEdit } from "@/server/sales/queries";
 import { editSaleOrderTx } from "@/server/sales/lifecycle";
@@ -209,4 +209,22 @@ it("uses a fixed auxiliary-material price instead of BOM purchase prices, even w
   expect(ref?.components?.map(c => c.perBase)).toEqual(["47867.76", "1000", "2000"]);
   expect(ref?.materials).toEqual([]);
   expect(referenceCostPlanSchema.safeParse({ processingTypeId: 1, scope: "TYPE", validFrom: "2026-09-20", tonProductId: null, fixedPricePerM2: null, feePerMeter: 1, auxFixedPerMeter: 5 }).success).toBe(false);
+});
+
+it("applies one plan to many products of a type in one transaction and skips products not linked or not in meters", async () => {
+  const { type, finished, save } = await plannedWorld(); void save;
+  const second = await makeProduct({ baseUnit: "md", kind: "THANH_PHAM", canProduce: true });
+  await prisma.productProcessingRatio.create({ data: { productId: second.id, processingTypeId: type.id, updatedBy: w.userId } });
+  const unlinked = await makeProduct({ baseUnit: "md", kind: "THANH_PHAM" });
+  const kg = await makeProduct({ baseUnit: "kg", kind: "THANH_PHAM" });
+  await prisma.productProcessingRatio.create({ data: { productId: kg.id, processingTypeId: type.id, updatedBy: w.userId } });
+  const input = bulkReferenceCostPlanSchema.parse({ processingTypeId: type.id, validFrom: "2026-09-20", tonProductId: w.p.id, fixedPricePerM2: 44322, feePerMeter: 2000, auxFixedPerMeter: 1000, productIds: [finished.id, second.id, unlinked.id, kg.id] });
+  const r = await prisma.$transaction(tx => bulkCreateReferenceCostPlans(tx, actor, input, new Date("2026-09-20T01:00:00Z")));
+  expect(r.created).toBe(2); expect(r.skipped).toHaveLength(2);
+  const rows = await prisma.referenceCostPlan.findMany({ where: { processingTypeId: type.id, productId: { not: null } } });
+  expect(rows.map(x => x.productId).sort()).toEqual([finished.id, second.id].sort());
+  expect(rows.every(x => x.auxFixedPerMeter?.toString() === "1000" && x.fixedPricePerM2?.toString() === "44322")).toBe(true);
+  expect(bulkReferenceCostPlanSchema.safeParse({ ...input, productIds: [], allLinked: false }).success).toBe(false);
+  const all = await prisma.$transaction(tx => bulkCreateReferenceCostPlans(tx, actor, bulkReferenceCostPlanSchema.parse({ ...input, productIds: undefined, allLinked: true, validFrom: "2026-09-21" }), new Date("2026-09-20T01:00:00Z")));
+  expect(all.created).toBe(2);
 });
