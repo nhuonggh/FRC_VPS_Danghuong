@@ -92,7 +92,7 @@ function PurchaseDimensionEntry({ loadProducts, onAdd, typeOptions, ensureTypes,
 }
 
 /** Bảng dòng hàng + nút thêm dòng / chọn nhiều + tiền hàng. Trên mobile mỗi dòng là một thẻ. */
-export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, ordering = false }: FormProps & { initialProducts?: ProductOption[]; ordering?: boolean; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
+export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, ordering = false, onlyLineId }: FormProps & { initialProducts?: ProductOption[]; ordering?: boolean; /** Có = chỉ hiện (và cho sửa) đúng dòng này của phiếu đã lập; các dòng khác giữ nguyên giá trị, ẩn khỏi bảng. */ onlyLineId?: number; /** Có = hiện nút thêm nhanh sản phẩm (cần quyền quản lý sản phẩm). */ quickProduct?: QuickProductConfig }) {
   const { register, control, watch, setValue, getValues, formState: { errors } } = form;
   const { fields, append, remove, update } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
@@ -130,7 +130,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
     if (rest.length) append(rest);
   };
   return <div className="space-y-5">
-    <PurchaseDimensionEntry quickProduct={quickProduct} loadProducts={loadProducts} onAdd={addDimensionRows} typeOptions={typeOptions} ensureTypes={ensureTypes} />
+    {onlyLineId === undefined && <PurchaseDimensionEntry quickProduct={quickProduct} loadProducts={loadProducts} onAdd={addDimensionRows} typeOptions={typeOptions} ensureTypes={ensureTypes} />}
     <div className="overflow-x-auto rounded-sm border border-border">
       <table className="line-table w-full min-w-[1000px] text-sm">
         <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
@@ -139,7 +139,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
           <th className="px-2 py-2 text-right">Đơn giá</th><th className="px-2 py-2 text-right">Thành tiền</th>{ordering && <th className="px-2 py-2">Dự kiến giao / Giá gần nhất</th>}<th className="px-2 py-2">Ghi chú / Kích thước</th><th aria-label="Thao tác" />
         </tr></thead>
         <tbody>{fields.map((field, index) => {
-          const line = lines[index] ?? emptyPurchaseLine; const error = errors.lines?.[index]; const product = products.get(line.productId); const units = product?.units ?? [];
+          const line = lines[index] ?? emptyPurchaseLine; if (onlyLineId !== undefined && line.id !== onlyLineId) return null; const error = errors.lines?.[index]; const product = products.get(line.productId); const units = product?.units ?? [];
           const qtyBase = asNumber(line.qty) && asNumber(line.factor) ? round3(asNumber(line.qty) / asNumber(line.factor)) : 0;
           const dup = line.productId ? lines.findIndex((o, i) => i < index && o?.productId === line.productId && o?.unit === line.unit) + 1 : 0;
           return <tr key={field.id} className="border-b border-border align-top last:border-b-0">
@@ -179,16 +179,16 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
             <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td>
             {ordering && <td className="px-2 py-2" data-label="Dự kiến giao / Giá gần nhất" data-wide><input type="date" aria-label={`Dự kiến giao dòng ${index + 1}`} {...register(`lines.${index}.expectedDate`)} className={inputClass()} /><LastSupplierPrice partnerId={watch("partnerId")} productId={line.productId} /></td>}
             <td className="px-2 py-2" data-label="Ghi chú cuộn" data-wide><input aria-label={`Ghi chú cuộn dòng ${index + 1}`} {...register(`lines.${index}.rollInfo`)} className={inputClass(error?.rollInfo)} /></td>
-            <td className="px-2 py-2" data-action><button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button></td>
+            <td className="px-2 py-2" data-action>{onlyLineId === undefined && <button type="button" aria-label={`Xóa dòng ${index + 1}`} onClick={() => remove(index)} className="h-11 w-11 text-danger hover:bg-danger-soft md:h-9 md:w-9">×</button>}</td>
           </tr>;
         })}</tbody>
         <tfoot><tr className="border-t-2 border-border bg-hover font-semibold"><td colSpan={(showFactor ? 7 : 5) + (ordering ? 1 : 0)} className="px-2 py-3 text-right">Tiền hàng</td><td className="px-2 py-3 text-right tabular">{formatCurrency(goodsTotal)}</td><td colSpan={ordering ? 3 : 2} /></tr></tfoot>
       </table>
     </div>
-    <div className="flex flex-wrap gap-2">
+    {onlyLineId === undefined && <div className="flex flex-wrap gap-2">
       <button type="button" onClick={() => append(emptyPurchaseLine)} className="h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-hover md:h-10">+ Thêm dòng</button>
       <ProductMultiPicker load={loadProducts} existingIds={lines.flatMap((l) => (l?.productId ? [l.productId] : []))} onPicked={addProducts} />
-    </div>
+    </div>}
   </div>;
 }
 
