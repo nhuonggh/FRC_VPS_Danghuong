@@ -168,7 +168,7 @@ describe("52/53 — tiêu hao thực tế và đối chiếu định mức", () 
   it("thực tế = định mức (xuất bán) + thiếu khi kiểm; đối chiếu gộp theo NVL, âm = vượt định mức; lọc + quyền", async () => {
     const { createStocktake, confirmStocktakeIdempotent } = await import("@/server/stocktake/service");
     const { stocktakeSchema } = await import("@/server/stocktake/schemas");
-    await prisma.product.update({ where: { id: w.p.id }, data: { kind: "NVL" } });
+    await prisma.product.update({ where: { id: w.p.id }, data: { kind: "HANG", canUseAsMaterial: true } }); // báo cáo theo cờ "dùng làm nguyên liệu", không bắt đúng loại NVL
     const actor2: Actor = { userId: w.userId, perms: new Set([...ALL, ...BOM]) };
     await order(a.id, { qty: 4, date: "2026-09-10" }); // xuất 4 theo sổ sách; tồn còn 96
     const day = new Date("2026-09-12T03:00:00Z");

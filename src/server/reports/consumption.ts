@@ -21,12 +21,12 @@ async function lines(db: Db, range: TimeRange): Promise<Line[]> {
   const sts = await db.stocktake.findMany({
     where: { status: "DONE", at: timeRangeWhere(range) },
     orderBy: [{ at: "asc" }, { id: "asc" }],
-    include: { lines: { include: { product: { select: { code: true, name: true, baseUnit: true, kind: true } } } } },
+    include: { lines: { include: { product: { select: { code: true, name: true, baseUnit: true, canUseAsMaterial: true } } } } },
   });
   const out: Line[] = [];
   for (const st of sts) {
     for (const l of st.lines) {
-      if (l.product.kind !== "NVL" || l.systemQty === null) continue;
+      if (!l.product.canUseAsMaterial || l.systemQty === null) continue;
       // Mốc trước: lần kiểm kho ĐÃ CHỐT gần nhất của cùng mã (trước phiếu này); chưa có ⇒ từ đầu kỳ.
       const prev = await db.stocktakeLine.findFirst({
         where: { productId: l.productId, stocktake: { status: "DONE", periodId: st.periodId, OR: [{ at: { lt: st.at } }, { at: st.at, id: { lt: st.id } }] } },
