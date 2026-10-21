@@ -18,16 +18,16 @@ async function pick(name: string) {
 }
 it("saves finished-width fixed price separately from the per-meter processing fee", async () => {
   render(<ReferenceCostPlans productId={2} types={types} canManage canDefault />);
-  await pick("Kiểu gia công dự toán"); await pick("Mã tôn đầu vào");
+  await userEvent.click(screen.getByRole("checkbox", { name: "Tôn xốp" })); await pick("Mã tôn đầu vào");
   await userEvent.type(screen.getByLabelText(/Giá tôn \(đ\/m²\)/), "44322");
   await userEvent.type(screen.getByLabelText(/Phí gia công \(đ\/m dài\)/), "2000");
   await userEvent.click(screen.getByRole("button", { name: "Lưu phiên bản dự toán" }));
   await waitFor(() => expect(fetch.mock.calls.some(c => c[1]?.method === "POST")).toBe(true));
-  expect(fetch.mock.calls.find(c => c[1]?.method === "POST")![1].json).toMatchObject({ scope: "PRODUCT", processingTypeId: 3, tonProductId: 7, fixedPricePerM2: 44322, feePerMeter: 2000 });
+  expect(fetch.mock.calls.find(c => c[1]?.method === "POST")![1].json).toMatchObject({ scope: "PRODUCT", processingTypeIds: [3], tonProductId: 7, fixedPricePerM2: 44322, feePerMeter: 2000 });
 });
 it("allows an explicit zero default fee and does not expose product price fields in default scope", async () => {
   render(<ReferenceCostPlans productId={2} types={types} canManage={false} canDefault />);
-  await pick("Kiểu gia công dự toán");
+  await userEvent.click(screen.getByRole("checkbox", { name: "Tôn xốp" }));
   expect(screen.queryByRole("combobox", { name: "Mã tôn đầu vào" })).toBeNull();
   await userEvent.type(screen.getByLabelText(/Phí gia công/), "0");
   await userEvent.click(screen.getByRole("button", { name: "Lưu phiên bản dự toán" }));
