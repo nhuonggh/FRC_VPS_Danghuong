@@ -81,3 +81,30 @@ describe("PurchaseDetail — tab", () => {
     expect(screen.getAllByRole("button", { name: /Thông tin chung/ }).length).toBeGreaterThan(0);
   });
 });
+
+describe("PurchaseDetail — sửa theo dòng", () => {
+  const line = (id: number, productId: number, code: string, qty: string) => ({ id, productId, productCode: code, productName: "SP " + code, baseUnit: "md", qty, unit: "md", factorUsed: "1", qtyBase: qty, rollInfo: null, processingTypeId: null, processingTypeName: null, areaRatio: null, purchasePrice: "1000", purchaseAmount: "0" });
+  const two = { ...purchase, lines: [line(11, 7, "TX01", "5"), line(12, 8, "TX02", "9")] } as unknown as PurchaseDetailDTO;
+  const prods = [{ value: 7, label: "TX01 — SP TX01", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] }, { value: 8, label: "TX02 — SP TX02", hint: "md", baseUnit: "md", units: [{ unit: "md", factor: "1" }] }];
+  it("mã sản phẩm là link sang trang sản phẩm; có nút sửa từng dòng khi được phép", async () => {
+    search = "tab=lines";
+    render(<PurchaseDetail purchase={two} canEdit canCancel={false} date="2026-09-15" products={prods as never} />);
+    expect(await screen.findByRole("link", { name: "TX01" })).toHaveAttribute("href", "/inventory/products/7");
+    expect(screen.getByRole("button", { name: "Sửa dòng TX02" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sửa tất cả dòng hàng" })).toBeInTheDocument();
+  });
+  it("bấm sửa một dòng: chỉ dòng đó hiện ô số lượng; không có nút thêm/xóa dòng", async () => {
+    search = "tab=lines";
+    render(<PurchaseDetail purchase={two} canEdit canCancel={false} date="2026-09-15" products={prods as never} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Sửa dòng TX02" }));
+    expect(await screen.findByLabelText("Số lượng dòng 2")).toHaveValue("9");
+    expect(screen.queryByLabelText("Số lượng dòng 1")).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ Thêm dòng" })).toBeNull();
+  });
+  it("không có quyền sửa: không hiện nút sửa dòng", async () => {
+    search = "tab=lines";
+    render(<PurchaseDetail purchase={two} canEdit={false} canCancel={false} date="2026-09-15" products={prods as never} />);
+    await screen.findByRole("link", { name: "TX01" });
+    expect(screen.queryByRole("button", { name: /Sửa dòng/ })).toBeNull();
+  });
+});
