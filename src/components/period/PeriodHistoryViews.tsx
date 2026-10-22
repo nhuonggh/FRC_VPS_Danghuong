@@ -23,9 +23,30 @@ export function ClosedPeriodBanner({ periodName, closedAt, note }: { periodName:
 
 export function PeriodList({ periods }: { periods: PeriodRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border bg-surface">
+    <>
+      {periods.length === 0 && <p className="p-6 text-center text-sm text-fg-secondary">Chưa có kỳ nào để tra cứu.</p>}
+      <div className="space-y-3 p-3 md:hidden">
+        {periods.map((p) => (
+          <article key={p.id} className="rounded-md border border-border bg-surface p-4">
+            <div className="flex items-start justify-between gap-3">
+              <Link href={`/period/history/${p.id}`} className="flex min-h-11 items-center font-medium text-accent hover:underline">{p.name}</Link>
+              <Badge tone={p.status === "OPEN" ? "success" : "neutral"}>{p.status === "OPEN" ? "Đang mở" : "Đã kết sổ"}</Badge>
+            </div>
+            <dl className="mt-2 space-y-2 text-sm">
+              {[
+                ["Mở ngày", formatDate(p.openedAt)],
+                ["Kết sổ", p.closedAt ? `${formatDate(p.closedAt)}${p.closedByName ? ` · ${p.closedByName}` : ""}` : "—"],
+                ["Đơn bán", formatNumber(p.counts.orders)],
+                ["Phiếu nhập", formatNumber(p.counts.purchases)],
+                ["Thu / Chi", `${formatNumber(p.counts.receipts)} / ${formatNumber(p.counts.payments)}`],
+              ].map(([label, value]) => <div key={label} className="flex justify-between gap-3"><dt className="text-fg-secondary">{label}</dt><dd className="tabular text-right">{value}</dd></div>)}
+            </dl>
+          </article>
+        ))}
+      </div>
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[40rem]">
-        <thead><tr className="border-b border-border">
+        <thead className="sticky top-0 z-header bg-hover"><tr className="border-b border-border">
           <th className={TH}>Kỳ</th><th className={TH}>Trạng thái</th><th className={TH}>Mở ngày</th><th className={TH}>Kết sổ</th>
           <th className={clsx(TH, "text-right")}>Đơn</th><th className={clsx(TH, "text-right")}>Phiếu nhập</th><th className={clsx(TH, "text-right")}>Thu / Chi</th><th className={TH}><span className="sr-only">Xem</span></th>
         </tr></thead>
@@ -39,12 +60,13 @@ export function PeriodList({ periods }: { periods: PeriodRow[] }) {
               <td className={clsx(TD, "tabular text-right")}>{formatNumber(p.counts.orders)}</td>
               <td className={clsx(TD, "tabular text-right")}>{formatNumber(p.counts.purchases)}</td>
               <td className={clsx(TD, "tabular text-right")}>{formatNumber(p.counts.receipts)} / {formatNumber(p.counts.payments)}</td>
-              <td className={TD}><Link href={`/period/history/${p.id}`} aria-label={`Xem ${p.name}`} className="flex h-9 w-9 items-center justify-center rounded-sm text-fg-secondary hover:bg-active"><Eye size={16} aria-hidden /></Link></td>
+              <td className={TD}><Link href={`/period/history/${p.id}`} aria-label={`Xem ${p.name}`} title={`Xem ${p.name}`} className="flex h-9 w-9 items-center justify-center rounded-sm text-fg-secondary hover:bg-active focus-visible:outline focus-visible:outline-accent"><Eye size={16} aria-hidden /></Link></td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
