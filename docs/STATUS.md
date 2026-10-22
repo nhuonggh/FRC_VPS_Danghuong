@@ -1,5 +1,7 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
+> **2026-10-22 — Danh sách đơn: bộ lọc 1 dòng kiểu danh sách chuyến:** `OrderListControls` bỏ panel "Bộ lọc" + nút Áp dụng; còn ô tìm kiếm + MultiSelectFilter Nhóm khách hàng / Người tạo / Giao hàng / Thanh toán / Ghi nhận xuất kho + QuickTimeFilter (lọc ngay khi chọn). Ẩn ô mã đơn, tên/mã khách, số bản ghi/trang (mã/khách tìm qua ô tìm kiếm). Không migration.
+
 > **2026-10-21 (bổ sung) — Báo cáo Tiêu hao thực tế / Đối chiếu định mức lấy theo cờ `canUseAsMaterial` (chưa commit, chưa nghiệm thu trình duyệt, không migration):** khách chốt 2 phiếu kiểm kho (KK000001/2) nhưng 2 báo cáo trống vì `src/server/reports/consumption.ts` chỉ lấy `kind = NVL`; mã nhập loại Hàng hóa/Phụ kiện bị bỏ. Nay lọc `canUseAsMaterial` (khớp định mức). Test `tests/reports/reports.test.ts` dùng mã `HANG` + cờ bật. Cần deploy `main` mới hiện số cho khách.
 
 > **2026-10-21 (bổ sung) — Sửa phiếu nhập: đổi sản phẩm của dòng cuối không lưu được (đã sửa, chưa nghiệm thu trình duyệt):** chọn SP ở dòng cuối tự mở thêm 1 dòng trống (`useLineEntry`), dòng trống này ẩn/không bị bỏ khi sửa phiếu đã lập nên zod báo lỗi ngầm, Lưu không làm gì. `PurchaseLinesFields`/`PurchaseFormFields` thêm prop `noAutoRow`; `PurchaseDetail` bật cho cả "Chỉnh sửa nội dung phiếu" lẫn sửa theo dòng. Test `purchase-tabs.test.tsx` có ca đổi SP rồi Lưu.
