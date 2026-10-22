@@ -13,6 +13,7 @@ import { cancelSaleOrderTx } from "@/server/sales/lifecycle";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { exportReportXlsx } from "@/server/reports/export";
+import { getDebtItemDetail } from "@/server/reports/debt-detail";
 import { runReport } from "@/server/reports/queries";
 import { REPORT_FILTER_KEYS } from "@/server/reports/types";
 import { prisma, resetDb } from "../helpers/db";
@@ -153,6 +154,20 @@ describe("73 — đối chiếu công nợ", () => {
     expect(r.summary).toContainEqual({ label: "Khoản mục lệch", value: 1, tone: "danger" });
     expect(r.summary).toContainEqual({ label: "Tổng lệch tuyệt đối", value: "5000", money: true, tone: "danger" });
     expect(r.notes!.join(" ")).toContain("mồ côi (chứng từ đã hủy/không còn): 1");
+  });
+
+  it("chi tiết khoản mục: liệt kê từng chứng từ, dòng sổ mồ côi nổi lên đầu", async () => {
+    await tx((t) => createReceipt(t, actor, receiptSchema.parse({ type: "THU_NO", partnerId: a.id, orderId: null, cashAccountId: cash.id, amount: 70_000, date: "2026-09-15", note: "" }), NOW));
+    let d = await getDebtItemDetail(prisma, actor, "receipt");
+    expect(d).toMatchObject({ ledger: "70000", source: "70000", diff: "0" });
+    expect(d.rows).toHaveLength(1);
+    expect(d.rows[0]).toMatchObject({ status: "OK", partner: "Khách A", ledger: "70000", source: "70000" });
+    await prisma.partnerLedger.create({ data: { periodId: w.periodId, partnerId: a.id, credit: 5_000, docType: "RECEIPT", docId: 987654, at: NOW, createdBy: w.userId } });
+    d = await getDebtItemDetail(prisma, actor, "receipt");
+    expect(d.diff).toBe("5000"); // khớp với dòng "Phiếu thu" ở màn đối chiếu
+    expect(d.rows[0]).toMatchObject({ status: "ORPHAN", ledger: "5000", diff: "5000" });
+    expect(d.rows[1].status).toBe("OK");
+    await expect(getDebtItemDetail(prisma, { userId: w.userId, perms: new Set() }, "receipt")).rejects.toThrow();
   });
 });
 

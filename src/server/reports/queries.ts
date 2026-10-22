@@ -160,17 +160,17 @@ async function debtReconciliation(db: Db): Promise<ReportResult> {
   ]);
   const by = new Map(ledger.map((l) => [l.docType, l]));
   const led = (t: string, side: "debit" | "credit") => sum(by.get(t)?._sum[side]);
-  const line = (label: string, ledgerAmt: Prisma.Decimal, source: Prisma.Decimal | null, note: string) => ({ item: label, ledger: ledgerAmt.toString(), source: source === null ? null : source.toString(), diff: source === null ? null : ledgerAmt.minus(source).toString(), note });
+  const line = (id: string, label: string, ledgerAmt: Prisma.Decimal, source: Prisma.Decimal | null, note: string) => ({ id, item: label, ledger: ledgerAmt.toString(), source: source === null ? null : source.toString(), diff: source === null ? null : ledgerAmt.minus(source).toString(), note });
   const rows = [
-    line("Phiếu thu (ghi có, không tính tiền lái xe/chuyến)", led("RECEIPT", "credit"), sum(receipts._sum.amount), "Sổ = Σ phiếu thu có đối tác chưa hủy"),
-    line("Phiếu chi trả NCC / hoàn khách (ghi nợ)", led("PAYMENT", "debit"), sum(payments._sum.amount), "Chưa tính dòng điều chỉnh sau kiểm"),
-    line("Phiếu nhập (ghi có NCC)", led("PURCHASE", "credit"), sum(purchases._sum.purchaseTotal), "Sổ = Σ tổng phiếu nhập chưa hủy"),
-    line("Trả hàng (ghi có)", led("RETURN", "credit").plus(led("RETURN", "debit")), sum(returns._sum.totalAmount), "Gồm trả khách (ghi có) và trả NCC (ghi nợ)"),
-    line("Điều chỉnh công nợ (ròng)", led("DEBT_ADJ", "debit").minus(led("DEBT_ADJ", "credit")), sum(adjs._sum.amount), "Số có dấu: tăng nợ +, giảm nợ −"),
-    line("Phiếu giao (ghi nợ khách)", led("DELIVERY", "debit"), null, "Đối chiếu theo từng đơn ở màn Công nợ"),
-    line("Tiền lái xe thu (ghi có)", led("TRIP_COLLECT", "credit"), null, "Chuyển thành phiếu thu khi thủ quỹ xác nhận chuyến"),
-    line("Tiền bớt khi giao chuyến (ghi có)", led("TRIP_DISCOUNT", "credit"), null, "Lái xe giao hàng, khách được bớt — không vào quỹ"),
-    line("Tất toán chiết khấu trừ nợ (ghi có)", led("DISCOUNT_SETTLE", "credit"), null, ""),
+    line("receipt", "Phiếu thu (ghi có, không tính tiền lái xe/chuyến)", led("RECEIPT", "credit"), sum(receipts._sum.amount), "Sổ = Σ phiếu thu có đối tác chưa hủy"),
+    line("payment", "Phiếu chi trả NCC / hoàn khách (ghi nợ)", led("PAYMENT", "debit"), sum(payments._sum.amount), "Chưa tính dòng điều chỉnh sau kiểm"),
+    line("purchase", "Phiếu nhập (ghi có NCC)", led("PURCHASE", "credit"), sum(purchases._sum.purchaseTotal), "Sổ = Σ tổng phiếu nhập chưa hủy"),
+    line("return", "Trả hàng (ghi có)", led("RETURN", "credit").plus(led("RETURN", "debit")), sum(returns._sum.totalAmount), "Gồm trả khách (ghi có) và trả NCC (ghi nợ)"),
+    line("debt-adj", "Điều chỉnh công nợ (ròng)", led("DEBT_ADJ", "debit").minus(led("DEBT_ADJ", "credit")), sum(adjs._sum.amount), "Số có dấu: tăng nợ +, giảm nợ −"),
+    line("delivery", "Phiếu giao (ghi nợ khách)", led("DELIVERY", "debit"), null, "Đối chiếu theo từng đơn ở màn Công nợ"),
+    line("trip-collect", "Tiền lái xe thu (ghi có)", led("TRIP_COLLECT", "credit"), null, "Chuyển thành phiếu thu khi thủ quỹ xác nhận chuyến"),
+    line("trip-discount", "Tiền bớt khi giao chuyến (ghi có)", led("TRIP_DISCOUNT", "credit"), null, "Lái xe giao hàng, khách được bớt — không vào quỹ"),
+    line("discount-settle", "Tất toán chiết khấu trừ nợ (ghi có)", led("DISCOUNT_SETTLE", "credit"), null, ""),
   ];
   const bad = rows.filter((r) => r.diff !== null && !D(r.diff).isZero()).length;
   return {
