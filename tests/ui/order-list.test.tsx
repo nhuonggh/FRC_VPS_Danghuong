@@ -26,32 +26,16 @@ describe("order list reference interactions", () => {
     expect(target.searchParams.get("page")).toBeNull();
     expect(activeOrderTab(params)).toBe("delivered");
   });
-  it("filter typing is staged until Apply", async () => {
+  it("shows the one-row filters and hides code/customer/page-size fields", () => {
     render(<OrderListControls params={parseListParams({})} counts={counts} creators={[]} groups={[]} now={new Date()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "Mã đơn hàng" }), "DH001");
-    expect(push).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Áp dụng" }));
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("code=DH001"));
+    for (const name of [/Nhóm khách hàng/, /Người tạo/, /Giao hàng/, /Thanh toán/, /Ghi nhận xuất kho/]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bộ lọc" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Mã đơn hàng" })).not.toBeInTheDocument();
   });
-  it("mobile uses a bottom sheet, supports Escape, and discards unapplied changes", async () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
-    render(<OrderListControls params={parseListParams({})} counts={counts} creators={[]} groups={[]} now={new Date()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
-    expect(screen.getByRole("dialog", { name: "Bộ lọc đơn hàng" })).toBeInTheDocument();
-    await userEvent.type(screen.getByRole("textbox", { name: "Mã đơn hàng" }), "DH002");
-    await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
-  });
-  it("customer group search remains usable inside the mobile dialog", async () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+  it("customer group filter applies immediately", async () => {
     render(<OrderListControls params={parseListParams({})} counts={counts} creators={[]} groups={[{ value: "1", label: "Đại lý" }]} now={new Date()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
-    await userEvent.click(screen.getByRole("combobox", { name: "Nhóm khách hàng" }));
-    await userEvent.click(await screen.findByRole("option", { name: "Đại lý" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Áp dụng" }));
+    await userEvent.click(screen.getByRole("button", { name: /Nhóm khách hàng/ }));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Đại lý" }));
     expect(push).toHaveBeenCalledWith(expect.stringContaining("group=1"));
   });
 });
