@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EmptyState, MultiSelectFilter, QuickTimeFilter, SearchBox, StatCard } from "@/components/ui";
+import { EmptyState, MultiSelectFilter, PageNotes, QuickTimeFilter, SearchBox, StatCard } from "@/components/ui";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
 import { buildExportHref, buildListHref, type ListParams } from "@/lib/query-params";
 import { ClickableRow } from "./ClickableRow";
@@ -23,11 +23,10 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
   const neg = (row: Record<string, Cell>) => report.negativeKey !== undefined && Number(row[report.negativeKey] ?? 0) < 0;
   const orderProfit = report.key === "order-profit";
   const debtRecon = report.key === "debt-reconciliation";
-  const notesBelow = true;
   const closeHref = buildListHref(base, params, { filters: { order: [] } });
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 xl:flex-row">
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+      {/* Đầu trang (tiêu đề, KPI, bộ lọc) cố định; chỉ bảng cuộn; ghi chú ghim đáy khung. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{report.title}</h1>
         <Link href={buildExportHref(`/api/reports/${report.key}/export`, orderProfit ? { ...params, filters: { ...params.filters, order: [] } } : params)} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">Xuất Excel</Link>
@@ -49,8 +48,8 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
           <QuickTimeFilter basePath={base} params={params} />
         </div>
       )}
-      {!notesBelow && report.notes?.map((n) => <p key={n} className="text-sm text-fg-secondary">{n}</p>)}
-      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-surface">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-md border border-border bg-surface">
         {report.rows.length === 0 ? <EmptyState kind="empty" title="Không có dữ liệu trong khoảng thời gian này" /> : (
           <table className="w-full min-w-[720px] text-sm">
             <thead className="sticky top-0 z-10 bg-hover"><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary">{report.columns.map((c) => <th key={c.key} className={`px-3 py-2 ${c.kind === "money" || c.kind === "qty" || c.kind === "pct" || c.kind === "int" ? "text-right" : ""}`}>{c.label}</th>)}</tr></thead>
@@ -71,12 +70,11 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
           </table>
         )}
       </div>
-      {notesBelow && !!report.notes?.length && <section aria-label="Ghi chú báo cáo" className="shrink-0 space-y-2 rounded-md border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold">Ghi chú</h2>
-        {report.notes.map((note) => <p key={note} className="text-sm text-fg-secondary">{note}</p>)}
-      </section>}
-    </div>
-    {orderProfit && params.filters.order?.length ? <OrderProfitPanel detail={report.orderDetail ?? null} closeHref={closeHref} /> : null}
+      {orderProfit && params.filters.order?.length ? <OrderProfitPanel detail={report.orderDetail ?? null} closeHref={closeHref} /> : null}
+      </div>
+      {!!report.notes?.length && <PageNotes label="Ghi chú báo cáo">
+        {report.notes.map((note) => <p key={note}>{note}</p>)}
+      </PageNotes>}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { PageNotes } from "./PageNotes";
 
 export function ListPageLayout({
   title, description, actions, stats, statsClassName, filters, footer, children, notes,
@@ -28,7 +29,7 @@ export function ListPageLayout({
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
         {footer}
       </div>
-      {notes && <section aria-label="Ghi chú" className="rounded-md border border-border bg-surface p-3 text-sm text-fg-secondary">{notes}</section>}
+      {notes && <PageNotes>{notes}</PageNotes>}
     </div>
   );
 }
