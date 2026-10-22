@@ -1,5 +1,6 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
+> **2026-10-22 — Kỳ kế toán: đồng bộ giao diện theo crm-design (chưa nghiệm thu trình duyệt, không migration):** Kết sổ cuối kỳ + Tra cứu kỳ bỏ khung `max-w-6xl`, thêm StatCard, nhóm điều kiện dạng card, chi tiết gập `<details>`; Tra cứu kỳ dùng `ListPageLayout` (footer tổng), mobile hiện dạng card. Test close-checklist/close-panel/period xanh.
 > **2026-10-22 — Đối chiếu công nợ: ghi chú ghim đáy + bấm dòng xem chi tiết (chưa commit, chưa nghiệm thu trình duyệt, không migration):** `ReportView` giờ là khung cố định chiều cao (vùng bảng cuộn, header/dòng tổng dính, khối Ghi chú luôn ở đáy). Bấm dòng khoản mục (`ClickableRow`) → trang đầy đủ `/reports/debt-reconciliation/[item]` (`src/server/reports/debt-detail.ts`): từng chứng từ với số theo sổ vs theo chứng từ, trạng thái Khớp/Lệch/Thiếu dòng sổ/Chứng từ hủy-mất/Ngoài phạm vi, link sang chứng từ, lọc "Chỉ dòng lệch". Test `reports.test.ts` thêm ca chi tiết khoản mục.
 
 > **2026-10-22 — Danh sách đơn: bộ lọc 1 dòng kiểu danh sách chuyến:** `OrderListControls` bỏ panel "Bộ lọc" + nút Áp dụng; còn ô tìm kiếm + MultiSelectFilter Nhóm khách hàng / Người tạo / Giao hàng / Thanh toán / Ghi nhận xuất kho + QuickTimeFilter (lọc ngay khi chọn). Ẩn ô mã đơn, tên/mã khách, số bản ghi/trang (mã/khách tìm qua ô tìm kiếm). Không migration.

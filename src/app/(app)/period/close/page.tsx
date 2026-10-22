@@ -13,7 +13,7 @@ export default async function PeriodClosePage() {
   // Số xem trước chỉ tính khi không còn mục chặn (kết sổ chưa được phép thì khỏi tốn truy vấn)
   const preview = checklist.blockerCount === 0 ? await previewClose(prisma, actor) : null;
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="w-full space-y-4">
       <CloseChecklist checklist={checklist} />
       <ClosePanel periodName={checklist.period.name} blockerCount={checklist.blockerCount} warningCount={checklist.warningCount} preview={preview?.preview ?? null} cashNames={await cashNames(preview?.preview.cash.map((c) => c.accountId) ?? [])} />
     </div>

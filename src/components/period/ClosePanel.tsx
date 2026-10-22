@@ -87,7 +87,7 @@ export function ClosePanel({ periodName, blockerCount, warningCount, preview, ca
   }
 
   return (
-    <section aria-labelledby="close-action" className="space-y-4">
+    <section aria-labelledby="close-action" className="space-y-4 rounded-md border border-border bg-surface p-4">
       <h2 id="close-action" className="border-b border-border pb-3 text-base font-semibold">Kết sổ</h2>
       {blockerCount > 0 ? (
         <p className="rounded-md border border-dashed border-border p-4 text-sm text-fg-secondary">Còn {blockerCount} mục chặn ở trên. Xử lý hết rồi mới kết sổ được.</p>
