@@ -1,7 +1,7 @@
 import type { PermissionCode } from "@/lib/permissions/catalog";
 
 /**
- * 9 mẫu in (M1–M9) + phiếu chuyến. `docType` trùng với `print_templates.docType` (mã loại chứng từ khách cấu hình ở Hệ thống → Công ty & mẫu in).
+ * 13 mẫu in (M1–M13) + phiếu chuyến, tất cả in trực tiếp bằng HTML (không còn Apps Script). `docType` trùng với `print_templates.docType` (mã loại chứng từ khách cấu hình ở Hệ thống → Công ty & mẫu in).
  * Data contract có `version` — đổi cấu trúc JSON gửi đi phải tăng CONTRACT_VERSION và cập nhật docs/infra/print/README.md + apps-script.gs.
  */
 export const CONTRACT_VERSION = 1;
@@ -13,10 +13,14 @@ export const PRINT_DOCS: readonly PrintDocDef[] = [
   { docType: "DELIVERY_NOTE", code: "M3", label: "Phiếu giao nhận", perm: "order.view", fileTag: "PhieuGiao", supported: true },
   { docType: "RECEIPT", code: "M4", label: "Phiếu thu", perm: "receipt.manage", fileTag: "PhieuThu", supported: true },
   { docType: "PAYMENT", code: "M5", label: "Phiếu chi", perm: "payment.manage", fileTag: "PhieuChi", supported: true },
-  { docType: "PRODUCTION_ORDER", code: "M6", label: "Lệnh sản xuất", perm: "production.manage", fileTag: "LenhSX", supported: false },
+  { docType: "PRODUCTION_ORDER", code: "M6", label: "Lệnh sản xuất", perm: "production.manage", fileTag: "LenhSX", supported: true },
   { docType: "DEBT_STATEMENT", code: "M7", label: "Đối chiếu công nợ", perm: "debt.view", fileTag: "DoiChieuCongNo", supported: true },
   { docType: "PURCHASE_RECEIPT", code: "M8", label: "Phiếu nhập hàng", perm: "purchase_price.view", fileTag: "PhieuNhap", supported: true },
-  { docType: "STOCKTAKE", code: "M9", label: "Phiếu kiểm kho", perm: "stocktake.manage", fileTag: "KiemKho", supported: false },
+  { docType: "STOCKTAKE", code: "M9", label: "Phiếu kiểm kho", perm: "stocktake.manage", fileTag: "KiemKho", supported: true },
+  { docType: "GOODS_RETURN", code: "M10", label: "Phiếu trả hàng", perm: "return.manage", fileTag: "PhieuTra", supported: true },
+  { docType: "LOSS_ADJUST", code: "M11", label: "Phiếu hao hụt / xuất hủy", perm: "stock_adjust.manage", fileTag: "HaoHut", supported: true },
+  { docType: "DISCOUNT_SETTLEMENT", code: "M12", label: "Phiếu tất toán chiết khấu", perm: "discount.settle", fileTag: "TatToanCK", supported: true },
+  { docType: "SUPPLIER_ORDER", code: "M13", label: "Đơn đặt hàng nhà cung cấp", perm: "purchase_price.view", fileTag: "DatHangNCC", supported: true },
   { docType: "TRIP_SHEET", code: "M3b", label: "Phiếu giao nhận theo chuyến", perm: "trip.manage", fileTag: "PhieuChuyen", supported: true },
 ] as const;
 export const printDoc = (docType: string) => PRINT_DOCS.find((d) => d.docType === docType);

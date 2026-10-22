@@ -32,7 +32,6 @@ describe("API in chứng từ", () => {
     expect((await POST(req("POST"), ctx("NOPE", "1"))).status).toBe(404);
     const r = await POST(req("POST"), ctx("sale_invoice", "1")); expect(r.status).toBe(409);
     expect((await r.json()).error).toContain("Công ty & mẫu in");
-    expect((await POST(req("POST"), ctx("PRODUCTION_ORDER", "1"))).status).toBe(409);
     loginAs(nv);
     expect((await POST(req("POST"), ctx("SALE_INVOICE", "1"))).status).toBe(403);
     loginAs(bh);

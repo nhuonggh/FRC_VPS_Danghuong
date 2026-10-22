@@ -10,6 +10,13 @@ import { getQuote } from "@/server/quotes/queries";
 import { getOrder } from "@/server/sales/queries";
 import { getVoucher } from "@/server/cash/queries";
 import { getTrip } from "@/server/trips/queries";
+import { getReturn } from "@/server/returns/queries";
+import { getProductionOrder } from "@/server/production/queries";
+import { LOSS_TYPE_LABEL } from "@/server/stock-adjust/schemas";
+import { getLossAdjust } from "@/server/stock-adjust/service";
+import { SETTLE_METHOD_LABEL } from "@/server/discount/schemas";
+import { orderInclude, progress } from "@/server/supplier-orders/service";
+import { getStocktake, STOCKTAKE_LABEL } from "@/server/stocktake/queries";
 import { partnerScopeWhere } from "@/lib/permissions/scope";
 import type { ContractBody } from "./types";
 
@@ -104,6 +111,69 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
         doc: { code: t.code, date: formatDate(t.date), vehicle: t.vehiclePlate, driver: t.driverName, assistant: t.assistantName ?? "", route: t.routeName ?? "", note: t.note ?? "", status: t.statusLabel },
         lines: t.stops.flatMap((s) => s.lines.filter((l) => Number(l.remaining) > 0 || s.result).map((l, i) => ({ stop: String(s.seq), order: s.orderCode, customer: s.partnerName, phone: s.phone ?? "", address: s.address ?? "", no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.remaining), due: i === 0 ? money(s.suggestedDue) : "" }))),
         totals: { stops: String(t.stops.length) },
+      };
+    }
+    case "GOODS_RETURN": {
+      const r = await getReturn(db, actor, docId);
+      const row = await db.goodsReturn.findUnique({ where: { id: docId }, select: { partnerId: true } });
+      const supplier = r.kind === "SUPPLIER";
+      const total = (supplier ? r.purchaseTotal : r.returnTotal) ?? "";
+      const deduction = r.returnDeduction ?? "0";
+      return {
+        docCode: r.code, partner: await partnerOf(db, row?.partnerId ?? null),
+        doc: { code: r.code, kind: supplier ? "Trả nhà cung cấp" : "Khách trả hàng", date: formatDate(r.at), orderCode: r.orderCode ?? "", note: r.note ?? "", createdBy: r.createdByName ?? "", status: r.isCancelled ? "ĐÃ HỦY" : "" },
+        lines: r.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.qty), price: money(supplier ? l.purchasePrice : l.salePrice), amount: money(supplier ? l.purchaseAmount : l.lineAmount), note: l.note ?? "", processing: "" })),
+        totals: { total: money(total), deduction: Number(deduction) ? money(deduction) : "", deductionNote: r.deductionNote ?? "", net: total === "" ? "" : money(D(total).minus(deduction).toString()) },
+      };
+    }
+    case "PRODUCTION_ORDER": {
+      const p = await getProductionOrder(db as PrismaClient, actor, docId);
+      const outs = (p.outputs ?? []).map((o, i) => ({ section: "Thành phẩm", no: String(i + 1), code: o.productCode, name: o.productName, spec: [o.widthMm ? `Khổ ${formatQty(o.widthMm)} mm` : "", o.stripCount > 1 ? `${o.stripCount} dải` : "", o.lengthM ? `Dài ${formatQty(o.lengthM)} m` : ""].filter(Boolean).join(" · "), unit: o.baseUnit, qty: formatQty(o.qty) }));
+      const mats = p.materials.map((m, i) => ({ section: "Nguyên vật liệu tiêu hao", no: String(i + 1), code: m.productCode, name: m.productName, spec: "", unit: m.baseUnit, qty: formatQty(m.qty) }));
+      return {
+        docCode: p.code, partner: null,
+        doc: { code: p.code, date: formatDate(p.at), note: p.note ?? "", createdBy: p.createdByName ?? "", status: p.isCancelled ? "ĐÃ HỦY" : "" },
+        lines: [...outs, ...mats], totals: {},
+      };
+    }
+    case "STOCKTAKE": {
+      const s = await getStocktake(db as PrismaClient, actor, docId);
+      return {
+        docCode: s.code, partner: null,
+        doc: { code: s.code, date: formatDate(s.at), note: s.note ?? "", createdBy: s.createdByName ?? "", statusLabel: STOCKTAKE_LABEL[s.status] ?? s.status, status: s.status === "CANCELLED" ? "ĐÃ HỦY" : "" },
+        lines: s.lines.map((l) => ({ no: "", code: l.productCode, name: l.productName, unit: l.baseUnit, systemQty: l.systemQty === null ? "" : formatQty(l.systemQty), actualQty: formatQty(l.actualQty), diff: l.diff === null ? "" : formatQty(l.diff) })).map((l, i) => ({ ...l, no: String(i + 1) })),
+        totals: {},
+      };
+    }
+    case "LOSS_ADJUST": {
+      const a = await getLossAdjust(db as PrismaClient, actor, docId);
+      return {
+        docCode: a.code, partner: null,
+        doc: { code: a.code, kind: LOSS_TYPE_LABEL[a.type], date: formatDate(a.at), note: a.note ?? "", createdBy: a.createdByName ?? "", status: a.isCancelled ? "ĐÃ HỦY" : "" },
+        lines: a.lines.map((l, i) => ({ no: String(i + 1), code: l.productCode, name: l.productName, unit: l.baseUnit, qty: formatQty(l.qty) })),
+        totals: {},
+      };
+    }
+    case "DISCOUNT_SETTLEMENT": {
+      const s = await db.discountSettlement.findFirst({ where: { id: docId, partner: partnerScopeWhere(actor) }, include: { payment: { select: { code: true } } } });
+      if (!s) throw new DomainError("Không tìm thấy phiếu tất toán.", 404);
+      const creator = await db.user.findUnique({ where: { id: s.createdBy }, select: { fullName: true } });
+      return {
+        docCode: s.code, partner: await partnerOf(db, s.partnerId),
+        doc: { code: s.code, date: formatDate(s.at), method: SETTLE_METHOD_LABEL[s.method], payment: s.payment?.code ?? "", note: s.note ?? "", createdBy: creator?.fullName ?? "", status: s.isCancelled ? "ĐÃ HỦY" : "" },
+        lines: [], totals: { amount: money(s.amount.toString()) },
+      };
+    }
+    case "SUPPLIER_ORDER": {
+      const o = await db.supplierOrder.findFirst({ where: { id: docId, partner: partnerScopeWhere(actor) }, include: orderInclude });
+      if (!o) throw new DomainError("Không tìm thấy đơn đặt hàng.", 404);
+      const types = new Map((await db.processingType.findMany({ where: { id: { in: o.lines.flatMap((l) => (l.processingTypeId ? [l.processingTypeId] : [])) } }, select: { id: true, name: true } })).map((t) => [t.id, t.name]));
+      const cancelled = progress(o) === "CANCELLED";
+      return {
+        docCode: o.code, partner: await partnerOf(db, o.partnerId),
+        doc: { code: o.code, date: formatDate(o.date), note: o.note, createdBy: o.creator.fullName, status: cancelled ? "ĐÃ HỦY" : "" },
+        lines: o.lines.map((l, i) => ({ no: String(i + 1), code: l.product.code, name: l.product.name, unit: l.unit, qty: formatQty(l.qty.toString()), price: money(l.purchasePrice.toString()), amount: money(D(l.qty).times(l.purchasePrice).toString()), processing: (l.processingTypeId && types.get(l.processingTypeId)) || "", note: [l.note, l.expectedDate ? `Dự kiến nhận: ${formatDate(l.expectedDate)}` : ""].filter(Boolean).join(" · ") })),
+        totals: { total: money(o.lines.reduce((s, l) => s.plus(D(l.qty).times(l.purchasePrice)), D(0)).toString()) },
       };
     }
     default:

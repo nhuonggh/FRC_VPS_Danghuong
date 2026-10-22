@@ -47,7 +47,7 @@ beforeEach(async () => {
   await engine(w)([w.p.id], (ctx) => buy(ctx, w.p.id, 100, 10_000, T(0), 1));
 });
 
-describe("data contract 9 mẫu", () => {
+describe("data contract 13 mẫu", () => {
   it("hóa đơn bán hàng: công ty (theo cờ), khách, dòng có chiết khấu theo dòng + tổng chiết khấu, đã thu, còn phải trả; có version", async () => {
     const o = await order();
     await tx((t) => createReceipt(t, actor, receiptSchema.parse({ type: "THU_NO", partnerId: customer.id, orderId: o.id, cashAccountId: cash.id, amount: 50_000, date: "2026-09-15", note: "" }), NOW));
@@ -78,8 +78,8 @@ describe("data contract 9 mẫu", () => {
     const trip = await tx((t) => createTrip(t, actor, tripSchema.parse({ date: "2026-09-16", routeId: null, vehicleId: v.id, driverId: d.id, assistantId: null, note: "", orderIds: [tripOrder.id] }), NOW));
     const ts = await buildContract(prisma, actor, "TRIP_SHEET", trip.id, NOW);
     expect(ts.doc).toMatchObject({ vehicle: "51C-1", driver: "Lái A" }); expect(ts.lines[0]).toMatchObject({ customer: "Khách Đạt", address: "Q12" });
-    await expect(buildContract(prisma, actor, "PRODUCTION_ORDER", 1, NOW)).rejects.toMatchObject({ code: "PRINT_UNSUPPORTED" });
-    expect(PRINT_DOCS.filter((x) => x.code.startsWith("M") && !x.code.endsWith("b"))).toHaveLength(9);
+    await expect(buildContract(prisma, actor, "UNKNOWN", 1, NOW)).rejects.toMatchObject({ code: "PRINT_UNSUPPORTED" });
+    expect(PRINT_DOCS.filter((x) => x.code.startsWith("M") && !x.code.endsWith("b"))).toHaveLength(13);
   });
   it("người thiếu quyền giá không in được hóa đơn/báo giá; không thấy chứng từ của khách người khác", async () => {
     const o = await order();
@@ -172,7 +172,7 @@ describe("gọi webhook Apps Script (D-38)", () => {
     expect(() => assertWebhookUrl("http://script.google.com/x")).toThrow(); expect(isAllowedFileUrl("https://drive.google.com/file/d/1/view")).toBe(true); expect(isAllowedFileUrl("javascript:alert(1)")).toBe(false);
     await expect(callPrintWebhook(HOOK, { secret: SECRET }, { fetchImpl: mockFetch(() => ok("A")).fetchImpl })).resolves.toMatchObject({ fileId: "A" });
   });
-  it("chưa bật/thiếu cấu hình mẫu: thông báo cách cấu hình; loại chưa hỗ trợ (lệnh SX, kiểm kho) bị chặn", async () => {
+  it("chưa bật/thiếu cấu hình mẫu: thông báo cách cấu hình; loại lạ bị chặn", async () => {
     const o = await order();
     const f = mockFetch(() => ok("F")).fetchImpl;
     await expect(printDocument(prisma, actor, "SALE_INVOICE", o.id, { now: NOW, fetchImpl: f })).rejects.toMatchObject({ code: "PRINT_NO_TEMPLATE" });
@@ -182,7 +182,6 @@ describe("gọi webhook Apps Script (D-38)", () => {
     await expect(printDocument(prisma, actor, "SALE_INVOICE", o.id, { now: NOW, fetchImpl: f })).rejects.toMatchObject({ code: "PRINT_TEMPLATE_INCOMPLETE" });
     await prisma.printTemplate.update({ where: { id: t.id }, data: { secretCiphertext: "v1.bad.bad.bad" } });
     await expect(printDocument(prisma, actor, "SALE_INVOICE", o.id, { now: NOW, fetchImpl: f })).rejects.toMatchObject({ code: "PRINT_SECRET_UNREADABLE" });
-    await expect(printDocument(prisma, actor, "PRODUCTION_ORDER", 1)).rejects.toMatchObject({ code: "PRINT_UNSUPPORTED" });
     await expect(printDocument(prisma, actor, "NOPE", 1)).rejects.toMatchObject({ status: 404 });
   });
 });

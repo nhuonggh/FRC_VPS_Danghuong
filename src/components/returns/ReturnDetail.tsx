@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
@@ -10,7 +11,7 @@ import type { ReturnDetailDTO } from "@/server/returns/queries";
 
 export const RETURN_KIND_LABEL = { BY_ORDER: "Trả theo đơn", BY_PRODUCT: "Trả theo sản phẩm", SUPPLIER: "Trả nhà cung cấp" } as const;
 
-export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canManage: boolean }) {
+export function ReturnDetail({ ret, canManage, canPrint = false }: { ret: ReturnDetailDTO; canManage: boolean; canPrint?: boolean }) {
   const router = useRouter();
   const nav = useDetailNav(["info", "lines"]);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -20,8 +21,9 @@ export function ReturnDetail({ ret, canManage }: { ret: ReturnDetailDTO; canMana
   const backHref = supplier ? "/returns/to-supplier" : ret.kind === "BY_ORDER" ? "/returns/by-order" : "/returns/by-product";
   async function cancel(reason: string) { await apiFetch(`/api/returns/${ret.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
 
-  const actions = !ret.isCancelled && canManage
-    ? <button type="button" onClick={() => setCancelOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft">Hủy phiếu trả</button>
+  const printBtn = canPrint && !ret.isCancelled ? <PrintButton docType="GOODS_RETURN" docId={ret.id} label="In phiếu trả" /> : null;
+  const actions = (printBtn || (!ret.isCancelled && canManage))
+    ? <div className="flex flex-wrap gap-2">{printBtn}{!ret.isCancelled && canManage && <button type="button" onClick={() => setCancelOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-soft">Hủy phiếu trả</button>}</div>
     : undefined;
 
   return (

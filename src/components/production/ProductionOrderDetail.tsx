@@ -1,12 +1,13 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatDateTime, formatQty } from "@/lib/format";
 import type { ProductionDetailDTO } from "@/server/production/queries";
 
-export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO }) {
+export function ProductionOrderDetail({ order, canPrint = false }: { order: ProductionDetailDTO; canPrint?: boolean }) {
   const router = useRouter(), nav = useDetailNav(["info", "outputs", "lines"]), [open, setOpen] = useState(false);
   const showCost = order.unitCost !== undefined, multi = (order.outputs?.length ?? 0) > 1;
   const outputs = order.outputs ?? [];
@@ -15,7 +16,7 @@ export function ProductionOrderDetail({ order }: { order: ProductionDetailDTO })
   return <div className="space-y-4">
     {order.isCancelled && <div role="status" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">Lệnh đã hủy. Lý do: {order.cancelReason}.</div>}
     <DetailPage backHref="/production/orders" backLabel="Quay lại lệnh sản xuất"
-      headerActions={!order.isCancelled ? <button type="button" onClick={() => setOpen(true)} className="h-11 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy lệnh</button> : undefined}
+      headerActions={!order.isCancelled ? <div className="flex flex-wrap gap-2">{canPrint && <PrintButton docType="PRODUCTION_ORDER" docId={order.id} label="In lệnh sản xuất" />}<button type="button" onClick={() => setOpen(true)} className="h-11 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy lệnh</button></div> : undefined}
       summary={{ title: order.code, code: multi ? `${outputs.length} sản phẩm đầu ra` : `${order.productCode} — ${order.productName}`, badges: [{ label: order.isCancelled ? "Đã hủy" : "Hiệu lực", tone: order.isCancelled ? "danger" : "success" }], facts: [{ label: "Ngày", value: formatDate(order.at) }, { label: multi ? "Sản phẩm đầu ra" : "Số lượng", value: multi ? String(outputs.length) : `${formatQty(order.qty)} ${order.baseUnit}` }, ...(showCost && !multi ? [{ label: "Giá thành/đv", value: order.unitCost ? formatCurrency(order.unitCost) : "—" }] : []), { label: "Người lập", value: order.createdByName ?? "—" }] }}
       tabs={[
         { key: "info", label: "Thông tin chung", render: () => <dl className="grid gap-x-8 gap-y-2 md:grid-cols-2"><DetailField label="Ghi chú">{order.note}</DetailField><DetailField label="Thời điểm ghi sổ">{formatDateTime(order.at)}</DetailField>{showCost && <DetailField label="Tổng giá thành đầu ra">{order.totalCost ? formatCurrency(order.totalCost) : "—"}</DetailField>}</dl> },

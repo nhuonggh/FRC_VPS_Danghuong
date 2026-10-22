@@ -7,6 +7,7 @@ import { parseDimNote } from "@/lib/length-expr";
 import { getCompany, type CompanyDTO } from "@/server/company/queries";
 import { getOrder } from "@/server/sales/queries";
 import { getPurchase } from "@/server/purchase/queries";
+import { getQuote } from "@/server/quotes/queries";
 import { DomainError } from "@/server/http/errors";
 import { hasLocalPrint } from "@/lib/local-print";
 import { buildContract } from "./contracts";
@@ -19,7 +20,10 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const e = escapeHtml;
 const image = (url: string, cls: string, alt: string) => /^(https:\/\/|\/(?!\/))/.test(url) ? `<img class="${cls}" src="${e(url)}" alt="${e(alt)}">` : "";
-type PrintType = keyof typeof styles;
+type PrintType = string;
+/** Ba mẫu gốc có CSS riêng; các phiếu còn lại dùng chung CSS của hóa đơn (cùng phong cách). */
+const styleOf = (type: string): keyof typeof styles => (type in styles ? type : type === "TRIP_SHEET" ? "DELIVERY_NOTE" : "SALE_INVOICE") as keyof typeof styles;
+const wordsOf = (formatted: string) => moneyInWords(formatted.split(",")[0].replace(/[^\d-]/g, "") || "0");
 type Line = Record<string, string>;
 export interface HtmlPrintDocument {
   type: PrintType; body: ContractBody; company: CompanyDTO; signer: string; footer: string; qr: string;
@@ -104,7 +108,32 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
       return { ...line, note: dim && !full ? dim.user : source.orderLine.note ?? "", qty: dim ? formatQty(source.qty.times(dim.ratio).toString()) : line.qty, unit: dim ? "m²" : line.unit, issued: dim && full ? `${formatQty(String(dim.pieces))} Tấm` : `${formatQty(source.qty.toString())} ${line.unit}` };
     });
     if (note.lines.some((l) => parseDimNote(l.orderLine.note) && !l.qty.equals(l.orderLine.qty))) result.notices.push("Dòng giao một phần hiển thị lượng thực giao theo đơn vị lưu; chưa có phân bổ số tấm theo từng kích thước.");
-  } else {
+  } else if (type === "QUOTE") {
+    const q = await getQuote(db, actor, id);
+    if (body.doc.status === "CANCELLED") throw new DomainError("Báo giá đã hủy, không thể in.", 409);
+    result.lines = combineInvoiceCuts(result.lines, q.lines);
+    result.summary = [{ label: "Tổng cộng", value: body.totals.total, big: true }];
+    result.words = wordsOf(body.totals.total);
+  } else if (type === "RECEIPT" || type === "PAYMENT") {
+    result.summary = [{ label: "Số tiền", value: body.totals.amount, big: true }];
+    result.words = wordsOf(body.totals.amount);
+  } else if (type === "DEBT_STATEMENT") {
+    const t = body.totals;
+    result.summary = [{ label: "Số dư đầu kỳ", value: t.opening }, { label: "Phát sinh tăng", value: t.debit }, { label: "Phát sinh giảm", value: t.credit }, { label: "Số dư cuối", value: t.balance, big: true }];
+    if (t.discountBalance && t.discountBalance !== "0") result.summary.push({ label: "Chiết khấu tích lũy còn lại", value: t.discountBalance });
+    result.notices.push("Số dư dương: đối tác còn nợ công ty; số dư âm: công ty còn nợ đối tác. Đề nghị đối chiếu và ký xác nhận.");
+  } else if (type === "GOODS_RETURN") {
+    const t = body.totals;
+    result.summary = [{ label: "Tiền hàng trả", value: t.total }, ...(t.deduction ? [{ label: `Khấu trừ${t.deductionNote ? ` (${t.deductionNote})` : ""}`, value: t.deduction }] : []), { label: "Giá trị trả", value: t.net, big: true }];
+    if (t.net) result.words = wordsOf(t.net);
+  } else if (type === "DISCOUNT_SETTLEMENT") {
+    result.summary = [{ label: "Số tiền tất toán", value: body.totals.amount, big: true }];
+    result.words = wordsOf(body.totals.amount);
+    if (body.doc.method === "Chuyển vào lãi công ty") result.notices.push("Khoản chiết khấu này không chi cho khách mà được chuyển vào lãi công ty.");
+  } else if (type === "SUPPLIER_ORDER") {
+    result.summary = [{ label: "Tổng giá trị dự kiến", value: body.totals.total, big: true }];
+    result.words = wordsOf(body.totals.total);
+  } else if (type === "PURCHASE_RECEIPT") {
     const purchase = await getPurchase(db, actor, id);
     result.lines = result.lines.map((line, i) => ({ ...line, note: purchase.lines[i].rollInfo ?? "" }));
     result.summary = [
@@ -131,28 +160,82 @@ function product(line: Line) {
   return `<div class="pn"><b>${e(line.name)}</b><span class="tag">${e(line.processing)}</span></div>${detail}`;
 }
 
+const TITLES: Record<string, string> = {
+  SALE_INVOICE: "HÓA ĐƠN GIAO NHẬN HÀNG HÓA", DELIVERY_NOTE: "PHIẾU GIAO NHẬN", PURCHASE_RECEIPT: "PHIẾU NHẬP KHO", QUOTE: "BÁO GIÁ", RECEIPT: "PHIẾU THU", PAYMENT: "PHIẾU CHI",
+  DEBT_STATEMENT: "BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ", TRIP_SHEET: "PHIẾU GIAO NHẬN THEO CHUYẾN", PRODUCTION_ORDER: "LỆNH SẢN XUẤT", STOCKTAKE: "PHIẾU KIỂM KHO", GOODS_RETURN: "PHIẾU TRẢ HÀNG",
+  DISCOUNT_SETTLEMENT: "PHIẾU TẤT TOÁN CHIẾT KHẤU", SUPPLIER_ORDER: "ĐƠN ĐẶT HÀNG NHÀ CUNG CẤP", LOSS_ADJUST: "PHIẾU HAO HỤT / XUẤT HỦY",
+};
+const SIGNS: Record<string, string[]> = {
+  SALE_INVOICE: ["Khách hàng", "Lái xe giao hàng", "Kế toán bán hàng"], DELIVERY_NOTE: ["Người mua hàng", "Người giao hàng", "Thủ kho", "Nhân viên bán hàng"], PURCHASE_RECEIPT: ["Người giao hàng", "Thủ quỹ", "Người nhập hàng"],
+  QUOTE: ["Khách hàng", "Người lập báo giá"], RECEIPT: ["Người lập phiếu", "Người nộp tiền", "Thủ quỹ", "Kế toán"], PAYMENT: ["Người lập phiếu", "Người nhận tiền", "Thủ quỹ", "Kế toán"],
+  DEBT_STATEMENT: ["Đối tác xác nhận", "Kế toán", "Giám đốc"], TRIP_SHEET: ["Lái xe", "Phụ xe", "Thủ kho"], PRODUCTION_ORDER: ["Người lập lệnh", "Thợ sản xuất", "Thủ kho"],
+  STOCKTAKE: ["Người kiểm kho", "Thủ kho", "Kế toán", "Giám đốc"], GOODS_RETURN: ["Người trả hàng", "Người nhận hàng", "Thủ kho", "Kế toán"],
+  DISCOUNT_SETTLEMENT: ["Người lập phiếu", "Khách hàng", "Kế toán", "Giám đốc"], SUPPLIER_ORDER: ["Nhà cung cấp xác nhận", "Người đặt hàng", "Giám đốc"], LOSS_ADJUST: ["Người lập phiếu", "Thủ kho", "Kế toán", "Giám đốc"],
+};
+const td = (v: string | undefined, cls = "") => `<td${cls ? ` class="${cls}"` : ""}>${e(v)}</td>`;
+/** Bảng riêng của các phiếu không dùng khung hóa đơn. `group` gom dòng theo khóa, `groupLabel` dựng dòng tiêu đề nhóm. */
+interface TableSpec { cols: string[]; widths: number[]; row: (l: Line) => string; group?: (l: Line) => string; groupLabel?: (l: Line) => string }
+const TABLES: Record<string, TableSpec> = {
+  DEBT_STATEMENT: { cols: ["STT", "Ngày", "Loại chứng từ", "Số chứng từ", "Phát sinh tăng", "Phát sinh giảm", "Số dư"], widths: [6, 12, 24, 16, 14, 14, 14], row: (l) => td(l.no, "c") + td(l.date, "c") + td(l.docLabel) + td(l.docCode) + td(l.debit, "r") + td(l.credit, "r") + td(l.running, "r") },
+  TRIP_SHEET: {
+    cols: ["STT", "Hàng hóa", "ĐVT", "Số lượng"], widths: [8, 56, 14, 22], group: (l) => l.stop,
+    groupLabel: (l) => [`Điểm ${l.stop}: ${l.customer}`, l.phone, l.address, `Đơn ${l.order}`, l.due ? `Cần thu: ${l.due}` : ""].filter(Boolean).join(" · "),
+    row: (l) => td(l.no, "c") + `<td><b>${e(l.name)}</b> <span class="note">${e(l.code)}</span></td>` + td(l.unit, "c") + td(l.qty, "r"),
+  },
+  PRODUCTION_ORDER: { cols: ["STT", "Mã", "Tên sản phẩm", "Quy cách", "ĐVT", "Số lượng"], widths: [7, 14, 35, 20, 8, 16], group: (l) => l.section, groupLabel: (l) => l.section, row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.spec) + td(l.unit, "c") + td(l.qty, "r") },
+  LOSS_ADJUST: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Số lượng"], widths: [7, 16, 47, 10, 20], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.qty, "r") },
+  STOCKTAKE: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Tồn sổ sách", "Thực đếm", "Chênh lệch"], widths: [6, 13, 33, 8, 14, 14, 12], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.systemQty, "r") + td(l.actualQty, "r") + td(l.diff, "r") },
+};
+function tableHtml(spec: TableSpec, lines: Line[]): string {
+  let last: string | undefined;
+  const rows = lines.map((l) => {
+    const g = spec.group?.(l);
+    const head = spec.group && g !== last ? `<tr class="grp"><td colspan="${spec.cols.length}">${e(spec.groupLabel!(l))}</td></tr>` : "";
+    last = g;
+    return `${head}<tr>${spec.row(l)}</tr>`;
+  }).join("");
+  return `<table><colgroup>${spec.widths.map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr>${spec.cols.map((c) => `<th scope="col">${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+/** Khối thông tin dạng lưới (nhãn xám + giá trị đậm); bỏ ô trống. */
+const infoBlock = (items: [string, string | undefined, boolean?][]) => `<div class="cust">${items.filter(([, v]) => v).map(([label, v, full]) => `<div${full ? ' class="full"' : ""}><span>${e(label)}:</span> <b>${e(v)}</b></div>`).join("")}</div>`;
+
 export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: boolean, nonce: string): string {
   const { body: b, company: c, type } = model;
-  const invoice = type === "SALE_INVOICE", delivery = type === "DELIVERY_NOTE";
-  const title = invoice ? "HÓA ĐƠN GIAO NHẬN HÀNG HÓA" : delivery ? "PHIẾU GIAO NHẬN" : "PHIẾU NHẬP KHO";
+  const invoice = type === "SALE_INVOICE" || type === "QUOTE" || type === "GOODS_RETURN" || type === "SUPPLIER_ORDER", delivery = type === "DELIVERY_NOTE", purchase = type === "PURCHASE_RECEIPT", voucher = type === "RECEIPT" || type === "PAYMENT" || type === "DISCOUNT_SETTLEMENT";
+  const plain = delivery || type === "TRIP_SHEET";
+  const title = type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU");
   const bank = [c.bank.accountNo, c.bank.accountHolder, c.bank.bankName, c.bank.branch].filter(Boolean).join(" - ");
-  const header = `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co"><h1>${e(c.name)}</h1>${!delivery ? `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}` : ""}</div>${invoice && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
-  const partner = `<div class="cust"><div><span>${type === "PURCHASE_RECEIPT" ? "Nhà cung cấp" : "Khách hàng"}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div></div>`;
+  const header = `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co"><h1>${e(c.name)}</h1>${!plain ? `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}` : ""}</div>${type === "SALE_INVOICE" && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
+  const partnerLabel = purchase || type === "SUPPLIER_ORDER" || (type === "GOODS_RETURN" && b.doc.kind === "Trả nhà cung cấp") ? "Nhà cung cấp" : "Khách hàng";
+  const partnerBlock = `<div class="cust"><div><span>${partnerLabel}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div></div>`;
+  const p = b.partner, d = b.doc;
+  const info = type === "DISCOUNT_SETTLEMENT" ? infoBlock([["Khách hàng", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Hình thức", d.method], ["Phiếu chi liên quan", d.payment]])
+    : type === "LOSS_ADJUST" ? infoBlock([["Loại phiếu", d.kind], ["Người lập", d.createdBy]])
+    : voucher ? infoBlock([[type === "RECEIPT" ? "Người nộp tiền" : "Người nhận tiền", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Nội dung", d.type, true], ["Quỹ", d.account], ["Theo đơn hàng", d.order]])
+    : type === "DEBT_STATEMENT" ? infoBlock([["Đối tác", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true]])
+    : type === "TRIP_SHEET" ? infoBlock([["Biển số xe", d.vehicle], ["Lái xe", d.driver], ["Phụ xe", d.assistant], ["Tuyến", d.route], ["Số điểm giao", b.totals.stops]])
+    : type === "PRODUCTION_ORDER" ? infoBlock([["Người lập", d.createdBy]])
+    : type === "STOCKTAKE" ? infoBlock([["Người lập", d.createdBy], ["Trạng thái", d.statusLabel]])
+    : partnerBlock;
   const cols = invoice ? ["STT", "Tên sản phẩm", "Số lượng", "Đơn giá", "Thành tiền"] : delivery ? ["STT", "Hàng hóa", "Số lượng", "Lượng xuất"] : ["STT", "Tên sản phẩm", "Mã cuộn", "Khối lượng", "Ghi chú", "Tổng số lượng", "Đơn vị tính", "Đơn giá", "Tổng tiền"];
   const widths = invoice ? [7, 45, 16, 15, 17] : delivery ? [7, 55, 20, 18] : [5, 29, 7, 6, 6, 10, 6, 14, 17];
   const rows = model.lines.map((line, i) => `<tr><td class="c">${i + 1}</td><td>${product(line)}</td>${invoice ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>` : delivery ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.issued)}</td>` : `<td>${parseDimNote(line.note) ? "" : e(line.rollInfo)}</td><td></td><td></td><td class="r">${e(line.qty)}</td><td class="c">${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>`}</tr>`).join("");
   const sum = delivery ? "" : `<tr class="sum"><td colspan="${cols.length - 1}" class="c">${invoice ? "Tổng" : "Tổng tiền hàng"}</td><td class="r">${e(b.totals.total)}</td></tr>`;
-  const signs = invoice ? ["Khách hàng", "Lái xe giao hàng", "Kế toán bán hàng"] : delivery ? ["Người mua hàng", "Người giao hàng", "Thủ kho", "Nhân viên bán hàng"] : ["Người giao hàng", "Thủ quỹ", "Người nhập hàng"];
+  const table = voucher ? "" : TABLES[type] ? tableHtml(TABLES[type], model.lines) : `<table><colgroup>${widths.map((width) => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${cols.map((col) => `<th scope="col">${col}</th>`).join("")}</tr></thead><tbody>${rows}${sum}</tbody></table>`;
+  const signs = SIGNS[type] ?? [];
+  const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : "Số";
+  const orderMeta = delivery || (type === "GOODS_RETURN" && b.doc.orderCode) ? `<div><span>Mã đơn hàng:</span> <b>${e(b.doc.orderCode)}</b></div>` : "";
   const script = `const ready=async()=>{await Promise.allSettled([400,600,700].map(w=>document.fonts.load(w+' 13px "Be Vietnam Pro"')));await document.fonts.ready;await Promise.all(Array.from(document.images).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r;i.onerror=r})));};document.getElementById('print-now').onclick=async()=>{await ready();window.print()};${auto ? "ready().then(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>window.print())));" : ""}`;
-  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[type][mono ? "mono" : "color"]}
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[styleOf(type)][mono ? "mono" : "color"]}
   /* Print override preserves the supplied paper design, independently of app theme. */
   :root{--tool-bg:var(--soft);--tool-fg:var(--ink);--tool-border:var(--line);--tool-space:12px;--tool-radius:6px}
   .toolbar{display:flex;flex-wrap:wrap;gap:var(--tool-space);align-items:center;max-width:210mm;margin:0 auto var(--tool-space);padding:var(--tool-space);background:var(--tool-bg);color:var(--tool-fg);border-radius:var(--tool-radius)}
   .toolbar button,.toolbar a{min-height:44px;padding:8px 12px;border:1px solid var(--tool-border);border-radius:var(--tool-radius);background:var(--tool-bg);color:var(--tool-fg);font:inherit;text-decoration:none;cursor:pointer}
   .toolbar :focus-visible{outline:2px solid currentColor;outline-offset:2px}.toolbar span{font-size:11px}
-  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr img{display:block}thead{display:table-header-group}table{table-layout:fixed}${!invoice && !delivery ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
+  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr img{display:block}thead{display:table-header-group}table{table-layout:fixed}${purchase ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
+  tr.grp td{background:var(--soft);font-weight:600;font-size:12px}
   @media screen and (max-width:800px){body{padding:8px}.toolbar{position:sticky;left:0}.page{margin:0}}
   @page{size:A4;margin:12mm 12mm 10mm}
   @media print{.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body><nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>A4 · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav><main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>Số:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${delivery ? `<div><span>Mã đơn hàng:</span> <b>${e(b.doc.orderCode)}</b></div>` : ""}</div></div>${partner}<table><colgroup>${widths.map((width) => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${cols.map((col) => `<th scope="col">${col}</th>`).join("")}</tr></thead><tbody>${rows}${sum}</tbody></table><div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !delivery ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  </style></head><body><nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>A4 · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav><main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }

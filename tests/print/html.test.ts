@@ -81,3 +81,42 @@ describe("HTML in trực tiếp", () => {
   });
   it.each([["0", "Không đồng"], ["30700000", "Ba mươi triệu bảy trăm nghìn đồng"], ["351499000", "Ba trăm năm mươi mốt triệu bốn trăm chín mươi chín nghìn đồng"], ["1000001", "Một triệu không trăm lẻ một đồng"], ["-15", "Âm mười lăm đồng"]])("số tiền bằng chữ %s", (input, output) => expect(moneyInWords(input)).toBe(output));
 });
+
+describe("HTML in: các phiếu còn lại", () => {
+  const company = { name: "Công ty", address: "HN", phone: "09", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 };
+  const base = (type: string, body: Partial<HtmlPrintDocument["body"]>, extra: Partial<HtmlPrintDocument> = {}): HtmlPrintDocument => ({ type, body: { docCode: "X1", partner: { code: "K1", name: "Khách A", phone: "0909", address: "HN" }, doc: { date: "20/10/2026" }, lines: [], totals: {}, ...body }, company, signer: "", footer: "", qr: "", lines: body.lines ?? [], summary: [], words: "", notices: [], ...extra });
+  it("phiếu thu/chi: không có bảng, hiện số tiền và tiền bằng chữ", () => {
+    const html = renderHtmlPrint(base("RECEIPT", { doc: { date: "20/10/2026", type: "Thu công nợ", account: "Quỹ TM" }, totals: { amount: "1.500.000" } }, { summary: [{ label: "Số tiền", value: "1.500.000", big: true }], words: moneyInWords("1500000") }), false, false, "n");
+    expect(html).toContain("PHIẾU THU"); expect(html).toContain("Người nộp tiền"); expect(html).toContain("Một triệu năm trăm nghìn đồng"); expect(html).not.toContain("<table");
+    expect(renderHtmlPrint(base("PAYMENT", { doc: { date: "x" } }), false, false, "n")).toContain("Người nhận tiền");
+  });
+  it("công nợ, chuyến, lệnh SX, kiểm kho, báo giá, trả hàng có đúng tiêu đề và cột", () => {
+    const debt = renderHtmlPrint(base("DEBT_STATEMENT", {}, { lines: [{ no: "1", date: "01/10/2026", docLabel: "Đơn bán", docCode: "DH1", debit: "100", credit: "", running: "100" }] }), true, false, "n");
+    expect(debt).toContain("BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ"); expect(debt).toContain("Phát sinh tăng"); expect(debt).toContain("DH1");
+    const trip = renderHtmlPrint(base("TRIP_SHEET", { partner: null, doc: { date: "d", vehicle: "51C-1", driver: "Lái A" }, totals: { stops: "2" } }, { lines: [{ stop: "1", customer: "Khách B", phone: "", address: "Q12", order: "DH2", no: "1", code: "T1", name: "Tôn", unit: "m", qty: "5", due: "1.000" }, { stop: "2", customer: "Khách C", phone: "", address: "", order: "DH3", no: "1", code: "T2", name: "Xà gồ", unit: "cây", qty: "2", due: "" }] }), false, false, "n");
+    expect(trip).toContain("PHIẾU GIAO NHẬN THEO CHUYẾN"); expect(trip).toContain("Điểm 1: Khách B"); expect(trip).toContain("Cần thu: 1.000"); expect(trip).toContain("Điểm 2: Khách C"); expect(trip).toContain("51C-1");
+    const prod = renderHtmlPrint(base("PRODUCTION_ORDER", { partner: null }, { lines: [{ section: "Thành phẩm", no: "1", code: "P1", name: "Phụ kiện", spec: "", unit: "cái", qty: "10" }, { section: "Nguyên vật liệu tiêu hao", no: "1", code: "N1", name: "Tôn cuộn", spec: "", unit: "kg", qty: "30" }] }), false, false, "n");
+    expect(prod).toContain("LỆNH SẢN XUẤT"); expect(prod).toContain("Nguyên vật liệu tiêu hao"); expect(prod).toContain("Thợ sản xuất");
+    const st = renderHtmlPrint(base("STOCKTAKE", { partner: null, doc: { date: "d", statusLabel: "Đã chốt" } }, { lines: [{ no: "1", code: "P1", name: "Tôn", unit: "m", systemQty: "10", actualQty: "9", diff: "-1" }] }), false, false, "n");
+    expect(st).toContain("PHIẾU KIỂM KHO"); expect(st).toContain("Tồn sổ sách"); expect(st).toContain("Đã chốt");
+    const quote = renderHtmlPrint(base("QUOTE", { totals: { total: "5" } }, { lines: [{ name: "Tôn", qty: "1", unit: "m", price: "5", amount: "5", note: "", processing: "" }] }), false, false, "n");
+    expect(quote).toContain("BÁO GIÁ"); expect(quote).toContain("Người lập báo giá"); expect(quote).not.toContain("Quét để thanh toán");
+    const ret = renderHtmlPrint(base("GOODS_RETURN", { doc: { date: "d", kind: "Trả nhà cung cấp", orderCode: "" } }), false, false, "n");
+    expect(ret).toContain("PHIẾU TRẢ HÀNG"); expect(ret).toContain("Nhà cung cấp:");
+  });
+  it("hao hụt / tất toán chiết khấu / đặt hàng NCC có đúng tiêu đề", () => {
+    expect(renderHtmlPrint(base("LOSS_ADJUST", { partner: null, doc: { date: "d", kind: "Xuất hủy", createdBy: "A" } }, { lines: [{ no: "1", code: "P1", name: "Tôn", unit: "m", qty: "2" }] }), false, false, "n")).toContain("PHIẾU XUẤT HỦY");
+    expect(renderHtmlPrint(base("LOSS_ADJUST", { partner: null, doc: { date: "d", kind: "Hao hụt" } }), false, false, "n")).toContain("PHIẾU HAO HỤT");
+    const settle = renderHtmlPrint(base("DISCOUNT_SETTLEMENT", { doc: { date: "d", method: "Chuyển vào lãi công ty" }, totals: { amount: "70.000" } }, { summary: [{ label: "Số tiền tất toán", value: "70.000", big: true }], words: moneyInWords("70000") }), false, false, "n");
+    expect(settle).toContain("PHIẾU TẤT TOÁN CHIẾT KHẤU"); expect(settle).toContain("Bảy mươi nghìn đồng"); expect(settle).not.toContain("<table");
+    const po = renderHtmlPrint(base("SUPPLIER_ORDER", { totals: { total: "200.000" } }, { lines: [{ name: "Tôn", qty: "10", unit: "kg", price: "20.000", amount: "200.000", note: "", processing: "" }] }), false, false, "n");
+    expect(po).toContain("ĐƠN ĐẶT HÀNG NHÀ CUNG CẤP"); expect(po).toContain("Nhà cung cấp:"); expect(po).toContain("Nhà cung cấp xác nhận"); expect(po).toContain("Thành tiền");
+  });
+  it("escape dữ liệu ở nhóm bảng riêng", () => {
+    const html = renderHtmlPrint(base("TRIP_SHEET", { partner: null }, { lines: [{ stop: "1", customer: "<b>x</b>", phone: "", address: "", order: "", no: "1", code: "", name: "<script>1</script>", unit: "", qty: "", due: "" }] }), false, false, "n");
+    expect(html).not.toContain("<script>1</script>"); expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+  it("lệnh in thiếu quyền loại phiếu bị chặn trước khi đọc dữ liệu", async () => {
+    await expect(buildHtmlPrint({} as never, { userId: 1, perms: new Set(["print.use"]) }, "STOCKTAKE", 1)).rejects.toThrow();
+  });
+});

@@ -1,6 +1,6 @@
-# In chứng từ qua Google Apps Script (plan 05 · D6)
+# In chứng từ (plan 05 · D6) — luồng Google Apps Script đã NGỪNG DÙNG
 
-> Hóa đơn bán hàng (`SALE_INVOICE`), phiếu giao nhận (`DELIVERY_NOTE`), phiếu nhập hàng (`PURCHASE_RECEIPT`) hiện dùng [mẫu HTML in trực tiếp](./html-print.md), không cần Google Apps Script. Hướng dẫn bên dưới áp dụng cho luồng webhook còn lại/luồng cũ.
+> **Từ 22/10/2026 mọi phiếu (M1–M10 + phiếu chuyến) in trực tiếp bằng [mẫu HTML](./html-print.md); giao diện không còn gọi Apps Script.** Phần dưới chỉ giữ để tham khảo/dọn dẹp: `POST /api/print/:docType/:docId`, `service.ts`, `webhook.ts` và `apps-script.gs` chưa bị xóa.
 
 Hệ thống **không tự dựng file in**: mỗi lần bấm **In**, server gửi dữ liệu chứng từ (JSON) tới một Google Apps Script của xưởng;
 script sao chép **Google Doc mẫu**, điền `<<placeholder>>`, lưu vào thư mục Drive và trả link. Mở link → in hoặc tải PDF.
@@ -34,10 +34,14 @@ Số tiền/số lượng/ngày đã định dạng kiểu Việt Nam (chuỗi),
 | M3b Phiếu giao nhận theo chuyến | `TRIP_SHEET` | code, date, vehicle, driver, assistant, route, note, status | stop, order, customer, phone, address, no, code, name, unit, qty, due | stops |
 | M4 Phiếu thu | `RECEIPT` | code, type, date, account, order, note, createdBy, status | — | amount |
 | M5 Phiếu chi | `PAYMENT` | code, type, date, account, order, note, createdBy, status | — | amount |
-| M6 Lệnh sản xuất | `PRODUCTION_ORDER` | *chưa có chứng từ trong hệ thống (plan 06)* | | |
+| M6 Lệnh sản xuất | `PRODUCTION_ORDER` | code, date, note, createdBy, status | section, no, code, name, spec, unit, qty | — |
 | M7 Đối chiếu công nợ | `DEBT_STATEMENT` (theo khách) | code, date, note | no, date, docLabel, docCode, debit, credit, running | opening, debit, credit, balance, discountBalance |
 | M8 Phiếu nhập hàng | `PURCHASE_RECEIPT` | code, date, note, createdBy, status | no, code, name, unit, qty, price, amount, rollInfo | freight, total |
-| M9 Phiếu kiểm kho | `STOCKTAKE` | *chưa có chứng từ trong hệ thống (plan 06)* | | |
+| M9 Phiếu kiểm kho | `STOCKTAKE` | code, date, note, createdBy, statusLabel, status | no, code, name, unit, systemQty, actualQty, diff | — |
+| M11 Phiếu hao hụt / xuất hủy | `LOSS_ADJUST` | code, kind, date, note, createdBy, status | no, code, name, unit, qty | — |
+| M12 Phiếu tất toán chiết khấu | `DISCOUNT_SETTLEMENT` | code, date, method, payment, note, createdBy, status | — | amount |
+| M13 Đơn đặt hàng NCC | `SUPPLIER_ORDER` | code, date, note, createdBy, status | no, code, name, unit, qty, price, amount, processing, note | total |
+| M10 Phiếu trả hàng | `GOODS_RETURN` | code, kind, date, orderCode, note, createdBy, status | no, code, name, unit, qty, price, amount, note | total, deduction, deductionNote, net |
 
 Hóa đơn có **chiết khấu theo dòng** (`lines.discountNow`, `lines.discountAccum`) và **tổng chiết khấu** (`totals.discountNow`, `totals.discountAccum`), **đã thu** (`totals.paid` = cọc + thu nợ theo đơn + tiền lái xe đã thu), **còn phải trả** (`totals.remaining`). Bản in **không có giá vốn/lãi**.
 

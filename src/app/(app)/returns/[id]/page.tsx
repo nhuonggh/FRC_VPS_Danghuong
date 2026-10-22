@@ -5,6 +5,7 @@ import { ClosedPeriodBanner } from "@/components/period/PeriodHistoryViews";
 import { requireActor } from "@/server/auth/session";
 import { closedPeriodOf } from "@/server/period/doc-period";
 import { DomainError } from "@/server/http/errors";
+import { canPrintDoc } from "@/server/print/types";
 import { getReturn } from "@/server/returns/queries";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function ReturnDetailPage({ params }: { params: Promise<{ i
   return (
     <>
       {closed && <div className="mb-4"><ClosedPeriodBanner periodName={closed.name} closedAt={closed.closedAt} /></div>}
-      <ReturnDetail ret={ret} canManage={!closed} />
+      <ReturnDetail ret={ret} canManage={!closed} canPrint={canPrintDoc(actor.perms, "GOODS_RETURN")} />
     </>
   );
 }

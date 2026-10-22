@@ -1,8 +1,8 @@
-# In trực tiếp theo 3 mẫu HTML
+# In trực tiếp bằng HTML
 
-Áp dụng cho `SALE_INVOICE`, `DELIVERY_NOTE`, `PURCHASE_RECEIPT`. Các nút In mở `/api/print/<loại>/<id>/html?auto=1`. Trang độc lập tự mở hộp thoại in sau khi font và ảnh tải xong; có nút in lại và đổi màu/đen trắng. Dùng A4, tỷ lệ 100%, tắt header/footer của trình duyệt. Có thể chọn máy in hoặc Lưu PDF.
+Áp dụng cho mọi loại phiếu: `SALE_INVOICE`, `QUOTE`, `DELIVERY_NOTE`, `RECEIPT`, `PAYMENT`, `PRODUCTION_ORDER`, `DEBT_STATEMENT`, `PURCHASE_RECEIPT`, `STOCKTAKE`, `GOODS_RETURN`, `TRIP_SHEET`, `LOSS_ADJUST`, `DISCOUNT_SETTLEMENT`, `SUPPLIER_ORDER`. Ba mẫu gốc (hóa đơn, giao nhận, nhập hàng) bám 6 file HTML của người dùng; các phiếu còn lại dùng chung CSS/khung của hóa đơn (cùng phong cách, chỉ đổi bảng, khối thông tin, tổng và chữ ký) — xem `renderHtmlPrint` trong `src/server/print/html-document.ts`. Các nút In mở `/api/print/<loại>/<id>/html?auto=1`. Trang độc lập tự mở hộp thoại in sau khi font và ảnh tải xong; có nút in lại và đổi màu/đen trắng. Dùng A4, tỷ lệ 100%, tắt header/footer của trình duyệt. Có thể chọn máy in hoặc Lưu PDF.
 
-Không cần webhook, secret hoặc Google Docs cho ba loại này. Các loại khác giữ luồng cũ. Không ghi `print_files` khi xem/in HTML; mỗi lần mở đọc dữ liệu hiện tại.
+Không cần webhook, secret hoặc Google Docs. Không ghi `print_files` khi xem/in HTML; mỗi lần mở đọc dữ liệu hiện tại.
 
 ## Mẫu và cấu hình
 

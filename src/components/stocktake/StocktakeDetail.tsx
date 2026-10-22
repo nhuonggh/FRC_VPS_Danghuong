@@ -1,4 +1,5 @@
 "use client";
+import { PrintButton } from "@/components/print/PrintButton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -10,7 +11,7 @@ import type { StocktakeDetailDTO } from "@/server/stocktake/queries";
 import { STOCKTAKE_LABEL } from "./labels";
 
 const TONE = { DRAFT: "warning", DONE: "success", CANCELLED: "danger" } as const;
-export function StocktakeDetail({ st }: { st: StocktakeDetailDTO }) {
+export function StocktakeDetail({ st, canPrint = false }: { st: StocktakeDetailDTO; canPrint?: boolean }) {
   const router = useRouter(), nav = useDetailNav(["info", "lines"]), idem = useIdempotencyKey();
   const [cancelOpen, setCancelOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const showCost = st.lines.some((l) => l.unitCost !== undefined);
@@ -23,7 +24,8 @@ export function StocktakeDetail({ st }: { st: StocktakeDetailDTO }) {
   }
   async function cancel(reason: string) { await apiFetch(`/api/stocktakes/${st.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
   const actions = st.status === "CANCELLED" ? undefined : (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
+      {canPrint && <PrintButton docType="STOCKTAKE" docId={st.id} label="In phiếu kiểm kho" />}
       {st.status === "DRAFT" && <Link href={`/inventory/stocktakes/${st.id}/edit`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Sửa nháp</Link>}
       {st.status === "DRAFT" && <button type="button" disabled={busy} onClick={confirm} className="h-10 rounded-sm bg-accent px-3 text-sm font-medium text-fg-on-accent disabled:opacity-60">Chốt phiếu</button>}
       <button type="button" onClick={() => setCancelOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy phiếu</button>

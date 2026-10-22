@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { Badge, ReasonDialog, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
@@ -11,7 +12,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { DiscountDetailDTO } from "@/server/discount/queries";
 
-export interface DiscountPerms { canSettle: boolean; canReconcile: boolean; canViewProfit?: boolean }
+export interface DiscountPerms { canSettle: boolean; canReconcile: boolean; canViewProfit?: boolean; canPrint?: boolean }
 
 const ictYm = (at: Date | string) => new Date(new Date(at).getTime() + 7 * 3600_000).toISOString().slice(0, 7);
 const monthLabel = (at: Date | string) => { const ym = ictYm(at); return `${ym.slice(5)}/${ym.slice(0, 4)}`; };
@@ -61,6 +62,7 @@ export function DiscountDetail({ d, perms, accounts, today }: { d: DiscountDetai
                 <span className={s.isCancelled ? "text-fg-muted line-through" : ""}><span className="font-mono text-xs">{s.code}</span> · {formatDate(s.at)} · <strong className="tabular">{formatCurrency(s.amount)}</strong> · {s.methodLabel}{s.paymentCode ? ` (${s.paymentCode})` : ""}{s.note ? ` — ${s.note}` : ""}</span>
                 <span className="flex flex-wrap items-center gap-2">
                   {s.method === "FORFEIT" && !s.isCancelled && (perms.canViewProfit ? <Link href={profitHref(s.at)} className="text-xs text-accent hover:underline">Đã tính vào lãi tháng {monthLabel(s.at)} · xem</Link> : <span className="text-xs text-fg-secondary">Đã tính vào lãi tháng {monthLabel(s.at)}</span>)}
+                  {perms.canPrint && !s.isCancelled && <PrintButton docType="DISCOUNT_SETTLEMENT" docId={s.id} label="In" className="inline-flex h-9 items-center gap-1 rounded-sm border border-border px-3 text-sm hover:bg-hover" />}
                   {s.isCancelled ? <Badge tone="neutral">Đã hủy{s.cancelReason ? `: ${s.cancelReason}` : ""}</Badge> : s.isReconciled ? <Badge tone="success">Đã hậu kiểm{s.reconciledByName ? ` · ${s.reconciledByName}` : ""}</Badge> : <Badge tone="warning">Chờ hậu kiểm</Badge>}
                   {!s.isCancelled && !s.isReconciled && perms.canReconcile && <button type="button" disabled={busy} onClick={() => reconcile(s.id, s.code)} aria-label={`Hậu kiểm ${s.code}`} className="h-9 rounded-sm bg-accent px-3 text-sm font-medium text-fg-on-accent disabled:opacity-50">Hậu kiểm</button>}
                   {!s.isCancelled && !s.isReconciled && perms.canSettle && <button type="button" disabled={busy} onClick={() => setCancelId(s.id)} aria-label={`Hủy ${s.code}`} className="h-9 rounded-sm border border-danger px-3 text-sm text-danger hover:bg-danger-soft disabled:opacity-50">Hủy</button>}

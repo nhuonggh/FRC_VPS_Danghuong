@@ -1,13 +1,14 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PrintButton } from "@/components/print/PrintButton";
 import { DetailField, DetailPage, ReasonDialog, useDetailNav } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency, formatDate, formatQty } from "@/lib/format";
 import { LOSS_TYPE_LABEL } from "@/server/stock-adjust/schemas";
 import type { LossDetailDTO } from "@/server/stock-adjust/service";
 
-export function LossAdjustDetail({ adj }: { adj: LossDetailDTO }) {
+export function LossAdjustDetail({ adj, canPrint = false }: { adj: LossDetailDTO; canPrint?: boolean }) {
   const router = useRouter(), nav = useDetailNav(["info", "lines"]), [open, setOpen] = useState(false);
   const showCost = adj.lines.some((l) => l.cost !== undefined);
   async function cancel(reason: string) { await apiFetch(`/api/stock-adjustments-loss/${adj.id}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }
@@ -16,7 +17,7 @@ export function LossAdjustDetail({ adj }: { adj: LossDetailDTO }) {
       {adj.isCancelled && <div role="status" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">Phiếu đã hủy. Lý do: {adj.cancelReason}.</div>}
       <DetailPage
         backHref="/inventory/adjustments" backLabel="Quay lại điều chỉnh hao hụt"
-        headerActions={!adj.isCancelled ? <button type="button" onClick={() => setOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy phiếu</button> : undefined}
+        headerActions={!adj.isCancelled ? <div className="flex flex-wrap gap-2">{canPrint && <PrintButton docType="LOSS_ADJUST" docId={adj.id} label="In phiếu" />}<button type="button" onClick={() => setOpen(true)} className="h-10 rounded-sm border border-danger px-3 text-sm font-medium text-danger">Hủy phiếu</button></div> : undefined}
         summary={{ title: adj.code, code: LOSS_TYPE_LABEL[adj.type], badges: [{ label: adj.isCancelled ? "Đã hủy" : "Hiệu lực", tone: adj.isCancelled ? "danger" : "success" }], facts: [{ label: "Ngày", value: formatDate(adj.at) }, { label: "Số dòng", value: adj.lines.length }, { label: "Người lập", value: adj.createdByName ?? "—" }] }}
         tabs={[{ key: "info", label: "Thông tin chung", render: () => (
           <div className="space-y-5">
