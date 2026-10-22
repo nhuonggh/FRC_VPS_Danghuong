@@ -54,6 +54,10 @@ describe("ProductDetail — tab Giá và Lịch sử giao dịch", () => {
     search = "tab=movements";
     const { unmount } = render(<ProductDetail product={product} canManage={false} movements={[{ id: 1, at: "2026-09-15T03:00:00.000Z", docType: "SALE", label: "Bán hàng", href: "/sales/orders/2", partner: "Khách A", qtyIn: "0", qtyOut: "3" }]} />);
     expect(await screen.findByRole("link", { name: "Bán hàng" })).toHaveAttribute("href", "/sales/orders/2");
+    const cells = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const row = screen.getByRole("link", { name: "Bán hàng" }).closest("tr")!.querySelectorAll("td");
+    expect(row).toHaveLength(cells.length); // đủ ô, Nhập/Xuất không lệch cột
+    expect(row[cells.indexOf("Khách hàng / NCC")]).toHaveTextContent("Khách A");
     unmount(); search = "";
     render(<ProductDetail product={product} canManage={false} movements={null} />);
     expect(screen.queryAllByRole("button", { name: /Lịch sử giao dịch/ })).toHaveLength(0);
