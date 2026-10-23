@@ -57,7 +57,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
     defaultValues: edit?.defaults ?? {
-      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0,
+      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0, printDebt: true,
       salesUserId: options.salesUsers.some((u) => u.value === options.currentUserId) ? options.currentUserId : null,
       warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: retailOn ? "CASH" : "NONE",
     },
@@ -108,6 +108,16 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
       ? { ...dto, costReference: saved.reference } : dto;
   };
 
+
+  // Công nợ cũ của khách đang chọn (null = không có quyền xem / chưa chọn khách)
+  const [oldDebt, setOldDebt] = useState<number | null>(null);
+  useEffect(() => {
+    if (walkIn || !partnerId) { setOldDebt(null); return; }
+    let live = true;
+    apiFetch<{ balance: string } | null>(`/api/orders/partner-debt?partnerId=${partnerId}`)
+      .then((r) => live && setOldDebt(r ? Number(r.balance) : null)).catch(() => live && setOldDebt(null));
+    return () => { live = false; };
+  }, [walkIn, partnerId]);
 
   // Tải gợi ý (tồn, giá) cho các mã đã chọn khi đã có khách; đổi khách → tải lại (giá gần nhất theo từng khách)
   useEffect(() => {
@@ -267,7 +277,11 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
       footerInfo={(
         <>
           <span className="text-sm font-semibold">Tổng tiền: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(total)}</b></span>
-          <span className="text-sm font-semibold">{paid > total && canCheckout ? "Thừa" : "Nợ"}: <b className={`ml-1 text-lg tabular ${(paid > total || (walkIn && paid < total)) && canCheckout ? "text-danger" : "text-accent"}`}>{formatCurrency(canCheckout ? Math.abs(total - paid) : total)}</b></span>
+          {oldDebt !== null && !walkIn ? (
+            <span className="text-sm font-semibold" title={total > 0 ? `Nợ cũ ${formatCurrency(oldDebt)} + tổng tiền ${formatCurrency(total)}` : undefined}>{total > 0 ? "Nợ" : "Nợ cũ"}: <b className={`ml-1 text-lg tabular ${oldDebt + total > 0 ? "text-danger" : "text-accent"}`}>{formatCurrency(oldDebt + total)}</b></span>
+          ) : (
+            <span className="text-sm font-semibold">{paid > total && canCheckout ? "Thừa" : "Nợ"}: <b className={`ml-1 text-lg tabular ${(paid > total || (walkIn && paid < total)) && canCheckout ? "text-danger" : "text-accent"}`}>{formatCurrency(canCheckout ? Math.abs(total - paid) : total)}</b></span>
+          )}
         </>
       )}
       headerActions={(run, pending) => (
@@ -441,6 +455,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           <InlineField id="shippingFee" label="Phí vận chuyển" error={errors.shippingFee?.message} labelClass={LABEL}>
             <RhfNumberInput id="shippingFee" control={control} name="shippingFee" empty={0} className={`${igInput} tabular text-right`} />
           </InlineField>
+          {!walkIn && (
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm md:min-h-9">
+              <input type="checkbox" {...register("printDebt")} className="h-4 w-4 cursor-pointer accent-[var(--accent)]" />
+              <span><span className="font-medium">In công nợ trên hóa đơn</span> <span className="text-fg-secondary">— bỏ tích khi giao tới nhà người khác, không muốn hiện nợ cũ</span></span>
+            </label>
+          )}
 
           {canCheckout && (payKind === "CASH" || payKind === "TRANSFER") && (<>
             <InlineField id="payAmount" label={walkIn ? "Số tiền thu" : "Tiền cọc / thu trước"} labelClass={LABEL} hint={walkIn ? undefined : "Lưu thành phiếu cọc của đơn, hiện ở Đã thanh toán / Còn lại khi in hóa đơn."}>

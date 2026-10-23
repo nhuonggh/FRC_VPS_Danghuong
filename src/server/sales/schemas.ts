@@ -51,6 +51,8 @@ export const saleOrderSchema = z
     paymentMethod: z.enum(SALE_PAYMENT_METHODS).optional(),
     /** Phí vận chuyển thu của khách (cộng vào tiền phải thu). Bỏ trống: đơn mới = 0, sửa đơn = giữ nguyên. */
     shippingFee: z.number().finite().min(0, "Phí vận chuyển không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân.").optional(),
+    /** In nợ cũ trên hóa đơn. Bỏ trống: đơn mới = có in, sửa đơn = giữ nguyên. */
+    printDebt: z.boolean().optional(),
     /** Chiết khấu cả đơn: phân bổ theo tỷ lệ vào chiết khấu trừ ngay của các dòng. Bỏ trống: đơn mới = 0, sửa đơn = giữ nguyên. */
     orderDiscount: z.number().finite().min(0, "Chiết khấu không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân.").optional(),
     lines: z.array(saleLineSchema).min(1, "Nhập ít nhất một dòng hàng.").max(SALE_MAX_LINES, `Tối đa ${SALE_MAX_LINES} dòng.`),
