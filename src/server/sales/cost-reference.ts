@@ -6,6 +6,7 @@ import { effectiveReferenceCostPlans, isMeter } from "@/server/processing/refere
 import { dateOnly } from "@/server/bom/resolve";
 import { ictYmd } from "@/lib/time";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { stockProductId } from "@/server/stock-lanes";
 
 export interface CostSource {
   kind: "PURCHASE" | "PRODUCTION" | "BOM";
@@ -98,10 +99,11 @@ export async function costReference(db: PrismaClient | Prisma.TransactionClient,
     return { primary: { kind: "BOM", perBase: total, at: bom.validFrom, code: `Định mức v${bom.versionNo}`, ...(actor.perms.has("bom.manage") ? { href: `/production/bom/${bom.bomId}` } : {}) }, alternatives: [], materials,
       message: complete ? "Ước tính nguyên vật liệu; chưa gồm nhân công và chi phí khác." : `Chưa đủ giá nguyên liệu: ${materials.filter(m => m.price === null).map(m => m.name).join(", ") || "định mức chưa có nguyên liệu"}.` };
   }
+  const stockId = await stockProductId(db, productId, processingTypeId);
   const sources: CostSource[] = [];
   // ASSUMPTION: stock shows the newest authorized source; the other source stays in collapsed details.
   const types = [...(purchaseAllowed ? ["PURCHASE" as const] : []), ...(costAllowed ? ["PRODUCTION_OUT" as const] : [])];
-  const found = await Promise.all(types.map(sourceDocType => db.costLayer.findFirst({ where: { productId, sourceDocType, at: { lte: at } }, orderBy: [{ at: "desc" }, { ledger: { seq: "desc" } }], select: { sourceDocType: true, sourceDocId: true, unitCost: true, at: true, ledger: { select: { seq: true } } } })));
+  const found = await Promise.all(types.map(sourceDocType => db.costLayer.findFirst({ where: { productId: stockId, sourceDocType, at: { lte: at } }, orderBy: [{ at: "desc" }, { ledger: { seq: "desc" } }], select: { sourceDocType: true, sourceDocId: true, unitCost: true, at: true, ledger: { select: { seq: true } } } })));
   const layers = found.filter(l => l !== null).sort((a, b) => b.at.getTime() - a.at.getTime() || Number(b.ledger.seq - a.ledger.seq));
   for (const l of layers) {
     if (l.sourceDocType === "PURCHASE") {

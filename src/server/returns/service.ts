@@ -1,3 +1,4 @@
+import { lockIdsOf, stockProductIdsOf } from "@/server/stock-lanes";
 import { Prisma, type PrismaClient, type StockDocType } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
@@ -81,6 +82,9 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
   }
 
   const byId = new Map(order.lines.map((l) => [l.id, l]));
+  // Hàng trả về đúng kho con của dòng bán gốc (cùng kiểu gia công).
+  const laneIds = await stockProductIdsOf(tx, order.lines.map((l) => ({ productId: l.productId, processingTypeId: l.processingTypeId })));
+  const laneOfLine = new Map(order.lines.map((l, i) => [l.id, laneIds[i]!]));
   const seen = new Set<number>();
   let total = D(0);
   const rows = input.lines.map((l, i) => {
@@ -89,7 +93,7 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     if (seen.has(line.id)) throw new DomainError(`Dòng ${i + 1}: bị trùng.`, 400);
     seen.add(line.id);
     if (line.bomVersionId !== null) throw new DomainError(`Dòng ${i + 1}: hàng gia công theo định mức không trả theo đơn được.`, 400);
-    if (!ctx.locked.has(line.productId)) throw new DomainError("Đơn vừa được người khác sửa, hãy tải lại trang rồi thử lại.", 409);
+    if (!ctx.locked.has(laneOfLine.get(line.id)!)) throw new DomainError("Đơn vừa được người khác sửa, hãy tải lại trang rồi thử lại.", 409);
     const delivered = qtyDelivered(line);
     const returned = qtyReturned(line);
     if (undelivered) {
@@ -124,7 +128,7 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
       },
     });
     const { seq } = await postReceipt(ctx, {
-      productId: r.line.productId, qty: r.qtyBase, unitCost: r.line.unitCostFifo, docType: "RETURN_IN", docId: id, docLineId: row.id, at,
+      productId: laneOfLine.get(r.line.id)!, qty: r.qtyBase, unitCost: r.line.unitCostFifo, docType: "RETURN_IN", docId: id, docLineId: row.id, at,
       costRef: { docType: "SALE", docLineId: r.line.id, qty: r.line.qtyBase },
     });
     await tx.goodsReturnLine.update({ where: { id: row.id }, data: { seq } });
@@ -207,8 +211,8 @@ export async function createReturnByProduct(ctx: EngineCtx, actor: Actor, mode: 
 // ───────────────────────────── ĐƯỜNG VÀO (transaction kho) ─────────────────────────────
 export async function createReturnByOrderIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: ReturnByOrderInput, now: Date = new Date()) {
   assertWriter(actor, "BY_ORDER");
-  const lines = await prisma.saleOrderLine.findMany({ where: { orderId: input.orderId, id: { in: input.lines.map((l) => l.orderLineId) } }, select: { productId: true } });
-  return withIdempotentInventoryTx(prisma, { userId: actor.userId, products: sortedUnique(lines.map((l) => l.productId)), scope: "return.create", key }, (ctx) => createReturnByOrder(ctx, actor, input, now));
+  const lines = await prisma.saleOrderLine.findMany({ where: { orderId: input.orderId, id: { in: input.lines.map((l) => l.orderLineId) } }, select: { productId: true, processingTypeId: true } });
+  return withIdempotentInventoryTx(prisma, { userId: actor.userId, products: await lockIdsOf(prisma, lines), scope: "return.create", key }, (ctx) => createReturnByOrder(ctx, actor, input, now));
 }
 
 export async function createReturnByProductIdempotent(prisma: PrismaClient, actor: Actor, mode: ReturnMode, key: string, input: ReturnByProductInput, now: Date = new Date()) {

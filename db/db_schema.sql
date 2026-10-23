@@ -1224,7 +1224,7 @@ ALTER TABLE "sale_orders" ADD CONSTRAINT "sale_orders_expected_chk" CHECK ("expe
 CREATE TYPE "quote_status" AS ENUM ('DRAFT', 'SENT', 'CONVERTED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "receipt_type" AS ENUM ('THU_NO', 'COC', 'KHAC', 'BO_SUNG_QUY');
+CREATE TYPE "receipt_type" AS ENUM ('THU_NO', 'COC', 'KHAC');
 
 -- AlterTable
 ALTER TABLE "sale_orders" ADD COLUMN     "isDraft" BOOLEAN NOT NULL DEFAULT false;
@@ -1542,7 +1542,7 @@ ON CONFLICT DO NOTHING;
 CREATE TYPE "cash_review_status" AS ENUM ('PENDING_REVIEW', 'REVIEWED', 'RETURNED');
 
 -- CreateEnum
-CREATE TYPE "payment_kind" AS ENUM ('TRA_NCC', 'HOAN_KHACH', 'CHI_PHI', 'TAT_TOAN_CK', 'KHAC', 'NOP_LAI_QUY');
+CREATE TYPE "payment_kind" AS ENUM ('TRA_NCC', 'HOAN_KHACH', 'CHI_PHI', 'TAT_TOAN_CK', 'KHAC');
 
 -- CreateEnum
 CREATE TYPE "cash_adjustment_kind" AS ENUM ('AMOUNT', 'VOID');
@@ -1674,7 +1674,7 @@ ALTER TABLE "payments" ADD CONSTRAINT "payments_cashAccountId_fkey" FOREIGN KEY 
 ALTER TABLE "payments" ADD CONSTRAINT "payments_amount_chk" CHECK ("amount" > 0);
 ALTER TABLE "payments" ADD CONSTRAINT "payments_partner_chk" CHECK (("kind" IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NOT NULL) OR ("kind" NOT IN ('TRA_NCC', 'HOAN_KHACH') AND "partnerId" IS NULL));
 ALTER TABLE "payments" ADD CONSTRAINT "payments_cancel_chk" CHECK (("isCancelled" AND "cancelledAt" IS NOT NULL) OR (NOT "isCancelled" AND "cancelledAt" IS NULL));
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" IN ('KHAC', 'BO_SUNG_QUY'));
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" = 'KHAC');
 ALTER TABLE "cash_review_events" ADD CONSTRAINT "cash_review_events_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT') AND "action" IN ('SUBMIT', 'EDIT', 'RESUBMIT', 'REVIEW', 'RETURN', 'CANCEL'));
 ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_doc_chk" CHECK ("docType" IN ('RECEIPT', 'PAYMENT'));
 ALTER TABLE "cash_adjustments" ADD CONSTRAINT "cash_adjustments_kind_chk" CHECK (("kind" = 'VOID' AND "newAmount" IS NULL AND "newCashAccountId" IS NULL) OR ("kind" = 'AMOUNT' AND ("newAmount" IS NOT NULL OR "newCashAccountId" IS NOT NULL) AND ("newAmount" IS NULL OR "newAmount" > 0)));
@@ -2485,3 +2485,42 @@ INSERT INTO "role_permissions" ("roleId", "permissionId")
 SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
 WHERE p.code='sale.cost_hint.view' AND r.name='Kế toán'
 ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20261021120000_cash_top_up/migration.sql
+-- Phiếu thu "Bổ sung quỹ": tiền giám đốc đưa thêm vào quỹ tiền mặt trong ngày (không gắn khách, không công nợ).
+ALTER TYPE "receipt_type" ADD VALUE IF NOT EXISTS 'BO_SUNG_QUY';
+
+-- >>> prisma/migrations/20261021120100_cash_top_up_constraint/migration.sql
+-- Tách file riêng: giá trị enum mới chỉ dùng được sau khi migration thêm giá trị đã commit.
+ALTER TABLE "receipts" DROP CONSTRAINT "receipts_partner_chk";
+ALTER TABLE "receipts" ADD CONSTRAINT "receipts_partner_chk" CHECK ("partnerId" IS NOT NULL OR "type" IN ('KHAC', 'BO_SUNG_QUY'));
+
+-- >>> prisma/migrations/20261022120000_cash_hand_over/migration.sql
+-- Phiếu chi "Nộp lại quỹ": giám đốc nhận lại tiền quỹ (không gắn đối tác, không công nợ, không tính vào chi phí).
+ALTER TYPE "payment_kind" ADD VALUE IF NOT EXISTS 'NOP_LAI_QUY';
+
+-- >>> prisma/migrations/20261023120000_return_line_note/migration.sql
+-- Ghi chú dòng phiếu trả (trả theo kích thước ghi dài × tỷ lệ × số tấm). Chỉ thêm cột, dữ liệu cũ để NULL.
+ALTER TABLE "goods_return_lines" ADD COLUMN "note" TEXT;
+
+-- >>> prisma/migrations/20261024120000_reference_cost_aux_fixed/migration.sql
+-- Vật liệu phụ của dự toán gia công: NULL = giá nhập gần nhất theo BOM (như cũ); có số = giá cố định đ/m dài. Chỉ thêm cột.
+ALTER TABLE "reference_cost_plans" ADD COLUMN "auxFixedPerMeter" DECIMAL(18,4);
+
+-- >>> prisma/migrations/20261024130000_grant_cost_hint_director/migration.sql
+-- Migration 20261020120000 chỉ cấp sale.cost_hint.view cho "Kế toán" mà quên "Giám đốc" (nhóm giữ mọi quyền).
+-- Hệ quả: Giám đốc không cấp lại mật khẩu/khoá/đổi nhóm được tài khoản Kế toán (chống leo thang đặc quyền: quyền đối tượng ⊄ quyền mình).
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE p.code='sale.cost_hint.view' AND r.name='Giám đốc'
+ON CONFLICT DO NOTHING;
+
+-- >>> prisma/migrations/20261025100000_product_stock_lanes/migration.sql
+CREATE TABLE "product_stock_lanes" (
+  "productId" INTEGER NOT NULL REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "processingTypeId" INTEGER NOT NULL REFERENCES "processing_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "stockProductId" INTEGER NOT NULL REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY ("productId", "processingTypeId")
+);
+CREATE INDEX "product_stock_lanes_stockProductId_idx" ON "product_stock_lanes"("stockProductId");

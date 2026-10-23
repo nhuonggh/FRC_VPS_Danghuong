@@ -14,6 +14,7 @@ import { planBomIssues } from "./issue-by-bom";
 import { lastSalePricePerBase, priceForUnit } from "./pricing";
 import type { SaleOrderInput } from "./schemas";
 import { grossOf } from "./queries";
+import { stockProductId } from "@/server/stock-lanes";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -99,13 +100,13 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: P
     const sameLine = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId;
     const mode = line.issueMode ?? (sameLine ? (pin.issueMode ?? (pin.bomVersionId ? "BOM" : "STOCK")) : "LEGACY");
     if (mode === "STOCK" || line.processingTypeId === null) {
-      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: product.id, qtyBase }], bomVersionId: null });
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null });
       continue;
     }
     // Chưa có định mức nào cho (SP × kiểu gia công): bán như hàng thường (xuất chính mã này), kiểu gia công chỉ ghi trên dòng
     const hasBom = mode === "BOM" ? 1 : await db.bom.count({ where: { productId: product.id, processingTypeId: line.processingTypeId, versions: { some: { status: "ACTIVE" } } } });
     if (!hasBom) {
-      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: product.id, qtyBase }], bomVersionId: null });
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null });
       continue;
     }
     const pinnedVersionId = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId ? pin.bomVersionId : null;

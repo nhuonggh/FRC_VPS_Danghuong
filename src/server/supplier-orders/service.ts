@@ -1,3 +1,4 @@
+import { lockIdsOf } from "@/server/stock-lanes";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
@@ -73,7 +74,7 @@ export async function receiveSupplierOrder(db: PrismaClient, actor: Actor, id: n
   if (!seed) throw new DomainError("Không tìm thấy đơn.", 404);
   const selected = await db.supplierOrderLine.findMany({ where: { id: { in: input.lines.map(l => l.lineId) } } });
   const orderIds = [...new Set([id, ...selected.map(l => l.orderId)])].sort((a,b) => a-b);
-  return withIdempotentInventoryTx(db, { userId: actor.userId, products: [...seed.lines.map(l => l.productId), ...selected.map(l => l.productId)], scope: `supplier-order.receive:${id}`, key }, async ctx => {
+  return withIdempotentInventoryTx(db, { userId: actor.userId, products: await lockIdsOf(db, [...seed.lines, ...selected]), scope: `supplier-order.receive:${id}`, key }, async ctx => {
     const orders: OrderWithLines[] = [];
     for (const orderId of orderIds) orders.push(await lock(ctx.tx, orderId));
     const order = orders.find(o => o.id === id)!;

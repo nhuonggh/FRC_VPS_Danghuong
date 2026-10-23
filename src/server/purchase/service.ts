@@ -1,3 +1,4 @@
+import { lockIdsOf, stockProductIdsOf } from "@/server/stock-lanes";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
@@ -48,6 +49,8 @@ async function ensureSupplier(tx: Tx, partnerId: number, alreadyOn?: number) {
 interface PreparedLine {
   id?: number;
   productId: number;
+  /** Mã kho thực sự nhập (kho con theo kiểu gia công; mặc định = productId). */
+  stockProductId: number;
   qty: Prisma.Decimal;
   unit: string;
   factor: Prisma.Decimal;
@@ -63,6 +66,7 @@ interface CostedLine extends PreparedLine {
 }
 
 async function prepareLines(tx: Tx, lines: PurchaseInput["lines"], keepInactive: Set<number>): Promise<PreparedLine[]> {
+  const stockIds = await stockProductIdsOf(tx, lines.map((line) => ({ productId: line.productId, processingTypeId: line.processingTypeId })));
   const products = await tx.product.findMany({
     where: { id: { in: sortedUnique(lines.map((line) => line.productId)) } },
     include: { units: true },
@@ -90,6 +94,7 @@ async function prepareLines(tx: Tx, lines: PurchaseInput["lines"], keepInactive:
     return {
       ...(line.id === undefined ? {} : { id: line.id }),
       productId: product.id,
+      stockProductId: stockIds[index]!,
       qty,
       unit: line.unit,
       factor: D(line.factor),
@@ -173,7 +178,7 @@ export async function createPurchase(
   for (const line of lines) {
     const row = await ctx.tx.purchaseLine.create({ data: { purchaseId: id, ...lineData(line) } });
     const { seq } = await postReceipt(ctx, {
-      productId: line.productId, qty: line.qtyBase, unitCost: line.unitCost,
+      productId: line.stockProductId, qty: line.qtyBase, unitCost: line.unitCost,
       docType: "PURCHASE", docId: id, docLineId: row.id, at,
     });
     await ctx.tx.purchaseLine.update({ where: { id: row.id }, data: { seq } });
@@ -195,7 +200,7 @@ export async function createPurchaseIdempotent(prisma: PrismaClient, actor: Acto
   assertWriter(actor, "purchase.create");
   return withIdempotentInventoryTx(
     prisma,
-    { userId: actor.userId, products: sortedUnique(input.lines.map((line) => line.productId)), scope: "purchase.create", key },
+    { userId: actor.userId, products: await lockIdsOf(prisma, input.lines), scope: "purchase.create", key },
     (ctx) => createPurchase(ctx, actor, input),
   );
 }
@@ -243,7 +248,7 @@ export async function updatePurchase(ctx: EngineCtx, actor: Actor, id: number, i
       ? await ctx.tx.purchaseLine.create({ data: { purchaseId: id, ...lineData(line) } })
       : await ctx.tx.purchaseLine.update({ where: { id: line.id }, data: lineData(line) });
     const { seq } = await postReceipt(ctx, {
-      productId: line.productId, qty: line.qtyBase, unitCost: line.unitCost,
+      productId: line.stockProductId, qty: line.qtyBase, unitCost: line.unitCost,
       docType: "PURCHASE", docId: id, docLineId: row.id, at,
     });
     await ctx.tx.purchaseLine.update({ where: { id: row.id }, data: { seq } });
@@ -264,7 +269,7 @@ export async function updatePurchaseTx(prisma: PrismaClient, actor: Actor, id: n
   assertWriter(actor, "purchase.edit");
   const purchase = await prisma.purchase.findUnique({ where: { id }, select: { periodId: true } });
   if (!purchase) throw new DomainError("Không tìm thấy phiếu nhập.", 404);
-  const products = sortedUnique([...(await productsOfDocument(prisma, "PURCHASE", id)), ...input.lines.map((line) => line.productId)]);
+  const products = sortedUnique([...(await productsOfDocument(prisma, "PURCHASE", id)), ...(await lockIdsOf(prisma, input.lines))]);
   return withInventoryTx(prisma, { userId: actor.userId, periodId: purchase.periodId, products }, (ctx) => updatePurchase(ctx, actor, id, input));
 }
 

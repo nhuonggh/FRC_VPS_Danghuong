@@ -4,6 +4,7 @@ import { canViewOrderAnalysis } from "@/lib/permissions/order-analysis";
 import type { Actor } from "@/lib/permissions/scope";
 import { getOpenPeriod } from "@/server/period/guard";
 import { lastPurchaseCost } from "@/server/purchase/last-cost";
+import { stockProductId } from "@/server/stock-lanes";
 import { costReference, type CostReference, type IssueMode } from "./cost-reference";
 
 type Db = Prisma.TransactionClient | PrismaClient;
@@ -69,15 +70,16 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
     lastSalePriceForPartner: last?.forPartner ?? false,
     ...(last ? { lastSalePriceSource: last.source } : {}),
   };
+  const stockId = await stockProductId(db, productId, processingTypeId);
   if (can(actor.perms, "stock.view")) {
     const period = await getOpenPeriod(db);
     const [layers, pending] = await Promise.all([
-      db.costLayer.aggregate({ where: { periodId: period.id, productId }, _sum: { qtyRemaining: true } }),
-      db.stockLedger.aggregate({ where: { periodId: period.id, productId }, _sum: { qtyProvisional: true } }),
+      db.costLayer.aggregate({ where: { periodId: period.id, productId: stockId }, _sum: { qtyRemaining: true } }),
+      db.stockLedger.aggregate({ where: { periodId: period.id, productId: stockId }, _sum: { qtyProvisional: true } }),
     ]);
     out.onHand = (layers._sum.qtyRemaining ?? new Prisma.Decimal(0)).minus(pending._sum.qtyProvisional ?? 0).toString();
   }
-  if (canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, productId))?.toString() ?? null;
+  if (canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, stockId))?.toString() ?? null;
   const reference = await costReference(db, actor, productId, processingTypeId ?? null, at, mode);
   if (reference) out.costReference = reference;
   else if (can(actor.perms, "sale.cost_hint.view")) {

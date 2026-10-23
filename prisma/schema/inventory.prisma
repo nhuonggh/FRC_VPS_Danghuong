@@ -123,3 +123,20 @@ model RecomputeJob {
   @@index([status, id])
   @@map("recompute_jobs")
 }
+
+/// Kho con theo kiểu gia công: (sản phẩm, kiểu) → mã hàng thực sự nhập/xuất kho. Không có dòng = kho là chính sản phẩm.
+/// Engine FIFO không biết bảng này; tầng nghiệp vụ đổi productId trước khi gọi engine (`src/server/stock-lanes.ts`).
+model ProductStockLane {
+  productId        Int
+  processingTypeId Int
+  stockProductId   Int
+  createdAt        DateTime @default(now())
+
+  product        Product        @relation("LaneProduct", fields: [productId], references: [id], onDelete: Restrict)
+  stockProduct   Product        @relation("LaneStock", fields: [stockProductId], references: [id], onDelete: Restrict)
+  processingType ProcessingType @relation(fields: [processingTypeId], references: [id], onDelete: Restrict)
+
+  @@id([productId, processingTypeId])
+  @@index([stockProductId])
+  @@map("product_stock_lanes")
+}
