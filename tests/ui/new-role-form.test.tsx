@@ -39,6 +39,16 @@ describe("NewRoleForm (/system/roles/new)", () => {
     expect(init.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("chọn 'Sao chép quyền từ' → POST kèm copyFromRoleId; không chọn thì không gửi trường này", async () => {
+    apiFetch.mockResolvedValue({ id: 9 });
+    render(<NewRoleForm sourceRoles={[{ id: 2, name: "Kế toán", permissionCount: 12 }]} />);
+    await userEvent.type(screen.getByLabelText("Tên nhóm quyền"), "Kế toán trưởng");
+    await userEvent.selectOptions(screen.getByLabelText("Sao chép quyền từ"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Tạo nhóm quyền" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/system/roles/9?edit=permissions"));
+    expect(apiFetch.mock.calls[0]![1].json).toMatchObject({ name: "Kế toán trưởng", copyFromRoleId: 2 });
+  });
+
   it("Enter trong ô tên gửi form, chỉ 1 lần", async () => {
     apiFetch.mockResolvedValue({ id: 9 });
     render(<NewRoleForm />);

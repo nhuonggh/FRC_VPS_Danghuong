@@ -7,7 +7,7 @@ import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { assertCanGrant } from "@/server/users/privilege";
 import { assertAdminRemains, lockAdminInvariant } from "@/server/users/service";
-import type { RoleInfoInput } from "./schemas";
+import type { RoleCreateInput, RoleInfoInput } from "./schemas";
 
 /** MỌI hàm nhận `db` là transaction client và PHẢI chạy trong prisma.$transaction. */
 type Db = Prisma.TransactionClient;
@@ -22,10 +22,19 @@ const sortedCodes = (r: { permissions: { permission: { code: string } }[] }) => 
 
 const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 
-export async function createRole(db: Db, actor: Actor, input: RoleInfoInput) {
+export async function createRole(db: Db, actor: Actor, input: RoleCreateInput) {
   assertCan(actor.perms, "role.manage");
   const name = input.name.trim();
   if (await db.role.findUnique({ where: { name } })) throw new DomainError("Tên nhóm quyền đã tồn tại.");
+
+  // Sao chép quyền: chỉ được chép quyền mà chính mình có (cùng luật với cấp quyền thủ công)
+  let copied: { permissionId: number; code: string }[] = [];
+  if (input.copyFromRoleId != null) {
+    const src = await getRoleOrThrow(db, input.copyFromRoleId);
+    assertCanGrant(actor.perms, sortedCodes(src));
+    copied = src.permissions.map((p) => ({ permissionId: p.permissionId, code: p.permission.code }));
+  }
+
   let role;
   try {
     role = await db.role.create({ data: { name, description: input.description?.trim() || null } });
@@ -33,7 +42,11 @@ export async function createRole(db: Db, actor: Actor, input: RoleInfoInput) {
     if (isUnique(e)) throw new DomainError("Tên nhóm quyền đã tồn tại."); // 2 yêu cầu đồng thời cùng tên
     throw e;
   }
-  await writeAudit(db, { userId: actor.userId, action: "role.create", entity: "Role", entityId: role.id, after: { name, description: role.description } });
+  if (copied.length) await db.rolePermission.createMany({ data: copied.map((p) => ({ roleId: role.id, permissionId: p.permissionId })) });
+  await writeAudit(db, {
+    userId: actor.userId, action: "role.create", entity: "Role", entityId: role.id,
+    after: { name, description: role.description, ...(input.copyFromRoleId != null ? { copyFromRoleId: input.copyFromRoleId, permissions: copied.map((p) => p.code).sort() } : {}) },
+  });
   return { id: role.id };
 }
 
@@ -45,7 +58,7 @@ export async function createRoleIdempotent(
   prisma: PrismaClient,
   actor: Actor,
   key: string,
-  input: RoleInfoInput,
+  input: RoleCreateInput,
 ): Promise<{ id: number }> {
   assertCan(actor.perms, "role.manage");
   return withIdempotency(prisma, { userId: actor.userId, scope: "role.create", key }, (tx) => createRole(tx, actor, input));

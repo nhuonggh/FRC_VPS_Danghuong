@@ -6,4 +6,8 @@ export const roleInfoSchema = z.object({
 });
 export type RoleInfoInput = z.infer<typeof roleInfoSchema>;
 
+/** Tạo nhóm mới; `copyFromRoleId` (tuỳ chọn) = sao chép toàn bộ quyền từ nhóm đó. */
+export const roleCreateSchema = roleInfoSchema.extend({ copyFromRoleId: z.number().int().positive().optional() });
+export type RoleCreateInput = z.infer<typeof roleCreateSchema>;
+
 export const rolePermissionsSchema = z.object({ codes: z.array(z.string()) });

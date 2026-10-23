@@ -14,9 +14,9 @@ describe("danh mục quyền", () => {
     expect(codes.has("partner.view_all")).toBe(true);
   });
 
-  it("5 vai trò mặc định theo spec 6.6", () => {
+  it("6 vai trò mặc định theo spec 6.6", () => {
     expect(Object.keys(ROLE_DEFAULTS).sort()).toEqual(
-      ["Bán hàng", "Giám đốc", "Kế toán", "Thủ kho", "Thủ quỹ"].sort(),
+      ["Bán hàng", "Giám đốc", "Kế toán", "Kế toán trưởng", "Thủ kho", "Thủ quỹ"].sort(),
     );
   });
 
@@ -32,6 +32,13 @@ describe("danh mục quyền", () => {
     expect(p.has("period.close")).toBe(false);
     expect(p.has("user.manage")).toBe(false);
     expect(p.has("role.manage")).toBe(false);
+  });
+
+  it("Kế toán trưởng = Kế toán + xem lãi/lỗ (profit.view); Kế toán viên không xem lãi/lỗ", () => {
+    const kt = resolveRolePermissions("Kế toán"), ktt = resolveRolePermissions("Kế toán trưởng");
+    expect(kt.has("profit.view")).toBe(false);
+    expect(ktt.has("profit.view")).toBe(true);
+    expect([...ktt].filter((c) => c !== "profit.view").sort()).toEqual([...kt].sort());
   });
 
   it("Thủ kho: KHÔNG thấy giá nhập, giá bán, lãi, giá vốn", () => {

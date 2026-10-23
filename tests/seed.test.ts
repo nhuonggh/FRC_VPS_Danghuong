@@ -15,7 +15,7 @@ describe("seed", () => {
     await seed(prisma);
     expect(await prisma.permission.count()).toBe(PERMISSIONS.length);
     expect((await prisma.role.findMany()).map((r) => r.name).sort()).toEqual(
-      ["Bán hàng", "Giám đốc", "Kế toán", "Thủ kho", "Thủ quỹ"].sort(),
+      ["Bán hàng", "Giám đốc", "Kế toán", "Kế toán trưởng", "Thủ kho", "Thủ quỹ"].sort(),
     );
     expect(await prisma.companySetting.count()).toBe(1);
     const open = await prisma.period.findMany({ where: { isOpen: true } });
@@ -35,7 +35,7 @@ describe("seed", () => {
     const rolePerms = await prisma.rolePermission.count();
     await seed(prisma);
     expect(await prisma.permission.count()).toBe(PERMISSIONS.length);
-    expect(await prisma.role.count()).toBe(5);
+    expect(await prisma.role.count()).toBe(6);
     expect(await prisma.rolePermission.count()).toBe(rolePerms);
     expect(await prisma.companySetting.count()).toBe(1);
     expect(await prisma.period.count()).toBe(1);

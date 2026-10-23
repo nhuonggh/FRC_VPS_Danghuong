@@ -30,6 +30,24 @@ describe("nhóm quyền động", () => {
     await expect(tx((db) => createRole(db, actor, { name: "Trợ lý" }))).rejects.toThrow("Tên nhóm quyền đã tồn tại.");
   });
 
+  it("sao chép quyền từ nhóm khác: nhóm mới có đúng quyền nguồn; audit ghi nguồn", async () => {
+    const src = await tx((db) => createRole(db, actor, { name: "Kế toán X" }));
+    await tx((db) => updateRolePermissions(db, actor, src.id, ["order.view", "product.view"]));
+    const r = await tx((db) => createRole(db, actor, { name: "Kế toán trưởng", copyFromRoleId: src.id }));
+    expect(await codesOf(r.id)).toEqual(["order.view", "product.view"]);
+    await tx((db) => updateRolePermissions(db, actor, r.id, ["order.view", "product.view", "profit.view"]));
+    expect(await codesOf(src.id)).toEqual(["order.view", "product.view"]); // nhóm nguồn không đổi
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { action: "role.create", entityId: String(r.id) } });
+    expect(log.afterJson).toMatchObject({ copyFromRoleId: src.id, permissions: ["order.view", "product.view"] });
+  });
+
+  it("sao chép: nhóm nguồn không tồn tại → 404; quyền vượt quyền người tạo → chặn, không tạo nhóm", async () => {
+    await expect(tx((db) => createRole(db, actor, { name: "A", copyFromRoleId: 999999 }))).rejects.toMatchObject({ status: 404 });
+    const weak: Actor = { userId: actor.userId, perms: new Set(["role.manage", "order.view"]) };
+    await expect(tx((db) => createRole(db, weak, { name: "B", copyFromRoleId: directorId }))).rejects.toThrow(/không thể cấp quyền/);
+    expect(await prisma.role.count({ where: { name: "B" } })).toBe(0);
+  });
+
   it("đồng thời tạo 2 nhóm cùng tên → 1 thành công, 1 lỗi 'đã tồn tại' (không lỗi hệ thống)", async () => {
     const rs = await Promise.allSettled([
       tx((db) => createRole(db, actor, { name: "Trợ lý" })),

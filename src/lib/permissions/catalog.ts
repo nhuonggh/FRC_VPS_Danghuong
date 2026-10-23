@@ -135,9 +135,13 @@ export const SENSITIVE_FIELDS: Record<string, PermissionCode> = {
 type RoleSpec = "*" | { allow: readonly PermissionCode[] } | { except: readonly PermissionCode[] };
 
 // Phân quyền MẪU (spec 6.6) — khách tự chỉnh được sau. `// TODO: confirm` với khách chi tiết từng vai trò.
+const ACCOUNTANT_EXCEPT: readonly PermissionCode[] = ["order.analysis.view", "period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"];
+
 export const ROLE_DEFAULTS: Record<string, RoleSpec> = {
   "Giám đốc": "*",
-  "Kế toán": { except: ["order.analysis.view", "period.close", "user.manage", "role.manage", "cash.review", "cash.adjust.approve", "cash.close", "cash.close.reopen", "trip.confirm_cash"] },
+  // Kế toán viên không xem lãi/lỗ; Kế toán trưởng = quyền y hệt + profit.view
+  "Kế toán": { except: [...ACCOUNTANT_EXCEPT, "profit.view"] },
+  "Kế toán trưởng": { except: ACCOUNTANT_EXCEPT },
   "Thủ kho": {
     allow: ["product.view", "stock.view", "stocktake.manage", "stock_adjust.manage", "order.view", "print.use"],
   },
