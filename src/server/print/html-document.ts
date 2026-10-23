@@ -96,6 +96,13 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
       { label: old === null ? "Còn phải trả của đơn" : "Còn phải trả", value: formatCurrency(remaining.toString()), big: true },
     ];
     result.words = moneyInWords(remaining.toFixed(0));
+    // Chưa cấu hình ảnh QR cố định ở mẫu in → tự sinh VietQR từ tài khoản công ty, kèm số tiền còn phải trả + mã đơn.
+    const { accountNo, bankName, accountHolder } = company.bank;
+    if (!result.qr && accountNo && bankName) {
+      const qs = new URLSearchParams({ addInfo: body.docCode, accountName: accountHolder });
+      if (remaining.gt(0)) qs.set("amount", remaining.toFixed(0));
+      result.qr = `https://img.vietqr.io/image/${encodeURIComponent(bankName)}-${encodeURIComponent(accountNo)}-compact2.png?${qs}`;
+    }
     if (D(order.shippingFee ?? 0).gt(0)) result.notices.push(`Tổng đơn đã bao gồm phí vận chuyển: ${formatCurrency(order.shippingFee)}.`);
     result.signer = order.createdByName ?? ""; // ô "Kế toán bán hàng": tên người lập đơn
   } else if (type === "DELIVERY_NOTE") {

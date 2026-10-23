@@ -17,5 +17,5 @@ export default async function TripResultsPage({ searchParams }: { searchParams: 
   const id = Number(params.filters.detail?.[0]);
   const canLoad = Number.isSafeInteger(id) && data.rows.some((r) => r.id === id);
   const [detail, accounts, closed] = canLoad ? await Promise.all([getTrip(prisma, actor, id), listActiveCashAccounts(prisma), closedPeriodOf(prisma, "trip", id)]) : [null, [], null];
-  return <TripResultsView rows={data.rows} total={data.total} stats={data.stats} summary={data.resultsSummary!} params={params} vehicles={options.vehicles} customers={filters.customers} routes={filters.routes} detail={detail} accounts={accounts} closedPeriodName={closed?.name} />;
+  return <TripResultsView rows={data.rows} total={data.total} stats={data.stats} summary={data.resultsSummary!} params={params} vehicles={options.vehicles} customers={filters.customers} routes={filters.routes} detail={detail} accounts={accounts} closedPeriodName={closed?.name} perms={{ canSettle: actor.perms.has("trip.settle"), canConfirm: actor.perms.has("trip.confirm_cash") }} />;
 }

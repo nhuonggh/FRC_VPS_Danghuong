@@ -11,6 +11,7 @@ import { RESULT_STATUS_TONE, RESULT_TRIP_TABS, resultTripLabel } from "@/lib/tri
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { TripDetailDTO, TripResultsSummary, TripRowDTO, TripStatsDTO } from "@/server/trips/queries";
 import { ResultDialog } from "./TripDetail";
+import { TripSettlePanel } from "./TripSettlePanel";
 
 const BASE = "/delivery/results";
 const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
@@ -18,7 +19,8 @@ const COLORS = { info: "bg-info", warning: "bg-warning", success: "bg-success", 
 const editable = (status: TripRowDTO["status"]) => status === "PLANNED" || status === "ON_ROAD" || status === "RETURNED";
 const resultTone = { GIAO_DU: "success", GHI_NO: "warning", HEN_TRA: "warning", KHONG_GIAO: "danger", GIAO_MOT_PHAN: "info" } as const;
 
-export function TripResultsView({ rows, total, stats, summary, params, vehicles, customers, routes, detail, accounts, closedPeriodName }: {
+export function TripResultsView({ rows, total, stats, summary, params, vehicles, customers, routes, detail, accounts, closedPeriodName, perms }: {
+  perms?: { canSettle: boolean; canConfirm: boolean };
   rows: TripRowDTO[]; total: number; stats: TripStatsDTO; summary: TripResultsSummary; params: ListParams;
   vehicles: { id: number; name: string }[]; customers: { id: number; name: string }[]; routes: { id: number; name: string }[];
   detail: TripDetailDTO | null; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; closedPeriodName?: string;
@@ -65,6 +67,7 @@ export function TripResultsView({ rows, total, stats, summary, params, vehicles,
         <td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.due)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.result ? s.cash : null)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.result ? s.transfer : null)}</td>
         <td className={`${cell} text-right`}>{showStopActions && <Link href={entryHref(detail.id, String(s.id))} scroll={false} title={s.result ? "Sửa kết quả" : "Nhập kết quả"} aria-label={`${s.result ? "Sửa kết quả" : "Nhập kết quả"} ${s.orderCode}`} className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border text-accent hover:bg-accent-soft md:min-h-9 md:min-w-9 ${focus}`}><ClipboardPen size={16} aria-hidden /></Link>}</td>
       </tr>)}</tbody></table></div>}
+      {!closedPeriodName && perms && <TripSettlePanel trip={detail} accounts={accounts} canSettle={perms.canSettle} canConfirm={perms.canConfirm} />}
     </div>;
   }
   return <>

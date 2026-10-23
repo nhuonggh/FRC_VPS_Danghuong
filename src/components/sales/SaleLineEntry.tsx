@@ -120,6 +120,12 @@ export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPri
       onAdd(product, [{ productId: product.value, unit, qty: num(qty), salePrice: num(price), discountNow: 0, discountAccum: 0, processingTypeId: typeId, note: note.trim() }] as SaleOrderInput["lines"]);
     }
     reset();
+    // Thêm xong: giữ khung nhập ở trên, đưa con trỏ về ô chọn sản phẩm để nhập tiếp (không để trang nhảy xuống chi tiết)
+    requestAnimationFrame(() => {
+      const box = document.getElementById("se-product-wrap");
+      box?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus({ preventScroll: true });
+      box?.scrollIntoView?.({ block: "center" });
+    });
   };
 
   return (
@@ -133,7 +139,7 @@ export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPri
       <span className="hidden xl:block" />
 
       <InlineField id="se-product" label="Tên sản phẩm" labelClass={LABEL} className="xl:col-span-2">
-        <div className={igCombo}><Combobox key={pickKey} hideLabel label="Tên sản phẩm" value={product} loadOptions={loadProducts} placeholder="Tìm sản phẩm (mã, tên…)" onChange={pickProduct} disabled={disabled} /></div>
+        <div id="se-product-wrap" className={igCombo}><Combobox key={pickKey} hideLabel label="Tên sản phẩm" value={product} loadOptions={loadProducts} placeholder="Tìm sản phẩm (mã, tên…)" onChange={pickProduct} disabled={disabled} /></div>
       </InlineField>
       {product ? (
         <p className={info} role="status">
