@@ -33,7 +33,7 @@ describe("nhóm quyền động", () => {
   it("sao chép quyền từ nhóm khác: nhóm mới có đúng quyền nguồn; audit ghi nguồn", async () => {
     const src = await tx((db) => createRole(db, actor, { name: "Kế toán X" }));
     await tx((db) => updateRolePermissions(db, actor, src.id, ["order.view", "product.view"]));
-    const r = await tx((db) => createRole(db, actor, { name: "Kế toán trưởng", copyFromRoleId: src.id }));
+    const r = await tx((db) => createRole(db, actor, { name: "Kế toán phó", copyFromRoleId: src.id }));
     expect(await codesOf(r.id)).toEqual(["order.view", "product.view"]);
     await tx((db) => updateRolePermissions(db, actor, r.id, ["order.view", "product.view", "profit.view"]));
     expect(await codesOf(src.id)).toEqual(["order.view", "product.view"]); // nhóm nguồn không đổi

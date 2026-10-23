@@ -84,7 +84,10 @@ describe("/system/roles/new (server)", () => {
 
   it("có quyền → hiện form", async () => {
     requireActor.mockResolvedValue(actor("role.manage"));
-    expect(((await NewRolePage()) as ReactElement).type).toBe(NewRoleForm);
+    listRoles.mockResolvedValue([{ ...role(2), name: "Kế toán", permissionCount: 12 }]);
+    const el = (await NewRolePage()) as ReactElement<{ sourceRoles: unknown }>;
+    expect(el.type).toBe(NewRoleForm);
+    expect(el.props.sourceRoles).toEqual([{ id: 2, name: "Kế toán", permissionCount: 12 }]);
   });
 });
 
