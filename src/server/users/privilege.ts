@@ -51,8 +51,9 @@ export function assertCanGrant(actorPerms: ReadonlySet<string>, wanted: Iterable
 export async function assertCanAffectUser(db: Db, actor: Actor, targetUserId: number): Promise<void> {
   if (targetUserId === actor.userId) return; // quyền của chính mình luôn ⊆ quyền của mình
   const target = await permsOfUser(db, targetUserId);
-  if ([...target].some((c) => !actor.perms.has(c))) {
-    throw forbidden("Bạn không thể thao tác trên tài khoản có quyền cao hơn quyền của bạn.");
+  const missing = [...target].filter((c) => !actor.perms.has(c)).sort();
+  if (missing.length > 0) {
+    throw forbidden(`Bạn không thể thao tác trên tài khoản có quyền cao hơn quyền của bạn. Quyền bạn đang thiếu: ${missing.map(describe).join(", ")}.`);
   }
 }
 
