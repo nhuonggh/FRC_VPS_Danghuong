@@ -80,12 +80,12 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
   if (body.doc.status === "ĐÃ HỦY") throw new DomainError("Phiếu đã hủy, không thể in.", 409);
   if (type === "SALE_INVOICE") {
     const order = await getOrder(db, actor, id);
-    const raw = await db.saleOrder.findUniqueOrThrow({ where: { id }, select: { periodId: true } });
+    const raw = await db.saleOrder.findUniqueOrThrow({ where: { id }, select: { periodId: true, printDebt: true } });
     result.lines = combineInvoiceCuts(result.lines, order.lines);
     if (order.walkInName) body.partner = { ...(body.partner ?? { code: "", name: "", phone: "", address: "" }), name: order.walkInName, phone: order.walkInPhone ?? body.partner?.phone ?? "" };
     const total = D(order.orderTotal ?? 0);
     // Same accounting definition as the order list: opening + ledger strictly before orderDate.
-    const old = actor.perms.has("debt.view") ? await debtBefore(db, order.partnerId, raw.periodId, order.orderDate) : null;
+    const old = actor.perms.has("debt.view") && raw.printDebt ? await debtBefore(db, order.partnerId, raw.periodId, order.orderDate) : null;
     const { orderPaid } = await import("@/server/deposits/status");
     const paid = await orderPaid(db, id);
     const remaining = total.plus(old ?? 0).minus(paid);
@@ -97,7 +97,7 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
     ];
     result.words = moneyInWords(remaining.toFixed(0));
     if (D(order.shippingFee ?? 0).gt(0)) result.notices.push(`Tổng đơn đã bao gồm phí vận chuyển: ${formatCurrency(order.shippingFee)}.`);
-    if (old !== null) result.notices.push("Nợ cũ tính ngay trước thời điểm lập đơn; đã thu là tiền gắn với đơn này.");
+    result.signer = order.createdByName ?? ""; // ô "Kế toán bán hàng": tên người lập đơn
   } else if (type === "DELIVERY_NOTE") {
     const note = await db.deliveryNote.findFirstOrThrow({ where: { id, order: { partner: partnerScopeWhere(actor) } }, include: { lines: { orderBy: { id: "asc" }, include: { orderLine: { select: { note: true, qty: true } } } } } });
     result.lines = result.lines.map((line, i) => {
@@ -172,6 +172,11 @@ const SIGNS: Record<string, string[]> = {
   STOCKTAKE: ["Người kiểm kho", "Thủ kho", "Kế toán", "Giám đốc"], GOODS_RETURN: ["Người trả hàng", "Người nhận hàng", "Thủ kho", "Kế toán"],
   DISCOUNT_SETTLEMENT: ["Người lập phiếu", "Khách hàng", "Kế toán", "Giám đốc"], SUPPLIER_ORDER: ["Nhà cung cấp xác nhận", "Người đặt hàng", "Giám đốc"], LOSS_ADJUST: ["Người lập phiếu", "Thủ kho", "Kế toán", "Giám đốc"],
 };
+/** Đầu và chân hóa đơn bán hàng (nội dung cố định theo yêu cầu của công ty). */
+const INVOICE_BUSINESS = ["Các loại tôn theo yêu cầu, Tôn xốp, Sóng vòm, Sóng ngói.", "Thép hộp, Thép hình, Nhôm, Kính, Inox, Cửa cuốn, Cửa xếp, Nhựa sáng ...vv"];
+const INVOICE_ADDRESS = "La Văn Cầu - Thượng Cốc - Lạc Sơn - Hòa Bình";
+const INVOICE_PHONES = "Kế toán Phượng 0328 919 556 - Nhâm 0326 500 868";
+const INVOICE_NOTES = ["Hóa đơn bán hàng có giá trị như giấy nhận nợ đối với khách hàng thanh toán chậm.", "Kiểm tra đối chiếu khi giao nhận hàng, Tôn đã cắt không được trả lại.", "Mọi thắc mắc xin quý khách liên hệ ngay, quá hai ngày sau khi nhận hàng công ty không chịu trách nhiệm."];
 const td = (v: string | undefined, cls = "") => `<td${cls ? ` class="${cls}"` : ""}>${e(v)}</td>`;
 /** Bảng riêng của các phiếu không dùng khung hóa đơn. `group` gom dòng theo khóa, `groupLabel` dựng dòng tiêu đề nhóm. */
 interface TableSpec { cols: string[]; widths: number[]; row: (l: Line) => string; group?: (l: Line) => string; groupLabel?: (l: Line) => string }
@@ -205,7 +210,11 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const plain = delivery || type === "TRIP_SHEET";
   const title = type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU");
   const bank = [c.bank.accountNo, c.bank.accountHolder, c.bank.bankName, c.bank.branch].filter(Boolean).join(" - ");
-  const header = `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co"><h1>${e(c.name)}</h1>${!plain ? `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}` : ""}</div>${type === "SALE_INVOICE" && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
+  const saleInvoice = type === "SALE_INVOICE";
+  const companyInfo = saleInvoice
+    ? `<p><b>Chuyên KD và SX:</b></p>${INVOICE_BUSINESS.map((t) => `<p>- ${e(t)}</p>`).join("")}<p><b>Địa chỉ:</b> ${e(INVOICE_ADDRESS)}</p><p><b>SĐT:</b> ${e(INVOICE_PHONES)}</p>${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`
+    : `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`;
+  const header = `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co"><h1>${e(c.name)}</h1>${!plain ? companyInfo : ""}</div>${type === "SALE_INVOICE" && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
   const partnerLabel = purchase || type === "SUPPLIER_ORDER" || (type === "GOODS_RETURN" && b.doc.kind === "Trả nhà cung cấp") ? "Nhà cung cấp" : "Khách hàng";
   const partnerBlock = `<div class="cust"><div><span>${partnerLabel}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div></div>`;
   const p = b.partner, d = b.doc;
@@ -218,7 +227,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
     : type === "STOCKTAKE" ? infoBlock([["Người lập", d.createdBy], ["Trạng thái", d.statusLabel]])
     : partnerBlock;
   const cols = invoice ? ["STT", "Tên sản phẩm", "Số lượng", "Đơn giá", "Thành tiền"] : delivery ? ["STT", "Hàng hóa", "Số lượng", "Lượng xuất"] : ["STT", "Tên sản phẩm", "Mã cuộn", "Khối lượng", "Ghi chú", "Tổng số lượng", "Đơn vị tính", "Đơn giá", "Tổng tiền"];
-  const widths = invoice ? [7, 45, 16, 15, 17] : delivery ? [7, 55, 20, 18] : [5, 29, 7, 6, 6, 10, 6, 14, 17];
+  const widths = invoice ? (saleInvoice ? [5, 55, 12, 13, 15] : [7, 45, 16, 15, 17]) : delivery ? [7, 55, 20, 18] : [5, 29, 7, 6, 6, 10, 6, 14, 17];
   const rows = model.lines.map((line, i) => `<tr><td class="c">${i + 1}</td><td>${product(line)}</td>${invoice ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>` : delivery ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.issued)}</td>` : `<td>${parseDimNote(line.note) ? "" : e(line.rollInfo)}</td><td></td><td></td><td class="r">${e(line.qty)}</td><td class="c">${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>`}</tr>`).join("");
   const sum = delivery ? "" : `<tr class="sum"><td colspan="${cols.length - 1}" class="c">${invoice ? "Tổng" : "Tổng tiền hàng"}</td><td class="r">${e(b.totals.total)}</td></tr>`;
   const table = voucher ? "" : TABLES[type] ? tableHtml(TABLES[type], model.lines) : `<table><colgroup>${widths.map((width) => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${cols.map((col) => `<th scope="col">${col}</th>`).join("")}</tr></thead><tbody>${rows}${sum}</tbody></table>`;
@@ -237,5 +246,5 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   @media screen and (max-width:800px){body{padding:8px}.toolbar{position:sticky;left:0}.page{margin:0}}
   @page{size:A4;margin:12mm 12mm 10mm}
   @media print{.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body><nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>A4 · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav><main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  </style></head><body><nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>A4 · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav><main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${INVOICE_NOTES.map((t) => `- ${e(t)}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }

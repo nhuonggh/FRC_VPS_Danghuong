@@ -21,7 +21,7 @@ export const grossOf = (qty: Prisma.Decimal, price: Prisma.Decimal) => round2(qt
 export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) =>
   grossOf(l.qty, l.salePrice).minus(l.discountNow);
 
-export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock"] as const;
+export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock", "deliveryFrom", "deliveryTo"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;
 const PAYMENT_VALUES = ["UNPAID", "DEPOSITED", "PARTIAL", "PAID", "DEBT", "PROMISED", "OVERPAID"] as const;
 
@@ -88,6 +88,9 @@ export function orderWhere(actor: Actor, params: ListParams, now: Date): Prisma.
   const groups = (params.filters.group ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
   if (groups.length) and.push({ partner: { groupId: { in: groups } } });
   // ASSUMPTION: stock confirmation follows isDraft; a confirmed order may still have provisional FIFO issues.
+  const ymd = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? new Date(`${v}T00:00:00Z`) : null);
+  const dFrom = ymd(params.filters.deliveryFrom?.[0]), dTo = ymd(params.filters.deliveryTo?.[0]);
+  if (dFrom || dTo) and.push({ expectedDeliveryDate: { ...(dFrom ? { gte: dFrom } : {}), ...(dTo ? { lte: dTo } : {}) } });
   if (params.filters.stock?.[0] === "posted") and.push({ isDraft: false });
   if (params.filters.stock?.[0] === "draft") and.push({ isDraft: true });
   if (params.filters.pending?.[0] === "1") and.push({ lines: { some: { isProvisional: true } } });
@@ -321,7 +324,7 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
-      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount),
+      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt,
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
         discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM", note: l.note ?? "",

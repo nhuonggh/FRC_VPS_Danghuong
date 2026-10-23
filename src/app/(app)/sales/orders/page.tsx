@@ -23,7 +23,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const pending = params.filters.pending?.[0] === "1", late = params.filters.late?.[0] === "1";
   const selectedTab = activeOrderTab(params);
   const canCreate = actor.perms.has("order.create") && actor.perms.has("sale_price.view");
-  const filtered = !!(params.q || params.filters.delivery || params.filters.payment || params.filters.creator || params.filters.code || params.filters.customer || params.filters.group || params.filters.stock || pending || late || params.timePreset);
+  const filtered = !!(params.q || params.filters.delivery || params.filters.payment || params.filters.creator || params.filters.code || params.filters.customer || params.filters.group || params.filters.stock || params.filters.deliveryFrom || params.filters.deliveryTo || pending || late || params.timePreset);
 
   return (
     <ListPageLayout

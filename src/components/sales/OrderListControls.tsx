@@ -5,6 +5,7 @@ import { MultiSelectFilter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { buildListHref, listTimeRange, type ListParams } from "@/lib/query-params";
 import { formatDate, formatNumber } from "@/lib/format";
 import { DELIVERY_LABEL, PAYMENT_LABEL } from "@/server/sales/status";
+import { DeliveryDateFilter } from "./DeliveryDateFilter";
 import { activeOrderTab, ORDER_TABS, resetOrderStatusFilters, type OrderTabKey } from "./order-list-config";
 
 const BASE = "/sales/orders";
@@ -26,6 +27,7 @@ export function OrderListControls({ params, counts, creators, groups, now }: { p
       {filter("Thanh toán", "payment", PAYMENT_OPTIONS)}
       {filter("Ghi nhận xuất kho", "stock", STOCK_OPTIONS)}
       <QuickTimeFilter basePath={BASE} params={params} now={now} />
+      <DeliveryDateFilter basePath={BASE} params={params} />
     </div>
     {count > 0 && <p className="text-xs text-fg-secondary">Đang áp dụng {count} điều kiện lọc.{range && ` Ngày lập: ${formatDate(range.start)} – ${formatDate(new Date(range.end.getTime() - 1))}.`} <Link href={BASE} className="text-accent">Xóa bộ lọc</Link></p>}
     <nav aria-label="Trạng thái đơn hàng" className="flex overflow-x-auto border-b border-border">{ORDER_TABS.map((tab) => <Link key={tab.key} href={buildListHref(BASE, params, { filters: { ...resetOrderStatusFilters, ...Object.fromEntries(Object.entries(tab.filters as Record<string, readonly string[]>).map(([key, values]) => [key, [...values]])) } })} aria-current={active === tab.key ? "page" : undefined} className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium ${active === tab.key ? "border-accent text-accent" : "border-transparent text-fg-secondary hover:bg-hover"}`}>{tab.label}<span className={`tabular rounded-full px-2 py-1 text-xs ${active === tab.key ? "bg-accent-soft text-accent" : "bg-hover text-fg-secondary"}`}>{formatNumber(counts[tab.key])}</span></Link>)}</nav>

@@ -47,6 +47,8 @@ model SaleOrder {
   walkInPhone          String?
   /// Phí vận chuyển thu của khách: cộng vào tiền phải thu; ghi công nợ theo tỷ lệ giá trị hàng đã giao (cùng phiếu giao).
   shippingFee          Decimal        @default(0) @db.Decimal(18, 2)
+  /// In "Nợ cũ" + "Tổng cộng" trên hóa đơn bán hàng. Tắt khi giao tới nhà người khác (khách không muốn lộ công nợ).
+  printDebt            Boolean        @default(true)
   /// Chiết khấu cả đơn do người dùng nhập; đã được PHÂN BỔ vào `discountNow` của từng dòng (xem `discountOrder`).
   orderDiscount        Decimal        @default(0) @db.Decimal(18, 2)
   /// Thời điểm chứng từ (docTimestamp) — cũng là `at` của mọi dòng sổ kho của đơn.

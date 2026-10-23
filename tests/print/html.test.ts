@@ -17,7 +17,7 @@ describe("HTML in trực tiếp", () => {
   it("hóa đơn cộng nợ cũ trước thời điểm lập đơn và trừ tiền gắn với đơn", async () => {
     vi.mocked(getOrder).mockResolvedValue({ partnerId: 1, orderDate: new Date("2026-10-01"), orderTotal: "14700000", shippingFee: "0", lines: [{ qty: "14", lineAmount: "14700000", note: null }] } as never);
     const aggregate = vi.fn(async () => ({ _sum: { debit: new Prisma.Decimal(5000000), credit: new Prisma.Decimal(2000000) } }));
-    const db = { printTemplate: { findFirst: async () => null }, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1 }) }, openingDebt: { findFirst: async () => ({ amount: new Prisma.Decimal(27000000) }) }, partnerLedger: { aggregate } };
+    const db = { printTemplate: { findFirst: async () => null }, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1, printDebt: true }) }, openingDebt: { findFirst: async () => ({ amount: new Prisma.Decimal(27000000) }) }, partnerLedger: { aggregate } };
     const withDebt = { ...actor, perms: new Set(["print.use", "sale_price.view", "debt.view"]) };
     const model = await buildHtmlPrint(db as never, withDebt, "SALE_INVOICE", 1);
     expect(model.summary.find((r) => r.label === "Còn phải trả")?.value).toContain("30.700.000");
@@ -28,6 +28,11 @@ describe("HTML in trực tiếp", () => {
     expect(aggregate).not.toHaveBeenCalled();
     expect(withoutDebt.summary.some((r) => r.label === "Nợ cũ")).toBe(false);
     expect(withoutDebt.summary.at(-1)?.value).toContain("700.000");
+    // Đơn tắt "In công nợ": có quyền xem nợ vẫn không in nợ cũ; chữ ký kế toán là người lập đơn.
+    vi.mocked(getOrder).mockResolvedValue({ partnerId: 1, orderDate: new Date("2026-10-01"), orderTotal: "14700000", shippingFee: "0", createdByName: "Phượng", lines: [{ qty: "14", lineAmount: "14700000", note: null }] } as never);
+    const hidden = await buildHtmlPrint({ ...db, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1, printDebt: false }) } } as never, withDebt, "SALE_INVOICE", 1);
+    expect(hidden.summary.some((r) => r.label === "Nợ cũ")).toBe(false);
+    expect(hidden.signer).toBe("Phượng");
   });
   it("phiếu nhập giữ nguyên tổng tiền hàng và không gán tiền chi NCC vào phiếu", async () => {
     vi.mocked(getPurchase).mockResolvedValue({ partnerId: 1, periodId: 1, at: new Date(), purchaseTotal: "4080000", freightCost: "200000", lines: [{ rollInfo: "C001" }] } as never);
