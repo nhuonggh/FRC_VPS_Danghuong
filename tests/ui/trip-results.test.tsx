@@ -61,6 +61,19 @@ describe("delivery results reference layout", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Nhập kết quả CH000001" })).not.toBeInTheDocument();
   });
+  it("settles then confirms in one click under the stop table when the same user holds both permissions", async () => {
+    api.mockResolvedValue({});
+    const done = { ...stop, result: "GIAO_DU" as const, resultLabel: "Giao đủ", due: "200000", cash: "200000", cashAccountId: 1 };
+    const returned = { ...detail, status: "RETURNED" as const, stops: [done], totals: { ...detail.totals, expected: "200000", cash: "200000" } };
+    render(<TripResultsView {...props} detail={returned} perms={{ canSettle: true, canConfirm: true }} params={params({ detail: "1" })} />);
+    await userEvent.click(screen.getAllByRole("button", { name: "Đối soát và xác nhận đã nhận tiền" })[0]);
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/trips/1/confirm", expect.objectContaining({ json: { cashAccountId: null, transferAccountId: null } })));
+    expect(api).toHaveBeenCalledWith("/api/trips/1/settle", expect.anything());
+  });
+  it("hides the settle panel without settle/confirm permission", () => {
+    render(<TripResultsView {...props} detail={{ ...detail, status: "RETURNED" }} perms={{ canSettle: false, canConfirm: false }} params={params({ detail: "1" })} />);
+    expect(screen.queryByRole("button", { name: /Đối soát|Xác nhận đã nhận/ })).not.toBeInTheDocument();
+  });
   it("searches account references inside the dialog before saving the selected account", async () => {
     api.mockResolvedValue({});
     render(<TripResultsView {...props} accounts={[{ id: 1, name: "Quỹ Kế toán", type: "CASH" }, { id: 3, name: "Quỹ Thu ngân", type: "CASH" }]} detail={detail} params={params({ detail: "1", entry: "first" })} />);
