@@ -7,7 +7,7 @@ import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
 import { emptyPrefs } from "@/lib/workspace";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: vi.fn() }) }));
 afterEach(cleanup);
 
 describe("AppShell", () => {
