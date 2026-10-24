@@ -101,7 +101,7 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
     if (!result.qr && accountNo && bankName) {
       const qs = new URLSearchParams({ addInfo: body.docCode, accountName: accountHolder });
       if (remaining.gt(0)) qs.set("amount", remaining.toFixed(0));
-      result.qr = `https://img.vietqr.io/image/${encodeURIComponent(bankName)}-${encodeURIComponent(accountNo)}-compact2.png?${qs}`;
+      result.qr = `https://img.vietqr.io/image/${encodeURIComponent(bankName)}-${encodeURIComponent(accountNo)}-qr_only.png?${qs}`;
     }
     if (D(order.shippingFee ?? 0).gt(0)) result.notices.push(`Tổng đơn đã bao gồm phí vận chuyển: ${formatCurrency(order.shippingFee)}.`);
     result.signer = order.createdByName ?? ""; // ô "Kế toán bán hàng": tên người lập đơn
@@ -248,7 +248,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   .toolbar{display:flex;flex-wrap:wrap;gap:var(--tool-space);align-items:center;max-width:210mm;margin:0 auto var(--tool-space);padding:var(--tool-space);background:var(--tool-bg);color:var(--tool-fg);border-radius:var(--tool-radius)}
   .toolbar button,.toolbar a{min-height:44px;padding:8px 12px;border:1px solid var(--tool-border);border-radius:var(--tool-radius);background:var(--tool-bg);color:var(--tool-fg);font:inherit;text-decoration:none;cursor:pointer}
   .toolbar :focus-visible{outline:2px solid currentColor;outline-offset:2px}.toolbar span{font-size:11px}
-  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr img{display:block}thead{display:table-header-group}table{table-layout:fixed}${purchase ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
+  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr{width:128px;font-size:10.5px}.qr .box{width:128px;height:128px;border:0}.qr img{display:block}thead{display:table-header-group}table{table-layout:fixed}${purchase ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
   tr.grp td{background:var(--soft);font-weight:600;font-size:12px}
   @media screen and (max-width:800px){body{padding:8px}.toolbar{position:sticky;left:0}.page{margin:0}}
   @page{size:A4;margin:12mm 12mm 10mm}
