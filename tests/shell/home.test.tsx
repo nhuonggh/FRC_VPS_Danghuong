@@ -1,14 +1,24 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { use } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HomePage from "@/app/(app)/page";
+import { WidgetCard } from "@/components/home/WidgetCard";
 import type { SessionActor } from "@/server/auth/actor";
 
 const requireActor = vi.fn();
 const loadWidget = vi.fn();
+const widgetPromises = new Map<string, Promise<unknown>>();
 vi.mock("@/server/auth/session", () => ({ requireActor: (...a: unknown[]) => requireActor(...a) }));
 // Trang chủ không chạm DB trong test này: số liệu widget được kiểm riêng ở tests/home/*
+// Widget thật là server component async (Suspense, stream vào sau) — jsdom không chạy được; thay bằng bản dùng `use()` cùng loadWidget giả.
+vi.mock("@/components/home/StreamedWidget", () => ({
+  StreamedWidget: ({ spec }: { spec: { key: string } & Record<string, never> }) => {
+    if (!widgetPromises.has(spec.key)) widgetPromises.set(spec.key, loadWidget({}, spec));
+    return <WidgetCard spec={spec as never} state={use(widgetPromises.get(spec.key)!) as never} />;
+  },
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/server/home/queries", async (orig) => ({ ...(await orig<typeof import("@/server/home/queries")>()), loadWidget: (...a: unknown[]) => loadWidget(...a) }));
@@ -18,7 +28,8 @@ const actor = (perms: string[], fullName = "Trần Văn An"): SessionActor =>
   ({ userId: 1, username: "an", fullName, perms: new Set(perms), mustChangePassword: false, authMethod: "password" });
 
 async function renderHome(search: Record<string, string> = {}) {
-  render(await HomePage({ searchParams: Promise.resolve(search) }));
+  const page = await HomePage({ searchParams: Promise.resolve(search) });
+  await act(async () => { render(page); });
 }
 
 beforeEach(() => {
@@ -30,6 +41,7 @@ afterEach(() => {
   vi.useRealTimers();
   requireActor.mockReset();
   loadWidget.mockReset();
+  widgetPromises.clear();
 });
 beforeEach(() => loadWidget.mockResolvedValue({ ok: true, value: 3 }));
 

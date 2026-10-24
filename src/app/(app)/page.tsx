@@ -20,7 +20,10 @@ import { requireActor } from "@/server/auth/session";
 import { DASH_TABS, isDashTabKey, loadDashboard, visibleDashTabs } from "@/server/home/dashboard";
 import type { Dashboard } from "@/server/home/dashboard/types";
 import { withTimeout } from "@/server/home/queries";
-import { homeWidgets, loadWidget } from "@/server/home/queries";
+import { homeWidgets } from "@/server/home/queries";
+import { Suspense } from "react";
+import { StreamedWidget } from "@/components/home/StreamedWidget";
+import { WidgetCardSkeleton } from "@/components/home/WidgetCard";
 
 export const dynamic = "force-dynamic"; // lời chào và số liệu phụ thuộc thời điểm hiện tại
 
@@ -64,11 +67,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   if (tab === null) {
     const specs = homeWidgets(nav, actor, now);
-    const widgets = await Promise.all(specs.map(async (spec) => ({ spec, state: await loadWidget(prisma, spec) })));
     return (
       <div className="space-y-6">
         {(visible.length > 0 || dailyVisible) && <HomeTabs tabs={tabItems} active="functions" />}
-        <HomeView fullName={actor.fullName} now={now} modules={nav.filter((m) => m.type === "accordion")} widgets={widgets} />
+        <HomeView fullName={actor.fullName} now={now} modules={nav.filter((m) => m.type === "accordion")} widgetsSlot={specs.length > 0 ? specs.map((spec) => <Suspense key={spec.key} fallback={<WidgetCardSkeleton spec={spec} />}><StreamedWidget spec={spec} /></Suspense>) : undefined} />
         <GuideHomeSection />
       </div>
     );
