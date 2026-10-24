@@ -3,8 +3,6 @@ import type { NavFunction, NavModule } from "@/config/app.config";
 import { can } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
 import { ICT_OFFSET_MS, toIct } from "@/lib/time";
-import { parseListParams } from "@/lib/query-params";
-import { onHandList } from "@/server/inventory-reports/on-hand";
 import { getOpenPeriod } from "@/server/period/guard";
 import type { WidgetSpec, WidgetState } from "./types";
 
@@ -43,10 +41,20 @@ export async function todayPurchaseCount(db: PrismaClient, now: Date): Promise<n
   return db.purchase.count({ where: { periodId: period.id, isCancelled: false, at: { gte: start, lt: end } } });
 }
 
-/** Số mã hàng có định mức tồn > 0 mà tồn hiện tại thấp hơn định mức. Không lộ giá. */
-export async function lowStockCount(db: PrismaClient, actor: Actor): Promise<number> {
-  const { stats } = await onHandList(db, actor, parseListParams({}), { belowMinOnly: true, unpaged: true });
-  return stats.below;
+/**
+ * Số mã hàng có định mức tồn > 0 mà tồn hiện tại thấp hơn định mức. Không lộ giá.
+ * Đếm thẳng ở DB (cùng công thức onHandList: Σ qtyRemaining − Σ qtyProvisional của kỳ mở) — không tải cả danh mục sản phẩm.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- giữ chữ ký cũ (actor không còn cần)
+export async function lowStockCount(db: PrismaClient, _actor?: Actor): Promise<number> {
+  const period = await getOpenPeriod(db);
+  const [row] = await db.$queryRaw<{ n: bigint }[]>`
+    SELECT COUNT(*) AS n FROM products p
+    WHERE p."minStock" > 0
+      AND COALESCE((SELECT SUM(l."qtyRemaining") FROM cost_layers l WHERE l."periodId" = ${period.id} AND l."productId" = p.id), 0)
+        - COALESCE((SELECT SUM(s."qtyProvisional") FROM stock_ledger s WHERE s."periodId" = ${period.id} AND s."productId" = p.id), 0)
+        < p."minStock"`;
+  return Number(row?.n ?? 0);
 }
 
 /** Tổng giá trị tồn (giá vốn FIFO) của kỳ đang mở. Chỉ gọi khi actor có `cost.view`. */

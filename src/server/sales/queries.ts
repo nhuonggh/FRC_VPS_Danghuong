@@ -107,27 +107,37 @@ const lateWhere = (now: Date): Prisma.SaleOrderWhereInput => ({
 /** Công nợ của khách ngay trước ngày lập từng đơn (trong kỳ của đơn): số đầu kỳ + Σ(nợ − có) các dòng sổ có `at` < ngày đơn. */
 async function oldDebtBefore(db: Db, rows: { id: number; partnerId: number; periodId: number; orderDate: Date }[]): Promise<Map<number, Prisma.Decimal>> {
   const out = new Map<number, Prisma.Decimal>();
-  await Promise.all(rows.map(async (o) => {
-    const [opening, led] = await Promise.all([
-      db.openingDebt.findFirst({ where: { periodId: o.periodId, partnerId: o.partnerId }, select: { amount: true } }),
-      db.partnerLedger.aggregate({ where: { periodId: o.periodId, partnerId: o.partnerId, at: { lt: o.orderDate } }, _sum: { debit: true, credit: true } }),
-    ]);
-    out.set(o.id, D(opening?.amount ?? 0).plus(led._sum.debit ?? 0).minus(led._sum.credit ?? 0));
-  }));
+  if (rows.length === 0) return out;
+  // 2 truy vấn cho cả trang (trước: 2 truy vấn MỖI dòng ⇒ N+1). Sổ cái: nối danh sách (đơn, khách, kỳ, ngày) với partner_ledger.
+  const pairs = [...new Map(rows.map((o) => [`${o.periodId}:${o.partnerId}`, { periodId: o.periodId, partnerId: o.partnerId }])).values()];
+  const values = Prisma.join(rows.map((o) => Prisma.sql`(${o.id}::int, ${o.partnerId}::int, ${o.periodId}::int, ${o.orderDate}::timestamptz)`));
+  const [openings, ledger] = await Promise.all([
+    db.openingDebt.findMany({ where: { OR: pairs }, select: { periodId: true, partnerId: true, amount: true } }),
+    db.$queryRaw<{ id: number; debit: Prisma.Decimal; credit: Prisma.Decimal }[]>`
+      SELECT v.id, COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
+      FROM (VALUES ${values}) AS v(id, "partnerId", "periodId", "orderDate")
+      LEFT JOIN partner_ledger l ON l."periodId" = v."periodId" AND l."partnerId" = v."partnerId" AND l.at < v."orderDate"
+      GROUP BY v.id`,
+  ]);
+  const opening = new Map(openings.map((r) => [`${r.periodId}:${r.partnerId}`, r.amount]));
+  const led = new Map(ledger.map((r) => [r.id, r]));
+  for (const o of rows) {
+    const l = led.get(o.id);
+    out.set(o.id, D(opening.get(`${o.periodId}:${o.partnerId}`) ?? 0).plus(l?.debit ?? 0).minus(l?.credit ?? 0));
+  }
   return out;
 }
 
 export async function listOrders(db: Db, actor: Actor, params: ListParams, now: Date = new Date()) {
   const where = orderWhere(actor, params, now);
   const scope: Prisma.SaleOrderWhereInput = { isCancelled: false, partner: partnerScopeWhere(actor) };
-  const [rows, total, all, pending, late, statuses] = await Promise.all([
+  const [rows, total, pending, late, statuses] = await Promise.all([
     db.saleOrder.findMany({
       where, orderBy: sortToOrderBy(params.sort, ["orderDate", "code", "expectedDeliveryDate"], { orderDate: "desc" }),
       skip: (params.page - 1) * params.pageSize, take: params.pageSize,
       include: { partner: { select: { code: true, name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true, isProvisional: true } } },
     }),
     db.saleOrder.count({ where }),
-    db.saleOrder.count({ where: scope }),
     db.saleOrder.count({ where: { AND: [scope, { lines: { some: { isProvisional: true } } }] } }),
     db.saleOrder.count({ where: { AND: [scope, lateWhere(now)] } }),
     db.saleOrder.groupBy({ by: ["deliveryStatus", "paymentStatus"], where: scope, _count: { _all: true } }),
@@ -145,6 +155,7 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
     };
   });
+  const all = statuses.reduce((s, r) => s + r._count._all, 0); // = số đơn theo phạm vi (cùng điều kiện `scope`), khỏi đếm thêm một lần
   const delivered = statuses.filter((r) => r.deliveryStatus === "DELIVERED").reduce((s, r) => s + r._count._all, 0);
   const failed = statuses.filter((r) => r.deliveryStatus === "FAILED").reduce((s, r) => s + r._count._all, 0);
   const unpaid = statuses.filter((r) => r.paymentStatus === "UNPAID").reduce((s, r) => s + r._count._all, 0);
