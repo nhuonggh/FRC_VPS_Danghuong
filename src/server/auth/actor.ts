@@ -59,15 +59,20 @@ export async function loadActor(
   /** Phiên Google: ms epoch lúc đăng nhập Google (JWT authAt). */
   authAt?: number,
 ): Promise<SessionActor | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-    },
-  });
+  // 2 truy vấn phẳng chạy song song (trước: include lồng 4 tầng ⇒ nhiều truy vấn nối tiếp, mỗi request/API đều trả).
+  const [user, permRows] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, fullName: true, email: true, emailChangedAt: true, isLocked: true, mustChangePassword: true },
+    }),
+    prisma.permission.findMany({
+      where: { roles: { some: { role: { users: { some: { userId } } } } } },
+      select: { code: true },
+    }),
+  ]);
   if (!user || user.isLocked) return null;
   if (authMethod === "google" && !googleSessionStillValid(user, authAt)) return null;
-  const perms = unionPermissionCodes(user.roles.map((ur) => ur.role));
+  const perms = new Set(permRows.map((p) => p.code));
   return {
     userId: user.id,
     username: user.username,
