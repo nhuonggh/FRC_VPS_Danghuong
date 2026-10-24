@@ -247,7 +247,7 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     await userEvent.click(screen.getByRole("menuitem", { name: /Lập đơn và in/ }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/5"));
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(navigatePrint).toHaveBeenCalledWith("/api/print/SALE_INVOICE/5/html?auto=1");
+    expect(navigatePrint).toHaveBeenCalledWith("/api/print/SALE_INVOICE/5/html");
     expect(closePrint).not.toHaveBeenCalled();
     open.mockRestore();
   });

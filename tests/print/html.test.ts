@@ -42,6 +42,32 @@ describe("HTML in trực tiếp", () => {
     const noPerm = await buildHtmlPrint(db as never, { ...actor, perms: new Set(["print.use", "sale_price.view"]) }, "SALE_INVOICE", 1, { debt: true });
     expect(noPerm.summary.some((r) => r.label === "Nợ cũ")).toBe(false);
   });
+  it("hóa đơn in địa chỉ giao hàng nhập trên đơn; đơn không nhập thì không có dòng đó", async () => {
+    const db = { printTemplate: { findFirst: async () => null }, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1, printDebt: false }) } };
+    const order = { partnerId: 1, orderDate: new Date("2026-10-01"), orderTotal: "100", shippingFee: "0", lines: [{ qty: "1", lineAmount: "100", note: null }] };
+    vi.mocked(getOrder).mockResolvedValue({ ...order, shipAddress: "Xóm Pheo - PL" } as never);
+    const withShip = await buildHtmlPrint(db as never, { ...actor, perms: new Set(["print.use", "sale_price.view"]) }, "SALE_INVOICE", 1);
+    expect(withShip.shipAddress).toBe("Xóm Pheo - PL");
+    expect(renderHtmlPrint(withShip, true, false, "n")).toContain("Địa chỉ giao hàng:</span> Xóm Pheo - PL");
+    vi.mocked(getOrder).mockResolvedValue({ ...order, shipAddress: null } as never);
+    const without = await buildHtmlPrint(db as never, { ...actor, perms: new Set(["print.use", "sale_price.view"]) }, "SALE_INVOICE", 1);
+    expect(renderHtmlPrint(without, true, false, "n")).not.toContain("Địa chỉ giao hàng");
+  });
+  it("phiếu giao nhận hàng hóa: mặc định theo mẫu, khách sửa tiêu đề/SĐT/lưu ý ở mẫu in", () => {
+    const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026" }, lines: [], totals: { total: "1" } }, company: { name: "Công ty", address: "Địa chỉ mới <b>", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [], summary: [], words: "", notices: [] };
+    const def = renderHtmlPrint(model, true, false, "n");
+    expect(def).toContain("<h2>PHIẾU GIAO NHẬN HÀNG HÓA</h2>");
+    expect(def).toContain("Kế toán Phượng 0328 919 556");
+    expect(def).toContain("Kiểm tra đối chiếu khi giao nhận hàng");
+    expect(def).toContain("Địa chỉ mới &lt;b&gt;");
+    const custom = renderHtmlPrint({ ...model, title: "biên nhận <x>", phone: "Thảo 0900 000 000", footer: "Dòng một\n- Dòng hai\n\n" }, true, false, "n");
+    expect(custom).toContain("<h2>BIÊN NHẬN &lt;X&gt;</h2>");
+    expect(custom).toContain("<title>BIÊN NHẬN &lt;X&gt; - DH1</title>");
+    expect(custom).toContain("Thảo 0900 000 000");
+    expect(custom).not.toContain("Kế toán Phượng");
+    expect(custom).toContain("- Dòng một<br>- Dòng hai");
+    expect(custom).not.toContain("Kiểm tra đối chiếu");
+  });
   it("hóa đơn: ẩn dòng tổng số tấm nhưng giữ dòng kích thước; nút in đặt ở thanh đáy", () => {
     const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026" }, lines: [], totals: { total: "100" } }, company: { name: "Công ty", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [{ name: "Tôn", note: "", qty: "1", unit: "m²", price: "1", amount: "1", cuts: "3,28 m × 14 Tấm", pieces: "14", ratio: "0,4" }], summary: [], words: "", notices: [] };
     const shown = renderHtmlPrint(model, true, false, "n");

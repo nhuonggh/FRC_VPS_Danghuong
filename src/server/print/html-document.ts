@@ -26,8 +26,10 @@ const styleOf = (type: string): keyof typeof styles => (type in styles ? type : 
 const wordsOf = (formatted: string) => moneyInWords(formatted.split(",")[0].replace(/[^\d-]/g, "") || "0");
 type Line = Record<string, string>;
 export interface HtmlPrintDocument {
-  type: PrintType; body: ContractBody; company: CompanyDTO; signer: string; footer: string; qr: string;
+  type: PrintType; body: ContractBody; company: CompanyDTO; signer: string; footer: string; qr: string; /** Từ mẫu in (Hệ thống → Công ty): tiêu đề, SĐT in; rỗng = dùng mặc định. */ title?: string; phone?: string;
   lines: Line[]; summary: { label: string; value: string; big?: boolean }[]; words: string; notices: string[];
+  /** Địa chỉ giao hàng nhập trên đơn (hóa đơn bán hàng). */
+  shipAddress?: string;
 }
 
 /** Adjacent cuts of the same product/price become the cut list shown in the supplied invoice. */
@@ -75,14 +77,15 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
   }
   const [body, company, template] = await Promise.all([
     buildContract(db, actor, type, id), getCompany(db),
-    db.printTemplate.findFirst({ where: { docType: type, isActive: true }, orderBy: { id: "asc" }, select: { signerName: true, footerNote: true, qrImage: true } }),
+    db.printTemplate.findFirst({ where: { docType: type, isActive: true }, orderBy: { id: "asc" }, select: { signerName: true, footerNote: true, qrImage: true, title: true, phone: true } }),
   ]);
-  const result: HtmlPrintDocument = { type: type as PrintType, body, company, signer: template?.signerName ?? "", footer: template?.footerNote ?? "", qr: template?.qrImage ?? "", lines: body.lines.map((l) => ({ ...l })), summary: [], words: "", notices: [] };
+  const result: HtmlPrintDocument = { type: type as PrintType, body, company, signer: template?.signerName ?? "", footer: template?.footerNote ?? "", qr: template?.qrImage ?? "", title: template?.title?.trim() ?? "", phone: template?.phone?.trim() ?? "", lines: body.lines.map((l) => ({ ...l })), summary: [], words: "", notices: [] };
   if (body.doc.status === "ĐÃ HỦY") throw new DomainError("Phiếu đã hủy, không thể in.", 409);
   if (type === "SALE_INVOICE") {
     const order = await getOrder(db, actor, id);
     const raw = await db.saleOrder.findUniqueOrThrow({ where: { id }, select: { periodId: true, printDebt: true } });
     result.lines = combineInvoiceCuts(result.lines, order.lines);
+    if (order.shipAddress) result.shipAddress = order.shipAddress;
     if (order.walkInName) body.partner = { ...(body.partner ?? { code: "", name: "", phone: "", address: "" }), name: order.walkInName, phone: order.walkInPhone ?? body.partner?.phone ?? "" };
     const total = D(order.orderTotal ?? 0);
     // Same accounting definition as the order list: opening + ledger strictly before orderDate.
@@ -172,7 +175,7 @@ function product(line: Line, hidePieces = false) {
 }
 
 const TITLES: Record<string, string> = {
-  SALE_INVOICE: "HÓA ĐƠN GIAO NHẬN HÀNG HÓA", DELIVERY_NOTE: "PHIẾU GIAO NHẬN", PURCHASE_RECEIPT: "PHIẾU NHẬP KHO", QUOTE: "BÁO GIÁ", RECEIPT: "PHIẾU THU", PAYMENT: "PHIẾU CHI",
+  SALE_INVOICE: "PHIẾU GIAO NHẬN HÀNG HÓA", DELIVERY_NOTE: "PHIẾU GIAO NHẬN", PURCHASE_RECEIPT: "PHIẾU NHẬP KHO", QUOTE: "BÁO GIÁ", RECEIPT: "PHIẾU THU", PAYMENT: "PHIẾU CHI",
   DEBT_STATEMENT: "BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ", TRIP_SHEET: "PHIẾU GIAO NHẬN THEO CHUYẾN", PRODUCTION_ORDER: "LỆNH SẢN XUẤT", STOCKTAKE: "PHIẾU KIỂM KHO", GOODS_RETURN: "PHIẾU TRẢ HÀNG",
   DISCOUNT_SETTLEMENT: "PHIẾU TẤT TOÁN CHIẾT KHẤU", SUPPLIER_ORDER: "ĐƠN ĐẶT HÀNG NHÀ CUNG CẤP", LOSS_ADJUST: "PHIẾU HAO HỤT / XUẤT HỦY",
 };
@@ -222,15 +225,15 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const { body: b, company: c, type } = model;
   const invoice = type === "SALE_INVOICE" || type === "QUOTE" || type === "GOODS_RETURN" || type === "SUPPLIER_ORDER", delivery = type === "DELIVERY_NOTE", purchase = type === "PURCHASE_RECEIPT", voucher = type === "RECEIPT" || type === "PAYMENT" || type === "DISCOUNT_SETTLEMENT";
   const plain = delivery || type === "TRIP_SHEET";
-  const title = type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU");
+  const title = e(model.title ? model.title.toLocaleUpperCase("vi") : type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU"));
   const bank = [c.bank.accountNo, c.bank.accountHolder, c.bank.bankName, c.bank.branch].filter(Boolean).join(" - ");
   const saleInvoice = type === "SALE_INVOICE";
   const companyInfo = saleInvoice
-    ? `<p><b>Chuyên KD và SX:</b></p>${INVOICE_BUSINESS.map((t) => `<p>- ${e(t)}</p>`).join("")}<p><b>Địa chỉ:</b> ${e(INVOICE_ADDRESS)}</p><p><b>SĐT:</b> ${e(INVOICE_PHONES)}</p>${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`
+    ? `<p><b>Chuyên KD và SX:</b></p>${INVOICE_BUSINESS.map((t) => `<p>- ${e(t)}</p>`).join("")}<p><b>Địa chỉ:</b> ${e(c.address || INVOICE_ADDRESS)}</p><p><b>SĐT:</b> ${e(model.phone || INVOICE_PHONES)}</p>${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`
     : `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`;
   const header = `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co"><h1>${e(c.name)}</h1>${!plain ? companyInfo : ""}</div>${type === "SALE_INVOICE" && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
   const partnerLabel = purchase || type === "SUPPLIER_ORDER" || (type === "GOODS_RETURN" && b.doc.kind === "Trả nhà cung cấp") ? "Nhà cung cấp" : "Khách hàng";
-  const partnerBlock = `<div class="cust"><div><span>${partnerLabel}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div></div>`;
+  const partnerBlock = `<div class="cust"><div><span>${partnerLabel}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div>${model.shipAddress ? `<div class="full"><span>Địa chỉ giao hàng:</span> ${e(model.shipAddress)}</div>` : ""}</div>`;
   const p = b.partner, d = b.doc;
   const info = type === "DISCOUNT_SETTLEMENT" ? infoBlock([["Khách hàng", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Hình thức", d.method], ["Phiếu chi liên quan", d.payment]])
     : type === "LOSS_ADJUST" ? infoBlock([["Loại phiếu", d.kind], ["Người lập", d.createdBy]])
@@ -262,7 +265,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : "Số";
   const orderMeta = delivery || (type === "GOODS_RETURN" && b.doc.orderCode) ? `<div><span>Mã đơn hàng:</span> <b>${e(b.doc.orderCode)}</b></div>` : "";
   const script = `const ready=async()=>{await Promise.allSettled([400,600,700].map(w=>document.fonts.load(w+' 13px "Be Vietnam Pro"')));await document.fonts.ready;await Promise.all(Array.from(document.images).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r;i.onerror=r})));};const pn=document.getElementById('print-now');if(pn)pn.onclick=async()=>{await ready();window.print()};${auto ? "ready().then(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>window.print())));" : ""}`;
-  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[styleOf(type)][mono ? "mono" : "color"]}
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[styleOf(type)][mono ? "mono" : "color"]}
   /* Print override preserves the supplied paper design, independently of app theme. */
   :root{--tool-bg:var(--soft);--tool-fg:var(--ink);--tool-border:var(--line);--tool-space:12px;--tool-radius:6px}
   .toolbar{display:flex;flex-wrap:wrap;gap:var(--tool-space);align-items:center;max-width:210mm;margin:0 auto var(--tool-space);padding:var(--tool-space);background:var(--tool-bg);color:var(--tool-fg);border-radius:var(--tool-radius)}
@@ -274,5 +277,5 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   ${saleInvoice ? ".toolbar a.pri{font-weight:600;border-color:var(--ink)}@media screen{.page{width:auto;max-width:1600px;min-height:0;margin:0 auto 72px}.toolbar{position:fixed;left:0;right:0;bottom:0;max-width:none;margin:0;justify-content:flex-end;border-radius:0;box-shadow:0 -2px 10px rgba(0,0,0,.15);z-index:10}}" : ""}
   @page{size:A4;margin:12mm 12mm 10mm}
   @media print{.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body>${toolbar}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${INVOICE_NOTES.map((t) => `- ${e(t)}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  </style></head><body>${toolbar}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }

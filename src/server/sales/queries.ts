@@ -173,7 +173,7 @@ export interface OrderDeliveryDTO {
 }
 export interface OrderDetailDTO extends Omit<OrderRowDTO, "lineCount" | "orderTotal"> {
   canViewAnalysis?: boolean;
-  note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; shippingFee?: string; orderDiscount?: string; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
+  note: string | null; createdByName: string | null; walkInName: string | null; walkInPhone: string | null; shipAddress?: string | null; shippingFee?: string; orderDiscount?: string; salesUserName: string | null; warehouseName: string | null; paymentMethod: "NONE" | "CASH" | "TRANSFER" | "COD"; cancelReason: string | null; originalDeliveryDate: string;
   lines: OrderLineDTO[]; orderTotal?: string; deliveries: OrderDeliveryDTO[];
   deposits: { id: number; code: string; at: Date; amount: string; cashAccountName: string; note: string | null; reviewed: boolean }[]; depositTotal: string;
   quote: { id: number; code: string } | null;
@@ -246,7 +246,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
     expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), originalDeliveryDate: ymdOf(o.originalDeliveryDate), delayDays: delayDays(o, now),
     hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
-    walkInName: o.walkInName, walkInPhone: o.walkInPhone, salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
+    walkInName: o.walkInName, walkInPhone: o.walkInPhone, shipAddress: o.shipAddress, salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
     shippingFee: o.shippingFee.toString(), orderDiscount: o.orderDiscount.toString(),
     orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).plus(o.shippingFee).toString(), lines,
     deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note, reviewed: r.reviewStatus === "REVIEWED" })),
@@ -324,7 +324,7 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
-      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt,
+      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt, shipAddress: o.shipAddress ?? "",
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
         discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM", note: l.note ?? "",

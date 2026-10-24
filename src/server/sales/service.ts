@@ -143,7 +143,8 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
  * Sửa: trường bỏ trống (undefined) = giữ nguyên, null = xoá. Người bán phải đang hoạt động, kho phải đang dùng.
  */
 export async function orderExtras(tx: Db, actor: Actor, input: SaleOrderInput, mode: "create" | "edit") {
-  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean } = {};
+  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean; shipAddress?: string | null } = {};
+  if (input.shipAddress !== undefined) out.shipAddress = input.shipAddress || null;
   if (input.printDebt !== undefined) out.printDebt = input.printDebt;
   if (input.shippingFee !== undefined) out.shippingFee = input.shippingFee; else if (mode === "create") out.shippingFee = 0;
   if (input.orderDiscount !== undefined) out.orderDiscount = input.orderDiscount; else if (mode === "create") out.orderDiscount = 0;
