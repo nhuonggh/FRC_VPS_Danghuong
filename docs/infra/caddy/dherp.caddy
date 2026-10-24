@@ -12,5 +12,6 @@ dherp.sheetapp.store {
         Strict-Transport-Security "max-age=31536000"
         -Server
     }
+    encode zstd gzip
     reverse_proxy dherp_app:3000
 }
