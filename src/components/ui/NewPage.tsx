@@ -98,10 +98,18 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
     }
   }
 
+  const titleRow = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-xl font-semibold">{title}</h1>
+      {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}
+    </div>
+  );
+
   return (
     // <form>: Enter trong ô nhập gửi form (nút Tạo là nút submit duy nhất); mọi đường gửi đều qua submit() (chặn bấm đúp).
     <form className="flex min-h-full flex-col" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-      <div className="mb-4">
+      {/* Form rộng (lập đơn): quay lại + tiêu đề + nút Lưu/In dính đầu vùng cuộn để đang xem cuối trang vẫn bấm được */}
+      <div className={clsx(wide ? "sticky top-0 z-header -mt-1 mb-4 space-y-3 border-b border-border bg-canvas pb-3 pt-1" : "mb-4")}>
         <Link
           href={backHref}
           onClick={(e) => { if (dirtyRef.current()) { e.preventDefault(); void leave(); } }}
@@ -109,6 +117,7 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
         >
           <ArrowLeft size={16} aria-hidden /> {backLabel}
         </Link>
+        {wide && titleRow}
       </div>
       {error && (
         <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">
@@ -117,10 +126,7 @@ export function NewPage({ backHref, backLabel, title, submitLabel = "Tạo", isD
         </div>
       )}
       <div className={clsx("min-w-0 flex-1 space-y-4", !wide && "mx-auto w-full max-w-7xl")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">{title}</h1>
-          {headerActions && <div className="flex flex-wrap items-center gap-2">{headerActions((action) => void submit(action), pending)}</div>}
-        </div>
+        {!wide && titleRow}
         {tabs ? (
           <>
             <FormTabUrlSync tabs={tabs} active={active} onChange={jump} />

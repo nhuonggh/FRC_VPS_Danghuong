@@ -124,6 +124,8 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
   } else if (type === "RECEIPT" || type === "PAYMENT") {
     result.summary = [{ label: "Số tiền", value: body.totals.amount, big: true }];
     result.words = wordsOf(body.totals.amount);
+  } else if (type === "TRIP_SHEET") {
+    result.notices.push("Lái xe đánh dấu kết quả giao; ghi tiền mặt, chuyển khoản, tiền bớt vào phiếu rồi mang về giao cho kế toán nhập dữ liệu. Tránh nhầm đơn này với đơn khác.");
   } else if (type === "DEBT_STATEMENT") {
     const t = body.totals;
     result.summary = [{ label: "Số dư đầu kỳ", value: t.opening }, { label: "Phát sinh tăng", value: t.debit }, { label: "Phát sinh giảm", value: t.credit }, { label: "Số dư cuối", value: t.balance, big: true }];
@@ -189,10 +191,12 @@ const td = (v: string | undefined, cls = "") => `<td${cls ? ` class="${cls}"` : 
 interface TableSpec { cols: string[]; widths: number[]; row: (l: Line) => string; group?: (l: Line) => string; groupLabel?: (l: Line) => string }
 const TABLES: Record<string, TableSpec> = {
   DEBT_STATEMENT: { cols: ["STT", "Ngày", "Loại chứng từ", "Số chứng từ", "Phát sinh tăng", "Phát sinh giảm", "Số dư"], widths: [6, 12, 24, 16, 14, 14, 14], row: (l) => td(l.no, "c") + td(l.date, "c") + td(l.docLabel) + td(l.docCode) + td(l.debit, "r") + td(l.credit, "r") + td(l.running, "r") },
+  // Phiếu lái xe cầm đi giao: mỗi đơn một dòng; cột kết quả/tiền/ghi chú để trống cho lái xe đánh dấu và ghi tay.
   TRIP_SHEET: {
-    cols: ["STT", "Hàng hóa", "ĐVT", "Số lượng"], widths: [8, 56, 14, 22], group: (l) => l.stop,
-    groupLabel: (l) => [`Điểm ${l.stop}: ${l.customer}`, l.phone, l.address, `Đơn ${l.order}`, l.due ? `Cần thu: ${l.due}` : ""].filter(Boolean).join(" · "),
-    row: (l) => td(l.no, "c") + `<td><b>${e(l.name)}</b> <span class="note">${e(l.code)}</span></td>` + td(l.unit, "c") + td(l.qty, "r"),
+    cols: ["STT", "Đơn hàng", "Khách hàng", "Số tiền đơn hàng", "Kết quả giao", "Tiền mặt", "Chuyển khoản", "Bớt", "Ghi chú"], widths: [4, 10, 21, 11, 14, 10, 10, 6, 14],
+    row: (l) => td(l.no, "c") + td(l.order) + `<td><b>${e(l.customer)}</b>${[l.phone, l.address].filter(Boolean).map((t) => `<span class="note">${e(t)}</span>`).join("")}${l.goods ? `<span class="note">${e(l.goods)}</span>` : ""}</td>`
+      + `<td class="r">${e(l.orderTotal)}${l.due && l.due !== l.orderTotal ? `<span class="note">Cần thu: ${e(l.due)}</span>` : ""}</td>`
+      + `<td>${["Hẹn", "Nợ", "Thanh toán hết"].map((t) => `<div class="cbx"><i class="cb"></i>${t}</div>`).join("")}</td><td></td><td></td><td></td><td></td>`,
   },
   PRODUCTION_ORDER: { cols: ["STT", "Mã", "Tên sản phẩm", "Quy cách", "ĐVT", "Số lượng"], widths: [7, 14, 35, 20, 8, 16], group: (l) => l.section, groupLabel: (l) => l.section, row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.spec) + td(l.unit, "c") + td(l.qty, "r") },
   LOSS_ADJUST: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Số lượng"], widths: [7, 16, 47, 10, 20], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.qty, "r") },
@@ -227,7 +231,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const p = b.partner, d = b.doc;
   const info = type === "DISCOUNT_SETTLEMENT" ? infoBlock([["Khách hàng", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Hình thức", d.method], ["Phiếu chi liên quan", d.payment]])
     : type === "LOSS_ADJUST" ? infoBlock([["Loại phiếu", d.kind], ["Người lập", d.createdBy]])
-    : voucher ? infoBlock([[type === "RECEIPT" ? "Người nộp tiền" : "Người nhận tiền", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Nội dung", d.type, true], ["Quỹ", d.account], ["Theo đơn hàng", d.order]])
+    : voucher ? infoBlock([[type === "RECEIPT" ? "Người nộp tiền" : "Người nhận tiền", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], [type === "PAYMENT" ? "Nội dung / loại chi phí" : "Nội dung", d.type, true], ["Vào quỹ / ngân hàng", d.account], ["Theo đơn hàng", d.order], ["Người lập", d.createdBy]])
     : type === "DEBT_STATEMENT" ? infoBlock([["Đối tác", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true]])
     : type === "TRIP_SHEET" ? infoBlock([["Biển số xe", d.vehicle], ["Lái xe", d.driver], ["Phụ xe", d.assistant], ["Tuyến", d.route], ["Số điểm giao", b.totals.stops]])
     : type === "PRODUCTION_ORDER" ? infoBlock([["Người lập", d.createdBy]])
@@ -248,7 +252,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   .toolbar{display:flex;flex-wrap:wrap;gap:var(--tool-space);align-items:center;max-width:210mm;margin:0 auto var(--tool-space);padding:var(--tool-space);background:var(--tool-bg);color:var(--tool-fg);border-radius:var(--tool-radius)}
   .toolbar button,.toolbar a{min-height:44px;padding:8px 12px;border:1px solid var(--tool-border);border-radius:var(--tool-radius);background:var(--tool-bg);color:var(--tool-fg);font:inherit;text-decoration:none;cursor:pointer}
   .toolbar :focus-visible{outline:2px solid currentColor;outline-offset:2px}.toolbar span{font-size:11px}
-  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr{width:128px;font-size:10.5px}.qr .box{width:128px;height:128px;border:0}.qr img{display:block}thead{display:table-header-group}table{table-layout:fixed}${purchase ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
+  .page{height:auto}.head img.logo{height:80px;object-fit:contain}${mono ? ".head img{filter:grayscale(1)}" : ""}.pn{flex-wrap:wrap}.tag{white-space:normal}.note{white-space:pre-line}.co,.pn b,td{overflow-wrap:anywhere}.sign,.terms,.words{break-inside:avoid}.words{margin-top:8px}.cust{break-inside:avoid}.qr{width:128px;font-size:10.5px}.qr .box{width:128px;height:128px;border:0}.qr img{display:block}.cbx{white-space:nowrap;font-size:11px;line-height:1.7}.cb{display:inline-block;width:10px;height:10px;border:1px solid #000;margin-right:5px;vertical-align:-1px}td .note{display:block}thead{display:table-header-group}table{table-layout:fixed}${purchase ? "table{font-size:10.5px}td,th{padding:5px}.cut{font-size:10px;flex-wrap:wrap;gap:2px}" : ""}td{font-variant-numeric:tabular-nums}td.r{white-space:nowrap;overflow-wrap:normal}
   tr.grp td{background:var(--soft);font-weight:600;font-size:12px}
   @media screen and (max-width:800px){body{padding:8px}.toolbar{position:sticky;left:0}.page{margin:0}}
   @page{size:A4;margin:12mm 12mm 10mm}
