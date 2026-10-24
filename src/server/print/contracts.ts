@@ -81,7 +81,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       const v = await getVoucher(db, actor, docType, docId);
       return {
         docCode: v.code, partner: await partnerOf(db, v.partnerId),
-        doc: { code: v.code, type: v.typeLabel, date: formatDate(v.at), account: v.cashAccountName, order: v.orderCode ?? "", note: v.note ?? "", createdBy: v.createdByName ?? "", status: v.isCancelled ? "ĐÃ HỦY" : "" },
+        doc: { code: v.code, type: v.typeLabel, date: formatDateTime(v.at), account: v.cashAccountName, order: v.orderCode ?? "", note: v.note ?? "", createdBy: v.createdByName ?? "", status: v.isCancelled ? "ĐÃ HỦY" : "" },
         lines: [], totals: { amount: money(v.amount), amountInWords: "" },
       };
     }
@@ -109,7 +109,11 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       return {
         docCode: t.code, partner: null,
         doc: { code: t.code, date: formatDate(t.date), vehicle: t.vehiclePlate, driver: t.driverName, assistant: t.assistantName ?? "", route: t.routeName ?? "", note: t.note ?? "", status: t.statusLabel },
-        lines: t.stops.flatMap((s) => s.lines.filter((l) => Number(l.remaining) > 0 || s.result).map((l, i) => ({ stop: String(s.seq), order: s.orderCode, customer: s.partnerName, phone: s.phone ?? "", address: s.address ?? "", no: String(i + 1), code: l.productCode, name: l.productName, unit: l.unit, qty: formatQty(l.remaining), due: i === 0 ? money(s.suggestedDue) : "" }))),
+        // Mỗi điểm giao một dòng (lái xe đánh dấu kết quả + ghi tiền thu vào phiếu); hàng hóa chỉ in gọn để soát khi xếp xe.
+        lines: t.stops.map((s) => ({
+          stop: String(s.seq), no: String(s.seq), order: s.orderCode, customer: s.partnerName, phone: s.phone ?? "", address: s.address ?? "", orderTotal: money(s.orderTotal), due: money(s.suggestedDue),
+          goods: s.lines.filter((l) => Number(l.remaining) > 0 || s.result).map((l) => `${l.productName} ${formatQty(l.remaining)} ${l.unit}`).join("; "),
+        })),
         totals: { stops: String(t.stops.length) },
       };
     }
