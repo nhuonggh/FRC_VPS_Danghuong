@@ -1,6 +1,6 @@
 # Áp `dherp.caddy` lên VPS — quy trình an toàn
 
-Phạm vi: chỉ file `/opt/caddy/sites/dherp.caddy`. **Không** sửa `/opt/caddy/Caddyfile` và file site của dự án khác (crm, lms, bldemo, WordPress…). Reload của Caddy là graceful (không rớt kết nối đang chạy); nếu cấu hình mới lỗi, Caddy giữ cấu hình cũ.
+Phạm vi: chỉ file `/opt/caddy/sites/dherp.caddy`. **Không** sửa `/opt/caddy/Caddyfile` và file site của dự án khác (crm, lms, WordPress…). Reload của Caddy là graceful (không rớt kết nối đang chạy); nếu cấu hình mới lỗi, Caddy giữ cấu hình cũ.
 
 Nội dung cần áp là `docs/infra/caddy/dherp.caddy` trong repo (bản đã merge vào `main`).
 
