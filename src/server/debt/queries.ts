@@ -26,6 +26,7 @@ const SORTS = ["balance", "code", "name", "discountBalance"] as const;
  */
 export async function listDebts(db: Db, actor: Actor, params: ListParams, opts: { all?: boolean } = {}) {
   const period = await getOpenPeriod(db);
+  const range = listTimeRange(params);
   const terms = normalizeSearch(params.q ?? "").split(" ").filter(Boolean);
   const kinds = params.filters.kind ?? [];
   const partners = await db.partner.findMany({
@@ -38,25 +39,30 @@ export async function listDebts(db: Db, actor: Actor, params: ListParams, opts: 
     select: { id: true, code: true, name: true, isCustomer: true, isSupplier: true, debtLimit: true, group: { select: { name: true } } },
   });
   const ids = partners.map((p) => p.id);
-  const [ledger, opening, discIn, discOpen] = await Promise.all([
-    db.partnerLedger.groupBy({ by: ["partnerId"], where: { periodId: period.id, partnerId: { in: ids } }, _sum: { debit: true, credit: true } }),
+  // Có khoảng thời gian: đầu kỳ = đầu kỳ sổ + phát sinh trước ngày bắt đầu; debit/credit = phát sinh trong khoảng; số dư = cuối khoảng.
+  const sumBy = (at?: Prisma.DateTimeFilter) => db.partnerLedger.groupBy({ by: ["partnerId"], where: { periodId: period.id, partnerId: { in: ids }, ...(at ? { at } : {}) }, _sum: { debit: true, credit: true } });
+  const [ledger, before, opening, discIn, discOpen] = await Promise.all([
+    sumBy(range ? { gte: range.start, lt: range.end } : undefined),
+    range ? sumBy({ lt: range.start }) : Promise.resolve([] as Awaited<ReturnType<typeof sumBy>>),
     db.openingDebt.findMany({ where: { periodId: period.id, partnerId: { in: ids } }, select: { partnerId: true, amount: true } }),
     db.discountLedger.groupBy({ by: ["partnerId"], where: { periodId: period.id, partnerId: { in: ids } }, _sum: { amountIn: true, amountOut: true } }),
     db.openingDiscount.findMany({ where: { periodId: period.id, partnerId: { in: ids } }, select: { partnerId: true, amount: true } }),
   ]);
   const led = new Map(ledger.map((l) => [l.partnerId, l._sum]));
+  const bef = new Map(before.map((l) => [l.partnerId, l._sum]));
   const open = new Map(opening.map((o) => [o.partnerId, o.amount]));
   const dl = new Map(discIn.map((l) => [l.partnerId, l._sum]));
   const dOpen = new Map(discOpen.map((o) => [o.partnerId, o.amount]));
 
   const state = params.filters.state ?? [];
   const all = partners.map((p) => {
-    const b = toBalance(open.get(p.id) ?? D(0), led.get(p.id)?.debit ?? D(0), led.get(p.id)?.credit ?? D(0));
+    const b = toBalance((open.get(p.id) ?? D(0)).plus(bef.get(p.id)?.debit ?? 0).minus(bef.get(p.id)?.credit ?? 0), led.get(p.id)?.debit ?? D(0), led.get(p.id)?.credit ?? D(0));
     const disc = (dOpen.get(p.id) ?? D(0)).plus(dl.get(p.id)?.amountIn ?? 0).minus(dl.get(p.id)?.amountOut ?? 0);
     return { p, b, disc };
   }).filter(({ b }) => {
     if (state.length === 1) return state[0] === "credit" ? b.balance.lt(0) : b.balance.gt(0);
-    return !b.balance.eq(0);
+    // Trong khoảng thời gian: đối tác có phát sinh vẫn hiện dù số dư cuối bằng 0 (để gửi đối chiếu).
+    return !b.balance.eq(0) || (range !== null && (b.debit.gt(0) || b.credit.gt(0)));
   });
 
   const sortKey = (SORTS as readonly string[]).includes((params.sort ?? "").replace(/^-/, "")) ? (params.sort ?? "").replace(/^-/, "") : "balance";
@@ -93,12 +99,15 @@ export interface DebtDetailDTO {
   opening: string; debit: string; credit: string; balance: string; discountBalance: string;
   /** Đối chiếu: số dư cộng dồn của dòng cuối phải bằng số dư tính gộp. */
   reconciled: boolean;
+  /** Khoảng thời gian đang xem (null = cả kỳ). Có khoảng: opening/debit/credit/balance là của khoảng đó. */
+  range: { start: Date; end: Date } | null;
   entries: DebtEntryDTO[]; total: number;
 }
 
 /** Chi tiết công nợ từng chứng từ: số dư chạy TÍNH KHI ĐỌC (đầu kỳ + cộng dồn), hiển thị mới nhất trước, có phân trang. */
 export async function getDebtDetail(db: Db, actor: Actor, partnerId: number, params: ListParams): Promise<DebtDetailDTO> {
   const period = await getOpenPeriod(db);
+  const range = listTimeRange(params);
   const p = await db.partner.findFirst({ where: { id: partnerId, ...partnerScopeWhere(actor) }, include: { group: { select: { name: true } } } });
   if (!p) throw new DomainError("Không tìm thấy đối tác.", 404);
   const [rows, opening, discIn, discOpen] = await Promise.all([
@@ -110,7 +119,13 @@ export async function getDebtDetail(db: Db, actor: Actor, partnerId: number, par
   const b = toBalance(opening?.amount ?? D(0), rows.reduce((s, r) => s.plus(r.debit), D(0)), rows.reduce((s, r) => s.plus(r.credit), D(0)));
   let run = b.opening;
   const withRun = rows.map((r) => { run = run.plus(r.debit).minus(r.credit); return { r, running: run }; });
-  const page = withRun.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
+  const inRange = range ? withRun.filter(({ r }) => r.at >= range.start && r.at < range.end) : withRun;
+  const beforeRange = range ? withRun.filter(({ r }) => r.at < range.start) : [];
+  const view = toBalance(
+    b.opening.plus(beforeRange.reduce((s, x) => s.plus(x.r.debit), D(0))).minus(beforeRange.reduce((s, x) => s.plus(x.r.credit), D(0))),
+    inRange.reduce((s, x) => s.plus(x.r.debit), D(0)), inRange.reduce((s, x) => s.plus(x.r.credit), D(0)),
+  );
+  const page = [...inRange].reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
 
   const idsOf = (t: string) => page.filter((x) => x.r.docType === t).map((x) => x.r.docId);
   const [notes, receipts, returns, purchases, adjs, transfers, payments, settles, stops] = await Promise.all([
@@ -137,10 +152,11 @@ export async function getDebtDetail(db: Db, actor: Actor, partnerId: number, par
 
   return {
     partner: { id: p.id, code: p.code, name: p.name, isCustomer: p.isCustomer, isSupplier: p.isSupplier, groupName: p.group.name, debtLimit: p.debtLimit.toString() },
-    opening: b.opening.toString(), debit: b.debit.toString(), credit: b.credit.toString(), balance: b.balance.toString(),
+    opening: view.opening.toString(), debit: view.debit.toString(), credit: view.credit.toString(), balance: view.balance.toString(),
     discountBalance: (discOpen?.amount ?? D(0)).plus(discIn._sum.amountIn ?? 0).minus(discIn._sum.amountOut ?? 0).toString(),
     reconciled: run.eq(b.balance),
-    total: rows.length,
+    range: range ? { start: range.start, end: range.end } : null,
+    total: inRange.length,
     entries: page.map(({ r, running }) => {
       const c = code.get(`${r.docType}:${r.docId}`);
       return { id: r.id, at: r.at, docType: r.docType, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: c?.code ?? null, docHref: c?.href ?? null, debit: r.debit.toString(), credit: r.credit.toString(), running: running.toString() };

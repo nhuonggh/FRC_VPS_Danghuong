@@ -2,8 +2,9 @@ import { PrintButton } from "@/components/print/PrintButton";
 import { canPrintDoc } from "@/server/print/types";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EmptyState, PaginationFooter, StatCard } from "@/components/ui";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { EmptyState, PaginationFooter, QuickTimeFilter, StatCard } from "@/components/ui";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { ictYmd } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
 import { buildListHref, parseListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
@@ -23,6 +24,9 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
     throw e;
   });
   const base = `/accounting/debts/${d.partner.id}`;
+  // Khoảng đang xem (gồm cả hai đầu): dùng để in/gửi đối chiếu đúng khoảng này.
+  const rangeFrom = d.range ? ictYmd(d.range.start) : "", rangeTo = d.range ? ictYmd(new Date(d.range.end.getTime() - 1)) : "";
+  const rangeLabel = d.range ? `Từ ${formatDate(d.range.start)} đến ${formatDate(new Date(d.range.end.getTime() - 1))}` : "";
   const canAdjust = actor.perms.has("debt.adjust");
   // Sổ lưu theo quy ước kế toán (+ khách nợ mình, − mình nợ NCC). NCC thuần: đảo dấu + đổi nhãn để đọc là "mình còn nợ bao nhiêu".
   const supplierOnly = d.partner.isSupplier && !d.partner.isCustomer;
@@ -47,12 +51,16 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
           <p className="text-sm text-fg-secondary"><span className="font-mono">{d.partner.code}</span> · {d.partner.groupName} · {[d.partner.isCustomer ? "Khách" : null, d.partner.isSupplier ? "NCC" : null].filter(Boolean).join(" / ")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-        {canPrintDoc(actor.perms, "DEBT_STATEMENT") && <PrintButton docType="DEBT_STATEMENT" docId={d.partner.id} label="In đối chiếu công nợ" />}
+        {canPrintDoc(actor.perms, "DEBT_STATEMENT") && <PrintButton docType="DEBT_STATEMENT" docId={d.partner.id} label={d.range ? "In / gửi đối chiếu khoảng này" : "In đối chiếu công nợ"} extra={d.range ? `from=${rangeFrom}&to=${rangeTo}` : undefined} />}
         {canAdjust && <Link href={`/accounting/debt-adjustments/new?partnerId=${d.partner.id}`} className="flex h-10 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover">Điều chỉnh công nợ</Link>}
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <QuickTimeFilter basePath={base} params={lp} />
+        {d.range && <span className="text-sm text-fg-secondary">Đang xem: <strong>{rangeLabel}</strong> — số liệu bên dưới chỉ trong khoảng này.</span>}
+      </div>
       <div className="flex flex-wrap gap-3">
-        <StatCard label={supplierOnly ? "Nợ NCC đầu kỳ" : "Đầu kỳ"} value={Number(d.opening) * sgn} />
+        <StatCard label={d.range ? (supplierOnly ? "Nợ NCC đầu khoảng" : "Dư đầu khoảng") : supplierOnly ? "Nợ NCC đầu kỳ" : "Đầu kỳ"} value={Number(d.opening) * sgn} />
         <StatCard label={cols.inc} value={inc} tone="info" />
         <StatCard label={cols.dec} value={dec} tone="success" />
         <StatCard label={supplierOnly ? (bal < 0 ? "NCC nợ lại mình" : "Còn nợ NCC") : both ? (bal < 0 ? "Số dư (mình nợ)" : "Số dư (đối tác nợ)") : (bal < 0 ? "Mình nợ khách" : "Khách còn nợ")} value={supplierOnly || both ? Math.abs(bal) : bal} tone={bal > 0 ? "danger" : "warning"} />
@@ -60,7 +68,7 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
       </div>
       <p className="text-sm text-fg-secondary">{cols.hint}</p>
       {!d.reconciled && <p role="alert" className="rounded-sm border border-danger bg-danger-soft p-3 text-sm text-danger">Số dư cộng dồn không khớp tổng — báo quản trị hệ thống.</p>}
-      {d.total === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh trong kỳ" /> : (
+      {d.total === 0 ? <EmptyState kind={d.range ? "no-result" : "empty"} title={d.range ? "Không có phát sinh trong khoảng này" : "Chưa có phát sinh trong kỳ"} /> : (
         <div className="overflow-x-auto rounded-sm border border-border">
           <table className="w-full min-w-[680px] text-sm">
             <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary">

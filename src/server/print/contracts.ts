@@ -36,7 +36,8 @@ const partnerOf = async (db: Db, partnerId: number | null) => {
  * Dựng data contract (phần theo loại chứng từ) từ các DTO đã có — mọi trường nhạy cảm đi qua CÙNG bộ lọc quyền của màn hình
  * (giá bán/giá nhập chỉ có khi người in có quyền; KHÔNG BAO GIỜ đưa giá vốn/lãi vào bản in).
  */
-export async function buildContract(db: Db, actor: Actor, docType: string, docId: number, now: Date = new Date()): Promise<ContractBody> {
+/** `range`: khoảng ngày (yyyy-mm-dd, gồm cả hai đầu) — hiện chỉ dùng cho đối chiếu công nợ. */
+export async function buildContract(db: Db, actor: Actor, docType: string, docId: number, now: Date = new Date(), range?: { from: string; to: string }): Promise<ContractBody> {
   switch (docType) {
     case "SALE_INVOICE": {
       const o = await getOrder(db, actor, docId, now);
@@ -95,11 +96,11 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       };
     }
     case "DEBT_STATEMENT": {
-      const d = await getDebtDetail(db, actor, docId, { page: 1, pageSize: 500, filters: {} });
+      const d = await getDebtDetail(db, actor, docId, { page: 1, pageSize: 500, filters: {}, ...(range ? { timePreset: "custom", timeStart: range.from, timeEnd: range.to } : {}) });
       const asc = [...d.entries].reverse();
       return {
         docCode: d.partner.code, partner: await partnerOf(db, d.partner.id),
-        doc: { code: d.partner.code, date: formatDate(now), note: d.total > d.entries.length ? `Chỉ in ${d.entries.length}/${d.total} dòng mới nhất` : "" },
+        doc: { code: d.partner.code, date: formatDate(now), period: d.range ? `Từ ${formatDate(d.range.start)} đến ${formatDate(new Date(d.range.end.getTime() - 1))}` : "", note: d.total > d.entries.length ? `Chỉ in ${d.entries.length}/${d.total} dòng mới nhất` : "" },
         lines: asc.map((e, i) => ({ no: String(i + 1), date: formatDate(e.at), docLabel: e.docLabel, docCode: e.docCode ?? "", debit: Number(e.debit) ? money(e.debit) : "", credit: Number(e.credit) ? money(e.credit) : "", running: money(e.running) })),
         totals: { opening: money(d.opening), debit: money(d.debit), credit: money(d.credit), balance: money(d.balance), discountBalance: money(d.discountBalance) },
       };

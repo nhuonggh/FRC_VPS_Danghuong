@@ -68,6 +68,11 @@ describe("HTML in trực tiếp", () => {
     expect(custom).toContain("- Dòng một<br>- Dòng hai");
     expect(custom).not.toContain("Kiểm tra đối chiếu");
   });
+  it("đối chiếu công nợ có khoảng ngày: hiện dòng Kỳ đối chiếu", () => {
+    const model: HtmlPrintDocument = { type: "DEBT_STATEMENT", body: { docCode: "KH1", partner: { code: "KH1", name: "Khách A", phone: "", address: "" }, doc: { date: "24/10/2026", period: "Từ 01/10/2026 đến 15/10/2026" }, lines: [], totals: { opening: "0", debit: "0", credit: "0", balance: "0", discountBalance: "0" } }, company: { name: "Công ty", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [], summary: [], words: "", notices: [] };
+    expect(renderHtmlPrint(model, true, false, "n")).toContain("Từ 01/10/2026 đến 15/10/2026");
+    expect(renderHtmlPrint({ ...model, body: { ...model.body, doc: { date: "24/10/2026", period: "" } } }, true, false, "n")).not.toContain("Kỳ đối chiếu");
+  });
   it("hóa đơn: ẩn dòng tổng số tấm nhưng giữ dòng kích thước; nút in đặt ở thanh đáy", () => {
     const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026" }, lines: [], totals: { total: "100" } }, company: { name: "Công ty", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [{ name: "Tôn", note: "", qty: "1", unit: "m²", price: "1", amount: "1", cuts: "3,28 m × 14 Tấm", pieces: "14", ratio: "0,4" }], summary: [], words: "", notices: [] };
     const shown = renderHtmlPrint(model, true, false, "n");

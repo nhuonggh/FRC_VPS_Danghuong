@@ -57,6 +57,29 @@ describe("số dư và chi tiết (62, 63)", () => {
     expect(d.entries.map((e) => [e.docType, e.running])).toEqual([["RECEIPT", "1300000"], ["DELIVERY", "1500000"]]);
   });
 
+  it("lọc khoảng thời gian: đầu khoảng = đầu kỳ + phát sinh trước đó; chỉ cộng phát sinh trong khoảng; số dư = cuối khoảng", async () => {
+    await prisma.openingDebt.create({ data: { periodId: w.periodId, partnerId: a.id, amount: 1_000_000 } });
+    await led(a.id, { debit: 500_000 }, "DELIVERY", 901, new Date("2026-09-10T03:00:00Z"));
+    await led(a.id, { credit: 200_000 }, "RECEIPT", 902, new Date("2026-09-12T03:00:00Z"));
+    await led(a.id, { debit: 300_000 }, "DELIVERY", 903, new Date("2026-09-20T03:00:00Z"));
+    const range = { timePreset: "custom", timeStart: "2026-09-11", timeEnd: "2026-09-14" };
+    const d = await getDebtDetail(prisma, actor, a.id, parseListParams(range, []));
+    expect(d).toMatchObject({ opening: "1500000", debit: "0", credit: "200000", balance: "1300000", total: 1, reconciled: true });
+    expect(d.entries.map((e) => [e.docType, e.running])).toEqual([["RECEIPT", "1300000"]]);
+    expect(d.range).not.toBeNull();
+    // Cả kỳ không đổi (không có khoảng)
+    expect(await getDebtDetail(prisma, actor, a.id, parseListParams({}, []))).toMatchObject({ opening: "1000000", debit: "800000", credit: "200000", balance: "1600000", total: 3, range: null });
+    // Danh sách: đối tác không phát sinh và số dư 0 trong khoảng không hiện; có phát sinh thì hiện đủ đầu kỳ/tăng/giảm/cuối
+    const r = await list(range);
+    expect(r.rows.map((x) => x.partnerId)).toEqual([a.id]);
+    expect(r.rows[0]).toMatchObject({ opening: "1500000", debit: "0", credit: "200000", balance: "1300000" });
+    // Đối tác có phát sinh nhưng số dư cuối khoảng = 0 vẫn hiện để gửi đối chiếu
+    await led(b.id, { debit: 100_000 }, "DELIVERY", 904, new Date("2026-09-12T03:00:00Z"));
+    await led(b.id, { credit: 100_000 }, "RECEIPT", 905, new Date("2026-09-13T03:00:00Z"));
+    expect((await list(range)).rows.find((x) => x.partnerId === b.id)).toMatchObject({ opening: "0", debit: "100000", credit: "100000", balance: "0" });
+    expect((await list()).rows.some((x) => x.partnerId === b.id)).toBe(false); // không lọc khoảng: số dư 0 vẫn bị ẩn như cũ
+  });
+
   it("danh sách: bỏ số dư 0, xếp hạng nợ nhiều nhất trước, lọc kind/state, tổng phải thu/phải trả", async () => {
     const s = await makePartner({ isCustomer: false, isSupplier: true });
     await led(a.id, { debit: 300_000 }); await led(b.id, { debit: 900_000 }, "DELIVERY", 901); await led(s.id, { credit: 400_000 }, "PURCHASE", 902);

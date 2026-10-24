@@ -66,7 +66,7 @@ async function debtBefore(db: PrismaClient, partnerId: number, periodId: number,
 
 /** Only exposes the presentation fields. Costs, profit and secrets never enter the HTML. */
 /** `opts.debt` ghi đè cờ printDebt của đơn (chọn in có/không nợ cũ ngay lúc in). */
-export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: string, id: number, opts: { debt?: boolean } = {}): Promise<HtmlPrintDocument> {
+export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: string, id: number, opts: { debt?: boolean; range?: { from: string; to: string } } = {}): Promise<HtmlPrintDocument> {
   assertCan(actor.perms, "print.use");
   if (!hasLocalPrint(type)) throw new DomainError("Loại phiếu này chưa có mẫu HTML.", 404);
   assertCan(actor.perms, printDoc(type)!.perm);
@@ -76,7 +76,7 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
     if (!accessible) throw new DomainError("Không tìm thấy phiếu nhập.", 404);
   }
   const [body, company, template] = await Promise.all([
-    buildContract(db, actor, type, id), getCompany(db),
+    buildContract(db, actor, type, id, new Date(), opts.range), getCompany(db),
     db.printTemplate.findFirst({ where: { docType: type, isActive: true }, orderBy: { id: "asc" }, select: { signerName: true, footerNote: true, qrImage: true, title: true, phone: true } }),
   ]);
   const result: HtmlPrintDocument = { type: type as PrintType, body, company, signer: template?.signerName ?? "", footer: template?.footerNote ?? "", qr: template?.qrImage ?? "", title: template?.title?.trim() ?? "", phone: template?.phone?.trim() ?? "", lines: body.lines.map((l) => ({ ...l })), summary: [], words: "", notices: [] };
@@ -238,7 +238,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const info = type === "DISCOUNT_SETTLEMENT" ? infoBlock([["Khách hàng", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Hình thức", d.method], ["Phiếu chi liên quan", d.payment]])
     : type === "LOSS_ADJUST" ? infoBlock([["Loại phiếu", d.kind], ["Người lập", d.createdBy]])
     : voucher ? infoBlock([[type === "RECEIPT" ? "Người nộp tiền" : "Người nhận tiền", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], [type === "PAYMENT" ? "Nội dung / loại chi phí" : "Nội dung", d.type, true], ["Vào quỹ / ngân hàng", d.account], ["Theo đơn hàng", d.order], ["Người lập", d.createdBy]])
-    : type === "DEBT_STATEMENT" ? infoBlock([["Đối tác", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true]])
+    : type === "DEBT_STATEMENT" ? infoBlock([["Đối tác", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Kỳ đối chiếu", d.period, true]])
     : type === "TRIP_SHEET" ? infoBlock([["Biển số xe", d.vehicle], ["Lái xe", d.driver], ["Phụ xe", d.assistant], ["Tuyến", d.route], ["Số điểm giao", b.totals.stops]])
     : type === "PRODUCTION_ORDER" ? infoBlock([["Người lập", d.createdBy]])
     : type === "STOCKTAKE" ? infoBlock([["Người lập", d.createdBy], ["Trạng thái", d.statusLabel]])
