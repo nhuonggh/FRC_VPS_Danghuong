@@ -10,6 +10,7 @@ import { ToolbarPortal } from "./ToolbarPortal";
 import { NULL_TEXT } from "@/lib/format";
 import { nextSort } from "@/lib/pagination";
 import { shouldNavigateOnRowClick } from "./row-click";
+import { startNavProgress } from "@/components/shell/NavProgress";
 
 export interface Column<T> {
   key: string;
@@ -126,7 +127,7 @@ export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowH
             <Dropdown.Portal>
               <Dropdown.Content align="end" className="z-dropdown min-w-40 rounded-md border border-border bg-raised p-1 shadow-md">
                 {rest.map((a) => (
-                  <Dropdown.Item key={a.key} onSelect={() => (a.href ? router.push(a.href) : a.onClick?.())}
+                  <Dropdown.Item key={a.key} onSelect={() => (a.href ? (startNavProgress(), router.push(a.href)) : a.onClick?.())}
                     className={clsx("flex h-9 cursor-pointer items-center rounded-sm px-3 text-sm outline-none data-[highlighted]:bg-hover", a.danger && "text-danger")}>
                     {a.label}
                   </Dropdown.Item>
@@ -192,7 +193,7 @@ export function DataTable<T>({ id, controlsTargetId, columns, rows, rowKey, rowH
         <tbody>
           {rows.map((row) => (
             <tr key={rowKey(row)} onClick={rowHref ? (e) => {
-                if (shouldNavigateOnRowClick(e, window.getSelection()?.toString() ?? "")) router.push(rowHref(row));
+                if (shouldNavigateOnRowClick(e, window.getSelection()?.toString() ?? "")) { startNavProgress(); router.push(rowHref(row)); }
               } : undefined}
               className={clsx("border-b border-border last:border-b-0 hover:bg-hover", rowHref && "cursor-pointer")}>
               {selection && <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="Chọn dòng" checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} className={box} /></td>}

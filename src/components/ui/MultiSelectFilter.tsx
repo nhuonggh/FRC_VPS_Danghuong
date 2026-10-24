@@ -1,5 +1,6 @@
 "use client";
 
+import { startNavProgress } from "@/components/shell/NavProgress";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -39,6 +40,7 @@ export function MultiSelectFilter({
     const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
     latest.current = next;
     setSelected(next);
+    startNavProgress();
     router.push(buildListHref(basePath, params, { filters: { [paramKey]: next } }));
   };
   return (

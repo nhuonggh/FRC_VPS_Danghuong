@@ -1,5 +1,6 @@
 "use client";
 
+import { startNavProgress } from "@/components/shell/NavProgress";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -29,6 +30,7 @@ export function SearchBox({ basePath, params, placeholder = "Tìm kiếm…", cl
     if (next === lastPushed.current) return;
     const id = setTimeout(() => {
       lastPushed.current = next;
+      startNavProgress();
       router.push(buildListHref(basePath, params, { q: next || undefined }));
     }, 300);
     return () => clearTimeout(id);

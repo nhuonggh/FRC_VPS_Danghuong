@@ -19,7 +19,15 @@ describe("route HTML", () => {
     expect(response.headers.get("Content-Type")).toContain("text/html");
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     expect(response.headers.get("Content-Security-Policy")).toContain("script-src 'nonce-");
-    expect(buildHtmlPrint).toHaveBeenCalledWith({}, actor, "SALE_INVOICE", 1);
+    expect(buildHtmlPrint).toHaveBeenCalledWith({}, actor, "SALE_INVOICE", 1, { debt: undefined });
+  });
+  it("?debt=0|1 chuyển xuống buildHtmlPrint để chọn in nợ cũ lúc in", async () => {
+    vi.mocked(requireActorApi).mockResolvedValue({ userId: 1, perms: new Set(["print.use"]) } as never);
+    vi.mocked(buildHtmlPrint).mockResolvedValue({} as never);
+    await GET(new NextRequest("http://localhost/api/print/SALE_INVOICE/1/html?debt=0"), context);
+    expect(vi.mocked(buildHtmlPrint).mock.calls.at(-1)?.[4]).toEqual({ debt: false });
+    await GET(new NextRequest("http://localhost/api/print/SALE_INVOICE/1/html?debt=1"), context);
+    expect(vi.mocked(buildHtmlPrint).mock.calls.at(-1)?.[4]).toEqual({ debt: true });
   });
   it("chưa đăng nhập trả 401, không trả HTML chứng từ", async () => {
     vi.mocked(requireActorApi).mockRejectedValue(new DomainError("Chưa đăng nhập", 401));

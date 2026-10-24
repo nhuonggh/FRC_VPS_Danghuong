@@ -57,7 +57,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
     defaultValues: edit?.defaults ?? {
-      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0, printDebt: true,
+      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0, printDebt: true, shipAddress: "",
       salesUserId: options.salesUsers.some((u) => u.value === options.currentUserId) ? options.currentUserId : null,
       warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: retailOn ? "CASH" : "NONE",
     },
@@ -338,7 +338,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             </div>
           )}
           {options.canCreateCustomer && !edit && !walkIn
-            ? <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
+            ? <QuickCustomerDialog groups={options.groups} onCreated={(c: QuickCustomer) => { setCustomer(c); setValue("shipAddress", (c as { deliveryAddress?: string }).deliveryAddress ?? "", { shouldDirty: true }); setValue("partnerId", Number(c.value), { shouldValidate: true, shouldDirty: true }); }} />
             : <span />}
         </div>
         <div className="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
@@ -363,7 +363,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
               <div className={igCombo}>
                 <Controller control={control} name="partnerId" render={({ field }) => (
                   <Combobox hideLabel label="Khách hàng" value={field.value ? customer : null} loadOptions={loadCustomers} placeholder="Tìm khách hàng…"
-                    onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); }} />
+                    onChange={(o) => { setCustomer(o); field.onChange(o ? Number(o.value) : undefined); setValue("shipAddress", (o as (ComboOption & { deliveryAddress?: string }) | null)?.deliveryAddress ?? "", { shouldDirty: true }); }} />
                 )} />
               </div>
             </InlineField>
@@ -371,7 +371,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             <InlineField id="cphone" label="Điện thoại" labelClass={LABEL} readOnly><input id="cphone" readOnly value={customerInfo?.hint ?? ""} className={igInput} /></InlineField>
             <InlineField id="caddr" label="Địa chỉ" labelClass={LABEL} readOnly className="md:col-span-2"><input id="caddr" readOnly value={customerInfo?.address ?? ""} className={igInput} /></InlineField>
             <InlineField id="ctax" label="Mã số thuế" labelClass={LABEL} readOnly><input id="ctax" readOnly value={customerInfo?.taxCode ?? ""} className={igInput} /></InlineField>
-            <InlineField id="cship" label="Địa chỉ giao hàng" labelClass={LABEL} readOnly className="md:col-span-2 xl:col-span-3"><input id="cship" readOnly value={customerInfo?.deliveryAddress ?? ""} className={igInput} /></InlineField>
+            <InlineField id="cship" label="Địa chỉ giao hàng" error={errors.shipAddress?.message} labelClass={LABEL} className="md:col-span-2 xl:col-span-3"><input id="cship" {...register("shipAddress")} placeholder="Nhập địa chỉ giao của đơn này" className={igInput} /></InlineField>
           </>)}
         </div>
       </section>

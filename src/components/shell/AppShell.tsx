@@ -6,6 +6,8 @@ import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { ModuleTabs } from "./ModuleTabs";
 import { OfflineBanner } from "./OfflineBanner";
+import { Suspense } from "react";
+import { NavProgress } from "./NavProgress";
 import { Sidebar } from "./Sidebar";
 
 export function AppShell({
@@ -14,6 +16,7 @@ export function AppShell({
   return (
     <WorkspaceProvider prefs={prefs}>
     <div className="flex h-dvh bg-canvas text-fg">
+      <Suspense fallback={null}><NavProgress /></Suspense>
       <Sidebar nav={nav} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header nav={nav} user={user} />
