@@ -57,9 +57,13 @@ export interface SalePricingDTO {
 /** Dữ liệu gợi ý cho màn bán hàng (31): tồn, giá bán gần nhất, giá nhập gần nhất — mỗi thứ chỉ khi đủ quyền. */
 export async function salePricing(db: PrismaClient, actor: Actor, partnerId: number, productId: number, processingTypeId?: number | null, at = new Date(), mode: IssueMode = "LEGACY"): Promise<SalePricingDTO | null> {
   if (!can(actor.perms, "sale_price.view")) return null;
-  const product = await db.product.findUnique({ where: { id: productId }, include: { units: { orderBy: { unit: "asc" } } } });
+  // 3 truy vấn độc lập chạy song song (trước: nối tiếp).
+  const [product, last, stockId] = await Promise.all([
+    db.product.findUnique({ where: { id: productId }, include: { units: { orderBy: { unit: "asc" } } } }),
+    lastSalePricePerBase(db, productId, partnerId, processingTypeId),
+    stockProductId(db, productId, processingTypeId),
+  ]);
   if (!product) return null;
-  const last = await lastSalePricePerBase(db, productId, partnerId, processingTypeId);
   const out: SalePricingDTO = {
     productId,
     baseUnit: product.baseUnit,
@@ -70,17 +74,19 @@ export async function salePricing(db: PrismaClient, actor: Actor, partnerId: num
     lastSalePriceForPartner: last?.forPartner ?? false,
     ...(last ? { lastSalePriceSource: last.source } : {}),
   };
-  const stockId = await stockProductId(db, productId, processingTypeId);
-  if (can(actor.perms, "stock.view")) {
+  const onHandP = can(actor.perms, "stock.view") ? (async () => {
     const period = await getOpenPeriod(db);
     const [layers, pending] = await Promise.all([
       db.costLayer.aggregate({ where: { periodId: period.id, productId: stockId }, _sum: { qtyRemaining: true } }),
       db.stockLedger.aggregate({ where: { periodId: period.id, productId: stockId }, _sum: { qtyProvisional: true } }),
     ]);
-    out.onHand = (layers._sum.qtyRemaining ?? new Prisma.Decimal(0)).minus(pending._sum.qtyProvisional ?? 0).toString();
-  }
-  if (canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")) out.lastPurchasePrice = (await lastPurchaseCost(db, stockId))?.toString() ?? null;
-  const reference = await costReference(db, actor, productId, processingTypeId ?? null, at, mode);
+    return (layers._sum.qtyRemaining ?? new Prisma.Decimal(0)).minus(pending._sum.qtyProvisional ?? 0).toString();
+  })() : Promise.resolve(undefined);
+  const purchaseP = canViewOrderAnalysis(actor.perms) && can(actor.perms, "purchase_price.view")
+    ? lastPurchaseCost(db, stockId).then((c) => c?.toString() ?? null) : Promise.resolve(undefined);
+  const [onHand, lastPurchase, reference] = await Promise.all([onHandP, purchaseP, costReference(db, actor, productId, processingTypeId ?? null, at, mode)]);
+  if (onHand !== undefined) out.onHand = onHand;
+  if (lastPurchase !== undefined) out.lastPurchasePrice = lastPurchase;
   if (reference) out.costReference = reference;
   else if (can(actor.perms, "sale.cost_hint.view")) {
     // Chỉ lấy MỘT con số tổng; nguồn, thành phần, định mức và giá nhập chi tiết không rời server.
