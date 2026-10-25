@@ -1,5 +1,7 @@
 # TRẠNG THÁI DỰ ÁN — đọc file này ĐẦU TIÊN ở mỗi phiên làm việc
 
+> **2026-10-25 — In: mở màn xem trước trước, bấm In mới hiện hộp thoại (nhánh `feat/print-preview-first`, chưa nghiệm thu, không migration):** khách phải bấm Hủy hộp thoại in tự bật mới thấy màn chọn tiêu chí. `localPrintHref` (`src/lib/local-print.ts`) bỏ `auto=1` cho mọi phiếu; thanh công cụ các phiếu (trừ hóa đơn bán) dính đáy màn hình, nút "In / Lưu PDF" nổi bật. Param `?auto=1` ở route vẫn hỗ trợ.
+
 > **2026-10-25 — Phiếu thu/chi in dạng bill 80mm (chưa commit, chưa in thử máy bill thật, không migration):** `RECEIPT`/`PAYMENT` bỏ đầu trang công ty (logo, tên, địa chỉ, SĐT, MST, STK), `@page size:80mm auto`, bố cục dọc căn giữa, chữ nhỏ, chữ ký xếp 2 cột. Phiếu tất toán chiết khấu vẫn khổ A4.
 
 > **2026-10-25 — In: phiếu chuyến gọn lại + hóa đơn bán có khổ A5 (nhánh `chore/caddy-encode`, chưa commit/push, chưa nghiệm thu in thật, không migration):** (1) Phiếu giao nhận theo chuyến (`TRIP_SHEET`): bỏ tên công ty ở đầu phiếu, bỏ dòng hàng hóa theo đơn, nhãn "Thanh toán hết" → "Đã TT", chia lại độ rộng cột (STT/Đơn hàng/Khách/Số tiền/Kết quả hẹp vừa đủ, mã đơn không xuống dòng; Tiền mặt/Chuyển khoản/Bớt/Ghi chú rộng để lái xe ghi). (2) Hóa đơn bán hàng (`SALE_INVOICE`): thanh công cụ thêm ô "Khổ A5" (`?paper=A5`; mặc định A4); A5 dùng `@page size:A5`, lề 8mm, chữ/logo/QR thu nhỏ khi in. Giữ khi đổi bản màu/đen trắng, nợ cũ, ẩn tổng tấm. Các phiếu khác chưa có A5. Test `tests/print/html.test.ts` 90 xanh.
