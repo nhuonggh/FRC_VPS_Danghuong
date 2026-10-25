@@ -1,7 +1,7 @@
 import { DebtTable } from "@/components/debt/DebtTable";
 import { EmptyState, ExportButton, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox, StatCard } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildExportHref, buildListHref, listTimeRange, parseListParams } from "@/lib/query-params";
+import { buildExportHref, buildListHref, listTimeRange, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { DEBT_FILTER_KEYS, listDebts } from "@/server/debt/queries";
 
@@ -10,7 +10,7 @@ const BASE = "/accounting/debts";
 
 export default async function DebtsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("debt.view");
-  const params = parseListParams(await searchParams, DEBT_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, DEBT_FILTER_KEYS);
   const { rows, total, summary } = await listDebts(prisma, actor, params);
   const ranged = listTimeRange(params) !== null;
   const filtering = Boolean(params.q || params.filters.kind || params.filters.state || ranged);

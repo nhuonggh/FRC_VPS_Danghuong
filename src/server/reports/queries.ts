@@ -13,10 +13,10 @@ type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const r2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 const ymd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
-/** Mặc định “tháng này” khi chưa chọn khoảng thời gian. */
+/** Mặc định “hôm nay” khi chưa chọn khoảng thời gian. */
 export function reportRange(params: ListParams, now: Date = new Date()): TimeRange {
-  const r = resolveTimeRange(params.timePreset ?? "thisMonth", now, { start: params.timeStart, end: params.timeEnd });
-  return r ?? resolveTimeRange("thisMonth", now)!;
+  const r = resolveTimeRange(params.timePreset ?? "today", now, { start: params.timeStart, end: params.timeEnd });
+  return r ?? resolveTimeRange("today", now)!;
 }
 const lineNet = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }, roundUp: boolean) => grossOf(l.qty, l.salePrice, roundUp).minus(l.discountNow);
 

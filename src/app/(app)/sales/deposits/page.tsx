@@ -5,7 +5,7 @@ import { EmptyState, ListPageLayout, PaginationFooter } from "@/components/ui";
 import { DEPOSIT_STATES } from "@/lib/deposit-list";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { DEPOSIT_FILTER_KEYS, listDeposits } from "@/server/deposits/queries";
 
@@ -19,7 +19,7 @@ const COLORS = {
 };
 export default async function DepositsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("deposit.manage");
-  const params = parseListParams(await searchParams, DEPOSIT_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, DEPOSIT_FILTER_KEYS);
   const now = new Date();
   const { rows, total, customers, stats, effectiveAmount, timeCounts } = await listDeposits(prisma, actor, params, now);
   const state = params.filters.state?.length === 1 ? DEPOSIT_STATES.find((s) => s.key === params.filters.state[0])?.key ?? "all" : "all";

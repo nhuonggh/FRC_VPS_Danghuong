@@ -17,7 +17,7 @@ export function DeletedOrderControls({ params, customers, counts, now }: {
   const router = useRouter();
   const [pending, transition] = useTransition();
   const options = customers.map((c) => ({ value: String(c.id), label: c.name }));
-  const presets = [{ value: undefined, label: "Tất cả" }, ...TIME_PRESETS.filter((p) => p.value !== "custom")];
+  const presets = [{ value: "all" as ListParams["timePreset"], label: "Tất cả" }, ...TIME_PRESETS.filter((p) => p.value !== "custom")];
   return <div className="space-y-3 border-b border-border p-4">
     <div className="flex flex-wrap items-center gap-3">
       <SearchBox basePath={BASE} params={params} placeholder="Tìm mã đơn, khách hàng, lý do…" className="sm:flex-1" />

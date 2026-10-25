@@ -10,7 +10,7 @@ import { DomainError } from "@/server/http/errors";
 import { ensureRegularRetail } from "@/server/partners/regular-retail";
 import { withIdempotentInventoryTx } from "@/server/idempotency/with-inventory-tx";
 import { docTimestamp } from "@/server/inventory";
-import { lineAmountOf } from "./queries";
+import { goodsTotalOf } from "./queries";
 import type { SaleOrderInput } from "./schemas";
 import { assertWriter, createSaleOrder, planLines } from "./service";
 
@@ -94,7 +94,7 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
     const created = await createSaleOrder(ctx, eff, order, now, extra);
     createdId = created.id;
     const row = await tx.saleOrder.findUniqueOrThrow({ where: { id: created.id }, include: { lines: { orderBy: { id: "asc" } } } });
-    const total = row.lines.reduce((s, l) => s.plus(lineAmountOf(l, row.roundAmounts)), D(0)).plus(row.shippingFee);
+    const total = goodsTotalOf(row.lines, row).plus(row.shippingFee);
 
     const paid = pays.reduce((s, p) => s.plus(p.amount), D(0));
     if (paid.gt(total)) throw new DomainError("Số tiền thu vượt tiền phải thu của đơn.", 400);

@@ -6,7 +6,7 @@ import { EmptyState, PaginationFooter, QuickTimeFilter, StatCard } from "@/compo
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { ictYmd } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { getDebtDetail } from "@/server/debt/queries";
 import { DomainError } from "@/server/http/errors";
@@ -18,7 +18,7 @@ export default async function DebtDetailPage({ params, searchParams }: { params:
   const actor = await requireActor("debt.view");
   const raw = (await params).partnerId;
   if (!/^\d{1,10}$/.test(raw) || Number(raw) <= 0 || Number(raw) > 2_147_483_647) notFound();
-  const lp = parseListParams(await searchParams, []);
+  const lp = parseTimedListParams(await searchParams, []);
   const d = await getDebtDetail(prisma, actor, Number(raw), lp).catch((e) => {
     if (e instanceof DomainError && e.status === 404) notFound();
     throw e;

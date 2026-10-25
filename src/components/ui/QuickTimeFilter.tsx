@@ -44,7 +44,7 @@ export function TimeRangeEditor({ value, onChange, now, allowAll = true }: {
   return <div className="grid gap-4 md:grid-cols-[10rem_1fr]">
     <div className="flex gap-1 overflow-x-auto md:block md:space-y-1 md:border-r md:border-border md:pr-3">
       <p className="mb-2 hidden px-3 text-xs font-semibold text-fg-secondary md:block">CHỌN NHANH</p>
-      {[...(allowAll ? [{ value: undefined, label: "Mọi thời gian" }] : []), ...TIME_PRESETS].map((p) => <button type="button" key={p.value ?? "all"} aria-pressed={value.timePreset === p.value} onClick={() => choosePreset(p.value)} className={`${button} shrink-0 text-left md:w-full ${value.timePreset === p.value ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary"}`}>{p.label}</button>)}
+      {[...(allowAll ? [{ value: "all" as TimePreset | undefined, label: "Mọi thời gian" }] : []), ...TIME_PRESETS].map((p) => <button type="button" key={p.value ?? "all"} aria-pressed={value.timePreset === p.value} onClick={() => choosePreset(p.value)} className={`${button} shrink-0 text-left md:w-full ${value.timePreset === p.value ? "bg-accent-soft font-medium text-accent" : "text-fg-secondary"}`}>{p.label}</button>)}
     </div>
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between"><h3 aria-live="polite" className="text-sm font-semibold">Tháng {month.m + 1}, {month.y}</h3><div className="flex"><button type="button" aria-label="Tháng trước" onClick={() => move(-1)} className={button}><ChevronLeft size={16} /></button><button type="button" aria-label="Tháng sau" onClick={() => move(1)} className={button}><ChevronRight size={16} /></button></div></div>
@@ -65,11 +65,11 @@ export function QuickTimeFilter({ basePath, params, now, allowAll = true, onChan
   const [pending, transition] = useTransition();
   const [draft, setDraft] = useState<Selection>(params);
   useEffect(() => { const media = window.matchMedia?.("(max-width: 767px)"); if (!media) return; const update = () => setMobile(media.matches); update(); media.addEventListener("change", update); return () => media.removeEventListener("change", update); }, []);
-  function toggle(next: boolean) { if (next) setDraft({ timePreset: params.timePreset ?? (allowAll ? undefined : "thisMonth"), timeStart: params.timeStart, timeEnd: params.timeEnd }); setOpen(next); }
+  function toggle(next: boolean) { if (next) setDraft({ timePreset: params.timePreset ?? (allowAll ? "all" : "today"), timeStart: params.timeStart, timeEnd: params.timeEnd }); setOpen(next); }
   const range = listTimeRange(params, now);
   const draftRange = draft.timePreset ? resolveTimeRange(draft.timePreset, now ?? new Date(), { start: draft.timeStart, end: draft.timeEnd }) : null;
-  const invalid = !!draft.timePreset && !draftRange;
-  const label = TIME_PRESETS.find((p) => p.value === params.timePreset)?.label ?? (allowAll ? "Mọi thời gian" : "Tháng này");
+  const invalid = !!draft.timePreset && draft.timePreset !== "all" && !draftRange;
+  const label = TIME_PRESETS.find((p) => p.value === params.timePreset)?.label ?? (allowAll ? "Mọi thời gian" : "Hôm nay");
   const trigger = <button type="button" aria-label="Lọc nhanh theo thời gian" className={`flex min-h-11 items-center gap-2 rounded-sm border border-border bg-canvas px-3 text-sm hover:bg-hover md:min-h-10 ${focus}`}><CalendarRange size={16} aria-hidden className="text-accent" />{label}<ChevronDown size={14} aria-hidden /></button>;
   const body = <><TimeRangeEditor value={draft} onChange={setDraft} now={now} allowAll={allowAll} />
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">

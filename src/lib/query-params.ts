@@ -20,7 +20,7 @@ export const MAX_PAGE = 1_000_000;
 export const MAX_QUERY_LENGTH = 200;
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-const PRESETS = new Set<string>(TIME_PRESETS.map((p) => p.value));
+const PRESETS = new Set<string>([...TIME_PRESETS.map((p) => p.value), "all"]);
 // '-tên' = giảm dần. Chỉ là bước lọc rác đầu vào; danh sách cột được phép thật sự do sortToOrderBy quyết định.
 const SORT_RE = /^-?[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const isPageSize = (n: number) => (PAGE_SIZES as readonly number[]).includes(n);
@@ -29,6 +29,16 @@ const parsePage = (raw: string | undefined) => {
   const n = Number(raw);
   return n >= 1 && n <= MAX_PAGE ? n : 1;
 };
+
+/**
+ * Như `parseListParams` nhưng trang có bộ lọc thời gian mở mặc định ở "Hôm nay" khi URL chưa chọn gì
+ * (đã chọn "Mọi thời gian" = `timePreset=all`; đã có timeStart/timeEnd tự nhập thì giữ nguyên).
+ */
+export function parseTimedListParams(sp: SearchParams, filterKeys: readonly string[] = [], fallback: TimePreset = "today"): ListParams {
+  const out = parseListParams(sp, filterKeys);
+  if (!out.timePreset && !out.timeStart && !out.timeEnd) out.timePreset = fallback;
+  return out;
+}
 
 /** Chuẩn query-param của crm-design (global-rules.md mục 5). Giá trị rác → mặc định; key filter phải khai báo. */
 export function parseListParams(sp: SearchParams, filterKeys: readonly string[] = []): ListParams {

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { OrderTable } from "@/components/sales/OrderTable";
 import { EmptyState, ListPageLayout, PaginationFooter, StatCard } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { advanceExpectedDeliveryDates, listOrderCreators, listOrders, ORDER_FILTER_KEYS } from "@/server/sales/queries";
 import { OrderListControls } from "@/components/sales/OrderListControls";
@@ -15,7 +15,7 @@ const BASE = "/sales/orders";
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("order.view");
-  const params = parseListParams(await searchParams, ORDER_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, ORDER_FILTER_KEYS);
   const now = new Date();
   await advanceExpectedDeliveryDates(prisma, now); // ngày giao quá hạn tự dời về hôm nay (lần đầu trong ngày)
   const [{ rows, total, stats, tabCounts }, creators, groups] = await Promise.all([listOrders(prisma, actor, params, now), listOrderCreators(prisma), prisma.partnerGroup.findMany({ where: { partners: { some: partnerScopeWhere(actor) } }, orderBy: { name: "asc" }, select: { id: true, name: true } })]);

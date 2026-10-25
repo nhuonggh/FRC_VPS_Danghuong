@@ -3,13 +3,13 @@ import { Plus } from "lucide-react";
 import { LossAdjustTable } from "@/components/stock-adjust/LossAdjustTable";
 import { EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, StatCard } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { listLossAdjusts } from "@/server/stock-adjust/service";
 
 const BASE = "/inventory/adjustments";
 export default async function LossAdjustmentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const actor = await requireActor("stock_adjust.manage"), params = parseListParams(await searchParams, ["status", "type"]);
+  const actor = await requireActor("stock_adjust.manage"), params = parseTimedListParams(await searchParams, ["status", "type"]);
   const result = await listLossAdjusts(prisma, actor, params), status = params.filters.status?.[0];
   const href = (p: Parameters<typeof buildListHref>[2]) => buildListHref(BASE, params, p);
   return (

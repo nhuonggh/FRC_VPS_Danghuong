@@ -26,7 +26,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import { buildDimNote, parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termArea, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
-import { grossAmount } from "@/lib/line-amount";
+import { grossAmount, roundUpThousand } from "@/lib/line-amount";
 
 const LABEL = "sm:min-w-40";
 /** Nhãn trong ô tìm khách là "MÃ — Tên"; lấy phần mã để hiện ở ô "Mã khách hàng". */
@@ -57,7 +57,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const form = useForm<SaleOrderInput>({
     resolver: zodResolver(saleOrderSchema),
     defaultValues: edit?.defaults ?? {
-      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0, printDebt: true, roundAmounts: true, shipAddress: "",
+      partnerId: retailOn ? 1 : undefined, date: today, expectedDeliveryDate: today, note: "", lines: [emptyLine], shippingFee: 0, orderDiscount: 0, printDebt: true, roundAmounts: false, roundTotal: true, shipAddress: "",
       salesUserId: options.salesUsers.some((u) => u.value === options.currentUserId) ? options.currentUserId : null,
       warehouseId: options.warehouses[0] ? Number(options.warehouses[0].value) : null, paymentMethod: retailOn ? "CASH" : "NONE",
     },
@@ -220,11 +220,12 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     setProducts((m) => new Map([...m, ...picked.map((p) => [p.value, p] as const)]));
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) }, SALE_MAX_LINES);
   };
-  const roundUp = watch("roundAmounts") !== false;
+  const roundUp = watch("roundAmounts") === true; // chỉ đơn cũ (làm tròn từng dòng); đơn lập/sửa từ form luôn gửi false
   const linesTotal = lines.reduce((sum, l) => sum + grossAmount(num(l?.qty), num(l?.salePrice), roundUp) - num(l?.discountNow), 0);
   const orderDiscount = num(watch("orderDiscount"));
   const shippingFee = num(watch("shippingFee"));
-  const total = round2(linesTotal - orderDiscount + shippingFee);
+  const goodsNet = linesTotal - orderDiscount;
+  const total = round2((watch("roundTotal") === true ? roundUpThousand(goodsNet) : goodsNet) + shippingFee);
   const accounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "CASH" : a.type === "BANK"));
   const otherAccounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "BANK" : a.type === "CASH"));
   const paid = (payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0) + num(secAmount);
@@ -457,8 +458,8 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             <RhfNumberInput id="shippingFee" control={control} name="shippingFee" empty={0} className={`${igInput} tabular text-right`} />
           </InlineField>
           <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm md:min-h-9">
-            <input type="checkbox" {...register("roundAmounts")} className="h-4 w-4 cursor-pointer accent-[var(--accent)]" />
-            <span><span className="font-medium">Làm tròn thành tiền</span> <span className="text-fg-secondary">— làm tròn lên nghìn đồng từng dòng (356.400 → 357.000); bỏ tích để lấy đúng SL × đơn giá</span></span>
+            <input type="checkbox" {...register("roundTotal")} className="h-4 w-4 cursor-pointer accent-[var(--accent)]" />
+            <span><span className="font-medium">Làm tròn tổng tiền hàng</span> <span className="text-fg-secondary">— làm tròn lên nghìn đồng ở tổng (476.650 → 477.000); thành tiền từng dòng giữ đúng SL × đơn giá</span></span>
           </label>
           {!walkIn && (
             <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm md:min-h-9">
@@ -526,7 +527,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const referenceCost = referencePerBase(dto);
   const belowCost = referenceCost != null && num(line?.salePrice) > 0 && num(line?.salePrice) * factor < Number(referenceCost) - 0.005;
   const red = belowCost ? "!border-danger !text-danger" : "";
-  const amount = grossAmount(num(line?.qty), num(line?.salePrice), watch("roundAmounts") !== false) - num(line?.discountNow);
+  const amount = grossAmount(num(line?.qty), num(line?.salePrice), watch("roundAmounts") === true) - num(line?.discountNow);
   // Kiểu gia công chỉ gồm những kiểu SP này có định mức (BOM); giữ kiểu đang chọn (đơn đang sửa) kể cả khi định mức đã ngừng
   const [types, setTypes] = useState<TypeOption[]>([]);
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau

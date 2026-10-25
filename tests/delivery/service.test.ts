@@ -18,7 +18,7 @@ let w: World; let actor: Actor; let customer: { id: number }; let n = 0;
 async function makeOrder(over: { date?: string; qty?: number } = {}) {
   const qty = over.qty ?? 3;
   const input = saleOrderSchema.parse({
-    partnerId: customer.id, date: over.date ?? "2026-09-15", expectedDeliveryDate: "2026-09-20", note: "",
+    partnerId: customer.id, date: over.date ?? "2026-09-15", expectedDeliveryDate: "2026-09-20", note: "", roundTotal: false,
     lines: [{ productId: w.p.id, unit: w.p.baseUnit, qty, salePrice: 100_000, discountNow: 1, discountAccum: 0, processingTypeId: null }],
   });
   const o = await createSaleOrderIdempotent(prisma, { userId: w.userId, perms: new Set(["order.create", "sale_price.view", "order.edit_price", "partner.view_all"]) }, `o-${++n}`, input, NOW);

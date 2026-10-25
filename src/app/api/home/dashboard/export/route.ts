@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     for (const [k, v] of url.searchParams) (query[k] ??= []).push(v);
     const params = parseListParams(query, ["accountingSection", "bankAccount"]), now = new Date();
     const section = tab === "accounting" ? resolveAccountingSection(actor.perms, params.filters.accountingSection?.[0]) : undefined;
-    const preset = params.timePreset ?? (tab === "accounting" ? "today" : "thisMonth");
+    const preset = params.timePreset ?? "today";
     const range = dashRange(preset, { start: params.timeStart, end: params.timeEnd }, now);
     const data = await loadDashboard(prisma, actor, tab, { preset, start: params.timeStart, end: params.timeEnd, bankAccount: params.filters.bankAccount?.[0], accountingSection: section?.key }, now);
     return xlsxResponse(`tong-quan-${tab}.xlsx`, await exportDashboard(data, [
