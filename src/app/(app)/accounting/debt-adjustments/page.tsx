@@ -4,7 +4,7 @@ import { CancelDebtButton } from "@/components/debt/CancelDebtButton";
 import { Badge, EmptyState, ListPageLayout, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { listAdjustments } from "@/server/debt/queries";
 import { REASON_LABEL } from "@/server/debt/schemas";
@@ -14,7 +14,7 @@ const BASE = "/accounting/debt-adjustments";
 
 export default async function DebtAdjustmentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("debt.adjust");
-  const params = parseListParams(await searchParams, []);
+  const params = parseTimedListParams(await searchParams, []);
   const { rows, total } = await listAdjustments(prisma, actor, params);
   return (
     <ListPageLayout

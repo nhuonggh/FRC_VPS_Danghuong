@@ -1,5 +1,5 @@
 import { Prisma, type PaymentStatus } from "@prisma/client";
-import { lineAmountOf } from "@/server/sales/queries";
+import { goodsTotalOf } from "@/server/sales/queries";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -24,9 +24,9 @@ export async function orderPaid(tx: Tx, orderId: number, exceptStopId?: number):
 export async function syncPaymentStatus(tx: Tx, orderId: number): Promise<PaymentStatus> {
   const order = await tx.saleOrder.findUniqueOrThrow({
     where: { id: orderId },
-    select: { paymentStatus: true, shippingFee: true, roundAmounts: true, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+    select: { paymentStatus: true, shippingFee: true, roundAmounts: true, roundTotal: true, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
   });
-  const total = order.lines.reduce((s, l) => s.plus(lineAmountOf(l, order.roundAmounts)), D(0)).plus(order.shippingFee);
+  const total = goodsTotalOf(order.lines, order).plus(order.shippingFee);
   const paid = await orderPaid(tx, orderId);
   const current = order.paymentStatus;
   if (!DEPOSIT_DRIVEN.includes(current)) return current;

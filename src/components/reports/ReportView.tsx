@@ -45,7 +45,7 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
           {showSearch && <SearchBox basePath={base} params={params} placeholder={orderProfit ? "Tìm mã đơn, khách hàng…" : "Tìm…"} />}
           {(orderProfit || report.key === "by-customer") && <MultiSelectFilter label="Khách hàng" paramKey="customer" basePath={base} params={params} searchable options={report.customers ?? []} />}
           {negFilter && <MultiSelectFilter label={report.key === "consumption-compare" ? "Định mức" : "Lãi"} paramKey="neg" basePath={base} params={params} options={[{ value: "1", label: report.key === "consumption-compare" ? "Chỉ NVL vượt định mức" : "Chỉ đơn lỗ" }]} />}
-          <QuickTimeFilter basePath={base} params={params} />
+          <QuickTimeFilter basePath={base} params={params} allowAll={false} />
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">

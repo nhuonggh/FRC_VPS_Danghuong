@@ -8,7 +8,7 @@ import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp, PeriodClosedError } from "@/server/inventory";
 import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
-import { lineAmountOf } from "@/server/sales/queries";
+import { goodsTotalOf, lineAmountOf, roundDeltaOf } from "@/server/sales/queries";
 import type { DeliveryNoteInput } from "./schemas";
 import { postPartnerLedger, removePartnerLedger } from "@/server/debt/ledger";
 
@@ -87,7 +87,7 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
   // Phần đã trả về kho khi chưa giao (hàng không giao được) không còn để giao nữa
   const backed = new Map((await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false, undelivered: true } }, _sum: { qty: true } })).map((r) => [r.orderLineId, r._sum.qty ?? D(0)]));
   let value = D(0);
-  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l, order.roundAmounts)), D(0));
+  const linesTotal = goodsTotalOf(order.lines, { ...order, roundTotal: false }), extraFee = order.shippingFee.plus(roundDeltaOf(order.lines, order)); // phí vận chuyển + phần chênh làm tròn tổng, chia theo giá trị hàng giao
   // giá trị hàng đã giao trước phiếu này (để chia phí vận chuyển luỹ kế)
   const valueBefore = order.lines.reduce((s, l) => s.plus(deliveredValue(lineAmountOf(l, order.roundAmounts), l.qty, D(0), deliveredOf(l))), D(0));
   const rows = input.lines.map((l, i) => {
@@ -100,7 +100,7 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
     return { orderLineId: line.id, qty: D(l.qty) };
   });
 
-  value = value.plus(shippingShare(order.shippingFee, linesTotal, valueBefore, value));
+  value = value.plus(shippingShare(extraFee, linesTotal, valueBefore, value));
   const id = await nextDocId(tx, "delivery_notes");
   const code = formatDocCode("PG", id);
   await tx.deliveryNote.create({
@@ -162,7 +162,7 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
   const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
   const lineById = new Map(order.lines.map((l) => [l.id, l]));
   const cum = new Map<number, Prisma.Decimal>();
-  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l, order.roundAmounts)), D(0));
+  const linesTotal = goodsTotalOf(order.lines, { ...order, roundTotal: false }), extraFee = order.shippingFee.plus(roundDeltaOf(order.lines, order)); // phí vận chuyển + phần chênh làm tròn tổng, chia theo giá trị hàng giao
   let valueSoFar = D(0);
   for (const note of notes) {
     let value = D(0);
@@ -173,7 +173,7 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
       cum.set(line.id, before.plus(dl.qty));
     }
     const goods = value;
-    value = value.plus(shippingShare(order.shippingFee, linesTotal, valueSoFar, goods));
+    value = value.plus(shippingShare(extraFee, linesTotal, valueSoFar, goods));
     valueSoFar = valueSoFar.plus(goods);
     await removePartnerLedger(tx, "DELIVERY", note.id);
     if (value.gt(0)) {

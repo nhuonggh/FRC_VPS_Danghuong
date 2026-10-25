@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { ReturnKind } from "@prisma/client";
 import { StatCard, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import type { Actor } from "@/lib/permissions/scope";
 import { listReturns, RETURN_FILTER_KEYS } from "@/server/returns/queries";
 import { ReturnTable } from "./ReturnTable";
@@ -12,7 +12,7 @@ import { ReturnTable } from "./ReturnTable";
 export async function ReturnListPage({ actor, title, base, kinds, newHref, searchParams }: {
   actor: Actor; title: string; base: string; kinds: ReturnKind[]; newHref: string; searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = parseListParams(await searchParams, RETURN_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, RETURN_FILTER_KEYS);
   const { rows, total, stats } = await listReturns(prisma, actor, kinds, params);
   const filtering = Boolean(params.q || params.filters.state || params.timePreset);
   return (

@@ -79,7 +79,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const def = DASH_TABS.find((t) => t.key === tab)!;
   const params = parseListParams(sp, tab === "accounting" ? ["bankAccount", "accountingSection"] : []);
   const accountingSection = tab === "accounting" ? resolveAccountingSection(actor.perms, params.filters.accountingSection?.[0]) : undefined;
-  const effective = { ...params, filters: { ...params.filters, ...(accountingSection ? { accountingSection: [accountingSection.key] } : {}) }, timePreset: params.timePreset ?? (tab === "accounting" ? "today" as const : "thisMonth" as const) };
+  const effective = { ...params, filters: { ...params.filters, ...(accountingSection ? { accountingSection: [accountingSection.key] } : {}) }, timePreset: params.timePreset ?? "today" as const };
   let data: Dashboard | null = null;
   try {
     data = await withTimeout(loadDashboard(prisma, actor, tab, { preset: effective.timePreset, start: params.timeStart, end: params.timeEnd, ...(tab === "accounting" ? { bankAccount: params.filters.bankAccount?.[0], accountingSection: accountingSection?.key } : {}) }, now), DASH_TIMEOUT_MS);

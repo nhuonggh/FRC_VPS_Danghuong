@@ -126,10 +126,10 @@ describe("Trang chủ — tab ngang tổng quan", () => {
     await render_({ tab: "sales" });
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tổng quan bán hàng");
     expect(screen.getByRole("link", { name: "Bán hàng" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" })).toHaveTextContent("Tháng này");
+    expect(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" })).toHaveTextContent("Hôm nay");
     await userEvent.click(screen.getByRole("button", { name: "Lọc nhanh theo thời gian" }));
     expect(screen.queryByRole("button", { name: "Mọi thời gian" })).not.toBeInTheDocument();
-    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "sales", { preset: "thisMonth", start: undefined, end: undefined }, expect.any(Date));
+    expect(loadDashboard).toHaveBeenCalledWith({}, expect.anything(), "sales", { preset: "today", start: undefined, end: undefined }, expect.any(Date));
   });
 
   it("loader lỗi → thông báo cục bộ, thanh tab vẫn dùng được", async () => {

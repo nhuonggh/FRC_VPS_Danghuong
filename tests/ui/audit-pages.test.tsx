@@ -129,14 +129,14 @@ describe("/system/audit-log (server)", () => {
     const [pf] = findAll(tree, PaginationFooter);
     expect(pf!.props).toMatchObject({ total: 50000, page: 4, pageSize: 20 });
     const build = pf!.props.buildHref as (p: { page?: number }) => string;
-    expect(build({ page: 5 })).toBe("/system/audit-log?q=a&page=5");
-    expect(build({ page: 1 })).toBe("/system/audit-log?q=a");
+    expect(build({ page: 5 })).toBe("/system/audit-log?q=a&timePreset=today&page=5");
+    expect(build({ page: 1 })).toBe("/system/audit-log?q=a&timePreset=today");
   });
 
   it("rỗng: 'empty' khi chưa lọc, 'no-result' khi đang lọc", async () => {
     requireActor.mockResolvedValue(actor("audit.view"));
     listAudit.mockResolvedValue({ rows: [], total: 0 });
-    expect(findAll(await page(), EmptyState)[0]!.props.kind).toBe("empty");
+    expect(findAll(await page({ timePreset: "all" }), EmptyState)[0]!.props.kind).toBe("no-result"); // mặc định Hôm nay = đang lọc theo ngày
     expect(findAll(await page({ q: "zzz" }), EmptyState)[0]!.props.kind).toBe("no-result");
     expect(findAll(await page({ timePreset: "today" }), EmptyState)[0]!.props.kind).toBe("no-result");
     expect(findAll(await page({ user: "3" }), EmptyState)[0]!.props.kind).toBe("no-result");

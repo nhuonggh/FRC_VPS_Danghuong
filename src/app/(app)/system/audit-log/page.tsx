@@ -5,7 +5,7 @@ import { EmptyState, ExportButton, ListPageLayout, MultiSelectFilter, Pagination
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
 import { formatNumber } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { buildExportHref, buildListHref, parseListParams } from "@/lib/query-params";
+import { buildExportHref, buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { MAX_EXPORT_ROWS } from "@/server/audit/export";
 import { AUDIT_FILTER_KEYS, auditStats, listAudit, listAuditEntities } from "@/server/audit/queries";
 import { requireActor } from "@/server/auth/session";
@@ -15,7 +15,7 @@ const BASE = "/system/audit-log";
 
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireActor("audit.view");
-  const params = parseListParams(await searchParams, AUDIT_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, AUDIT_FILTER_KEYS);
   const [{ rows, total }, users, entities, stats] = await Promise.all([
     listAudit(prisma, params),
     prisma.user.findMany({ select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),

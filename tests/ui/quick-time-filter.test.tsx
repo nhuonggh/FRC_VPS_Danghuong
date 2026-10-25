@@ -64,7 +64,7 @@ describe("QuickTimeFilter calendar dropdown", () => {
     await open({ timePreset: "custom", timeStart: "2026-09-01", timeEnd: "2026-09-15" });
     await userEvent.click(screen.getByRole("button", { name: "Mọi thời gian" }));
     await userEvent.click(screen.getByRole("button", { name: "Áp dụng" }));
-    expect(push).toHaveBeenCalledWith("/x?tab=report");
+    expect(push).toHaveBeenCalledWith("/x?tab=report&timePreset=all");
   });
   it("uses ICT at month boundaries and supports parent filter drafts", async () => {
     const onChange = vi.fn();

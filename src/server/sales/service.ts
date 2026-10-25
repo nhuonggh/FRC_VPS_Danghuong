@@ -143,10 +143,11 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
  * Sửa: trường bỏ trống (undefined) = giữ nguyên, null = xoá. Người bán phải đang hoạt động, kho phải đang dùng.
  */
 export async function orderExtras(tx: Db, actor: Actor, input: SaleOrderInput, mode: "create" | "edit") {
-  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean; roundAmounts?: boolean; shipAddress?: string | null } = {};
+  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean; roundAmounts?: boolean; roundTotal?: boolean; shipAddress?: string | null } = {};
   if (input.shipAddress !== undefined) out.shipAddress = input.shipAddress || null;
   if (input.printDebt !== undefined) out.printDebt = input.printDebt;
-  if (input.roundAmounts !== undefined) out.roundAmounts = input.roundAmounts;
+  if (input.roundAmounts !== undefined) out.roundAmounts = input.roundAmounts; else if (mode === "create") out.roundAmounts = false; // đơn mới không làm tròn từng dòng nữa (xem roundTotal)
+  if (input.roundTotal !== undefined) out.roundTotal = input.roundTotal; else if (mode === "create") out.roundTotal = true;
   if (input.shippingFee !== undefined) out.shippingFee = input.shippingFee; else if (mode === "create") out.shippingFee = 0;
   if (input.orderDiscount !== undefined) out.orderDiscount = input.orderDiscount; else if (mode === "create") out.orderDiscount = 0;
   const salesUserId = input.salesUserId === undefined && mode === "create" ? actor.userId : input.salesUserId;
@@ -176,7 +177,7 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
   await assertPrices(tx, actor, input.partnerId, lines);
   const period = await getOpenPeriod(tx);
   const extras = await orderExtras(tx, actor, input, "create");
-  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? true);
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? false);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({
@@ -216,7 +217,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   await assertPrices(tx, actor, input.partnerId, lines);
 
   const extras = await orderExtras(tx, actor, input, "create");
-  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? true);
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? false);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({

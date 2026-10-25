@@ -8,10 +8,10 @@ import { xntList } from "@/server/inventory-reports/xnt";
 const BASE = "/inventory/xnt";
 export default async function XntPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("stock.view");
-  // Mặc định tháng này được đưa vào params để UI, truy vấn và export luôn đồng bộ.
+  // Mặc định hôm nay được đưa vào params để UI, truy vấn và export luôn đồng bộ.
   const raw = await searchParams;
-  const params = parseListParams({ ...raw, timePreset: raw.timePreset ?? "thisMonth" });
+  const parsed = parseListParams(raw), params = listTimeRange(parsed) ? parsed : { ...parsed, timePreset: "today" as const, timeStart: undefined, timeEnd: undefined };
   const range = listTimeRange(params)!;
   const report = await xntList(prisma, actor, { from: range.start, to: range.end, q: params.q, page: params.page, pageSize: params.pageSize });
-  return <ListPageLayout title="Báo cáo xuất nhập tồn" statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" stats={<OperationalStats kind="xnt" data={{ ...report.stats, total: report.total }} values={actor.perms.has("cost.view") ? { ...report.totals } : undefined} />} actions={<ExportButton href={buildExportHref("/api/inventory/xnt/export", params)} />} filters={<div className="flex flex-wrap items-center gap-2"><SearchBox basePath={BASE} params={params} placeholder="Tìm mã, tên sản phẩm…" /><QuickTimeFilter basePath={BASE} params={params} /></div>} footer={<PaginationFooter total={report.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(BASE, params, patch)} />}>{report.total ? <XntTable rows={report.rows} totals={report.totals} /> : <EmptyState kind="no-result" title="Không có sản phẩm phù hợp" />}</ListPageLayout>;
+  return <ListPageLayout title="Báo cáo xuất nhập tồn" statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" stats={<OperationalStats kind="xnt" data={{ ...report.stats, total: report.total }} values={actor.perms.has("cost.view") ? { ...report.totals } : undefined} />} actions={<ExportButton href={buildExportHref("/api/inventory/xnt/export", params)} />} filters={<div className="flex flex-wrap items-center gap-2"><SearchBox basePath={BASE} params={params} placeholder="Tìm mã, tên sản phẩm…" /><QuickTimeFilter basePath={BASE} params={params} allowAll={false} /></div>} footer={<PaginationFooter total={report.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(BASE, params, patch)} />}>{report.total ? <XntTable rows={report.rows} totals={report.totals} /> : <EmptyState kind="no-result" title="Không có sản phẩm phù hợp" />}</ListPageLayout>;
 }

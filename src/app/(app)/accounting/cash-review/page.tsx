@@ -2,7 +2,7 @@ import { ReviewQueue } from "@/components/cash/ReviewQueue";
 import Link from "next/link";
 import { StatCard, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, parseListParams } from "@/lib/query-params";
+import { buildListHref, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { listReviewQueue, QUEUE_FILTER_KEYS } from "@/server/cash/queries";
 
@@ -11,7 +11,7 @@ const BASE = "/accounting/cash-review";
 
 export default async function CashReviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("cash.review");
-  const params = parseListParams(await searchParams, QUEUE_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, QUEUE_FILTER_KEYS);
   const { rows, total, stats } = await listReviewQueue(prisma, actor, params);
   const filtered = !!(params.q || params.filters.kind || params.filters.status || params.timePreset);
   return (

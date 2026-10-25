@@ -21,6 +21,18 @@ export const grossOf = (qty: Prisma.Decimal, price: Prisma.Decimal, roundUp = tr
 export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }, roundUp = true) =>
   grossOf(l.qty, l.salePrice, roundUp).minus(l.discountNow);
 
+/** Làm tròn LÊN nghìn đồng. */
+export const ceilThousand = (v: Prisma.Decimal) => v.div(1000).ceil().times(1000);
+type RoundFlags = { roundAmounts: boolean; roundTotal: boolean };
+/** Tổng tiền hàng của đơn = Σ thành tiền dòng; đơn bật `roundTotal` thì làm tròn LÊN nghìn đồng ở mức TỔNG (thành tiền dòng không đổi). Chưa gồm phí vận chuyển. */
+export const goodsTotalOf = (lines: readonly { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }[], o: RoundFlags) => {
+  const sum = lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0));
+  return o.roundTotal ? ceilThousand(sum) : sum;
+};
+/** Phần chênh do làm tròn tổng (0 ≤ x < 1.000đ): chia theo giá trị hàng giao như phí vận chuyển. */
+export const roundDeltaOf = (lines: Parameters<typeof goodsTotalOf>[0], o: RoundFlags) =>
+  o.roundTotal ? goodsTotalOf(lines, o).minus(goodsTotalOf(lines, { ...o, roundTotal: false })) : D(0);
+
 export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock", "deliveryFrom", "deliveryTo"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;
 const PAYMENT_VALUES = ["UNPAID", "DEPOSITED", "PARTIAL", "PAID", "DEBT", "PROMISED", "OVERPAID"] as const;
@@ -150,9 +162,9 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       id: o.id, code: o.code, createdByName: creatorNames.get(o.createdBy) ?? null, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
       expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
-      orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).plus(o.shippingFee).toString(),
+      orderTotal: goodsTotalOf(o.lines, o).plus(o.shippingFee).toString(),
       ...(oldDebts ? { oldDebt: oldDebts.get(o.id)!.toString() } : {}),
-      ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
+      ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: goodsTotalOf(o.lines, o).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
     };
   });
   const all = statuses.reduce((s, r) => s + r._count._all, 0); // = số đơn theo phạm vi (cùng điều kiện `scope`), khỏi đếm thêm một lần
@@ -259,7 +271,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
     hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft, note: o.note, cancelReason: o.cancelReason, createdByName: users[0]?.fullName ?? null,
     walkInName: o.walkInName, walkInPhone: o.walkInPhone, shipAddress: o.shipAddress, salesUserName: o.salesUser?.fullName ?? null, warehouseName: o.warehouse?.name ?? null, paymentMethod: o.paymentMethod,
     shippingFee: o.shippingFee.toString(), orderDiscount: o.orderDiscount.toString(),
-    orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).plus(o.shippingFee).toString(), lines,
+    orderTotal: lines.reduce((s, l) => s.plus(l.lineAmount ?? 0), D(0)).plus(roundDeltaOf(o.lines, o)).plus(o.shippingFee).toString(), lines,
     deposits: receipts.map((r) => ({ id: r.id, code: r.code, at: r.at, amount: r.amount.toString(), cashAccountName: r.cashAccount.name, note: r.note, reviewed: r.reviewStatus === "REVIEWED" })),
     depositTotal: receipts.reduce((s, r) => s.plus(r.amount), D(0)).toString(),
     quote: quoteRow,
@@ -335,7 +347,7 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
-      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt, roundAmounts: o.roundAmounts, shipAddress: o.shipAddress ?? "",
+      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt, roundAmounts: false, roundTotal: o.roundTotal || o.roundAmounts, shipAddress: o.shipAddress ?? "",
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
         discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM", note: l.note ?? "",
@@ -370,7 +382,7 @@ export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams
   const out: DeletedOrderDTO[] = rows.map((o) => ({
     id: o.id, code: o.code, orderDate: o.orderDate, partnerName: o.partner.name, cancelledAt: o.cancelledAt, cancelReason: o.cancelReason,
     cancelledByName: o.cancelledBy === null ? null : users.get(o.cancelledBy) ?? null,
-    orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).toString(),
+    orderTotal: goodsTotalOf(o.lines, o).toString(),
   }));
   const [amountRows, customers, presetCounts] = await Promise.all([
     // Hai nhóm theo cờ làm tròn của đơn (groupBy không đi qua quan hệ được)

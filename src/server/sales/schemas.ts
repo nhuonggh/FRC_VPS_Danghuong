@@ -50,8 +50,10 @@ export const saleOrderSchema = z
     shippingFee: z.number().finite().min(0, "Phí vận chuyển không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân.").optional(),
     /** In nợ cũ trên hóa đơn. Bỏ trống: đơn mới = có in, sửa đơn = giữ nguyên. */
     printDebt: z.boolean().optional(),
-    /** Làm tròn LÊN nghìn đồng thành tiền từng dòng. Bỏ trống: đơn mới = có làm tròn, sửa đơn = giữ nguyên. */
+    /** (Cũ) làm tròn LÊN nghìn đồng thành tiền từng dòng. Bỏ trống: đơn mới = không, sửa đơn = giữ nguyên. */
     roundAmounts: z.boolean().optional(),
+    /** Làm tròn LÊN nghìn đồng ở mức TỔNG tiền hàng (thành tiền dòng không làm tròn). Bỏ trống: đơn mới = có làm tròn, sửa đơn = giữ nguyên. */
+    roundTotal: z.boolean().optional(),
     /** Địa chỉ giao hàng của đơn. Bỏ trống: đơn mới = chưa nhập, sửa đơn = giữ nguyên; chuỗi rỗng = xoá. */
     shipAddress: z.string().trim().max(250, "Địa chỉ giao hàng tối đa 250 ký tự.").optional(),
     /** Chiết khấu cả đơn: phân bổ theo tỷ lệ vào chiết khấu trừ ngay của các dòng. Bỏ trống: đơn mới = 0, sửa đơn = giữ nguyên. */
@@ -61,7 +63,7 @@ export const saleOrderSchema = z
   .superRefine((o, ctx) => {
     // Giá trị dòng phụ thuộc cờ làm tròn của đơn nên kiểm tổng chiết khấu ở mức đơn
     o.lines.forEach((l, i) => {
-      if (l.discountNow + l.discountAccum > grossAmount(l.qty, l.salePrice, o.roundAmounts !== false) + 1e-9) {
+      if (l.discountNow + l.discountAccum > grossAmount(l.qty, l.salePrice, o.roundAmounts === true) + 1e-9) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lines", i, "discountNow"], message: "Tổng chiết khấu vượt giá trị dòng." });
       }
     });

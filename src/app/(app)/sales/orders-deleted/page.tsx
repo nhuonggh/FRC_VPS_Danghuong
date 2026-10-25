@@ -4,7 +4,7 @@ import { DeletedOrderControls } from "@/components/sales/DeletedOrderControls";
 import { EmptyState, ListPageLayout, PaginationFooter } from "@/components/ui";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { buildListHref, listTimeRange, parseListParams } from "@/lib/query-params";
+import { buildListHref, listTimeRange, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { listDeletedOrders } from "@/server/sales/queries";
 
@@ -13,7 +13,7 @@ const BASE = "/sales/orders-deleted";
 
 export default async function DeletedOrdersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("order.restore");
-  const params = parseListParams(await searchParams, ["customer"]);
+  const params = parseTimedListParams(await searchParams, ["customer"]);
   // ASSUMPTION: giữ mặc định mọi thời gian để các đơn cũ vẫn xuất hiện khi mở trang.
   const now = new Date();
   const { rows, total, amount, customers, counts } = await listDeletedOrders(prisma, actor, params, now);

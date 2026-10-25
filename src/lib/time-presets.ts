@@ -2,7 +2,8 @@ import { ictStartOfDay, toIct } from "./time";
 
 export type TimePreset =
   | "today" | "thisWeek" | "thisMonth" | "thisQuarter"
-  | "lastWeek" | "lastMonth" | "lastQuarter" | "thisYear" | "lastYear" | "custom";
+  | "lastWeek" | "lastMonth" | "lastQuarter" | "thisYear" | "lastYear" | "custom"
+  | "all"; // "Mọi thời gian": chọn rõ để KHÔNG lọc (vắng param = mặc định của trang, thường là hôm nay)
 
 // Đủ 10 mốc cố định (view-table.md mục 2) — luôn dùng nguyên bộ, không lắp rời từng module
 export const TIME_PRESETS: { value: TimePreset; label: string }[] = [
@@ -47,6 +48,8 @@ export function resolveTimeRange(
   const t = toIct(now);
   const day = (y: number, m: number, d: number) => ictStartOfDay(y, m, d);
   switch (preset) {
+    case "all":
+      return null;
     case "today":
       return { start: day(t.y, t.m, t.d), end: day(t.y, t.m, t.d + 1) };
     case "thisWeek": {

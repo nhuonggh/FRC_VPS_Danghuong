@@ -1,6 +1,6 @@
 ﻿import { TripResultsView } from "@/components/trips/TripResultsView";
 import { prisma } from "@/lib/prisma";
-import { parseListParams } from "@/lib/query-params";
+import { parseTimedListParams } from "@/lib/query-params";
 import { RESULT_TRIP_TABS } from "@/lib/trip-results";
 import { requireActor } from "@/server/auth/session";
 import { listActiveCashAccounts } from "@/server/cash/queries";
@@ -10,7 +10,7 @@ import { getTrip, listTripFilterOptions, listTripOptions, listTrips, TRIP_RESULT
 export const dynamic = "force-dynamic";
 export default async function TripResultsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor("trip.manage");
-  const params = parseListParams(await searchParams, TRIP_RESULTS_FILTER_KEYS);
+  const params = parseTimedListParams(await searchParams, TRIP_RESULTS_FILTER_KEYS);
   const tab = RESULT_TRIP_TABS.find((t) => t.key === params.filters.resultState?.[0]) ?? RESULT_TRIP_TABS[0];
   const effective = { ...params, filters: { ...params.filters, status: tab.statuses } };
   const [data, options, filters] = await Promise.all([listTrips(prisma, actor, effective, { resultsSummary: true }), listTripOptions(prisma), listTripFilterOptions(prisma, actor)]);

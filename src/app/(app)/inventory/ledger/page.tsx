@@ -4,7 +4,7 @@ import { ProductPicker } from "@/components/inventory/ProductPicker";
 import { StockCardTable } from "@/components/inventory/StockCardTable";
 import { EmptyState, ExportButton, ListPageLayout, PaginationFooter, QuickTimeFilter } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { buildExportHref, buildListHref, listTimeRange, parseListParams } from "@/lib/query-params";
+import { buildExportHref, buildListHref, listTimeRange, parseTimedListParams } from "@/lib/query-params";
 import { requireActor } from "@/server/auth/session";
 import { stockCardList } from "@/server/inventory-reports/stock-card";
 
@@ -19,7 +19,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (!validId(productParam)) notFound();
   const product = await prisma.product.findUnique({ where: { id: Number(productParam) }, select: { id: true, code: true, name: true, baseUnit: true } });
   if (!product) notFound();
-  const params = parseListParams(allParams);
+  const params = parseTimedListParams(allParams);
   const range = listTimeRange(params);
   const result = await stockCardList(prisma, actor, product.id, { from: range?.start, to: range?.end, page: params.page, pageSize: params.pageSize });
   return <ListPageLayout title="Thẻ kho" statsClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" stats={<OperationalStats kind="ledger" data={result.stats} unit={product.baseUnit} />} actions={<ExportButton href={buildExportHref(`/api/inventory/ledger/export?product=${product.id}`, params)} />} filters={<div className="flex flex-wrap items-end gap-2"><ProductPicker productId={product.id} label={`${product.code} — ${product.name}`} /><QuickTimeFilter basePath={`/inventory/ledger?product=${product.id}`} params={params} /></div>} footer={<PaginationFooter total={result.total} page={params.page} pageSize={params.pageSize} buildHref={(patch) => buildListHref(`/inventory/ledger?product=${product.id}`, params, patch)} />}>
