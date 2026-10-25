@@ -125,14 +125,19 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
       const stops = t.stops.filter((s) => Number(s.cash) > 0);
       if (stops.length === 0) throw new DomainError("Chuyến này không thu tiền mặt.", 409, "TRIP_NO_CASH");
       const receipts = await db.receipt.findMany({ where: { tripId: docId, isCancelled: false, cashAccount: { type: "CASH" } }, orderBy: { id: "asc" }, select: { code: true, orderId: true, note: true } });
+      // Chi phí lái xe ứng từ tiền thu (đã lập phiếu chi lúc thủ quỹ xác nhận): in thành dòng trừ, tiền thực nộp = tiền thu − chi phí
+      const expense = sum(t.expenses.map((x) => x.amount)), gross = sum(stops.map((s) => s.cash));
       return {
         docCode: t.code, partner: null,
         doc: { code: t.code, date: formatDateTime(t.confirmed.at), driver: t.driverName, vehicle: t.vehiclePlate, operator: t.confirmed.byName ?? "", note: "", status: "" },
-        lines: stops.map((s, i) => ({
-          no: String(i + 1), order: s.orderCode, customer: s.partnerName, amount: money(s.cash), over: Number(s.over) > 0 ? "gồm thu vượt (nợ cũ/dư)" : "",
-          receipts: receipts.filter((r) => r.orderId === s.orderId || r.note?.includes(` · ${s.orderCode} · `)).map((r) => r.code).join(", "),
-        })),
-        totals: { cash: money(sum(stops.map((s) => s.cash))) },
+        lines: [
+          ...stops.map((s, i) => ({
+            no: String(i + 1), order: s.orderCode, customer: s.partnerName, amount: money(s.cash), over: Number(s.over) > 0 ? "gồm thu vượt (nợ cũ/dư)" : "",
+            receipts: receipts.filter((r) => r.orderId === s.orderId || r.note?.includes(` · ${s.orderCode} · `)).map((r) => r.code).join(", "),
+          })),
+          ...t.expenses.map((x) => ({ no: "", kind: "expense", order: `Chi: ${x.expenseTypeName}`, customer: x.note ?? "", amount: `-${money(x.amount)}`, over: "", receipts: x.paymentCode ?? "" })),
+        ],
+        totals: { cash: money(gross), expense: Number(expense) > 0 ? money(expense) : "", net: money(D(gross).minus(expense).toString()) },
       };
     }
     case "GOODS_RETURN": {

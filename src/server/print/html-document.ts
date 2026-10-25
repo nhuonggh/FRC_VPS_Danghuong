@@ -129,8 +129,11 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
     result.summary = [{ label: "Số tiền", value: body.totals.amount, big: true }];
     result.words = wordsOf(body.totals.amount);
   } else if (type === "TRIP_CASH") {
-    result.summary = [{ label: "Tổng tiền mặt thu từ lái xe", value: body.totals.cash, big: true }];
-    result.words = wordsOf(body.totals.cash);
+    const net = body.totals.expense ? body.totals.net : body.totals.cash;
+    result.summary = body.totals.expense
+      ? [{ label: "Tiền mặt thu từ khách", value: body.totals.cash }, { label: "Lái xe đã ứng chi", value: `-${body.totals.expense}` }, { label: "Tiền mặt lái xe nộp quỹ", value: net, big: true }]
+      : [{ label: "Tổng tiền mặt thu từ lái xe", value: body.totals.cash, big: true }];
+    result.words = wordsOf(net);
   } else if (type === "TRIP_SHEET") {
     result.notices.push("Lái xe đánh dấu kết quả giao; ghi tiền mặt, chuyển khoản, tiền bớt vào phiếu rồi mang về giao cho kế toán nhập dữ liệu. Tránh nhầm đơn này với đơn khác.");
   } else if (type === "DEBT_STATEMENT") {
@@ -209,7 +212,7 @@ const TABLES: Record<string, TableSpec> = {
   // Bill 80mm: mỗi đơn một dòng (tên khách + mã phiếu thu nhỏ bên dưới), chỉ tiền mặt.
   TRIP_CASH: {
     cols: ["Đơn hàng", "Tiền mặt"], widths: [60, 40],
-    row: (l) => `<td><b>${e(l.order)}</b>${[l.customer, l.receipts && `PT: ${l.receipts}`, l.over].filter(Boolean).map((t) => `<span class="note">${e(t)}</span>`).join("")}</td>` + td(l.amount, "r"),
+    row: (l) => `<td><b>${e(l.order)}</b>${[l.customer, l.receipts && `${l.kind === "expense" ? "PC" : "PT"}: ${l.receipts}`, l.over].filter(Boolean).map((t) => `<span class="note">${e(t)}</span>`).join("")}</td>` + td(l.amount, "r"),
   },
   PRODUCTION_ORDER: { cols: ["STT", "Mã", "Tên sản phẩm", "Quy cách", "ĐVT", "Số lượng"], widths: [7, 14, 35, 20, 8, 16], group: (l) => l.section, groupLabel: (l) => l.section, row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.spec) + td(l.unit, "c") + td(l.qty, "r") },
   LOSS_ADJUST: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Số lượng"], widths: [7, 16, 47, 10, 20], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.qty, "r") },

@@ -7,8 +7,9 @@ const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ.").
 const id = (msg: string) => z.number({ invalid_type_error: msg }).int().positive(msg);
 const money0 = z.number({ invalid_type_error: "Nhập số tiền." }).finite().min(0, "Số tiền không được âm.").max(99_999_999_999).refine((v) => Number(v.toFixed(2)) === v, "Tối đa 2 chữ số thập phân.");
 
-export const RESULT_KINDS = ["GIAO_DU", "GHI_NO", "HEN_TRA", "KHONG_GIAO", "GIAO_MOT_PHAN"] as const;
-export const RESULT_LABEL: Record<(typeof RESULT_KINDS)[number], string> = { GIAO_DU: "Giao đủ", GHI_NO: "Giao đủ, ghi nợ", HEN_TRA: "Giao, hẹn trả", KHONG_GIAO: "Không giao được", GIAO_MOT_PHAN: "Giao một phần" };
+/** Kết quả chọn được khi nhập. "Giao, hẹn trả" (HEN_TRA) đã bỏ — coi như ghi nợ; chỉ còn ở dữ liệu cũ (hiển thị, không nhập mới). */
+export const RESULT_KINDS = ["GIAO_DU", "GHI_NO", "KHONG_GIAO", "GIAO_MOT_PHAN"] as const;
+export const RESULT_LABEL: Record<(typeof RESULT_KINDS)[number] | "HEN_TRA", string> = { GIAO_DU: "Giao đủ", GHI_NO: "Giao đủ, ghi nợ", HEN_TRA: "Giao, ghi nợ (hẹn trả — cũ)", KHONG_GIAO: "Không giao được", GIAO_MOT_PHAN: "Giao một phần" };
 export const TRIP_STATUS_LABEL = { PLANNED: "Đã xếp", ON_ROAD: "Đang đi", RETURNED: "Đã về (đủ kết quả)", SETTLED: "Đã đối soát", CONFIRMED: "Thủ quỹ đã nhận tiền", CANCELLED: "Đã hủy" } as const;
 
 /** Xếp chuyến (38): ngày, tuyến, xe + lái + phụ, danh sách đơn theo thứ tự giao. */
@@ -35,7 +36,6 @@ export const tripResultSchema = z.object({
   debtAmount: money0.default(0),
   /** Tiền bớt cho khách (khách đưa ít hơn phải thu một chút). Bắt buộc ghi lý do. */
   discountAmount: money0.default(0),
-  promiseDate: ymd.nullable().default(null),
   note: z.string().trim().max(300, "Ghi chú tối đa 300 ký tự.").default(""),
 }).superRefine((v, ctx) => {
   const bad = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
@@ -47,11 +47,16 @@ export const tripResultSchema = z.object({
   if (v.result === "GIAO_MOT_PHAN" && !v.lines.some((l) => l.qty > 0)) bad("lines", "Nhập số lượng thực giao.");
   if (v.result === "GIAO_DU" && v.debtAmount > 0) bad("debtAmount", "Giao đủ thu đủ không ghi nợ — chọn “Giao đủ, ghi nợ”.");
   if (v.result === "GHI_NO" && !(v.debtAmount > 0)) bad("debtAmount", "Nhập số ghi nợ.");
-  if (v.result === "HEN_TRA") {
-    if (!v.promiseDate) bad("promiseDate", "Nhập ngày khách hẹn trả.");
-    if (!(v.debtAmount > 0)) bad("debtAmount", "Nhập số tiền khách hẹn trả.");
-  } else if (v.promiseDate) bad("promiseDate", "Chỉ nhập ngày hẹn khi chọn “Giao, hẹn trả”.");
 });
+
+/** Chi phí lái xe ứng từ tiền thu của chuyến (đổ dầu, mua giấy…): trừ vào quỹ tiền mặt đã chọn khi thủ quỹ xác nhận chuyến. */
+export const tripExpenseSchema = z.object({
+  expenseTypeId: id("Chọn loại chi phí."),
+  cashAccountId: id("Chọn quỹ tiền mặt."),
+  amount: z.number({ invalid_type_error: "Nhập số tiền." }).finite().gt(0, "Số tiền phải lớn hơn 0.").max(99_999_999_999).refine((v) => Number(v.toFixed(2)) === v, "Tối đa 2 chữ số thập phân."),
+  note: z.string().trim().max(300, "Ghi chú tối đa 300 ký tự.").default(""),
+});
+export const removeTripExpenseSchema = z.object({ expenseId: id("Chọn khoản chi phí.") });
 
 export const settleTripSchema = z.object({ reason: z.string().trim().max(300, "Lý do tối đa 300 ký tự.").default("") });
 /** Chỉ cần cho điểm giao chưa chọn tài khoản lúc nhập kết quả (dữ liệu cũ). */
@@ -61,4 +66,5 @@ export const handleStopSchema = z.object({ note: z.string().trim().min(1, "Nhậ
 
 export type TripInput = z.infer<typeof tripSchema>;
 export type TripResultInput = z.infer<typeof tripResultSchema>;
+export type TripExpenseInput = z.infer<typeof tripExpenseSchema>;
 export type ConfirmTripInput = z.infer<typeof confirmTripSchema>;

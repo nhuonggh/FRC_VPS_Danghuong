@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ClosedPeriodBanner } from "@/components/period/PeriodHistoryViews";
 import { requireActor } from "@/server/auth/session";
 import { closedPeriodOf } from "@/server/period/doc-period";
-import { listActiveCashAccounts } from "@/server/cash/queries";
+import { listActiveCashAccounts, listExpenseTypes } from "@/server/cash/queries";
 import { DomainError } from "@/server/http/errors";
 import { canPrintDoc } from "@/server/print/types";
 import { getTrip } from "@/server/trips/queries";
@@ -24,7 +24,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   return (
     <>
       {closed && <div className="mb-4"><ClosedPeriodBanner periodName={closed.name} closedAt={closed.closedAt} /></div>}
-      <TripDetail trip={trip} accounts={accounts} perms={{ canManage: !closed && p.has("trip.manage"), canSettle: !closed && p.has("trip.settle"), canConfirm: !closed && p.has("trip.confirm_cash"), canPrint: canPrintDoc(p, "TRIP_SHEET"), canPrintCash: canPrintDoc(p, "TRIP_CASH") }} />
+      <TripDetail trip={trip} accounts={accounts} expenseTypes={await listExpenseTypes(prisma)} perms={{ canManage: !closed && p.has("trip.manage"), canSettle: !closed && p.has("trip.settle"), canConfirm: !closed && p.has("trip.confirm_cash"), canPrint: canPrintDoc(p, "TRIP_SHEET"), canPrintCash: canPrintDoc(p, "TRIP_CASH") }} />
     </>
   );
 }

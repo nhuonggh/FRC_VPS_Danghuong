@@ -15,7 +15,8 @@ import { docTimestamp, PeriodClosedError } from "@/server/inventory";
 import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { formatDocCode, nextDocId } from "@/server/purchase/codes";
 import { lineAmountOf } from "@/server/sales/queries";
-import type { ConfirmTripInput, TripInput, TripResultInput } from "./schemas";
+import { createExpense } from "@/server/cash/expenses";
+import type { ConfirmTripInput, TripExpenseInput, TripInput, TripResultInput } from "./schemas";
 import { remainingToDeliver as remainingOf } from "./remaining";
 
 type Tx = Prisma.TransactionClient;
@@ -176,14 +177,14 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   if (over.gt(0) && !input.note) throw new DomainError(`Tiền thu vượt số phải thu ${over.toFixed(0)} — nhập lý do (VD: khách trả nợ cũ).`, 400, "OVER_NEEDS_NOTE");
   if (collected.gt(0)) await postPartnerLedger(tx, { periodId: t.periodId, partnerId: order.partnerId, side: "credit", amount: collected, docType: "TRIP_COLLECT", docId: stop.id, at, createdBy: actor.userId });
   if (discount.gt(0)) await postPartnerLedger(tx, { periodId: t.periodId, partnerId: order.partnerId, side: "credit", amount: discount, docType: "TRIP_DISCOUNT", docId: stop.id, at, createdBy: actor.userId });
-  if (input.result === "GHI_NO" || (input.result === "GIAO_MOT_PHAN" && debt.gt(0))) {
+  if (input.result === "GHI_NO" || debt.gt(0)) {
     if (!order.partner.allowCredit) throw new DomainError(`Khách ${order.partner.name} không được ghi nợ.`, 409, "CREDIT_NOT_ALLOWED");
     const bal = (await partnerBalance(tx, order.partnerId)).balance;
     if (order.partner.debtLimit.gt(0) && bal.gt(order.partner.debtLimit)) throw new DomainError(`Ghi nợ làm công nợ (${bal.toFixed(0)}) vượt hạn mức ${order.partner.debtLimit.toFixed(0)} của khách.`, 409, "CREDIT_LIMIT");
   }
   await tx.tripOrder.update({
     where: { id: stop.id },
-    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, cashAccountId: cash.gt(0) ? input.cashAccountId : null, transferAccountId: transfer.gt(0) ? input.transferAccountId : null, debtAmount: debt, discountAmount: discount, overAmount: over, promiseDate: input.promiseDate ? new Date(`${input.promiseDate}T00:00:00Z`) : null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
+    data: { result: input.result, dueAmount: due, cashAmount: cash, transferAmount: transfer, cashAccountId: cash.gt(0) ? input.cashAccountId : null, transferAccountId: transfer.gt(0) ? input.transferAccountId : null, debtAmount: debt, discountAmount: discount, overAmount: over, promiseDate: null, resultNote: input.note || null, deliveryNoteId: noteId, resultAt: now, resultBy: actor.userId },
   });
   // Trục giao hàng + thanh toán của đơn
   if (input.result === "KHONG_GIAO") await setDeliveryStatus(tx, order.id, "FAILED");
@@ -191,7 +192,7 @@ export async function recordTripResult(tx: Tx, actor: Actor, tripId: number, inp
   if (input.result !== "KHONG_GIAO") {
     const fresh = await tx.saleOrder.findUniqueOrThrow({ where: { id: order.id }, select: { deliveryStatus: true } });
     const outstanding = due.minus(collected).minus(discount).plus(over);
-    const next = outstanding.lte(0) ? (fresh.deliveryStatus === "DELIVERED" ? "PAID" : "PARTIAL") : input.result === "HEN_TRA" ? "PROMISED" : collected.gt(0) ? "PARTIAL" : "DEBT";
+    const next = outstanding.lte(0) ? (fresh.deliveryStatus === "DELIVERED" ? "PAID" : "PARTIAL") : collected.gt(0) ? "PARTIAL" : "DEBT";
     await tx.saleOrder.update({ where: { id: order.id }, data: { paymentStatus: next } });
   }
   // Đủ kết quả ⇒ chuyến “đã về”
@@ -282,9 +283,50 @@ export async function confirmTripCash(tx: Tx, actor: Actor, id: number, input: C
       n++;
     }
   }
+  // Chi phí lái xe ứng từ tiền thu ⇒ phiếu chi phí (người ứng = lái xe) trừ đúng quỹ đã chọn; thủ quỹ không cần quyền lập chi phí riêng
+  const pending = await tx.tripExpense.findMany({ where: { tripId: id, paymentId: null }, orderBy: { id: "asc" } });
+  if (pending.length) {
+    const eff: Actor = { ...actor, perms: new Set([...actor.perms, "expense.manage", "cash.transaction.create"]) };
+    const driver = await tx.driver.findUniqueOrThrow({ where: { id: t.driverId }, select: { name: true } });
+    for (const e of pending) {
+      const x = await createExpense(tx, eff, { advancedById: null, advancedByDriverId: t.driverId, expenseTypeId: e.expenseTypeId, cashAccountId: e.cashAccountId, amount: Number(e.amount), date: ictYmd(now), note: `Chuyến ${t.code} · ${driver.name} ứng từ tiền thu${e.note ? ` · ${e.note}` : ""}` }, now);
+      await tx.tripExpense.update({ where: { id: e.id }, data: { paymentId: x.paymentId } });
+    }
+  }
   await tx.trip.update({ where: { id }, data: { status: "CONFIRMED", confirmedAt: now, confirmedBy: actor.userId, cashAccountId: input.cashAccountId, transferAccountId: input.transferAccountId } });
-  await writeAudit(tx, { userId: actor.userId, action: "trip.confirm_cash", entity: "Trip", entityId: id, after: { code: t.code, receipts: n, cash: t.cashAmount?.toString(), transfer: t.transferAmount?.toString() } });
+  await writeAudit(tx, { userId: actor.userId, action: "trip.confirm_cash", entity: "Trip", entityId: id, after: { code: t.code, receipts: n, expenses: pending.length, cash: t.cashAmount?.toString(), transfer: t.transferAmount?.toString() } });
   return { receipts: n };
+}
+
+// ── chi phí lái xe ứng từ tiền thu ─────────────────────────────────────────────────────────────────────────────────────
+async function lockOpenTrip(tx: Tx, id: number) {
+  const t = await lockTrip(tx, id);
+  await assertTripPeriod(tx, t.periodId);
+  if (t.status === "CANCELLED") throw new DomainError("Chuyến đã hủy.", 409);
+  if (t.status === "CONFIRMED") throw new DomainError("Thủ quỹ đã xác nhận chuyến này — không thêm/xóa chi phí lái xe ứng được.", 409, "TRIP_LOCKED");
+  return t;
+}
+
+/** Ghi chi phí lái xe đã ứng từ tiền khách đưa. Chưa đụng quỹ: phiếu chi phí chỉ sinh khi thủ quỹ xác nhận chuyến (confirmTripCash). */
+export async function addTripExpense(tx: Tx, actor: Actor, tripId: number, input: TripExpenseInput): Promise<{ id: number }> {
+  assertCan(actor.perms, "trip.manage");
+  const t = await lockOpenTrip(tx, tripId);
+  const type = await tx.expenseType.findUnique({ where: { id: input.expenseTypeId }, select: { isActive: true, name: true } });
+  if (!type?.isActive) throw new DomainError("Loại chi phí không hợp lệ hoặc đã tắt.", 400);
+  const acc = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId }, select: { isActive: true, type: true } });
+  if (!acc?.isActive || acc.type !== "CASH") throw new DomainError("Chọn quỹ tiền mặt hợp lệ (lái xe ứng từ tiền mặt).", 400);
+  const row = await tx.tripExpense.create({ data: { tripId, expenseTypeId: input.expenseTypeId, cashAccountId: input.cashAccountId, amount: D(input.amount), note: input.note || null, createdBy: actor.userId }, select: { id: true } });
+  await writeAudit(tx, { userId: actor.userId, action: "trip.expense_add", entity: "Trip", entityId: tripId, after: { code: t.code, expenseType: type.name, amount: input.amount, note: input.note } });
+  return row;
+}
+
+export async function removeTripExpense(tx: Tx, actor: Actor, tripId: number, expenseId: number): Promise<void> {
+  assertCan(actor.perms, "trip.manage");
+  const t = await lockOpenTrip(tx, tripId);
+  const e = await tx.tripExpense.findFirst({ where: { id: expenseId, tripId }, select: { amount: true } });
+  if (!e) throw new DomainError("Không tìm thấy khoản chi phí của chuyến.", 404);
+  await tx.tripExpense.delete({ where: { id: expenseId } });
+  await writeAudit(tx, { userId: actor.userId, action: "trip.expense_remove", entity: "Trip", entityId: tripId, before: { code: t.code, amount: e.amount.toString() } });
 }
 
 /** Chỉ lưu hướng xử lý của lần giao thất bại; không đổi kho, đơn hay chuyến. */

@@ -41,6 +41,8 @@ model Payment {
   kind          PaymentKind
   partnerId     Int?
   advancedById  Int?
+  /// Người ứng tiền là lái xe/phụ xe (không có tài khoản đăng nhập) — loại trừ với advancedById.
+  advancedByDriverId Int?
   amount        Decimal          @db.Decimal(18, 2)
   cashAccountId Int
   at            DateTime
@@ -59,9 +61,11 @@ model Payment {
   period      Period              @relation(fields: [periodId], references: [id], onDelete: Restrict)
   partner     Partner?            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   advancedBy  User?               @relation("PaymentAdvancedBy", fields: [advancedById], references: [id], onDelete: Restrict)
+  advancedByDriver Driver?        @relation(fields: [advancedByDriverId], references: [id], onDelete: Restrict)
   cashAccount CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
   goodsReturn GoodsReturn?        @relation(fields: [goodsReturnId], references: [id], onDelete: Restrict)
   expense     OperatingExpense?
+  tripExpense TripExpense?
   settlement  DiscountSettlement?
 
   @@index([periodId, at])

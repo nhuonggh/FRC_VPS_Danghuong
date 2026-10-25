@@ -4,7 +4,7 @@ import { assertCan } from "@/lib/permissions/guard";
 import { prisma } from "@/lib/prisma";
 import { ictYmd } from "@/lib/time";
 import { requireActor } from "@/server/auth/session";
-import { getExpense, listActiveCashAccounts, listExpenseTypes } from "@/server/cash/queries";
+import { getExpense, listActiveCashAccounts, listAdvancers, listExpenseTypes } from "@/server/cash/queries";
 import { DomainError } from "@/server/http/errors";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +17,5 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
   const e = await getExpense(prisma, actor, id).catch((err: unknown) => { if (err instanceof DomainError && err.status === 404) return null; throw err; });
   if (!e) notFound();
   if (e.isCancelled || e.reviewStatus === "REVIEWED") redirect(`/accounting/payments/${e.paymentId}`);
-  return <ExpenseForm people={(await prisma.user.findMany({ where: { isLocked: false }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } })).map(u => ({ value: u.id, label: u.fullName }))} id={id} code={e.code} today={ictYmd(new Date())} types={await listExpenseTypes(prisma)} accounts={await listActiveCashAccounts(prisma)} initial={{ advancedBy: e.advancedBy, expenseTypeId: e.expenseTypeId, cashAccountId: e.cashAccountId, amount: e.amount, date: e.dateYmd, note: e.note }} />;
+  return <ExpenseForm people={await listAdvancers(prisma)} id={id} code={e.code} today={ictYmd(new Date())} types={await listExpenseTypes(prisma)} accounts={await listActiveCashAccounts(prisma)} initial={{ advancedBy: e.advancedBy, expenseTypeId: e.expenseTypeId, cashAccountId: e.cashAccountId, amount: e.amount, date: e.dateYmd, note: e.note }} />;
 }

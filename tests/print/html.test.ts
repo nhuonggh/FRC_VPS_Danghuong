@@ -167,6 +167,10 @@ describe("HTML in: các phiếu còn lại", () => {
     for (const t of ["Lái A", "51C-1", "Thủ quỹ", "Thời gian thu", "DH1", "PT: PT000001", "gồm thu vượt", "Tổng tiền mặt thu từ lái xe", "Hai trăm năm mươi nghìn đồng"]) expect(html).toContain(t);
     expect(html).toContain("Khách &lt;B&gt;"); expect(html).not.toContain("Chuyển khoản"); expect(html).not.toContain("Ký, ghi rõ họ tên");
   });
+  it("phiếu thu tiền lái xe có chi phí ứng: dòng trừ (mã PC) + tiền mặt thực nộp quỹ + số tiền bằng chữ theo tiền thực nộp", () => {
+    const html = renderHtmlPrint(base("TRIP_CASH", { partner: null, doc: { date: "25/10/2026 15:10", driver: "Lái A", vehicle: "51C-1", operator: "Thủ quỹ" }, totals: { cash: "200.000", expense: "5.000", net: "195.000" } }, { lines: [{ no: "1", order: "DH1", customer: "Khách B", amount: "200.000", receipts: "PT000001", over: "" }, { no: "", kind: "expense", order: "Chi: Xăng dầu", customer: "đổ dầu", amount: "-5.000", receipts: "PC000002", over: "" }], summary: [{ label: "Lái xe đã ứng chi", value: "-5.000" }, { label: "Tiền mặt lái xe nộp quỹ", value: "195.000", big: true }], words: moneyInWords("195000") }), false, false, "n");
+    for (const t of ["Chi: Xăng dầu", "PC: PC000002", "PT: PT000001", "-5.000", "Lái xe đã ứng chi", "Tiền mặt lái xe nộp quỹ", "195.000", "Một trăm chín mươi lăm nghìn đồng"]) expect(html).toContain(t);
+  });
   it("công nợ, chuyến, lệnh SX, kiểm kho, báo giá, trả hàng có đúng tiêu đề và cột", () => {
     const debt = renderHtmlPrint(base("DEBT_STATEMENT", {}, { lines: [{ no: "1", date: "01/10/2026", docLabel: "Đơn bán", docCode: "DH1", debit: "100", credit: "", running: "100" }] }), true, false, "n");
     expect(debt).toContain("BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ"); expect(debt).toContain("Phát sinh tăng"); expect(debt).toContain("DH1");

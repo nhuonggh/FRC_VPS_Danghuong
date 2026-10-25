@@ -258,6 +258,16 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 26/10/2026 — Nhập kết quả giao + người ứng tiền (ĐÃ LÀM xong code + test, chờ user duyệt commit/push — có migration `20261026600000_trip_expenses_driver_advancer`)
+Đã làm: (1) bỏ `HEN_TRA` khỏi lựa chọn/schema (enum DB giữ cho dữ liệu cũ, hiển thị "Giao, ghi nợ (hẹn trả — cũ)"; mở sửa kết quả cũ thì coi như ghi nợ; bỏ ô ngày hẹn); (2) dialog kết quả: "Bớt cho khách" ngay dưới "Kết quả", gợi ý tiền mặt = phải thu − bớt − CK (ghi nợ = phải thu − bớt − thu), ô đã sửa tay không bị đè, ô tiền trống + placeholder 0 + chọn hết khi focus; (3) bảng mới `trip_expenses` + mục "Chi phí lái xe ứng từ tiền thu" ở chi tiết chuyến (thêm/xóa tới khi thủ quỹ xác nhận; API `POST /api/trips/:id/expense-add|expense-remove`); `confirmTripCash` tự lập phiếu chi phí (người ứng = lái xe, trừ đúng quỹ tiền mặt đã chọn) ⇒ quỹ thực nhận = tiền thu − chi phí; (4) `payments.advancedByDriverId` (cột mới, CHECK chỉ một người ứng) + `listAdvancers`: ô "Người ứng tiền" ở Lập chi phí/Phiếu chi liệt kê cả người dùng lẫn lái xe/phụ xe (option lái xe có id ÂM, xem `src/lib/advancer.ts`).
+Yêu cầu gốc (giữ để đối chiếu):
+Nơi sửa: `ResultDialog` ở `src/components/trips/TripDetail.tsx`, `src/server/trips/{schemas,service,queries}.ts`; form chi phí `src/components/cash/ExpenseForm.tsx` + `VoucherForm.tsx` (danh sách người ứng = `users` chưa khoá).
+1. **Bỏ "Giao, hẹn trả"** (`HEN_TRA`), chỉ giữ "Giao, ghi nợ" (khách coi hẹn trả = nợ). Giữ enum cho dữ liệu cũ; dialog sửa kết quả cũ `HEN_TRA` hiển thị như ghi nợ; ngừng nhận `HEN_TRA` mới; bỏ ô "Ngày hẹn trả" và nhãn "Ghi nợ / hẹn trả" → "Ghi nợ".
+2. **Ô "Bớt cho khách" đưa lên ngay dưới "Kết quả"**; nhập bớt xong thì tiền mặt/chuyển khoản tự gợi ý = phải thu − bớt (chỉ là gợi ý, sửa tay được, không ép đúng số). Ô tiền không để sẵn "0" (hiện trống + placeholder 0 / chọn hết khi focus) để khỏi thừa số 0 khi gõ.
+3. **Lái xe ứng tiền thu được để chi cho công ty** (đổ dầu, mua giấy…): bổ sung ở phần nhập kết quả giao. Cần chốt thiết kế (xem câu hỏi bên dưới).
+4. **Thêm "Người ứng tiền" ở Lập chi phí**: hiện chỉ chọn được tài khoản người dùng hệ thống chưa khoá. Cần chốt cách thêm người (lái xe/phụ xe/nhân viên không có tài khoản).
+Câu hỏi chờ chốt: (3) chi phí của lái xe ghi theo chuyến hay theo từng đơn, trừ vào tiền mặt lái xe nộp thế nào, tạo phiếu chi/chi phí tự động lúc thủ quỹ xác nhận hay kế toán nhập; (4) người ứng là lái xe có sẵn trong danh mục lái xe hay tạo tài khoản người dùng mới.
+
 ### BÀN GIAO HIỆN TẠI — cập nhật 01/10/2026 (ưu tiên hơn các ghi chú lịch sử bên dưới)
 
 **13/10/2026 — sửa lỗi UI (chưa deploy):** (1) Phiếu cọc không chọn được quỹ: API trả `{value,label}` nhưng form đọc `{id,name}` → đã sửa, tải quỹ ngay khi mở. (2) Tab "Tiền cọc" đổi thành "Thanh toán & tiền cọc" (ô thu cọc 1 hàng, summary hiện "Đã cọc"); hóa đơn in thêm `totals.deposit`. (3) Dialog "Kết quả giao" (danh sách chuyến) ô tiền bị bóp hẹp → xếp 1 cột. (4) Danh sách đơn: thêm cột + bộ lọc "Người tạo" (`filters.creator`, `listOrderCreators`). (5) Form lập đơn mới: ô thu trước của khách thường đổi nhãn "Tiền cọc / thu trước" (lưu thành phiếu COC qua checkout; chỉ khách lẻ mới tự điền đủ tiền). CHƯA làm: template in (dịch vụ ngoài repo) hiển thị dòng `totals.deposit` riêng.

@@ -25,7 +25,7 @@ export interface Voucher {
   cashAccountId: number; amount: Prisma.Decimal; at: Date; note: string | null;
   reviewStatus: CashReviewStatus; isCancelled: boolean; createdBy: number;
   /** Phiếu thu sinh từ xác nhận chuyến giao (công nợ đã ghi ở TRIP_COLLECT) — chỉ đổi qua nghiệp vụ chuyến. */
-  tripId: number | null; advancedById?: number | null;
+  tripId: number | null; advancedById?: number | null; advancedByDriverId?: number | null;
 }
 
 /** Khoá dòng phiếu (`FOR UPDATE`) rồi đọc: hai thủ quỹ kiểm cùng phiếu / sửa & kiểm đồng thời chỉ một bên thắng. */
@@ -39,7 +39,7 @@ export async function lockVoucher(tx: Tx, doc: VoucherDoc, id: number): Promise<
   await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
   const p = await tx.payment.findUnique({ where: { id } });
   if (!p) throw new DomainError("Không tìm thấy phiếu chi.", 404);
-  return { id, doc, periodId: p.periodId, code: p.code, advancedById: p.advancedById, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy, tripId: null };
+  return { id, doc, periodId: p.periodId, code: p.code, advancedById: p.advancedById, advancedByDriverId: p.advancedByDriverId, type: p.kind, partnerId: p.partnerId, orderId: null, cashAccountId: p.cashAccountId, amount: p.amount, at: p.at, note: p.note, reviewStatus: p.reviewStatus, isCancelled: p.isCancelled, createdBy: p.createdBy, tripId: null };
 }
 
 type VoucherPatch = Partial<{ amount: Prisma.Decimal; cashAccountId: number; at: Date; note: string | null; partnerId: number | null; orderId: number | null; reviewStatus: CashReviewStatus; reviewedBy: number | null; reviewedAt: Date | null; isCancelled: boolean; cancelledAt: Date | null; cancelledBy: number | null }>;
@@ -82,6 +82,13 @@ export async function checkAdvancedBy(tx: Tx, id: number | null | undefined, exi
   if (id == null || id === existing) return;
   const user = await tx.user.findUnique({ where: { id }, select: { isLocked: true } });
   if (!user || user.isLocked) throw new DomainError("Người ứng tiền không tồn tại hoặc tài khoản đã khóa.", 400);
+}
+/** Người ứng là lái xe/phụ xe: phải còn hoạt động; không được vừa là người dùng vừa là lái xe. */
+export async function checkAdvancedByDriver(tx: Tx, userId: number | null | undefined, driverId: number | null | undefined, existing?: number | null) {
+  if (userId != null && driverId != null) throw new DomainError("Chỉ chọn một người ứng tiền.", 400);
+  if (driverId == null || driverId === existing) return;
+  const d = await tx.driver.findUnique({ where: { id: driverId }, select: { isActive: true } });
+  if (!d || !d.isActive) throw new DomainError("Lái xe/phụ xe ứng tiền không tồn tại hoặc đã tắt.", 400);
 }
 async function checkPartner(tx: Tx, id: number, role: "customer" | "supplier" | "any") {
   const p = await tx.partner.findUnique({ where: { id }, select: { isCustomer: true, isSupplier: true, mergedIntoId: true, isActive: true } });
@@ -128,13 +135,14 @@ export async function createPayment(tx: Tx, actor: Actor, input: Omit<PaymentInp
   await checkAccount(tx, input.cashAccountId);
   if (input.partnerId !== null) await checkPartner(tx, input.partnerId, input.kind === "TRA_NCC" ? "supplier" : "customer");
   await checkAdvancedBy(tx, input.advancedById);
+  await checkAdvancedByDriver(tx, input.advancedById, input.advancedByDriverId);
   const id = await nextDocId(tx, "payments");
   const code = formatDocCode(VOUCHER_PREFIX.PAYMENT, id);
   const amount = D(input.amount);
-  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, advancedById: input.advancedById ?? null, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, goodsReturnId: input.goodsReturnId ?? null, createdBy: actor.userId } });
+  await tx.payment.create({ data: { id, code, periodId: period.id, kind: input.kind, advancedById: input.advancedById ?? null, advancedByDriverId: input.advancedByDriverId ?? null, partnerId: input.partnerId, amount, cashAccountId: input.cashAccountId, at, note: input.note || null, goodsReturnId: input.goodsReturnId ?? null, createdBy: actor.userId } });
   await postVoucherLedgers(tx, { doc: "PAYMENT", id, periodId: period.id, type: input.kind, partnerId: input.partnerId, cashAccountId: input.cashAccountId, amount, at }, actor.userId);
   await addReviewEvent(tx, "PAYMENT", id, "SUBMIT", actor.userId);
-  await writeAudit(tx, { userId: actor.userId, action: "payment.create", entity: "Payment", entityId: id, after: { advancedById: input.advancedById ?? null, code, kind: input.kind, amount: input.amount, cashAccountId: input.cashAccountId } });
+  await writeAudit(tx, { userId: actor.userId, action: "payment.create", entity: "Payment", entityId: id, after: { advancedById: input.advancedById ?? null, advancedByDriverId: input.advancedByDriverId ?? null, code, kind: input.kind, amount: input.amount, cashAccountId: input.cashAccountId } });
   return { id, code };
 }
 
@@ -182,7 +190,8 @@ export async function editPayment(tx: Tx, actor: Actor, id: number, input: Payme
   await removeVoucherLedgers(tx, "PAYMENT", id);
   const amount = D(input.amount);
   await checkAdvancedBy(tx, input.advancedById, v.advancedById);
-  await tx.payment.update({ where: { id }, data: { advancedById: input.advancedById ?? null } });
+  await checkAdvancedByDriver(tx, input.advancedById, input.advancedByDriverId, v.advancedByDriverId);
+  await tx.payment.update({ where: { id }, data: { advancedById: input.advancedById ?? null, advancedByDriverId: input.advancedByDriverId ?? null } });
   await updateVoucher(tx, "PAYMENT", id, { amount, cashAccountId: input.cashAccountId, at, note: input.note || null, partnerId: input.partnerId });
   await postVoucherLedgers(tx, { doc: "PAYMENT", id, periodId: v.periodId, type: v.type, partnerId: input.partnerId, cashAccountId: input.cashAccountId, amount, at }, actor.userId);
   await addReviewEvent(tx, "PAYMENT", id, v.reviewStatus === "RETURNED" ? "RESUBMIT" : "EDIT", actor.userId);

@@ -61,6 +61,7 @@ model Trip {
   assistant Driver?     @relation("TripAssistant", fields: [assistantId], references: [id], onDelete: Restrict)
   stops     TripOrder[]
   receipts  Receipt[]
+  expenses  TripExpense[]
 
   @@index([periodId, tripDate])
   @@index([status])
@@ -106,4 +107,27 @@ model TripOrder {
   @@unique([tripId, orderId])
   @@index([orderId])
   @@map("trip_orders")
+}
+
+/// Chi phí lái xe ứng từ tiền thu của chuyến (đổ dầu, mua giấy…). Nhập khi chuyến chưa được thủ quỹ xác nhận; lúc xác nhận
+/// sinh phiếu chi phí (OperatingExpense, người ứng = lái xe) trừ vào đúng quỹ đã chọn ⇒ quỹ thực nhận = tiền thu − chi phí.
+model TripExpense {
+  id            Int      @id @default(autoincrement())
+  tripId        Int
+  expenseTypeId Int
+  cashAccountId Int
+  amount        Decimal  @db.Decimal(18, 2)
+  note          String?
+  /// Phiếu chi sinh khi thủ quỹ xác nhận chuyến.
+  paymentId     Int?     @unique
+  createdBy     Int
+  createdAt     DateTime @default(now())
+
+  trip        Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  expenseType ExpenseType @relation(fields: [expenseTypeId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  payment     Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([tripId])
+  @@map("trip_expenses")
 }

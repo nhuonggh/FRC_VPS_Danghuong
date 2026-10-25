@@ -7,12 +7,13 @@ import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp } from "@/server/inventory";
 import { assertDocDateInPeriod, getOpenPeriod } from "@/server/period/guard";
 import { z } from "zod";
-import { addReviewEvent, lockVoucher, postVoucherLedgers, removeVoucherLedgers, updateVoucher, createPayment, checkAdvancedBy } from "./vouchers";
+import { addReviewEvent, lockVoucher, postVoucherLedgers, removeVoucherLedgers, updateVoucher, createPayment, checkAdvancedBy, checkAdvancedByDriver } from "./vouchers";
 
 type Tx = Prisma.TransactionClient;
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ.");
 export const expenseSchema = z.object({
   advancedById: z.number({ invalid_type_error: "Người ứng tiền không hợp lệ." }).int().positive("Người ứng tiền không hợp lệ.").nullable().optional(),
+  advancedByDriverId: z.number({ invalid_type_error: "Người ứng tiền không hợp lệ." }).int().positive("Người ứng tiền không hợp lệ.").nullable().optional(),
   expenseTypeId: z.number({ invalid_type_error: "Chọn loại chi phí." }).int().positive("Chọn loại chi phí."),
   cashAccountId: z.number({ invalid_type_error: "Chọn quỹ/tài khoản." }).int().positive("Chọn quỹ/tài khoản."),
   amount: z.number({ invalid_type_error: "Nhập số tiền." }).finite().gt(0, "Số tiền phải lớn hơn 0.").max(99_999_999_999).refine((v) => Number(v.toFixed(2)) === v, "Tối đa 2 chữ số thập phân."),
@@ -30,10 +31,10 @@ async function checkType(tx: Tx, id: number) {
 export async function createExpense(tx: Tx, actor: Actor, input: ExpenseInput, now: Date = new Date()): Promise<{ id: number; paymentId: number; code: string }> {
   assertCan(actor.perms, "expense.manage");
   await checkType(tx, input.expenseTypeId);
-  const p = await createPayment(tx, actor, { kind: "CHI_PHI", advancedById: input.advancedById, partnerId: null, cashAccountId: input.cashAccountId, amount: input.amount, date: input.date, note: input.note }, now);
+  const p = await createPayment(tx, actor, { kind: "CHI_PHI", advancedById: input.advancedById, advancedByDriverId: input.advancedByDriverId, partnerId: null, cashAccountId: input.cashAccountId, amount: input.amount, date: input.date, note: input.note }, now);
   const period = await getOpenPeriod(tx);
   const e = await tx.operatingExpense.create({ data: { periodId: period.id, expenseTypeId: input.expenseTypeId, paymentId: p.id, createdBy: actor.userId }, select: { id: true } });
-  await writeAudit(tx, { userId: actor.userId, action: "expense.create", entity: "OperatingExpense", entityId: e.id, after: { advancedById: input.advancedById ?? null, code: p.code, expenseTypeId: input.expenseTypeId, amount: input.amount } });
+  await writeAudit(tx, { userId: actor.userId, action: "expense.create", entity: "OperatingExpense", entityId: e.id, after: { advancedById: input.advancedById ?? null, advancedByDriverId: input.advancedByDriverId ?? null, code: p.code, expenseTypeId: input.expenseTypeId, amount: input.amount } });
   return { id: e.id, paymentId: p.id, code: p.code };
 }
 
@@ -55,7 +56,8 @@ export async function editExpense(tx: Tx, actor: Actor, id: number, input: Expen
   const at = same ? v.at : docTimestamp(input.date, now);
   assertDocDateInPeriod(period, at);
   await checkAdvancedBy(tx, input.advancedById, v.advancedById);
-  await tx.payment.update({ where: { id: v.id }, data: { advancedById: input.advancedById ?? null } });
+  await checkAdvancedByDriver(tx, input.advancedById, input.advancedByDriverId, v.advancedByDriverId);
+  await tx.payment.update({ where: { id: v.id }, data: { advancedById: input.advancedById ?? null, advancedByDriverId: input.advancedByDriverId ?? null } });
   await removeVoucherLedgers(tx, "PAYMENT", v.id);
   const amount = new Prisma.Decimal(input.amount);
   await updateVoucher(tx, "PAYMENT", v.id, { amount, cashAccountId: input.cashAccountId, at, note: input.note || null });

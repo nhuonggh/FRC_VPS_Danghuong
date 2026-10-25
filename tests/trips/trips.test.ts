@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { cashBalance } from "@/server/cash/balance";
+import { getExpense } from "@/server/cash/queries";
 import { buildContract } from "@/server/print/contracts";
 import { cancelVoucher, reviewVoucher } from "@/server/cash/vouchers";
 import { partnerBalance } from "@/server/debt/balance";
@@ -10,7 +11,7 @@ import { cancelSaleOrderTx } from "@/server/sales/lifecycle";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
 import { confirmTripSchema, tripResultSchema, tripSchema } from "@/server/trips/schemas";
-import { cancelTrip, clearTripResult, confirmTripCash, createTrip, createTripIdempotent, departTrip, handleStop, recordTripResult, settleTrip } from "@/server/trips/service";
+import { addTripExpense, removeTripExpense, cancelTrip, clearTripResult, confirmTripCash, createTrip, createTripIdempotent, departTrip, handleStop, recordTripResult, settleTrip } from "@/server/trips/service";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner } from "../helpers/factories";
 import { buy, engine, newWorld, T, useNoopCostOwners, type World } from "../inventory/helpers";
@@ -112,10 +113,10 @@ describe("kết quả giao (40)", () => {
     expect((await errOf(result(t3.id, c.id, { result: "GHI_NO", cashAmount: 0, debtAmount: 200_000 })))?.code).toBe("CREDIT_LIMIT");
     expect(await prisma.deliveryNote.count({ where: { orderId: c.id, isCancelled: false } })).toBe(0); // rollback trọn
   });
-  it("hẹn trả → PROMISED; không giao được → FAILED, không phiếu giao; tiền vượt phải thu bị chặn; schema bắt buộc lý do/ngày hẹn", async () => {
+  it("ghi nợ (không còn hẹn trả) → DEBT; không giao được → FAILED, không phiếu giao; tiền vượt phải thu bị chặn; schema bắt buộc lý do/ngày hẹn", async () => {
     const [a, b] = [await order(), await order()]; const t = await trip([a.id, b.id]);
-    await result(t.id, a.id, { result: "HEN_TRA", cashAmount: 0, debtAmount: 200_000, promiseDate: "2026-09-20" });
-    expect((await st(a.id)).paymentStatus).toBe("PROMISED");
+    await result(t.id, a.id, { result: "GHI_NO", cashAmount: 0, debtAmount: 200_000 });
+    expect((await st(a.id)).paymentStatus).toBe("DEBT");
     await result(t.id, b.id, { result: "KHONG_GIAO", cashAmount: 0, note: "khách vắng" });
     expect(await st(b.id)).toMatchObject({ deliveryStatus: "FAILED" });
     expect(await prisma.deliveryNote.count({ where: { orderId: b.id } })).toBe(0);
@@ -178,6 +179,34 @@ describe("đối soát (41) và thủ quỹ xác nhận (D-35)", () => {
     expect(receipts.map((r) => [String(r.amount), r.orderId === a.id ? "đơn" : r.orderId === null ? "không đơn" : "?"])).toEqual([["200000", "đơn"], ["50000", "không đơn"]]);
     await tx((x) => syncPaymentStatus(x, a.id));
     expect((await st(a.id)).paymentStatus).toBe("PAID"); // không thành OVERPAID
+  });
+  it("chi phí lái xe ứng từ tiền thu: ghi nhận trước, thủ quỹ xác nhận ⇒ tự lập phiếu chi phí (người ứng = lái xe) trừ quỹ; sau đó khóa", async () => {
+    const a = await order(); const t = await trip([a.id]);
+    await result(t.id, a.id, { cashAmount: 200_000, cashAccountId: cash.id });
+    const type = await prisma.expenseType.create({ data: { name: "Xăng dầu" } });
+    const e1 = await tx((x) => addTripExpense(x, kt, t.id, { expenseTypeId: type.id, cashAccountId: cash.id, amount: 30_000, note: "đổ dầu" }));
+    await tx((x) => addTripExpense(x, kt, t.id, { expenseTypeId: type.id, cashAccountId: cash.id, amount: 5_000, note: "mua giấy" }));
+    await tx((x) => removeTripExpense(x, kt, t.id, e1.id)); // chưa vào sổ ⇒ xóa được
+    expect((await errOf(tx((x) => addTripExpense(x, kt, t.id, { expenseTypeId: type.id, cashAccountId: bank.id, amount: 1, note: "" }))))?.status).toBe(400); // phải là quỹ tiền mặt
+    expect((await errOf(tx((x) => addTripExpense(x, { userId: 1, perms: new Set() }, t.id, { expenseTypeId: type.id, cashAccountId: cash.id, amount: 1, note: "" }))))?.status).toBe(403);
+    expect(await prisma.payment.count()).toBe(0); // chưa sinh phiếu chi
+    await tx((x) => settleTrip(x, kt, t.id, "", NOW));
+    await tx((x) => confirmTripCash(x, tq, t.id, { cashAccountId: null, transferAccountId: null }, NOW));
+    const pay = await prisma.payment.findFirstOrThrow({ where: { kind: "CHI_PHI" } });
+    expect(pay).toMatchObject({ advancedByDriverId: driver.id, advancedById: null, cashAccountId: cash.id });
+    expect(String(pay.amount)).toBe("5000");
+    expect(pay.note).toContain("mua giấy");
+    expect((await prisma.tripExpense.findFirstOrThrow({ where: { tripId: t.id } })).paymentId).toBe(pay.id);
+    expect((await cashBalance(prisma, w.periodId, cash.id)).balance.toString()).toBe("195000"); // thu 200.000 − chi 5.000
+    const exp = await getExpense(prisma, { userId: tq.userId, perms: new Set(["expense.manage"]) }, (await prisma.operatingExpense.findFirstOrThrow({ where: { paymentId: pay.id } })).id);
+    expect(exp.advancedBy).toEqual({ value: -driver.id, label: "Lái A (lái xe)" });
+    expect((await errOf(tx((x) => addTripExpense(x, kt, t.id, { expenseTypeId: type.id, cashAccountId: cash.id, amount: 1, note: "" }))))?.code).toBe("TRIP_LOCKED");
+    // phiếu in thu tiền lái xe: thêm dòng chi phí ứng (trừ) + tiền thực nộp
+    const printer: Actor = { userId: tq.userId, perms: new Set([...TQ, "print.use", "trip.manage"]) };
+    const c = await buildContract(prisma, printer, "TRIP_CASH", t.id, NOW);
+    expect(c.lines.map((l) => l.order)).toEqual([a.code, "Chi: Xăng dầu"]);
+    expect(c.lines[1]!.amount).toMatch(/^-.*5.000/); expect(c.lines[1]!.receipts).toBe(pay.code);
+    expect(c.totals.cash).toContain("200.000"); expect(c.totals.expense).toContain("5.000"); expect(c.totals.net).toContain("195.000");
   });
   it("phiếu in thu tiền lái xe (TRIP_CASH): chỉ in sau khi thủ quỹ xác nhận; chỉ tiền mặt, mã phiếu thu theo đơn, người thao tác + thời gian", async () => {
     const { a, b, t } = await twoStops();

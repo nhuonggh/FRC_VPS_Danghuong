@@ -126,7 +126,9 @@ export interface StopDTO {
 export interface TripDetailDTO {
   id: number; code: string; date: string; status: TripStatus; statusLabel: string; note: string | null; routeName: string | null; vehiclePlate: string; driverName: string; assistantName: string | null;
   departedAt: Date | null; returnedAt: Date | null; createdByName: string | null;
-  totals: { expected: string; cash: string; transfer: string; debt: string; discount: string; over: string; diff: string };
+  totals: { expected: string; cash: string; transfer: string; debt: string; discount: string; over: string; diff: string; expense: string };
+  /** Chi phí lái xe ứng từ tiền thu; sau khi thủ quỹ xác nhận có mã phiếu chi. */
+  expenses: { id: number; expenseTypeName: string; cashAccountName: string; amount: string; note: string | null; paymentId: number | null; paymentCode: string | null }[];
   settled: { at: Date; byName: string | null; diffReason: string | null } | null; confirmed: { at: Date; byName: string | null; cashAccountName: string | null; transferAccountName: string | null } | null; cancelReason: string | null;
   stops: StopDTO[]; receipts: { id: number; code: string; amount: string; accountName: string }[];
 }
@@ -141,6 +143,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     },
   });
   if (!t) throw new DomainError("Không tìm thấy chuyến giao.", 404);
+  const expenseRows = await db.tripExpense.findMany({ where: { tripId: id }, orderBy: { id: "asc" }, include: { expenseType: { select: { name: true } }, cashAccount: { select: { name: true } }, payment: { select: { code: true } } } });
   const receipts = await db.receipt.findMany({ where: { tripId: id }, orderBy: { id: "asc" }, select: { id: true, code: true, amount: true, cashAccount: { select: { name: true } } } });
   const accIds = [t.cashAccountId, t.transferAccountId].filter((x): x is number => x !== null);
   const [accs, names] = await Promise.all([db.cashAccount.findMany({ where: { id: { in: accIds } }, select: { id: true, name: true } }), fullName(db, [t.createdBy, ...(t.settledBy ? [t.settledBy] : []), ...(t.confirmedBy ? [t.confirmedBy] : [])])]);
@@ -164,7 +167,8 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
   return {
     id: t.id, code: t.code, date: ymd(t.tripDate), status: t.status, statusLabel: TRIP_STATUS_LABEL[t.status], note: t.note, routeName: t.route?.name ?? null, vehiclePlate: t.vehicle.plate, driverName: t.driver.name, assistantName: t.assistant?.name ?? null,
     departedAt: t.departedAt, returnedAt: t.returnedAt, createdByName: names.get(t.createdBy) ?? null,
-    totals: { expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), discount: discount.toString(), over: over.toString(), diff: expected.plus(over).minus(cash).minus(transfer).minus(debt).minus(discount).toString() },
+    totals: { expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), discount: discount.toString(), over: over.toString(), diff: expected.plus(over).minus(cash).minus(transfer).minus(debt).minus(discount).toString(), expense: expenseRows.reduce((a, e) => a.plus(e.amount), D(0)).toString() },
+    expenses: expenseRows.map((e) => ({ id: e.id, expenseTypeName: e.expenseType.name, cashAccountName: e.cashAccount.name, amount: e.amount.toString(), note: e.note, paymentId: e.paymentId, paymentCode: e.payment?.code ?? null })),
     settled: t.settledAt ? { at: t.settledAt, byName: t.settledBy ? (names.get(t.settledBy) ?? null) : null, diffReason: t.diffReason } : null,
     confirmed: t.confirmedAt ? { at: t.confirmedAt, byName: t.confirmedBy ? (names.get(t.confirmedBy) ?? null) : null, cashAccountName: t.cashAccountId ? (accName.get(t.cashAccountId) ?? null) : null, transferAccountName: t.transferAccountId ? (accName.get(t.transferAccountId) ?? null) : null } : null,
     cancelReason: t.cancelReason, stops, receipts: receipts.map((r) => ({ id: r.id, code: r.code, amount: r.amount.toString(), accountName: r.cashAccount.name })),
