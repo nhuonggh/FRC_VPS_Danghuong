@@ -56,17 +56,13 @@ describe("xếp chuyến (38)", () => {
     await createTripIdempotent(prisma, kt, "k1", input, NOW); await createTripIdempotent(prisma, kt, "k1", input, NOW);
     expect(await prisma.trip.count()).toBe(2);
   });
-  it("chống trùng xe/lái/phụ cùng ngày (kể cả người đổi vai), khác ngày thì được; hủy chuyến giải phóng", async () => {
+  it("không chặn xe/lái/phụ đã có chuyến chưa nhập kết quả: cùng ngày hay khác ngày đều xếp được chuyến mới (chỉ chặn ở mức đơn)", async () => {
     const [a, b, c] = [await order(), await order(), await order()];
-    const t1 = await trip([a.id]);
-    expect((await errOf(trip([b.id])))?.code).toBe("TRIP_CLASH");
-    const v2 = await prisma.vehicle.create({ data: { plate: "51C-99999" } });
-    expect((await errOf(trip([b.id], { vehicleId: v2.id, assistantId: null })))?.code).toBe("TRIP_CLASH"); // trùng lái
-    const d2 = await prisma.driver.create({ data: { name: "Lái C" } });
-    expect((await errOf(trip([b.id], { vehicleId: v2.id, driverId: d2.id })))?.code).toBe("TRIP_CLASH"); // trùng phụ
-    await trip([b.id], { date: "2026-09-17" });
-    await tx((t) => cancelTrip(t, kt, t1.id, "đổi kế hoạch", NOW));
-    await trip([c.id]);
+    await trip([a.id]);
+    await trip([b.id]); // cùng xe + lái + phụ + cùng ngày, chuyến trước chưa có kết quả
+    await trip([c.id], { date: "2026-09-17" });
+    expect(await prisma.trip.count()).toBe(3);
+    expect((await errOf(trip([a.id])))?.code).toBe("ORDER_IN_TRIP"); // đơn đang nằm chuyến chưa có kết quả vẫn bị chặn
   });
   it("đơn đang nằm chuyến chưa có kết quả / nháp / đã hủy / đã giao hết / vai trò sai / ngày quá xa / thiếu quyền bị từ chối", async () => {
     const a = await order(); await trip([a.id]);
