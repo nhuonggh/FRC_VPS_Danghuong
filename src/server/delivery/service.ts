@@ -87,16 +87,16 @@ export async function createDeliveryNoteCore(tx: Tx, actor: Actor, input: Delive
   // Phần đã trả về kho khi chưa giao (hàng không giao được) không còn để giao nữa
   const backed = new Map((await tx.goodsReturnLine.groupBy({ by: ["orderLineId"], where: { goodsReturn: { orderId: order.id, isCancelled: false, undelivered: true } }, _sum: { qty: true } })).map((r) => [r.orderLineId, r._sum.qty ?? D(0)]));
   let value = D(0);
-  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
+  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l, order.roundAmounts)), D(0));
   // giá trị hàng đã giao trước phiếu này (để chia phí vận chuyển luỹ kế)
-  const valueBefore = order.lines.reduce((s, l) => s.plus(deliveredValue(lineAmountOf(l), l.qty, D(0), deliveredOf(l))), D(0));
+  const valueBefore = order.lines.reduce((s, l) => s.plus(deliveredValue(lineAmountOf(l, order.roundAmounts), l.qty, D(0), deliveredOf(l))), D(0));
   const rows = input.lines.map((l, i) => {
     const line = byId.get(l.orderLineId);
     if (!line) throw new DomainError(`Dòng ${i + 1}: không thuộc đơn này.`, 400);
     const delivered = deliveredOf(line);
     const remaining = line.qty.minus(delivered).minus(backed.get(line.id) ?? 0);
     if (D(l.qty).gt(remaining)) throw new DomainError(`Dòng ${i + 1}: chỉ còn ${remaining.toString()} ${line.unit} chưa giao.`, 400);
-    value = value.plus(deliveredValue(lineAmountOf(line), line.qty, delivered, D(l.qty)));
+    value = value.plus(deliveredValue(lineAmountOf(line, order.roundAmounts), line.qty, delivered, D(l.qty)));
     return { orderLineId: line.id, qty: D(l.qty) };
   });
 
@@ -162,14 +162,14 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
   const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
   const lineById = new Map(order.lines.map((l) => [l.id, l]));
   const cum = new Map<number, Prisma.Decimal>();
-  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0));
+  const linesTotal = order.lines.reduce((s, l) => s.plus(lineAmountOf(l, order.roundAmounts)), D(0));
   let valueSoFar = D(0);
   for (const note of notes) {
     let value = D(0);
     for (const dl of note.lines) {
       const line = lineById.get(dl.orderLineId)!;
       const before = cum.get(line.id) ?? D(0);
-      value = value.plus(deliveredValue(lineAmountOf(line), line.qty, before, dl.qty));
+      value = value.plus(deliveredValue(lineAmountOf(line, order.roundAmounts), line.qty, before, dl.qty));
       cum.set(line.id, before.plus(dl.qty));
     }
     const goods = value;

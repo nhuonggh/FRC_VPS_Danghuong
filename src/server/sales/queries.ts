@@ -15,11 +15,11 @@ import { delayDays, effectiveDeliveryStatus } from "./status";
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-/** SL × đơn giá, làm tròn 2 số rồi LÀM TRÒN LÊN nghìn đồng (356.400 → 357.000). Cùng công thức `src/lib/line-amount.ts`. */
-export const grossOf = (qty: Prisma.Decimal, price: Prisma.Decimal) => round2(qty.times(price)).div(1000).ceil().times(1000);
+/** SL × đơn giá, làm tròn 2 số rồi (đơn bật làm tròn, `roundUp`) LÀM TRÒN LÊN nghìn đồng (356.400 → 357.000). Cùng công thức `src/lib/line-amount.ts`. */
+export const grossOf = (qty: Prisma.Decimal, price: Prisma.Decimal, roundUp = true) => (roundUp ? round2(qty.times(price)).div(1000).ceil().times(1000) : round2(qty.times(price)));
 /** Thành tiền dòng = grossOf − chiết khấu trừ ngay. Chiết khấu tích lũy KHÔNG trừ (D-27). */
-export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) =>
-  grossOf(l.qty, l.salePrice).minus(l.discountNow);
+export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }, roundUp = true) =>
+  grossOf(l.qty, l.salePrice, roundUp).minus(l.discountNow);
 
 export const ORDER_FILTER_KEYS = ["delivery", "payment", "pending", "late", "creator", "code", "customer", "group", "stock", "deliveryFrom", "deliveryTo"] as const;
 export const DELIVERY_FILTER_VALUES = ["WAITING_STOCK", "READY", "LOADED", "DELIVERING", "DELIVERED", "PARTIAL", "FAILED"] as const;
@@ -150,9 +150,9 @@ export async function listOrders(db: Db, actor: Actor, params: ListParams, now: 
       id: o.id, code: o.code, createdByName: creatorNames.get(o.createdBy) ?? null, orderDate: o.orderDate, partnerId: o.partnerId, partnerCode: o.partner.code, partnerName: o.partner.name,
       lineCount: o.lines.length, deliveryStatus: effectiveDeliveryStatus(o.deliveryStatus, hasProvisional), paymentStatus: o.paymentStatus,
       expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), delayDays: delayDays(o, now), hasProvisional, isCancelled: o.isCancelled, isDraft: o.isDraft,
-      orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).toString(),
+      orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).plus(o.shippingFee).toString(),
       ...(oldDebts ? { oldDebt: oldDebts.get(o.id)!.toString() } : {}),
-      ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
+      ...(oldDebts && actor.perms.has("sale_price.view") ? { totalPayable: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).plus(o.shippingFee).plus(oldDebts.get(o.id)!).toString() } : {}),
     };
   });
   const all = statuses.reduce((s, r) => s + r._count._all, 0); // = số đơn theo phạm vi (cùng điều kiện `scope`), khỏi đếm thêm một lần
@@ -235,7 +235,7 @@ export async function getOrder(db: Db, actor: Actor, id: number, now: Date = new
   }
   const areaRatios = await areaRatiosOf(db, o.lines.map((l) => ({ productId: l.productId, unit: l.unit, baseUnit: l.product.baseUnit, note: l.note, processingTypeId: l.processingTypeId, type: l.processingType })));
   const lines: OrderLineDTO[] = o.lines.map((l, lineIdx) => {
-    const amount = lineAmountOf(l);
+    const amount = lineAmountOf(l, o.roundAmounts);
     const profit = l.isProvisional ? null : amount.minus(l.discountAccum).minus(l.unitCostFifo.times(l.qtyBase));
     return {
       referenceCost: canViewOrderAnalysis(actor.perms) && actor.perms.has("cost.view") && actor.perms.has("purchase_price.view") && l.referenceCostSnapshot ? l.referenceCostSnapshot as unknown as CostReference : undefined,
@@ -335,7 +335,7 @@ export async function getOrderForEdit(db: Db, actor: Actor, id: number) {
     defaults: {
       partnerId: o.partnerId, date: ictYmd(o.orderDate), expectedDeliveryDate: ymdOf(o.expectedDeliveryDate), note: o.note ?? "",
       salesUserId: o.salesUserId, warehouseId: o.warehouseId, paymentMethod: o.paymentMethod,
-      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt, shipAddress: o.shipAddress ?? "",
+      shippingFee: Number(o.shippingFee), orderDiscount: Number(o.orderDiscount), printDebt: o.printDebt, roundAmounts: o.roundAmounts, shipAddress: o.shipAddress ?? "",
       lines: o.lines.map((l) => ({
         id: l.id, productId: l.productId, unit: l.unit, qty: Number(l.qty), salePrice: Number(l.salePrice),
         discountNow: Number(l.discountNow.minus(l.discountOrder)), discountAccum: Number(l.discountAccum), processingTypeId: l.processingTypeId, issueMode: l.issueMode as "LEGACY" | "STOCK" | "BOM", note: l.note ?? "",
@@ -370,17 +370,20 @@ export async function listDeletedOrders(db: Db, actor: Actor, params: ListParams
   const out: DeletedOrderDTO[] = rows.map((o) => ({
     id: o.id, code: o.code, orderDate: o.orderDate, partnerName: o.partner.name, cancelledAt: o.cancelledAt, cancelReason: o.cancelReason,
     cancelledByName: o.cancelledBy === null ? null : users.get(o.cancelledBy) ?? null,
-    orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), D(0)).toString(),
+    orderTotal: o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0)).toString(),
   }));
   const [amountRows, customers, presetCounts] = await Promise.all([
-    actor.perms.has("sale_price.view") ? db.saleOrderLine.groupBy({ by: ["qty", "salePrice", "discountNow"], where: { order: where }, _count: { _all: true } }) : Promise.resolve(null),
+    // Hai nhóm theo cờ làm tròn của đơn (groupBy không đi qua quan hệ được)
+    actor.perms.has("sale_price.view")
+      ? Promise.all([true, false].map(async (roundUp) => ({ roundUp, groups: await db.saleOrderLine.groupBy({ by: ["qty", "salePrice", "discountNow"], where: { order: { AND: [where, { roundAmounts: roundUp }] } }, _count: { _all: true } }) })))
+      : Promise.resolve(null),
     db.partner.findMany({ where: { AND: [partnerScopeWhere(actor), { saleOrders: { some: { isCancelled: true } } }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     Promise.all([{ value: "all" }, ...TIME_PRESETS.filter((p) => p.value !== "custom")].map(async (preset) => {
       const r = preset.value === "all" ? null : listTimeRange({ ...params, timePreset: preset.value as ListParams["timePreset"] }, now);
       return [preset.value, await db.saleOrder.count({ where: { AND: [baseWhere, ...(r ? [{ cancelledAt: timeRangeWhere(r) }] : [])] } })] as const;
     })),
   ]);
-  const amount = amountRows?.reduce((sum, line) => sum.plus(lineAmountOf(line).times(line._count._all)), D(0)).toString();
+  const amount = amountRows?.reduce((sum, { roundUp, groups }) => groups.reduce((s, line) => s.plus(lineAmountOf(line, roundUp).times(line._count._all)), sum), D(0)).toString();
   return { rows: redactDeep(out, actor.perms), total, amount, customers, counts: Object.fromEntries(presetCounts) };
 }
 

@@ -106,7 +106,7 @@ export async function createReturnByOrder(ctx: EngineCtx, actor: Actor, input: R
     }
     const qty = D(l.qty);
     // Hàng chưa giao chưa ghi nợ khách (D-26) ⇒ không có tiền/chiết khấu để đảo.
-    const amount = undelivered ? D(0) : deliveredValue(lineAmountOf(line), line.qty, returned, qty);
+    const amount = undelivered ? D(0) : deliveredValue(lineAmountOf(line, order.roundAmounts), line.qty, returned, qty);
     const discount = undelivered ? D(0) : deliveredValue(line.discountAccum, line.qty, returned, qty);
     total = total.plus(amount);
     return { line, qty, qtyBase: convertToBase(qty, line.factorUsed), amount, discount };

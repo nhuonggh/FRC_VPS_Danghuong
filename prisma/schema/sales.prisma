@@ -49,6 +49,8 @@ model SaleOrder {
   shippingFee          Decimal        @default(0) @db.Decimal(18, 2)
   /// In "Nợ cũ" + "Tổng cộng" trên hóa đơn bán hàng. Tắt khi giao tới nhà người khác (khách không muốn lộ công nợ).
   printDebt            Boolean        @default(true)
+  /// Làm tròn LÊN nghìn đồng thành tiền từng dòng (356.400 → 357.000). Tắt = SL × giá (2 số thập phân), khớp phần mềm không làm tròn.
+  roundAmounts         Boolean        @default(true)
   /// Địa chỉ giao hàng riêng của đơn (mặc định điền từ khách khi lập, sửa được). null = chưa nhập.
   shipAddress          String?
   /// Chiết khấu cả đơn do người dùng nhập; đã được PHÂN BỔ vào `discountNow` của từng dòng (xem `discountOrder`).

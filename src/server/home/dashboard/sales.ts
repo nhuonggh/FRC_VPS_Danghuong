@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { can } from "@/lib/permissions/guard";
+import { grossAmount } from "@/lib/line-amount";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { getOpenPeriod } from "@/server/period/guard";
 import { DELIVERY_LABEL } from "@/server/sales/status";
@@ -10,8 +11,8 @@ import {
 } from "./common";
 import type { Dashboard, Kpi, Widget } from "./types";
 
-// Doanh thu dòng = qty × giá bán (làm tròn 2, lên nghìn đồng) − chiết khấu đợt này — đúng `lineAmountOf` ở src/server/sales/queries.ts.
-const LINE_AMOUNT = Prisma.sql`CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 - l."discountNow"`;
+// Doanh thu dòng = qty × giá bán (làm tròn 2, lên nghìn đồng nếu đơn bật làm tròn `roundAmounts`) − chiết khấu đợt này — đúng `lineAmountOf` ở src/server/sales/queries.ts.
+const LINE_AMOUNT = Prisma.sql`(CASE WHEN o."roundAmounts" THEN CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 ELSE ROUND(l.qty * l."salePrice", 2) END) - l."discountNow"`;
 const VALID = Prisma.sql`o."isCancelled" = false AND o."isDraft" = false`;
 
 async function totals(db: Db, actor: Actor, from: Date, to: Date) {
@@ -46,7 +47,7 @@ export async function loadSales(db: Db, actor: Actor, range: DashRange): Promise
       GROUP BY p.id, p.name ORDER BY revenue DESC LIMIT 5` : Promise.resolve([]),
     db.saleOrder.findMany({
       where: { partner: scope }, orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 5,
-      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, roundAmounts: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
     }),
     db.partner.count({ where: { ...scope, isCustomer: true, createdAt: { gte: range.start, lt: range.end } } }),
     db.partner.count({ where: { ...scope, isCustomer: true, createdAt: { gte: range.prevStart, lt: range.prevEnd } } }),
@@ -79,7 +80,7 @@ export async function loadSales(db: Db, actor: Actor, range: DashRange): Promise
     key: "recent", kind: "table", title: "Đơn hàng gần đây", span: money ? 8 : 12, moreHref: "/sales/orders",
     columns: [{ label: "Mã đơn" }, { label: "Ngày đặt" }, { label: "Khách hàng" }, ...(money ? [{ label: "Tổng tiền", align: "right" as const }] : []), { label: "Trạng thái" }],
     rows: recent.map((o) => {
-      const total = o.lines.reduce((s, l) => s + Math.round(num(l.qty) * num(l.salePrice) * 100) / 100 - num(l.discountNow), 0);
+      const total = o.lines.reduce((s, l) => s + grossAmount(num(l.qty), num(l.salePrice), o.roundAmounts) - num(l.discountNow), 0);
       const st = o.isCancelled ? { text: "Đã hủy", tone: "danger" as const } : o.isDraft ? { text: "Nháp", tone: "neutral" as const } : { text: DELIVERY_LABEL[o.deliveryStatus].label, tone: DELIVERY_LABEL[o.deliveryStatus].tone === "neutral" ? ("neutral" as const) : DELIVERY_LABEL[o.deliveryStatus].tone };
       return [cell(o.code, { href: `/sales/orders/${o.id}` }), cell(formatDate(o.orderDate)), cell(o.partner.name), ...(money ? [cell(formatCurrency(total), { align: "right" })] : []), cell(st.text, { tone: st.tone })];
     }),

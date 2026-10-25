@@ -18,17 +18,17 @@ export function reportRange(params: ListParams, now: Date = new Date()): TimeRan
   const r = resolveTimeRange(params.timePreset ?? "thisMonth", now, { start: params.timeStart, end: params.timeEnd });
   return r ?? resolveTimeRange("thisMonth", now)!;
 }
-const lineNet = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }) => grossOf(l.qty, l.salePrice).minus(l.discountNow);
+const lineNet = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }, roundUp: boolean) => grossOf(l.qty, l.salePrice, roundUp).minus(l.discountNow);
 
 async function liveOrders(db: Db, actor: Actor, range: TimeRange, customerIds?: number[]) {
   return db.saleOrder.findMany({
     where: { isCancelled: false, isDraft: false, orderDate: timeRangeWhere(range), partner: partnerScopeWhere(actor), ...(customerIds ? { partnerId: { in: customerIds } } : {}) },
     orderBy: [{ orderDate: "desc" }, { id: "desc" }],
-    select: { id: true, code: true, orderDate: true, partner: { select: { id: true, code: true, name: true, group: { select: { name: true } } } }, lines: { select: { id: true, qty: true, salePrice: true, discountNow: true, discountAccum: true, unitCostFifo: true, qtyBase: true, isProvisional: true } } },
+    select: { id: true, code: true, orderDate: true, roundAmounts: true, partner: { select: { id: true, code: true, name: true, group: { select: { name: true } } } }, lines: { select: { id: true, qty: true, salePrice: true, discountNow: true, discountAccum: true, unitCostFifo: true, qtyBase: true, isProvisional: true } } },
   });
 }
-const orderFigures = (lines: Awaited<ReturnType<typeof liveOrders>>[number]["lines"]) => {
-  const revenue = lines.reduce((s, l) => s.plus(lineNet(l)), D(0));
+const orderFigures = (lines: Awaited<ReturnType<typeof liveOrders>>[number]["lines"], roundUp: boolean) => {
+  const revenue = lines.reduce((s, l) => s.plus(lineNet(l, roundUp)), D(0));
   const accum = lines.reduce((s, l) => s.plus(l.discountAccum), D(0));
   const cost = lines.reduce((s, l) => s.plus(l.unitCostFifo.times(l.qtyBase)), D(0));
   return { revenue: r2(revenue), accum: r2(accum), cost: r2(cost), profit: r2(revenue.minus(accum).minus(cost)), provisional: lines.some((l) => l.isProvisional) };
@@ -45,10 +45,10 @@ async function orderProfit(db: Db, actor: Actor, params: ListParams, range: Time
   const selectedId = Number(params.filters.order?.[0]);
   const selected = Number.isSafeInteger(selectedId) && selectedId > 0 ? await db.saleOrder.findFirst({
     where: { id: selectedId, isCancelled: false, isDraft: false, partner: partnerScopeWhere(actor) },
-    select: { id: true, code: true, orderDate: true, partner: { select: { name: true } }, lines: { orderBy: { id: "asc" }, select: { id: true, qty: true, unit: true, salePrice: true, discountNow: true, discountAccum: true, unitCostFifo: true, qtyBase: true, isProvisional: true, product: { select: { code: true, name: true } } } } },
+    select: { id: true, code: true, orderDate: true, roundAmounts: true, partner: { select: { name: true } }, lines: { orderBy: { id: "asc" }, select: { id: true, qty: true, unit: true, salePrice: true, discountNow: true, discountAccum: true, unitCostFifo: true, qtyBase: true, isProvisional: true, product: { select: { code: true, name: true } } } } },
   }) : null;
   const figures = (f: ReturnType<typeof orderFigures>) => ({ revenue: f.revenue.toString(), accum: f.accum.toString(), cost: f.cost.toString(), profit: f.profit.toString(), margin: pct(f.profit, f.revenue), note: f.provisional ? "Giá vốn tạm do thiếu tồn; lãi có thể thay đổi khi chốt giá vốn." : "" });
-  let rows = orders.map((o) => { const f = orderFigures(o.lines); return { o, f }; });
+  let rows = orders.map((o) => { const f = orderFigures(o.lines, o.roundAmounts); return { o, f }; });
   if (params.filters.neg?.[0] === "1") rows = rows.filter((x) => x.f.profit.lt(0));
   const q = (params.q ?? "").trim().toLowerCase();
   if (q) rows = rows.filter((x) => x.o.code.toLowerCase().includes(q) || x.o.partner.name.toLowerCase().includes(q) || x.o.partner.code.toLowerCase().includes(q));
@@ -56,7 +56,7 @@ async function orderProfit(db: Db, actor: Actor, params: ListParams, range: Time
   return {
     key: "order-profit", title: "Lãi từng đơn", negativeKey: "profit", total: rows.length,
     customers: customers.map((c) => ({ value: String(c.id), label: `${c.code} — ${c.name}` })),
-    orderDetail: selected ? { id: selected.id, code: selected.code, date: ymd(selected.orderDate), customer: selected.partner.name, figures: figures(orderFigures(selected.lines)), lines: selected.lines.map((l) => ({ id: l.id, code: l.product.code, name: l.product.name, qty: l.qty.toString(), unit: l.unit, price: l.salePrice.toString(), discountNow: l.discountNow.toString(), ...figures(orderFigures([l])) })) } : null,
+    orderDetail: selected ? { id: selected.id, code: selected.code, date: ymd(selected.orderDate), customer: selected.partner.name, figures: figures(orderFigures(selected.lines, selected.roundAmounts)), lines: selected.lines.map((l) => ({ id: l.id, code: l.product.code, name: l.product.name, qty: l.qty.toString(), unit: l.unit, price: l.salePrice.toString(), discountNow: l.discountNow.toString(), ...figures(orderFigures([l], selected.roundAmounts)) })) } : null,
     columns: [{ key: "code", label: "Đơn", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "customer", label: "Khách", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "cost", label: "Giá vốn", kind: "money" }, { key: "profit", label: "Lãi", kind: "money" }, { key: "margin", label: "% lãi", kind: "pct" }, { key: "note", label: "Ghi chú", kind: "text", align: "left" }],
     rows: rows.map(({ o, f }) => ({ id: o.id, code: o.code, date: ymd(o.orderDate), customer: o.partner.name, revenue: f.revenue.toString(), accum: f.accum.toString(), cost: f.cost.toString(), profit: f.profit.toString(), margin: pct(f.profit, f.revenue), note: f.provisional ? "Có dòng thiếu tồn (giá vốn tạm)" : "" })),
     totals: { code: "Tổng", revenue: tot.rev.toString(), accum: tot.acc.toString(), cost: tot.cost.toString(), profit: tot.profit.toString(), margin: pct(tot.profit, tot.rev) },
@@ -75,7 +75,7 @@ async function periodPnl(db: Db, actor: Actor, _params: ListParams, range: TimeR
   const layers = returns.length ? await db.costLayer.findMany({ where: { sourceDocType: "RETURN_IN", sourceDocId: { in: returns.map((r) => r.id) } }, select: { sourceDocId: true, qtyIn: true, unitCost: true } }) : [];
   const m = new Map<string, { rev: Prisma.Decimal; ret: Prisma.Decimal; retCost: Prisma.Decimal; cost: Prisma.Decimal; acc: Prisma.Decimal; exp: Prisma.Decimal; fo: Prisma.Decimal }>();
   const get = (k: string) => { let v = m.get(k); if (!v) { v = { rev: D(0), ret: D(0), retCost: D(0), cost: D(0), acc: D(0), exp: D(0), fo: D(0) }; m.set(k, v); } return v; };
-  for (const o of orders) { const f = orderFigures(o.lines); const v = get(ymd(o.orderDate).slice(0, 7)); v.rev = v.rev.plus(f.revenue); v.cost = v.cost.plus(f.cost); v.acc = v.acc.plus(f.accum); }
+  for (const o of orders) { const f = orderFigures(o.lines, o.roundAmounts); const v = get(ymd(o.orderDate).slice(0, 7)); v.rev = v.rev.plus(f.revenue); v.cost = v.cost.plus(f.cost); v.acc = v.acc.plus(f.accum); }
   const retMonth = new Map(returns.map((r) => [r.id, ymd(r.at).slice(0, 7)]));
   for (const r of returns) { const v = get(ymd(r.at).slice(0, 7)); v.ret = v.ret.plus(r.totalAmount); v.acc = v.acc.minus(r.lines.reduce((s, l) => s.plus(l.discountAccumReversed), D(0))); }
   for (const l of layers) { const v = get(retMonth.get(l.sourceDocId)!); v.retCost = v.retCost.plus(l.qtyIn.times(l.unitCost)); }
@@ -105,7 +105,7 @@ async function salesBy(db: Db, actor: Actor, range: TimeRange, by: "customer" | 
   const keyOf = (p: { id: number; code: string; name: string; group: { name: string } }) => (by === "customer" ? `${p.id}|${p.code}|${p.name}` : p.group.name);
   const m = new Map<string, { orders: number; rev: Prisma.Decimal; acc: Prisma.Decimal; ret: Prisma.Decimal; code: string; name: string }>();
   const get = (p: Parameters<typeof keyOf>[0]) => { const k = keyOf(p); let v = m.get(k); if (!v) { v = { orders: 0, rev: D(0), acc: D(0), ret: D(0), code: by === "customer" ? p.code : "", name: by === "customer" ? p.name : p.group.name }; m.set(k, v); } return v; };
-  for (const o of orders) { const f = orderFigures(o.lines); const v = get(o.partner); v.orders++; v.rev = v.rev.plus(f.revenue); v.acc = v.acc.plus(f.accum); }
+  for (const o of orders) { const f = orderFigures(o.lines, o.roundAmounts); const v = get(o.partner); v.orders++; v.rev = v.rev.plus(f.revenue); v.acc = v.acc.plus(f.accum); }
   for (const r of returns) { const v = get(r.partner); v.ret = v.ret.plus(r.totalAmount); }
   const q = (params.q ?? "").trim().toLowerCase();
   const list = [...m.values()].filter((v) => !q || v.name.toLowerCase().includes(q) || v.code.toLowerCase().includes(q)).sort((a, b) => b.rev.minus(b.ret).comparedTo(a.rev.minus(a.ret)));
