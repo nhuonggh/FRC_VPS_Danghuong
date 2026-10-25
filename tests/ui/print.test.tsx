@@ -11,7 +11,7 @@ describe("PrintButton", () => {
   it.each(PRINT_DOCS.map((d) => d.docType))("%s mở mẫu HTML trực tiếp ở tab mới", (docType) => {
     render(<PrintButton docType={docType} docId={12} label="In phiếu" />);
     const link = screen.getByRole("link", { name: "In phiếu" });
-    expect(link).toHaveAttribute("href", `/api/print/${docType}/12/html${docType === "SALE_INVOICE" ? "" : "?auto=1"}`); // hóa đơn bán hàng mở màn xem trước, không tự in
+    expect(link).toHaveAttribute("href", `/api/print/${docType}/12/html`); // mọi phiếu mở màn xem trước, không tự in
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
