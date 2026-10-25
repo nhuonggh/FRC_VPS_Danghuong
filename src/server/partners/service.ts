@@ -73,11 +73,11 @@ export async function updatePartnerProfile(db: Db, actor: Actor, id: number, v: 
   assertCan(actor.perms, "partner.manage");
   const before = await loadEditable(db, actor, id);
   if (v.groupId !== before.groupId) await assertGroupUsable(db, v.groupId);
-  // Khách lẻ thân quen: SĐT là khoá nhận diện ⇒ bắt buộc hợp lệ và giữ `phoneKey` đồng bộ
+  // Khách lẻ thân quen: SĐT (nếu có) là khoá nhận diện ⇒ phải hợp lệ và giữ `phoneKey` đồng bộ; để trống ⇒ nhận diện theo tên
   const phoneKey = before.isRegularRetail ? normalizePhone(v.phone) : "";
-  if (before.isRegularRetail && !phoneKey) throw new DomainError("Khách lẻ thân quen cần số điện thoại hợp lệ (ít nhất 8 chữ số).", 400);
+  if (before.isRegularRetail && v.phone.trim() && !phoneKey) throw new DomainError("Số điện thoại khách lẻ thân quen không hợp lệ (ít nhất 8 chữ số).", 400);
   try {
-    await db.partner.update({ where: { id }, data: { ...(phoneKey ? { phoneKey } : {}), name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, ...(v.taxCode === undefined ? {} : { taxCode: v.taxCode || null }), ...(v.deliveryAddress === undefined ? {} : { deliveryAddress: v.deliveryAddress || null }), note: v.note || null } });
+    await db.partner.update({ where: { id }, data: { ...(before.isRegularRetail ? { phoneKey: phoneKey || null } : {}), name: v.name, searchText: searchTextOf({ code: before.code, name: v.name, phone: v.phone }), groupId: v.groupId, isCustomer: v.isCustomer, isSupplier: v.isSupplier, phone: v.phone || null, address: v.address || null, ...(v.taxCode === undefined ? {} : { taxCode: v.taxCode || null }), ...(v.deliveryAddress === undefined ? {} : { deliveryAddress: v.deliveryAddress || null }), note: v.note || null } });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw new DomainError("SĐT này đã thuộc một khách lẻ thân quen khác.", 409);
     throw e;
