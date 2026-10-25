@@ -20,7 +20,6 @@ import { remainingToDeliver as remainingOf } from "./remaining";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
-const ACTIVE = ["PLANNED", "ON_ROAD", "RETURNED"] as const;
 
 // ── tiện ích ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 async function lockTrip(tx: Tx, id: number) {
@@ -65,14 +64,8 @@ export async function createTrip(tx: Tx, actor: Actor, input: TripInput, now: Da
   if (input.assistantId !== null && (!assistant?.isActive || !assistant.isAssistant)) throw new DomainError("Phụ xe không hợp lệ (hoặc không phải phụ xe / đã tắt).", 400);
   if (input.routeId !== null && !route?.isActive) throw new DomainError("Tuyến không hợp lệ hoặc đã tắt.", 400);
 
-  // Chống trùng xe / lái / phụ trong cùng ngày với chuyến còn hiệu lực (khoá bảng chuyến theo ngày ⇒ hai người xếp cùng lúc tuần tự)
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${1_005_001})`;
-  const people = [input.driverId, ...(input.assistantId !== null ? [input.assistantId] : [])];
-  const clash = await tx.trip.findFirst({
-    where: { tripDate, status: { in: [...ACTIVE] }, OR: [{ vehicleId: input.vehicleId }, { driverId: { in: people } }, { assistantId: { in: people } }] },
-    select: { code: true, vehicleId: true },
-  });
-  if (clash) throw new DomainError(`${clash.vehicleId === input.vehicleId ? "Xe" : "Lái xe/phụ xe"} đã có chuyến ${clash.code} cùng ngày.`, 409, "TRIP_CLASH");
+  // Không chặn xe / lái / phụ đã có chuyến khác (cùng ngày hay chuyến cũ chưa nhập kết quả): thực tế kế toán chưa kịp nhập kết quả
+  // thì hôm sau lái xe đã đi giao đơn mới, và một ngày có thể chạy nhiều chuyến. Chỉ chặn ở mức ĐƠN (xem ORDER_IN_TRIP bên dưới).
 
   // Khoá các đơn theo thứ tự id (tránh deadlock) rồi kiểm từng đơn
   const ids = [...input.orderIds].sort((a, b) => a - b);
