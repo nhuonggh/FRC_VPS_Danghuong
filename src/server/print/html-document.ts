@@ -128,6 +128,9 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
   } else if (type === "RECEIPT" || type === "PAYMENT") {
     result.summary = [{ label: "Số tiền", value: body.totals.amount, big: true }];
     result.words = wordsOf(body.totals.amount);
+  } else if (type === "TRIP_CASH") {
+    result.summary = [{ label: "Tổng tiền mặt thu từ lái xe", value: body.totals.cash, big: true }];
+    result.words = wordsOf(body.totals.cash);
   } else if (type === "TRIP_SHEET") {
     result.notices.push("Lái xe đánh dấu kết quả giao; ghi tiền mặt, chuyển khoản, tiền bớt vào phiếu rồi mang về giao cho kế toán nhập dữ liệu. Tránh nhầm đơn này với đơn khác.");
   } else if (type === "DEBT_STATEMENT") {
@@ -175,7 +178,7 @@ function product(line: Line, hidePieces = false) {
 }
 
 const TITLES: Record<string, string> = {
-  SALE_INVOICE: "PHIẾU GIAO NHẬN HÀNG HÓA", DELIVERY_NOTE: "PHIẾU GIAO NHẬN", PURCHASE_RECEIPT: "PHIẾU NHẬP KHO", QUOTE: "BÁO GIÁ", RECEIPT: "PHIẾU THU", PAYMENT: "PHIẾU CHI",
+  SALE_INVOICE: "PHIẾU GIAO NHẬN HÀNG HÓA", DELIVERY_NOTE: "PHIẾU GIAO NHẬN", PURCHASE_RECEIPT: "PHIẾU NHẬP KHO", QUOTE: "BÁO GIÁ", RECEIPT: "PHIẾU THU", PAYMENT: "PHIẾU CHI", TRIP_CASH: "PHIẾU THU TIỀN LÁI XE",
   DEBT_STATEMENT: "BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ", TRIP_SHEET: "PHIẾU GIAO NHẬN THEO CHUYẾN", PRODUCTION_ORDER: "LỆNH SẢN XUẤT", STOCKTAKE: "PHIẾU KIỂM KHO", GOODS_RETURN: "PHIẾU TRẢ HÀNG",
   DISCOUNT_SETTLEMENT: "PHIẾU TẤT TOÁN CHIẾT KHẤU", SUPPLIER_ORDER: "ĐƠN ĐẶT HÀNG NHÀ CUNG CẤP", LOSS_ADJUST: "PHIẾU HAO HỤT / XUẤT HỦY",
 };
@@ -203,6 +206,11 @@ const TABLES: Record<string, TableSpec> = {
       + `<td class="r">${e(l.orderTotal)}${l.due && l.due !== l.orderTotal ? `<span class="note">Cần thu: ${e(l.due)}</span>` : ""}</td>`
       + `<td>${["Hẹn", "Nợ", "Đã TT"].map((t) => `<div class="cbx"><i class="cb"></i>${t}</div>`).join("")}</td><td></td><td></td><td></td><td></td>`,
   },
+  // Bill 80mm: mỗi đơn một dòng (tên khách + mã phiếu thu nhỏ bên dưới), chỉ tiền mặt.
+  TRIP_CASH: {
+    cols: ["Đơn hàng", "Tiền mặt"], widths: [60, 40],
+    row: (l) => `<td><b>${e(l.order)}</b>${[l.customer, l.receipts && `PT: ${l.receipts}`, l.over].filter(Boolean).map((t) => `<span class="note">${e(t)}</span>`).join("")}</td>` + td(l.amount, "r"),
+  },
   PRODUCTION_ORDER: { cols: ["STT", "Mã", "Tên sản phẩm", "Quy cách", "ĐVT", "Số lượng"], widths: [7, 14, 35, 20, 8, 16], group: (l) => l.section, groupLabel: (l) => l.section, row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.spec) + td(l.unit, "c") + td(l.qty, "r") },
   LOSS_ADJUST: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Số lượng"], widths: [7, 16, 47, 10, 20], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.qty, "r") },
   STOCKTAKE: { cols: ["STT", "Mã", "Tên sản phẩm", "ĐVT", "Tồn sổ sách", "Thực đếm", "Chênh lệch"], widths: [6, 13, 33, 8, 14, 14, 12], row: (l) => td(l.no, "c") + td(l.code) + td(l.name) + td(l.unit, "c") + td(l.systemQty, "r") + td(l.actualQty, "r") + td(l.diff, "r") },
@@ -225,7 +233,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const { body: b, company: c, type } = model;
   const a5 = opts.paper === "A5" && type === "SALE_INVOICE";
   /** Phiếu thu/chi in dạng bill nhỏ (khổ 80mm như máy in siêu thị): không đầu trang công ty. */
-  const slip = type === "RECEIPT" || type === "PAYMENT";
+  const slip = type === "RECEIPT" || type === "PAYMENT" || type === "TRIP_CASH";
   const invoice = type === "SALE_INVOICE" || type === "QUOTE" || type === "GOODS_RETURN" || type === "SUPPLIER_ORDER", delivery = type === "DELIVERY_NOTE", purchase = type === "PURCHASE_RECEIPT", voucher = type === "RECEIPT" || type === "PAYMENT" || type === "DISCOUNT_SETTLEMENT";
   const plain = delivery || type === "TRIP_SHEET";
   const title = e(model.title ? model.title.toLocaleUpperCase("vi") : type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU"));
@@ -242,6 +250,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
     : type === "LOSS_ADJUST" ? infoBlock([["Loại phiếu", d.kind], ["Người lập", d.createdBy]])
     : voucher ? infoBlock([[type === "RECEIPT" ? "Người nộp tiền" : "Người nhận tiền", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], [type === "PAYMENT" ? "Nội dung / loại chi phí" : "Nội dung", d.type, true], ["Vào quỹ / ngân hàng", d.account], ["Theo đơn hàng", d.order], ["Người lập", d.createdBy]])
     : type === "DEBT_STATEMENT" ? infoBlock([["Đối tác", p?.name], ["Điện thoại", p?.phone], ["Địa chỉ", p?.address, true], ["Kỳ đối chiếu", d.period, true]])
+    : type === "TRIP_CASH" ? infoBlock([["Lái xe", d.driver], ["Biển số xe", d.vehicle], ["Người thao tác", d.operator]])
     : type === "TRIP_SHEET" ? infoBlock([["Biển số xe", d.vehicle], ["Lái xe", d.driver], ["Phụ xe", d.assistant], ["Tuyến", d.route], ["Số điểm giao", b.totals.stops]])
     : type === "PRODUCTION_ORDER" ? infoBlock([["Người lập", d.createdBy]])
     : type === "STOCKTAKE" ? infoBlock([["Người lập", d.createdBy], ["Trạng thái", d.statusLabel]])
@@ -266,7 +275,8 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const toolbar = saleInvoice
     ? `<nav class="toolbar bar" aria-label="Công cụ in"><a href="${e(href({ hidePieces: !opts.hidePieces }))}" role="checkbox" aria-checked="${!!opts.hidePieces}">${opts.hidePieces ? "☑" : "☐"} Ẩn tổng số tấm</a><a href="${e(href({ debt: !showDebt }))}" role="checkbox" aria-checked="${showDebt}">${showDebt ? "☑" : "☐"} Hiện nợ cũ</a><a href="${e(href({ mode: mono ? "color" : "mono" }))}">${mono ? "Bản màu" : "Bản đen trắng"}</a><a href="${e(href({ paper: a5 ? "A4" : "A5" }))}" role="checkbox" aria-checked="${a5}">${a5 ? "☑" : "☐"} Khổ A5</a><a href="${e(href({ debt: false, auto: true }))}">In đơn hàng không có công nợ cũ</a><a class="pri" href="${e(href({ debt: true, auto: true }))}">In đơn hàng</a></nav>`
     : `<nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button" class="pri">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>${slip ? "Khổ 80mm (máy in bill)" : "A4"} · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav>`;
-  const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : "Số";
+  const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : type === "TRIP_CASH" ? "Chuyến" : "Số";
+  const dateLabel = type === "TRIP_CASH" ? "Thời gian thu" : "Ngày";
   const orderMeta = delivery || (type === "GOODS_RETURN" && b.doc.orderCode) ? `<div><span>Mã đơn hàng:</span> <b>${e(b.doc.orderCode)}</b></div>` : "";
   const script = `const ready=async()=>{await Promise.allSettled([400,600,700].map(w=>document.fonts.load(w+' 13px "Be Vietnam Pro"')));await document.fonts.ready;await Promise.all(Array.from(document.images).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r;i.onerror=r})));};const pn=document.getElementById('print-now');if(pn)pn.onclick=async()=>{await ready();window.print()};${auto ? "ready().then(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>window.print())));" : ""}`;
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - ${e(b.docCode)}</title><style>${fontFaces}\n${styles[styleOf(type)][mono ? "mono" : "color"]}
@@ -281,8 +291,8 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   ${saleInvoice ? ".toolbar a.pri{font-weight:600;border-color:var(--ink)}@media screen{.page{width:auto;max-width:1600px;min-height:0;margin:0 auto 72px}.toolbar{position:fixed;left:0;right:0;bottom:0;max-width:none;margin:0;justify-content:flex-end;border-radius:0;box-shadow:0 -2px 10px rgba(0,0,0,.15);z-index:10}}" : ""}
   ${saleInvoice ? "" : ".toolbar .pri{font-weight:600;border-color:var(--ink)}@media screen{.page{margin-bottom:72px}.toolbar{position:fixed;left:0;right:0;bottom:0;max-width:none;margin:0;justify-content:flex-end;border-radius:0;box-shadow:0 -2px 10px rgba(0,0,0,.15);z-index:10}}"}
   @page{size:${slip ? "80mm auto" : a5 ? "A5" : "A4"};margin:${slip ? "2mm" : a5 ? "8mm 8mm 7mm" : "12mm 12mm 10mm"}}
-  ${slip ? ".page{width:80mm;min-height:0;padding:3mm;border-top:0}.titlebar{display:block;text-align:center;margin:0 0 6px}.titlebar h2{border-left:0;padding:0;font-size:15px}.meta{text-align:center;font-size:11px}.cust{display:block;font-size:11px;padding:4px 0;background:none;border-top:1px dashed var(--ink);border-bottom:1px dashed var(--ink);border-radius:0;margin-bottom:6px}.cust div{padding:1px 0}.tot{width:auto;font-size:12px;margin:6px 0 2px}.tot .big{font-size:15px}.words{text-align:center;font-size:11px;margin-bottom:8px}.sign{flex-wrap:wrap}.sign div{flex:1 1 45%;min-height:54px;font-size:11px}.sign small{font-size:9px}.sign em{margin-top:20px}.terms{font-size:9.5px;margin-top:8px}@media print{.page{width:auto;padding:0}}" : ""}
+  ${slip ? ".page{width:80mm;min-height:0;padding:3mm;border-top:0}.titlebar{display:block;text-align:center;margin:0 0 6px}.titlebar h2{border-left:0;padding:0;font-size:15px}.meta{text-align:center;font-size:11px}.cust{display:block;font-size:11px;padding:4px 0;background:none;border-top:1px dashed var(--ink);border-bottom:1px dashed var(--ink);border-radius:0;margin-bottom:6px}.cust div{padding:1px 0}.tot{width:auto;font-size:12px;margin:6px 0 2px}.tot .big{font-size:15px}.words{text-align:center;font-size:11px;margin-bottom:8px}" + (type === "TRIP_CASH" ? "table{font-size:11px}th,td{padding:3px 4px}.note{font-size:10px}" : "") + ".sign{flex-wrap:wrap}.sign div{flex:1 1 45%;min-height:54px;font-size:11px}.sign small{font-size:9px}.sign em{margin-top:20px}.terms{font-size:9.5px;margin-top:8px}@media print{.page{width:auto;padding:0}}" : ""}
   ${a5 ? "@media print{body{font-size:11px}.head{gap:8px;padding-bottom:6px}.head img.logo{height:48px}.co h1{font-size:15px}.co{font-size:10px}.titlebar{margin:8px 0 6px}.titlebar h2{font-size:15px}.meta{font-size:11px}.cust{font-size:11px;padding:5px 8px;margin-bottom:8px}table{font-size:10.5px}th,td{padding:4px 5px}.cut{font-size:10px}.qr,.qr .box{width:84px}.qr .box{height:84px}.qr{font-size:9px}.tot{width:230px;font-size:11px}.tot .big{font-size:13px}.sign div{min-height:64px}.sign em{margin-top:28px}.terms{font-size:9.5px;margin-top:8px}}" : ""}
   @media print{.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body>${toolbar}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>Ngày:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  </style></head><body>${toolbar}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>${dateLabel}:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }

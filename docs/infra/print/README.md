@@ -32,6 +32,7 @@ Số tiền/số lượng/ngày đã định dạng kiểu Việt Nam (chuỗi),
 | M2 Báo giá | `QUOTE` | code, date, note, status, createdBy | no, code, name, unit, qty, price, amount, note | total |
 | M3 Phiếu giao nhận | `DELIVERY_NOTE` (mỗi phiếu giao) | code, orderCode, date, note, status | no, code, name, unit, qty | totalQty |
 | M3b Phiếu giao nhận theo chuyến | `TRIP_SHEET` | code, date, vehicle, driver, assistant, route, note, status | stop, order, customer, phone, address, no, code, name, unit, qty, due | stops |
+| M4b Phiếu thu tiền mặt từ lái xe (bill 80mm, chỉ in khi chuyến đã được thủ quỹ xác nhận) | `TRIP_CASH` | code, date (thời gian thu), driver, vehicle, operator | no, order, customer, amount, receipts, over | cash |
 | M4 Phiếu thu | `RECEIPT` | code, type, date, account, order, note, createdBy, status | — | amount |
 | M5 Phiếu chi | `PAYMENT` | code, type, date, account, order, note, createdBy, status | — | amount |
 | M6 Lệnh sản xuất | `PRODUCTION_ORDER` | code, date, note, createdBy, status | section, no, code, name, spec, unit, qty | — |

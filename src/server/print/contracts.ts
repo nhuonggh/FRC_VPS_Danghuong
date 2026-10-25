@@ -118,6 +118,23 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
         totals: { stops: String(t.stops.length) },
       };
     }
+    case "TRIP_CASH": {
+      // Chỉ tiền mặt lái xe nộp, in sau khi thủ quỹ xác nhận: kế toán buộc cọc tiền với từng đơn + mã phiếu thu sinh ra.
+      const t = await getTrip(db, actor, docId);
+      if (t.status !== "CONFIRMED" || !t.confirmed) throw new DomainError("Chỉ in phiếu thu tiền lái xe sau khi thủ quỹ đã xác nhận nhận tiền.", 409, "TRIP_NOT_CONFIRMED");
+      const stops = t.stops.filter((s) => Number(s.cash) > 0);
+      if (stops.length === 0) throw new DomainError("Chuyến này không thu tiền mặt.", 409, "TRIP_NO_CASH");
+      const receipts = await db.receipt.findMany({ where: { tripId: docId, isCancelled: false, cashAccount: { type: "CASH" } }, orderBy: { id: "asc" }, select: { code: true, orderId: true, note: true } });
+      return {
+        docCode: t.code, partner: null,
+        doc: { code: t.code, date: formatDateTime(t.confirmed.at), driver: t.driverName, vehicle: t.vehiclePlate, operator: t.confirmed.byName ?? "", note: "", status: "" },
+        lines: stops.map((s, i) => ({
+          no: String(i + 1), order: s.orderCode, customer: s.partnerName, amount: money(s.cash), over: Number(s.over) > 0 ? "gồm thu vượt (nợ cũ/dư)" : "",
+          receipts: receipts.filter((r) => r.orderId === s.orderId || r.note?.includes(` · ${s.orderCode} · `)).map((r) => r.code).join(", "),
+        })),
+        totals: { cash: money(sum(stops.map((s) => s.cash))) },
+      };
+    }
     case "GOODS_RETURN": {
       const r = await getReturn(db, actor, docId);
       const row = await db.goodsReturn.findUnique({ where: { id: docId }, select: { partnerId: true } });
