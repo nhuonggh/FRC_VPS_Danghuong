@@ -22,6 +22,7 @@ export const PRINT_DOCS: readonly PrintDocDef[] = [
   { docType: "DISCOUNT_SETTLEMENT", code: "M12", label: "Phiếu tất toán chiết khấu", perm: "discount.settle", fileTag: "TatToanCK", supported: true },
   { docType: "SUPPLIER_ORDER", code: "M13", label: "Đơn đặt hàng nhà cung cấp", perm: "purchase_price.view", fileTag: "DatHangNCC", supported: true },
   { docType: "TRIP_SHEET", code: "M3b", label: "Phiếu giao nhận theo chuyến", perm: "trip.manage", fileTag: "PhieuChuyen", supported: true },
+  { docType: "TRIP_CASH", code: "M4b", label: "Phiếu thu tiền mặt từ lái xe", perm: "trip.confirm_cash", fileTag: "ThuTienLaiXe", supported: true },
 ] as const;
 export const printDoc = (docType: string) => PRINT_DOCS.find((d) => d.docType === docType);
 

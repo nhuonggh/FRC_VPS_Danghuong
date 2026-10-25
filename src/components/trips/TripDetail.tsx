@@ -14,7 +14,7 @@ import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { StopDTO, TripDetailDTO } from "@/server/trips/queries";
 import { RESULT_KINDS, RESULT_LABEL } from "@/server/trips/schemas";
 
-export interface TripPerms { canManage: boolean; canSettle: boolean; canConfirm: boolean; canPrint?: boolean }
+export interface TripPerms { canManage: boolean; canSettle: boolean; canConfirm: boolean; canPrint?: boolean; canPrintCash?: boolean }
 const TONE = { PLANNED: "info", ON_ROAD: "info", RETURNED: "warning", SETTLED: "warning", CONFIRMED: "success", CANCELLED: "neutral" } as const;
 /** Lý do gợi ý để nhập nhanh khi lái xe thu vượt số phải thu / khách được bớt. */
 const OVER_REASONS = ["Khách trả nợ cũ", "Khách trả dư, trừ vào đơn sau", "Khách trả trước cho đơn sau", "Trả nợ cũ + đơn này"];
@@ -50,6 +50,7 @@ export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; per
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {perms.canPrint && trip.status !== "CANCELLED" && <PrintButton docType="TRIP_SHEET" docId={trip.id} label="In phiếu giao nhận" />}
+          {perms.canPrintCash && trip.status === "CONFIRMED" && Number(trip.totals.cash) > 0 && <PrintButton docType="TRIP_CASH" docId={trip.id} label="In phiếu thu tiền lái xe" />}
           {perms.canManage && trip.status === "PLANNED" && <button type="button" disabled={busy} onClick={depart} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xuất phát</button>}
           {perms.canSettle && trip.status === "RETURNED" && <button type="button" disabled={busy} onClick={() => setDialog("settle")} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Đối soát lái xe</button>}
           {perms.canConfirm && trip.status === "SETTLED" && <button type="button" disabled={busy} onClick={() => setDialog("confirm")} className="h-10 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-50">Xác nhận đã nhận tiền</button>}

@@ -24,7 +24,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   return (
     <>
       {closed && <div className="mb-4"><ClosedPeriodBanner periodName={closed.name} closedAt={closed.closedAt} /></div>}
-      <TripDetail trip={trip} accounts={accounts} perms={{ canManage: !closed && p.has("trip.manage"), canSettle: !closed && p.has("trip.settle"), canConfirm: !closed && p.has("trip.confirm_cash"), canPrint: canPrintDoc(p, "TRIP_SHEET") }} />
+      <TripDetail trip={trip} accounts={accounts} perms={{ canManage: !closed && p.has("trip.manage"), canSettle: !closed && p.has("trip.settle"), canConfirm: !closed && p.has("trip.confirm_cash"), canPrint: canPrintDoc(p, "TRIP_SHEET"), canPrintCash: canPrintDoc(p, "TRIP_CASH") }} />
     </>
   );
 }

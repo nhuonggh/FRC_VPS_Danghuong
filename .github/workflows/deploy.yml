@@ -182,7 +182,18 @@ jobs:
               exit 1
             fi
             if command -v curl >/dev/null 2>&1; then
-              curl -fsS --max-time 5 "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null
+              # Probe trong container đã qua; cổng host có thể chậm 1 nhịp ngay sau khi swap (VPS vừa migrate/seed) ⇒ thử lại, không fail ngay lần đầu
+              host_ok=0
+              for i in 1 2 3 4 5 6; do
+                if curl -fsS --max-time 10 "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null; then host_ok=1; break; fi
+                echo "   cổng host chưa phản hồi (lần $i/6), thử lại sau 5s"
+                sleep 5
+              done
+              if [ "$host_ok" != 1 ]; then
+                echo "!! Cổng host 127.0.0.1:${APP_PORT} không phản hồi sau 6 lần. Log gần nhất:"
+                docker logs --tail 80 "${SLUG}_app" || true
+                exit 1
+              fi
               echo "==> Cổng host 127.0.0.1:${APP_PORT} OK"
             fi
             echo "==> App healthy: $APP_IMAGE"

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { cashBalance } from "@/server/cash/balance";
+import { buildContract } from "@/server/print/contracts";
 import { cancelVoucher, reviewVoucher } from "@/server/cash/vouchers";
 import { partnerBalance } from "@/server/debt/balance";
 import { syncPaymentStatus } from "@/server/deposits/status";
@@ -181,6 +182,21 @@ describe("đối soát (41) và thủ quỹ xác nhận (D-35)", () => {
     expect(receipts.map((r) => [String(r.amount), r.orderId === a.id ? "đơn" : r.orderId === null ? "không đơn" : "?"])).toEqual([["200000", "đơn"], ["50000", "không đơn"]]);
     await tx((x) => syncPaymentStatus(x, a.id));
     expect((await st(a.id)).paymentStatus).toBe("PAID"); // không thành OVERPAID
+  });
+  it("phiếu in thu tiền lái xe (TRIP_CASH): chỉ in sau khi thủ quỹ xác nhận; chỉ tiền mặt, mã phiếu thu theo đơn, người thao tác + thời gian", async () => {
+    const { a, b, t } = await twoStops();
+    const printer: Actor = { userId: tq.userId, perms: new Set([...TQ, "print.use", "trip.manage"]) };
+    expect((await errOf(buildContract(prisma, printer, "TRIP_CASH", t.id, NOW)))?.code).toBe("TRIP_NOT_CONFIRMED");
+    await tx((x) => settleTrip(x, kt, t.id, "", NOW));
+    expect((await errOf(buildContract(prisma, printer, "TRIP_CASH", t.id, NOW)))?.code).toBe("TRIP_NOT_CONFIRMED");
+    await tx((x) => confirmTripCash(x, tq, t.id, { cashAccountId: cash.id, transferAccountId: bank.id }, NOW));
+    const c = await buildContract(prisma, printer, "TRIP_CASH", t.id, NOW);
+    expect(c.doc).toMatchObject({ driver: "Lái A", vehicle: "51C-12345", operator: "Thủ quỹ" });
+    expect(c.lines.map((l) => l.order)).toEqual([a.code, b.code]);
+    expect(c.lines[0]!.amount).toContain("150.000"); expect(c.lines[1]!.amount).toContain("100.000"); // 50.000 chuyển khoản của đơn A không in
+    expect(c.totals.cash).toContain("250.000");
+    const codes = await prisma.receipt.findMany({ where: { tripId: t.id, cashAccountId: cash.id }, orderBy: { id: "asc" }, select: { code: true } });
+    expect(c.lines.map((l) => l.receipts)).toEqual(codes.map((r) => r.code));
   });
   it("tiền bớt (153.000 → khách đưa 150.000): bắt buộc lý do, ghi có TRIP_DISCOUNT, không vào quỹ; đơn PAID; không bớt quá phải thu; xóa kết quả hoàn lại", async () => {
     expect(tripResultSchema.safeParse({ orderId: 1, result: "GIAO_DU", cashAmount: 197_000, discountAmount: 3000 }).success).toBe(false);
