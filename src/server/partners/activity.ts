@@ -34,7 +34,7 @@ export async function getPartnerActivity(db: PrismaClient, actor: Actor, partner
       where: { partnerId: partner.id, isCancelled: false, isDraft: false }, orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 200,
       include: { lines: { select: { qty: true, salePrice: true, discountNow: true } } },
     });
-    const total = (o: (typeof orders)[number]) => (showPrice ? o.lines.reduce((s, l) => s.plus(lineAmountOf(l)), new Prisma.Decimal(0)).plus(o.shippingFee).toString() : null);
+    const total = (o: (typeof orders)[number]) => (showPrice ? o.lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), new Prisma.Decimal(0)).plus(o.shippingFee).toString() : null);
     out.history = orders.filter((o) => o.deliveryStatus === "DELIVERED").slice(0, LIMIT).map((o) => ({ id: o.id, code: o.code, at: o.orderDate.toISOString(), total: total(o), payment: PAYMENT_LABEL[o.paymentStatus].label }));
     const open = orders.filter((o) => o.deliveryStatus !== "DELIVERED").slice(0, LIMIT);
     const quotes = has("quote.manage") ? await db.quote.findMany({ where: { partnerId: partner.id, status: { not: "CANCELLED" } }, orderBy: [{ at: "desc" }, { id: "desc" }], take: LIMIT, select: { id: true, code: true, at: true, status: true } }) : [];

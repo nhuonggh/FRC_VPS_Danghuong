@@ -27,12 +27,12 @@ const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_
  * Phân bổ chiết khấu CẢ ĐƠN vào từng dòng theo tỷ lệ phần còn lại của dòng (giá trị − chiết khấu trừ ngay − chiết khấu tích lũy).
  * Làm tròn 2 số; dòng cuối nhận phần dư nên Σ phần chia = đúng số nhập, không dòng nào bị chiết khấu quá giá trị.
  */
-export function allocateOrderDiscount(lines: readonly PlannedLine[], orderDiscount: Prisma.Decimal.Value): Prisma.Decimal[] {
+export function allocateOrderDiscount(lines: readonly PlannedLine[], orderDiscount: Prisma.Decimal.Value, roundUp = true): Prisma.Decimal[] {
   const total = D(orderDiscount);
   const zero = lines.map(() => D(0));
   if (!total.gt(0)) return zero;
   const cap = lines.map((l) => {
-    const c = grossOf(D(l.input.qty), D(l.input.salePrice)).minus(l.input.discountNow).minus(l.input.discountAccum);
+    const c = grossOf(D(l.input.qty), D(l.input.salePrice), roundUp).minus(l.input.discountNow).minus(l.input.discountAccum);
     return c.gt(0) ? c : D(0);
   });
   const capSum = cap.reduce((s, c) => s.plus(c), D(0));
@@ -143,9 +143,10 @@ export async function assertPrices(tx: Db, actor: Actor, partnerId: number, line
  * Sửa: trường bỏ trống (undefined) = giữ nguyên, null = xoá. Người bán phải đang hoạt động, kho phải đang dùng.
  */
 export async function orderExtras(tx: Db, actor: Actor, input: SaleOrderInput, mode: "create" | "edit") {
-  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean; shipAddress?: string | null } = {};
+  const out: { salesUserId?: number | null; warehouseId?: number | null; paymentMethod?: NonNullable<SaleOrderInput["paymentMethod"]>; shippingFee?: number; orderDiscount?: number; printDebt?: boolean; roundAmounts?: boolean; shipAddress?: string | null } = {};
   if (input.shipAddress !== undefined) out.shipAddress = input.shipAddress || null;
   if (input.printDebt !== undefined) out.printDebt = input.printDebt;
+  if (input.roundAmounts !== undefined) out.roundAmounts = input.roundAmounts;
   if (input.shippingFee !== undefined) out.shippingFee = input.shippingFee; else if (mode === "create") out.shippingFee = 0;
   if (input.orderDiscount !== undefined) out.orderDiscount = input.orderDiscount; else if (mode === "create") out.orderDiscount = 0;
   const salesUserId = input.salesUserId === undefined && mode === "create" ? actor.userId : input.salesUserId;
@@ -175,7 +176,7 @@ export async function createDraftSaleOrder(tx: Prisma.TransactionClient, actor: 
   await assertPrices(tx, actor, input.partnerId, lines);
   const period = await getOpenPeriod(tx);
   const extras = await orderExtras(tx, actor, input, "create");
-  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0);
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? true);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({
@@ -215,7 +216,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
   await assertPrices(tx, actor, input.partnerId, lines);
 
   const extras = await orderExtras(tx, actor, input, "create");
-  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0);
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? 0, extras.roundAmounts ?? true);
   const id = await nextDocId(tx, "sale_orders");
   const code = formatDocCode("DH", id);
   await tx.saleOrder.create({

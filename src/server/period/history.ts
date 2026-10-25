@@ -10,8 +10,8 @@ type Db = PrismaClient;
 const D = (v: Prisma.Decimal.Value | null | undefined) => new Prisma.Decimal(v ?? 0);
 const norm = normalizeSearch;
 
-/** Doanh thu dòng đơn — cùng công thức `lineAmountOf` (qty × giá làm tròn 2, lên nghìn đồng − chiết khấu đợt này). */
-const LINE_AMOUNT = Prisma.sql`CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 - l."discountNow"`;
+/** Doanh thu dòng đơn — cùng công thức `lineAmountOf` (qty × giá làm tròn 2, lên nghìn đồng nếu đơn bật làm tròn − chiết khấu đợt này). */
+const LINE_AMOUNT = Prisma.sql`(CASE WHEN o."roundAmounts" THEN CEIL(ROUND(l.qty * l."salePrice", 2) / 1000) * 1000 ELSE ROUND(l.qty * l."salePrice", 2) END) - l."discountNow"`;
 
 export interface PeriodRow {
   id: number; name: string; status: "OPEN" | "CLOSED"; openedAt: Date; closedAt: Date | null; closedByName: string | null;
@@ -174,14 +174,14 @@ export async function periodOrders(db: Db, actor: Actor, id: number, opts: { q?:
     db.saleOrder.count({ where }),
     db.saleOrder.findMany({
       where, orderBy: [{ orderDate: "desc" }, { id: "desc" }], skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize,
-      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, roundAmounts: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
     }),
   ]);
   return {
     total,
     rows: rows.map((r) => ({
       id: r.id, code: r.code, orderDate: r.orderDate, partnerName: r.partner.name, status: r.isCancelled ? "Đã hủy" : r.isDraft ? "Nháp" : r.deliveryStatus,
-      ...(sale ? { total: r.lines.reduce((s, l) => s.plus(grossOf(D(l.qty), l.salePrice)).minus(l.discountNow), D(0)).toFixed(2) } : {}),
+      ...(sale ? { total: r.lines.reduce((s, l) => s.plus(grossOf(D(l.qty), l.salePrice, r.roundAmounts)).minus(l.discountNow), D(0)).toFixed(2) } : {}),
     })),
   };
 }

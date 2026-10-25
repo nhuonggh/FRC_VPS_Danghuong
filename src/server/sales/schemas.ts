@@ -32,9 +32,6 @@ export const saleLineSchema = z
   })
   .superRefine((l, ctx) => {
     if (l.issueMode === "BOM" && !l.processingTypeId) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["processingTypeId"], message: "Chọn kiểu gia công khi xuất theo định mức." });
-    if (l.discountNow + l.discountAccum > grossAmount(l.qty, l.salePrice) + 1e-9) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discountNow"], message: "Tổng chiết khấu vượt giá trị dòng." });
-    }
   });
 
 export const saleOrderSchema = z
@@ -53,6 +50,8 @@ export const saleOrderSchema = z
     shippingFee: z.number().finite().min(0, "Phí vận chuyển không được âm.").max(9_999_999_999).refine(decimals(2), "Tối đa 2 chữ số thập phân.").optional(),
     /** In nợ cũ trên hóa đơn. Bỏ trống: đơn mới = có in, sửa đơn = giữ nguyên. */
     printDebt: z.boolean().optional(),
+    /** Làm tròn LÊN nghìn đồng thành tiền từng dòng. Bỏ trống: đơn mới = có làm tròn, sửa đơn = giữ nguyên. */
+    roundAmounts: z.boolean().optional(),
     /** Địa chỉ giao hàng của đơn. Bỏ trống: đơn mới = chưa nhập, sửa đơn = giữ nguyên; chuỗi rỗng = xoá. */
     shipAddress: z.string().trim().max(250, "Địa chỉ giao hàng tối đa 250 ký tự.").optional(),
     /** Chiết khấu cả đơn: phân bổ theo tỷ lệ vào chiết khấu trừ ngay của các dòng. Bỏ trống: đơn mới = 0, sửa đơn = giữ nguyên. */
@@ -60,6 +59,12 @@ export const saleOrderSchema = z
     lines: z.array(saleLineSchema).min(1, "Nhập ít nhất một dòng hàng.").max(SALE_MAX_LINES, `Tối đa ${SALE_MAX_LINES} dòng.`),
   })
   .superRefine((o, ctx) => {
+    // Giá trị dòng phụ thuộc cờ làm tròn của đơn nên kiểm tổng chiết khấu ở mức đơn
+    o.lines.forEach((l, i) => {
+      if (l.discountNow + l.discountAccum > grossAmount(l.qty, l.salePrice, o.roundAmounts !== false) + 1e-9) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lines", i, "discountNow"], message: "Tổng chiết khấu vượt giá trị dòng." });
+      }
+    });
     if (o.expectedDeliveryDate < o.date) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["expectedDeliveryDate"], message: "Ngày giao dự kiến không được trước ngày đơn." });
     }

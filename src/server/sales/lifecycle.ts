@@ -110,7 +110,7 @@ export async function editSaleOrder(ctx: EngineCtx, actor: Actor, id: number, in
 
   const accum = new Map<number, Prisma.Decimal>();
   const extras = await orderExtras(tx, actor, input, "edit");
-  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? Number(order.orderDiscount));
+  const shares = allocateOrderDiscount(lines, extras.orderDiscount ?? Number(order.orderDiscount), extras.roundAmounts ?? order.roundAmounts);
   for (const [li, l] of lines.entries()) {
     const previous = l.input.id === undefined ? undefined : existing.get(l.input.id);
     const snapshot = previous && previous.productId === l.input.productId && previous.processingTypeId === l.input.processingTypeId && previous.issueMode === (l.bomVersionId === null ? "STOCK" : "BOM") ? previous.referenceCostSnapshot ?? Prisma.JsonNull : await referenceCostSnapshot(tx, l.input.productId, l.input.processingTypeId, at, l.bomVersionId === null ? "STOCK" : "BOM");
@@ -255,7 +255,7 @@ export async function updateDraftOrder(tx: Tx, actor: Actor, id: number, input: 
   });
   await tx.saleOrderLine.deleteMany({ where: { orderId: id } });
   const extras = await orderExtras(tx, actor, input, "edit");
-  const shares = allocateOrderDiscount(planned, extras.orderDiscount ?? Number(order.orderDiscount));
+  const shares = allocateOrderDiscount(planned, extras.orderDiscount ?? Number(order.orderDiscount), extras.roundAmounts ?? order.roundAmounts);
   const snapshots = await Promise.all(planned.map(l => {
     const previous = l.input.id === undefined ? undefined : existing.get(l.input.id);
     const mode = l.bomVersionId === null ? "STOCK" : "BOM";

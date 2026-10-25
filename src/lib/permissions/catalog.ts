@@ -56,6 +56,7 @@ export const PERMISSIONS = [
   { code: "production.manage", label: "Lệnh sản xuất phụ kiện", group: "Sản xuất" },
   { code: "processing.manage", label: "Gia công thuê", group: "Sản xuất" },
   { code: "bom.manage", label: "Định mức NVL", group: "Sản xuất" },
+  { code: "bom.delete", label: "Xóa hẳn định mức NVL", group: "Sản xuất", sensitive: true },
   // Kế toán
   { code: "receipt.manage", label: "Phiếu thu", group: "Kế toán" },
   { code: "payment.manage", label: "Phiếu chi", group: "Kế toán" },

@@ -149,6 +149,48 @@ export async function cancelBomVersion(db: Db, actor: Actor, versionId: number, 
   });
 }
 
+const DELETE_BOM_LIMIT = 500;
+
+/**
+ * Xoá HẲN định mức (Bom + mọi phiên bản + dòng NVL) — chỉ Giám đốc (`bom.delete`). Tất cả hoặc không gì cả:
+ * định mức có phiên bản đã được dòng đơn bán tham chiếu (`sale_order_lines.bomVersionId`) thì không xoá được
+ * (đơn cũ phải giữ nguyên định mức đã dùng, D-20) ⇒ 409 `BOM_IN_USE`, nêu rõ từng định mức bị chặn.
+ */
+export async function deleteBoms(db: Db, actor: Actor, ids: readonly number[]) {
+  assertCan(actor.perms, "bom.delete");
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) throw new ValidationError("Chưa chọn định mức nào.");
+  if (unique.length > DELETE_BOM_LIMIT) throw new ValidationError(`Tối đa ${DELETE_BOM_LIMIT} định mức mỗi lần — chia nhỏ rồi thử lại.`);
+  const boms = await db.bom.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, product: { select: { code: true } }, processingType: { select: { name: true } }, versions: { select: { id: true } } },
+  });
+  if (boms.length !== unique.length) throw new DomainError("Có định mức không còn tồn tại (có thể đã bị xoá). Tải lại danh sách rồi thử lại.", 404);
+  const versionIds = boms.flatMap((b) => b.versions.map((v) => v.id));
+  const used = await db.saleOrderLine.groupBy({ by: ["bomVersionId"], where: { bomVersionId: { in: versionIds } }, _count: { _all: true } });
+  const usedBy = new Map(used.map((u) => [u.bomVersionId, u._count._all]));
+  const blocked = boms
+    .map((b) => ({ b, lines: b.versions.reduce((n, v) => n + (usedBy.get(v.id) ?? 0), 0) }))
+    .filter((x) => x.lines > 0);
+  if (blocked.length > 0) {
+    const shown = blocked.slice(0, 5).map(({ b, lines }) => `${b.product.code} – ${b.processingType.name} (${lines} dòng đơn bán)`).join("; ");
+    const more = blocked.length > 5 ? ` và ${blocked.length - 5} định mức khác` : "";
+    throw new DomainError(
+      `Không xoá được: ${blocked.length}/${boms.length} định mức đã được dùng để lập đơn bán hàng — ${shown}${more}. Bỏ các định mức này khỏi lựa chọn rồi xoá lại; chưa có định mức nào bị xoá.`,
+      409, "BOM_IN_USE",
+    );
+  }
+  // Trigger D-19 chặn xoá dòng/phiên bản; cờ chỉ có hiệu lực trong giao dịch này (`true` = local).
+  await db.$executeRaw`SELECT set_config('app.bom_delete', 'on', true)`;
+  await db.bomLine.deleteMany({ where: { bomVersionId: { in: versionIds } } });
+  await db.bomVersion.deleteMany({ where: { id: { in: versionIds } } });
+  await db.bom.deleteMany({ where: { id: { in: unique } } });
+  for (const b of boms) {
+    await writeAudit(db, { userId: actor.userId, action: "bom.delete", entity: "Bom", entityId: b.id, before: { productCode: b.product.code, processingType: b.processingType.name, versionCount: b.versions.length } });
+  }
+  return { deleted: boms.length };
+}
+
 const ratioOf = (v: unknown) => {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0 || n > 99 || Number(n.toFixed(4)) !== n) throw new ValidationError("Tỷ lệ phải lớn hơn 0 và tối đa 4 chữ số thập phân.");
