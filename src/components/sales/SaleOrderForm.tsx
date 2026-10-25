@@ -87,7 +87,9 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   // Khách lẻ thân quen đã có hồ sơ (khớp SĐT): gợi ý giá theo chính khách đó; chưa có thì theo khách chung KHL
   const [hits, setHits] = useState<{ id: number; code: string; name: string; phone: string | null }[]>([]);
   const phoneKey = normalizePhone(walkPhone);
-  const matched = phoneKey ? hits.find((h) => normalizePhone(h.phone) === phoneKey) ?? null : null;
+  const nameKey = walkName.trim().toLowerCase();
+  // Khớp theo SĐT; không có SĐT thì khớp theo tên với hồ sơ chưa có SĐT (server dùng lại đúng hồ sơ đó)
+  const matched = phoneKey ? hits.find((h) => normalizePhone(h.phone) === phoneKey) ?? null : nameKey ? hits.find((h) => !normalizePhone(h.phone) && h.name.trim().toLowerCase() === nameKey) ?? null : null;
   const pricingPartnerId = walkIn ? matched?.id ?? options.walkInPartnerId ?? 2_147_483_647 : partnerId;
   useEffect(() => {
     const q = phoneKey.length >= 3 ? walkPhone.trim() : walkName.trim().length >= 2 ? walkName.trim() : "";
@@ -172,7 +174,10 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
     if (amount > total + 0.004) throw new Error("Số tiền thu vượt tiền phải thu.");
     if (first > 0 && !payAccount) throw new Error("Chọn quỹ/tài khoản nhận tiền.");
     if (second > 0 && !secAccount) throw new Error("Chọn quỹ/tài khoản cho khoản thu thứ hai.");
-    if (walkIn && amount + 0.004 < total) throw new Error("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).");
+    if (walkIn && amount + 0.004 < total) {
+      if (pickupNow) throw new Error("Khách lẻ lấy hàng tại quầy phải thanh toán đủ tiền phải thu (không ghi nợ).");
+      if (!walkName.trim() && !phoneKey) throw new Error("Khách lẻ chưa trả đủ: nhập tên hoặc số điện thoại khách để theo dõi thu tiền khi giao.");
+    }
     if (!walkIn && !pickupNow && amount <= 0) return undefined;
     return {
       ...(walkIn ? { walkIn: { name: walkName.trim(), phone: walkPhone.trim() } } : {}),
@@ -242,8 +247,8 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const toggleWalkIn = (on: boolean) => {
     setWalkIn(on); setCustomer(null);
     setValue("partnerId", on ? 1 : (undefined as never), { shouldDirty: true });
-    setPickupNow(on && options.canPickup);
-    if (on && (payKind === "NONE" || payKind === "COD")) changeKind("CASH");
+    setPickupNow(on && retailOn && options.canPickup); // đơn thường: đa số khách lẻ được giao ⇒ không tự tích "tự chở"
+    if (on && (payKind === "NONE" || payKind === "COD")) changeKind(retailOn ? "CASH" : "COD");
     if (!on) changeKind("NONE");
   };
   const loadCustomers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/customers/search?q=${encodeURIComponent(q)}`);
@@ -350,15 +355,15 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
             <InlineField id="walkPhone" label="Số điện thoại (tuỳ chọn)" labelClass={LABEL}><input id="walkPhone" value={walkPhone} onChange={(e) => setWalkPhone(e.target.value)} inputMode="tel" placeholder="Nhập để lưu khách quen" autoComplete="off" className={igInput} /></InlineField>
             {hits.length > 0 && !matched && (
               <ul aria-label="Khách lẻ thân quen đã lưu" className="flex flex-wrap gap-2 text-xs md:col-span-2 xl:col-span-3">
-                {hits.map((h) => <li key={h.id}><button type="button" onClick={() => { setWalkName(h.name); setWalkPhone(h.phone ?? ""); }} className="rounded-full border border-border px-3 py-1.5 hover:bg-hover">{h.name} · {h.phone} · <span className="text-fg-muted">{h.code}</span></button></li>)}
+                {hits.map((h) => <li key={h.id}><button type="button" onClick={() => { setWalkName(h.name); setWalkPhone(h.phone ?? ""); }} className="rounded-full border border-border px-3 py-1.5 hover:bg-hover">{[h.name, h.phone].filter(Boolean).join(" · ")} · <span className="text-fg-muted">{h.code}</span></button></li>)}
               </ul>
             )}
             <p className="text-xs text-fg-muted md:col-span-2 xl:col-span-3">
               {matched
-                ? <>SĐT này đã lưu là khách lẻ thân quen <strong>{matched.name}</strong> ({matched.code}) — đơn ghi cho khách này, dùng để tra lịch sử mua và trả hàng.</>
-                : phoneKey
-                  ? <>Có số điện thoại ⇒ hệ thống <strong>lưu hồ sơ khách lẻ thân quen</strong> (tên + SĐT, không công nợ) để tra lịch sử mua và trả hàng. Thanh toán đủ ngay.</>
-                  : <>Không nhập số điện thoại (hoặc chưa đủ 8 số) ⇒ dùng khách chung <strong>KHL</strong> (không nhận diện được từng người). Thanh toán đủ ngay, không ghi nợ.</>}
+                ? <>Khách này đã lưu là khách lẻ thân quen <strong>{matched.name}</strong> ({matched.code}) — đơn ghi cho khách này, dùng để tra lịch sử mua, công nợ giao hàng và trả hàng.</>
+                : phoneKey || walkName.trim()
+                  ? <>Có {phoneKey ? "số điện thoại" : "tên"} ⇒ hệ thống <strong>lưu hồ sơ khách lẻ thân quen</strong> để theo dõi riêng (không tính vào KHL). Hồ sơ nhận diện theo {phoneKey ? "SĐT" : "tên — gõ lại đúng tên sẽ dùng lại hồ sơ này"}; có thể nâng thành đối tác ở danh sách khách hàng.</>
+                  : <>Không nhập tên và số điện thoại ⇒ dùng khách chung <strong>KHL</strong> (không theo dõi được từng người, phải thanh toán đủ). Nhập tên để theo dõi.</>}
             </p>
           </>) : (<>
             <InlineField id="partnerId" label="Tên khách hàng" required error={errors.partnerId?.message} labelClass={LABEL}>
@@ -436,7 +441,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
                 <option value="NONE">Chưa thu tiền</option>
                 <option value="CASH">Tiền mặt</option>
                 <option value="TRANSFER">Chuyển khoản</option>
-                {!walkIn && <option value="COD">Thu hộ khi giao (COD)</option>}
+                {(!walkIn || !pickupNow) && <option value="COD">Thu hộ khi giao (COD)</option>}
               </select>
             </InlineField>
             {(payKind === "CASH" || payKind === "TRANSFER") ? (
@@ -500,7 +505,8 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           <p className="mt-3 text-xs text-fg-muted">Tiền thu khi chưa giao hàng được ghi là <strong>tiền cọc</strong> của đơn (trừ vào công nợ khi giao). Có thể thu bằng cả tiền mặt và chuyển khoản cùng lúc.</p>
           {options.canPickup && (
             <div className="mt-2 border-t border-border pt-3">
-              <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={pickupNow} onChange={(e) => setPickupNow(e.target.checked)} className="h-4 w-4" />Khách tự chở — giao hàng ngay (lập phiếu giao)</label>
+              <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={pickupNow} onChange={(e) => { setPickupNow(e.target.checked); if (e.target.checked && walkIn && (payKind === "NONE" || payKind === "COD")) changeKind("CASH"); }} className="h-4 w-4" />Khách tự chở — giao hàng ngay (lập phiếu giao)</label>
+              {walkIn && <p className="mt-1 text-xs text-fg-muted">{pickupNow ? "Lấy hàng tại quầy: khách thanh toán đủ ngay." : "Giao sau: có thể thu luôn, hoặc để lái xe thu khi giao (chọn “Thu hộ khi giao” / thu một phần)."}</p>}
             </div>
           )}
         </>)}

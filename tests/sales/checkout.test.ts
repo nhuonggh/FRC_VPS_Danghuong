@@ -91,10 +91,10 @@ describe("bán tại quầy — thu tiền + giao ngay cùng giao dịch", () =>
 describe("khách lẻ (KHL)", () => {
   it("tự tạo khách KHL lần đầu, ghi tên/SĐT trên đơn, người bán KHÔNG có partner.view_all vẫn lập được", async () => {
     await makePartnerGroup();
-    const o = await run(body(), { walkIn: { name: "Anh Ba", phone: "0909" }, pickupNow: true, payment: { amount: 150_000, cashAccountId: cash.id, note: "" } });
+    const o = await run(body(), { walkIn: { name: "", phone: "0909" }, pickupNow: true, payment: { amount: 150_000, cashAccountId: cash.id, note: "" } });
     const kh = await prisma.partner.findUniqueOrThrow({ where: { code: WALK_IN_CODE } });
     expect(kh).toMatchObject({ allowCredit: false, isCustomer: true });
-    expect(await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).toMatchObject({ partnerId: kh.id, walkInName: "Anh Ba", walkInPhone: "0909", paymentStatus: "PAID", deliveryStatus: "DELIVERED" });
+    expect(await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).toMatchObject({ partnerId: kh.id, walkInName: null, walkInPhone: "0909", paymentStatus: "PAID", deliveryStatus: "DELIVERED" });
     // lần 2 dùng lại đúng khách KHL (không tạo thêm)
     await run(body(), { walkIn: { name: "", phone: "" }, payment: { amount: 150_000, cashAccountId: cash.id, note: "" } });
     expect(await prisma.partner.count({ where: { code: WALK_IN_CODE } })).toBe(1);
@@ -127,15 +127,40 @@ describe("khách lẻ thân quen (có SĐT)", () => {
     expect(await prisma.partner.findFirstOrThrow({ where: { phoneKey: "0911222333" } })).toMatchObject({ code: "KL000002" });
   });
 
-  it("không SĐT hoặc SĐT chưa đủ 8 số ⇒ vẫn dùng KHL (không tạo hồ sơ)", async () => {
+  it("không tên và không SĐT (hoặc SĐT chưa đủ 8 số) ⇒ vẫn dùng KHL (không tạo hồ sơ)", async () => {
     await makePartnerGroup();
-    const o = await retail("Khách vãng lai", "");
+    const o = await retail("", "");
     const khl = await prisma.partner.findUniqueOrThrow({ where: { code: WALK_IN_CODE } });
     expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).partnerId).toBe(khl.id);
-    expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(0);
-    const o2 = await retail("X", "12ab");
+    const o2 = await retail("", "12ab");
     expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(khl.id);
     expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(0);
+  });
+
+  it("chỉ có tên (không SĐT) ⇒ tạo hồ sơ theo tên, gõ lại tên (khác hoa/thường) ⇒ dùng lại; SĐT sai vẫn theo tên", async () => {
+    await makePartnerGroup();
+    const o1 = await retail("Khách vãng lai", "");
+    const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
+    expect(kh).toMatchObject({ code: "KL000001", name: "Khách vãng lai", phone: null, phoneKey: null, allowCredit: false });
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o1.id } })).partnerId).toBe(kh.id);
+    const o2 = await retail("khách VÃNG lai", "12ab");
+    expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(kh.id);
+    await retail("Anh Hai", "");
+    expect(await prisma.partner.count({ where: { isRegularRetail: true } })).toBe(2);
+  });
+
+  it("giao sau: khách lẻ có tên được lập đơn không thu/thu một phần (lái xe thu khi giao); tự chở hoặc không tên/SĐT thì vẫn phải thu đủ", async () => {
+    await makePartnerGroup();
+    const o = await run(body(), { walkIn: { name: "Chú Tư", phone: "" } });
+    const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true, name: "Chú Tư" } });
+    expect(await prisma.saleOrder.findUniqueOrThrow({ where: { id: o.id } })).toMatchObject({ partnerId: kh.id, walkInName: "Chú Tư" });
+    expect(await counts()).toMatchObject({ receipts: 0, deliveries: 0 });
+    await run(body(), { walkIn: { name: "Chú Tư", phone: "" }, payment: { amount: 50_000, cashAccountId: cash.id, note: "" } });
+    expect(await counts()).toMatchObject({ receipts: 1, deliveries: 0 });
+    const before = await counts();
+    await expect(run(body(), { walkIn: { name: "Chú Tư", phone: "" }, pickupNow: true, payment: { amount: 50_000, cashAccountId: cash.id, note: "" } })).rejects.toMatchObject({ status: 400 });
+    await expect(run(body(), { walkIn: { name: "", phone: "" } })).rejects.toMatchObject({ status: 400 });
+    expect(await counts()).toEqual(before);
   });
 
   it("hồ sơ khách lẻ thân quen không cho đặt hạn mức/ghi nợ (CHECK DB); nâng thành đối tác xong thì cho", async () => {

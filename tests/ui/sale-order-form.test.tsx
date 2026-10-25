@@ -338,12 +338,40 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     expect(sel).toHaveValue("6");
   });
 
-  it("khách lẻ: ẩn tìm khách + Lưu nháp, tự bật giao ngay + thu tiền mặt đủ, gửi checkout.walkIn", async () => {
+  it("khách lẻ (đơn thường): mặc định giao sau + thu hộ khi giao (lái xe thu), không tích tự chở; gửi checkout.walkIn không kèm pickupNow/thu tiền", async () => {
+    baseApi((url, init) => (url === "/api/orders" && init?.method === "POST" ? { id: 8, code: "DH000008" } : undefined));
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
+    expect(screen.getByLabelText(/Khách tự chở/)).not.toBeChecked();
+    expect(screen.getByLabelText("Hình thức thanh toán")).toHaveValue("COD");
+    await userEvent.type(screen.getByLabelText(/Tên khách/), "Anh Ba");
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sales/orders/8"));
+    expect(posts()[0]![1].json).toMatchObject({ paymentMethod: "COD", checkout: { walkIn: { name: "Anh Ba", phone: "" } } });
+    expect(posts()[0]![1].json.checkout.pickupNow).toBeUndefined();
+    expect(posts()[0]![1].json.checkout.payments).toBeUndefined();
+  });
+
+  it("khách lẻ giao sau mà không có tên/SĐT → báo lỗi, KHÔNG gọi POST", async () => {
+    baseApi(() => undefined);
+    render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
+    await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
+    await pick("Sản phẩm dòng 1", "ton");
+    await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
+    expect(await screen.findByText(/nhập tên hoặc số điện thoại khách/)).toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("khách lẻ: ẩn tìm khách + Lưu nháp; tích tự chở ⇒ chuyển thu tiền mặt đủ, gửi checkout.walkIn + pickupNow", async () => {
     baseApi((url, init) => (url === "/api/orders" && init?.method === "POST" ? { id: 8, code: "DH000008" } : undefined));
     render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
     await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
     expect(screen.queryByRole("combobox", { name: "Khách hàng" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Lưu nháp/ })).toBeNull();
+    await userEvent.click(screen.getByLabelText(/Khách tự chở/));
     expect(screen.getByLabelText(/Khách tự chở/)).toBeChecked();
     expect(screen.getByLabelText("Hình thức thanh toán")).toHaveValue("CASH");
     await userEvent.type(screen.getByLabelText(/Tên khách/), "Anh Ba");
@@ -355,16 +383,17 @@ describe("SaleOrderForm — bán tại quầy (khách lẻ, thu tiền, giao nga
     expect(posts()[0]![1].json.checkout).toMatchObject({ walkIn: { name: "Anh Ba", phone: "0909" }, pickupNow: true, payments: [{ amount: 60000, cashAccountId: 5 }] });
   });
 
-  it("khách lẻ thu thiếu → báo lỗi, KHÔNG gọi POST", async () => {
+  it("khách lẻ tự chở thu thiếu → báo lỗi, KHÔNG gọi POST", async () => {
     baseApi(() => undefined);
     render(<SaleOrderForm options={COUNTER} today="2026-09-15" canEditPrice />);
     await userEvent.click(screen.getByRole("button", { name: "Khách lẻ" }));
+    await userEvent.click(screen.getByLabelText(/Khách tự chở/));
     await pick("Sản phẩm dòng 1", "ton");
     await userEvent.type(screen.getByLabelText("Số lượng dòng 1"), "2");
     await userEvent.clear(screen.getByLabelText(/Số tiền thu|Tiền cọc/));
     await userEvent.type(screen.getByLabelText(/Số tiền thu|Tiền cọc/), "10000");
     await userEvent.click(screen.getByRole("button", { name: "Lập đơn" }));
-    expect(await screen.findByText(/Khách lẻ phải thanh toán đủ/)).toBeInTheDocument();
+    expect(await screen.findByText(/lấy hàng tại quầy phải thanh toán đủ/)).toBeInTheDocument();
     expect(posts()).toHaveLength(0);
   });
 

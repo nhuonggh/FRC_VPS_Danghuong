@@ -30,7 +30,7 @@ const paymentRow = z.object({
 });
 
 export const checkoutSchema = z.object({
-  /** Có = khách lẻ: đơn gắn khách chung KHL, tên/SĐT chỉ ghi trên đơn. */
+  /** Có = khách lẻ: có tên/SĐT ⇒ gắn hồ sơ khách lẻ thân quen (theo SĐT, không SĐT thì theo tên); không có cả hai ⇒ khách chung KHL. Tên/SĐT luôn ghi trên đơn. */
   walkIn: z.object({ name: z.string().trim().max(120, "Tên tối đa 120 ký tự."), phone: z.string().trim().max(30, "SĐT tối đa 30 ký tự.") }).optional(),
   /** Khách tự chở: tạo luôn phiếu giao đủ số lượng. */
   pickupNow: z.boolean().optional(),
@@ -68,12 +68,13 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
   let eff = actor;
   let order = input;
   if (checkout.walkIn) {
-    // Có SĐT ⇒ hồ sơ khách lẻ thân quen (tự tạo/dùng lại theo SĐT); không SĐT ⇒ khách chung KHL
+    // Có SĐT (≥ 8 số) hoặc có tên ⇒ hồ sơ khách lẻ thân quen (tự tạo/dùng lại theo SĐT, không SĐT thì theo tên); không có cả hai ⇒ khách chung KHL
     const walkInId = await ensureWalkInCustomer(prisma);
     let partnerId = walkInId;
-    if (normalizePhone(checkout.walkIn.phone)) { // SĐT chưa đủ 8 số ⇒ coi như không có (vẫn KHL, SĐT ghi trên đơn)
+    const phoneOk = !!normalizePhone(checkout.walkIn.phone); // SĐT chưa đủ 8 số ⇒ coi như không có (SĐT vẫn ghi trên đơn)
+    if (phoneOk || checkout.walkIn.name) {
       const { groupId } = await prisma.partner.findUniqueOrThrow({ where: { id: walkInId }, select: { groupId: true } });
-      partnerId = (await ensureRegularRetail(prisma, { name: checkout.walkIn.name, phone: checkout.walkIn.phone, groupId })).id;
+      partnerId = (await ensureRegularRetail(prisma, { name: checkout.walkIn.name, phone: phoneOk ? checkout.walkIn.phone : "", groupId })).id;
     }
     order = { ...input, partnerId };
     eff = { ...actor, perms: new Set([...actor.perms, "partner.view_all"]) };
@@ -99,7 +100,11 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
     const paid = pays.reduce((s, p) => s.plus(p.amount), D(0));
     if (paid.gt(total)) throw new DomainError("Số tiền thu vượt tiền phải thu của đơn.", 400);
     if (pays.some((p) => !p.cashAccountId)) throw new DomainError("Chọn quỹ/tài khoản nhận tiền.", 400);
-    if (checkout.walkIn && paid.lt(total)) throw new DomainError("Khách lẻ phải thanh toán đủ tiền phải thu (không ghi nợ).", 400);
+    // Khách lẻ không ghi nợ: lấy hàng tại quầy ⇒ trả đủ ngay; giao sau ⇒ được thu một phần/để lái xe thu khi giao (cần tên hoặc SĐT để biết thu của ai)
+    if (checkout.walkIn && paid.lt(total)) {
+      if (checkout.pickupNow) throw new DomainError("Khách lẻ lấy hàng tại quầy phải thanh toán đủ tiền phải thu (không ghi nợ).", 400);
+      if (!checkout.walkIn.name && !normalizePhone(checkout.walkIn.phone)) throw new DomainError("Khách lẻ chưa trả đủ: nhập tên hoặc số điện thoại khách để theo dõi thu tiền khi giao.", 400);
+    }
 
     for (const p of pays) await createDeposit(tx, eff, { orderId: created.id, amount: p.amount, cashAccountId: p.cashAccountId!, date: order.date, note: p.note }, now);
     if (checkout.pickupNow) {

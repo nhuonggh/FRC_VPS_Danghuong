@@ -10,15 +10,21 @@ import { nextPartnerCodesWithPrefix, REGULAR_RETAIL_PREFIX } from "./codes";
 const searchTextOf = (code: string, name: string, phone: string) => normalizeSearch(`${code} ${name} ${phone}`);
 
 /**
- * Khách lẻ thân quen: hồ sơ nhẹ (tên + SĐT) theo SĐT chuẩn hoá. Có rồi ⇒ dùng lại (giữ tên cũ); chưa có ⇒ tạo mới.
+ * Khách lẻ thân quen: hồ sơ nhẹ (tên + SĐT). Có SĐT ⇒ nhận diện theo SĐT chuẩn hoá; chỉ có tên ⇒ nhận diện theo tên
+ * (trùng tên không phân biệt hoa/thường với hồ sơ chưa có SĐT ⇒ dùng lại). Có rồi ⇒ dùng lại (giữ tên cũ); chưa có ⇒ tạo mới.
  * Nhóm khách do nơi gọi truyền vào (= nhóm của khách chung KHL ⇒ giá gợi ý "cùng nhóm" không đổi). Không cho ghi nợ (CHECK DB).
  */
 export async function ensureRegularRetail(prisma: PrismaClient, v: { name: string; phone: string; groupId: number }): Promise<{ id: number; created: boolean }> {
   const key = normalizePhone(v.phone);
-  if (!key) throw new DomainError("Số điện thoại không hợp lệ (cần ít nhất 8 chữ số).", 400);
-  const find = () => prisma.partner.findUnique({ where: { phoneKey: key }, select: { id: true, isActive: true, mergedIntoId: true } });
+  const name = v.name.trim();
+  if (v.phone.trim() && !key) throw new DomainError("Số điện thoại không hợp lệ (cần ít nhất 8 chữ số).", 400);
+  if (!key && !name) throw new DomainError("Nhập tên hoặc số điện thoại của khách lẻ.", 400);
+  const state = { id: true, isActive: true, mergedIntoId: true } as const;
+  const find = () => key
+    ? prisma.partner.findUnique({ where: { phoneKey: key }, select: state })
+    : prisma.partner.findFirst({ where: { isRegularRetail: true, phoneKey: null, name: { equals: name, mode: "insensitive" } }, orderBy: { id: "asc" }, select: state });
   const usable = (p: { id: number; isActive: boolean; mergedIntoId: number | null }) => {
-    if (!p.isActive || p.mergedIntoId !== null) throw new DomainError("Hồ sơ khách lẻ thân quen của SĐT này đã bị tắt/gộp — hãy bật lại ở danh sách khách lẻ thân quen.", 409);
+    if (!p.isActive || p.mergedIntoId !== null) throw new DomainError("Hồ sơ khách lẻ thân quen này đã bị tắt/gộp — hãy bật lại ở danh sách khách lẻ thân quen.", 409);
     return p.id;
   };
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -27,8 +33,9 @@ export async function ensureRegularRetail(prisma: PrismaClient, v: { name: strin
     try {
       const id = await prisma.$transaction(async (tx) => {
         const [code] = await nextPartnerCodesWithPrefix(tx, REGULAR_RETAIL_PREFIX, 1);
-        const name = v.name.trim() || v.phone.trim();
-        const row = await tx.partner.create({ data: { code: code!, name, searchText: searchTextOf(code!, name, v.phone.trim()), groupId: v.groupId, isCustomer: true, allowCredit: false, phone: v.phone.trim(), phoneKey: key, isRegularRetail: true } });
+        const label = name || v.phone.trim();
+        const phone = key ? v.phone.trim() : null;
+        const row = await tx.partner.create({ data: { code: code!, name: label, searchText: searchTextOf(code!, label, phone ?? ""), groupId: v.groupId, isCustomer: true, allowCredit: false, phone, phoneKey: key || null, isRegularRetail: true } });
         return row.id;
       });
       return { id, created: true };
