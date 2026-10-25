@@ -90,6 +90,12 @@ describe("HTML in trực tiếp", () => {
     expect(hidden).not.toContain("(14 Tấm)");
     expect(hidden).toContain("3,28 m × 14 Tấm");
     expect(hidden).toContain("× 0,4");
+    expect(shown).toContain("size:A4");
+    expect(shown).toContain("☐ Khổ A5");
+    const a5 = renderHtmlPrint(model, true, false, "n", { paper: "A5" });
+    expect(a5).toContain("size:A5");
+    expect(a5).toContain("☑ Khổ A5");
+    expect(a5).toContain("?mode=mono&amp;paper=A5&amp;debt=1&amp;auto=1");
     expect(hidden).toContain('href="?mode=mono&amp;hidePieces=1&amp;debt=1&amp;auto=1"');
     expect(Array.from(hidden.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)).every((m) => { new Script(m[1]); return true; })).toBe(true);
   });
@@ -152,14 +158,15 @@ describe("HTML in: các phiếu còn lại", () => {
   it("phiếu thu/chi: không có bảng, hiện số tiền và tiền bằng chữ", () => {
     const html = renderHtmlPrint(base("RECEIPT", { doc: { date: "20/10/2026", type: "Thu công nợ", account: "Quỹ TM", createdBy: "Phượng", order: "DH9" }, totals: { amount: "1.500.000" } }, { summary: [{ label: "Số tiền", value: "1.500.000", big: true }], words: moneyInWords("1500000") }), false, false, "n");
     expect(html).toContain("PHIẾU THU"); expect(html).toContain("Người nộp tiền"); expect(html).toContain("Một triệu năm trăm nghìn đồng"); expect(html).not.toContain("<table"); expect(html).toContain("Vào quỹ / ngân hàng"); expect(html).toContain("Người lập"); expect(html).toContain("Phượng"); expect(html).toContain("DH9");
-    expect(renderHtmlPrint(base("PAYMENT", { doc: { date: "x" } }), false, false, "n")).toContain("Người nhận tiền");
+    const pay = renderHtmlPrint(base("PAYMENT", { doc: { date: "x" } }), false, false, "n");
+    expect(pay).toContain("Người nhận tiền"); expect(pay).toContain("size:80mm auto"); expect(pay).not.toContain("<header");
   });
   it("công nợ, chuyến, lệnh SX, kiểm kho, báo giá, trả hàng có đúng tiêu đề và cột", () => {
     const debt = renderHtmlPrint(base("DEBT_STATEMENT", {}, { lines: [{ no: "1", date: "01/10/2026", docLabel: "Đơn bán", docCode: "DH1", debit: "100", credit: "", running: "100" }] }), true, false, "n");
     expect(debt).toContain("BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ"); expect(debt).toContain("Phát sinh tăng"); expect(debt).toContain("DH1");
     const trip = renderHtmlPrint(base("TRIP_SHEET", { partner: null, doc: { date: "d", vehicle: "51C-1", driver: "Lái A" }, totals: { stops: "2" } }, { lines: [{ stop: "1", no: "1", customer: "Khách B", phone: "", address: "Q12", order: "DH2", orderTotal: "5.000", due: "1.000", goods: "Tôn 5 m" }, { stop: "2", no: "2", customer: "Khách C", phone: "", address: "", order: "DH3", orderTotal: "2.000", due: "2.000", goods: "" }] }), false, false, "n");
-    expect(trip).toContain("PHIẾU GIAO NHẬN THEO CHUYẾN"); expect(trip).toContain("Khách B"); expect(trip).toContain("Cần thu: 1.000"); expect(trip).not.toContain("Cần thu: 2.000"); expect(trip).toContain("51C-1");
-    for (const t of ["Số tiền đơn hàng", "Kết quả giao", "Hẹn", "Nợ", "Thanh toán hết", "Tiền mặt", "Chuyển khoản", "Bớt", "Ghi chú"]) expect(trip).toContain(t);
+    expect(trip).toContain("PHIẾU GIAO NHẬN THEO CHUYẾN"); expect(trip).toContain("Khách B"); expect(trip).toContain("Cần thu: 1.000"); expect(trip).not.toContain("Cần thu: 2.000"); expect(trip).toContain("51C-1"); expect(trip).not.toContain("<h1>"); expect(trip).not.toContain("Tôn 5 m"); expect(trip).not.toContain("Thanh toán hết");
+    for (const t of ["Số tiền đơn hàng", "Kết quả giao", "Hẹn", "Nợ", "Đã TT", "Tiền mặt", "Chuyển khoản", "Bớt", "Ghi chú"]) expect(trip).toContain(t);
     const prod = renderHtmlPrint(base("PRODUCTION_ORDER", { partner: null }, { lines: [{ section: "Thành phẩm", no: "1", code: "P1", name: "Phụ kiện", spec: "", unit: "cái", qty: "10" }, { section: "Nguyên vật liệu tiêu hao", no: "1", code: "N1", name: "Tôn cuộn", spec: "", unit: "kg", qty: "30" }] }), false, false, "n");
     expect(prod).toContain("LỆNH SẢN XUẤT"); expect(prod).toContain("Nguyên vật liệu tiêu hao"); expect(prod).toContain("Thợ sản xuất");
     const st = renderHtmlPrint(base("STOCKTAKE", { partner: null, doc: { date: "d", statusLabel: "Đã chốt" } }, { lines: [{ no: "1", code: "P1", name: "Tôn", unit: "m", systemQty: "10", actualQty: "9", diff: "-1" }] }), false, false, "n");
