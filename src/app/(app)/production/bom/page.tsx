@@ -54,7 +54,7 @@ export default async function BomListPage({ searchParams }: { searchParams: Prom
             : canManage ? <Link href={`${BASE}/new`} className="text-sm font-medium text-accent">Thêm định mức đầu tiên</Link> : undefined}
         />
       ) : (
-        <BomTable rows={rows} canManage={canManage} params={params} />
+        <BomTable rows={rows} canManage={canManage} canDelete={actor.perms.has("bom.delete")} params={params} />
       )}
     </ListPageLayout>
   );
