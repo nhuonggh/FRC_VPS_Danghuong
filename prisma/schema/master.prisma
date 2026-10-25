@@ -193,6 +193,7 @@ model CashAccount {
   ledger      CashLedger[]
   receipts    Receipt[]
   payments    Payment[]
+  tripExpenses TripExpense[]
 
   @@map("cash_accounts")
 }
@@ -216,6 +217,7 @@ model Driver {
 
   driverTrips    Trip[] @relation("TripDriver")
   assistantTrips Trip[] @relation("TripAssistant")
+  advancedPayments Payment[]
 
   @@map("drivers")
 }
@@ -236,6 +238,7 @@ model ExpenseType {
   isActive Boolean @default(true)
 
   expenses OperatingExpense[]
+  tripExpenses TripExpense[]
 
   @@map("expense_types")
 }

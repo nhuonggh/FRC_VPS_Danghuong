@@ -47,7 +47,7 @@ const stop = (over: Partial<StopDTO> = {}): StopDTO => ({
 });
 const trip = (over: Partial<TripDetailDTO> = {}): TripDetailDTO => ({
   id: 3, code: "CH000003", date: "2026-09-16", status: "PLANNED", statusLabel: "Đã xếp", note: null, routeName: "Quận 12", vehiclePlate: "51C-12345", driverName: "Lái A", assistantName: "Phụ B", departedAt: null, returnedAt: null, createdByName: "KT",
-  totals: { expected: "0", cash: "0", transfer: "0", debt: "0", discount: "0", over: "0", diff: "0" }, settled: null, confirmed: null, cancelReason: null, stops: [stop()], receipts: [], ...over,
+  totals: { expected: "0", cash: "0", transfer: "0", debt: "0", discount: "0", over: "0", diff: "0", expense: "0" }, settled: null, confirmed: null, cancelReason: null, stops: [stop()], receipts: [], expenses: [], ...over,
 });
 const allPerms = { canManage: true, canSettle: true, canConfirm: true };
 const accounts = [{ id: 1, name: "Tiền mặt", type: "CASH" as const }, { id: 2, name: "VCB", type: "BANK" as const }];
@@ -59,14 +59,52 @@ describe("TripDetail — nhập kết quả (40)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
     expect(screen.getByLabelText("Tiền mặt")).toHaveValue("200.000");
     await userEvent.click(screen.getByRole("button", { name: "Lưu kết quả" }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/result", expect.objectContaining({ json: { orderId: 11, result: "GIAO_DU", lines: [], cashAmount: 200000, transferAmount: 0, cashAccountId: 1, transferAccountId: null, debtAmount: 0, discountAmount: 0, promiseDate: null, note: "" }, idempotencyKey: expect.any(String) })));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/result", expect.objectContaining({ json: { orderId: 11, result: "GIAO_DU", lines: [], cashAmount: 200000, transferAmount: 0, cashAccountId: 1, transferAccountId: null, debtAmount: 0, discountAmount: 0, note: "" }, idempotencyKey: expect.any(String) })));
     expect(refresh).toHaveBeenCalled();
   });
-  it("không giao được bắt buộc lý do (server), hẹn trả hiện ô ngày, giao một phần nhập SL từng dòng và chặn vượt SL còn lại", async () => {
+  it("không còn lựa chọn \"Giao, hẹn trả\"; bớt cho khách gợi ý tiền mặt = phải thu − bớt (sửa tay được); ô tiền không để sẵn 0", async () => {
     render(<TripDetail trip={trip()} perms={allPerms} accounts={accounts} />);
     await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: /^Kết quả/ }), "HEN_TRA");
-    expect(screen.getByLabelText(/Ngày khách hẹn trả/)).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /hẹn trả/i })).toBeNull();
+    expect(screen.getByLabelText("Chuyển khoản")).toHaveValue("");
+    expect(screen.getByLabelText("Bớt cho khách")).toHaveValue("");
+    // bớt nằm ngay dưới Kết quả, trước tiền mặt và chuyển khoản
+    const before = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(screen.getByLabelText("Bớt cho khách"), screen.getByLabelText("Tiền mặt"))).toBe(true);
+    expect(before(screen.getByLabelText("Tiền mặt"), screen.getByLabelText("Chuyển khoản"))).toBe(true);
+    await userEvent.type(screen.getByLabelText("Bớt cho khách"), "3000");
+    expect(screen.getByLabelText("Tiền mặt")).toHaveValue("197.000");
+    await userEvent.clear(screen.getByLabelText("Tiền mặt")); await userEvent.type(screen.getByLabelText("Tiền mặt"), "150000");
+    await userEvent.type(screen.getByLabelText("Bớt cho khách"), "0"); // 30000 — tiền mặt đã sửa tay nên không bị gợi ý đè
+    expect(screen.getByLabelText("Tiền mặt")).toHaveValue("150.000");
+  });
+  it("ghi nợ: tiền nợ tự gợi ý = phải thu − bớt − tiền thu", async () => {
+    render(<TripDetail trip={trip()} perms={allPerms} accounts={accounts} />);
+    await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /^Kết quả/ }), "GHI_NO");
+    expect(screen.getByLabelText("Ghi nợ")).toHaveValue("200.000");
+    await userEvent.type(screen.getByLabelText("Tiền mặt"), "50000");
+    expect(screen.getByLabelText("Ghi nợ")).toHaveValue("150.000");
+  });
+  it("chi phí lái xe ứng: thêm từ dialog gửi expense-add; chuyến đã xác nhận thì không có nút thêm", async () => {
+    apiFetch.mockResolvedValue({ id: 1 });
+    render(<TripDetail trip={trip()} perms={allPerms} accounts={accounts} expenseTypes={[{ id: 4, name: "Xăng dầu" }]} />);
+    await userEvent.click(screen.getByRole("button", { name: "+ Thêm chi phí" }));
+    await userEvent.selectOptions(screen.getByLabelText(/Loại chi phí/), "4");
+    await userEvent.type(screen.getByLabelText(/Số tiền/), "30000");
+    await userEvent.click(screen.getByRole("button", { name: "Lưu chi phí" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/expense-add", expect.objectContaining({ json: { expenseTypeId: 4, cashAccountId: 1, amount: 30000, note: "" } })));
+    expect(refresh).toHaveBeenCalled();
+  });
+  it("chuyến đã xác nhận: hiện chi phí đã lập phiếu, không cho thêm/xóa", () => {
+    render(<TripDetail trip={trip({ status: "CONFIRMED", statusLabel: "Thủ quỹ đã nhận tiền", expenses: [{ id: 1, expenseTypeName: "Xăng dầu", cashAccountName: "Tiền mặt", amount: "30000", note: null, paymentId: 9, paymentCode: "PC000009" }], totals: { expected: "200000", cash: "200000", transfer: "0", debt: "0", discount: "0", over: "0", diff: "0", expense: "30000" } })} perms={allPerms} accounts={accounts} />);
+    expect(screen.getByRole("link", { name: "PC000009" })).toHaveAttribute("href", "/accounting/payments/9");
+    expect(screen.queryByRole("button", { name: "+ Thêm chi phí" })).toBeNull();
+    expect(screen.getByText("Tiền mặt nộp quỹ")).toBeInTheDocument();
+  });
+  it("giao một phần nhập SL từng dòng và chặn vượt SL còn lại", async () => {
+    render(<TripDetail trip={trip()} perms={allPerms} accounts={accounts} />);
+    await userEvent.click(screen.getByRole("button", { name: "Nhập kết quả DH000011" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /^Kết quả/ }), "GIAO_MOT_PHAN");
     await userEvent.type(screen.getByLabelText("SL giao TX01"), "9");
     await userEvent.click(screen.getByRole("button", { name: "Lưu kết quả" }));
@@ -79,7 +117,7 @@ describe("TripDetail — nhập kết quả (40)", () => {
   });
   it("điểm đã có kết quả: sửa/xóa; chuyến đã đối soát khoá nhập; đối soát có chênh lệch bắt buộc lý do", async () => {
     const done = stop({ result: "GIAO_DU", resultLabel: "Giao đủ", due: "200000", cash: "150000", canCancelResult: true });
-    const { unmount } = render(<TripDetail trip={trip({ status: "RETURNED", statusLabel: "Đã về", stops: [done], totals: { expected: "200000", cash: "150000", transfer: "0", debt: "0", discount: "0", over: "0", diff: "50000" } })} perms={allPerms} accounts={accounts} />);
+    const { unmount } = render(<TripDetail trip={trip({ status: "RETURNED", statusLabel: "Đã về", stops: [done], totals: { expected: "200000", cash: "150000", transfer: "0", debt: "0", discount: "0", over: "0", diff: "50000", expense: "0" } })} perms={allPerms} accounts={accounts} />);
     expect(screen.getByRole("button", { name: "Sửa kết quả DH000011" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Xóa kết quả DH000011" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/clear-result", expect.objectContaining({ json: { orderId: 11 } })));
@@ -97,7 +135,7 @@ describe("TripDetail — nhập kết quả (40)", () => {
   });
   it("thủ quỹ xác nhận: chọn quỹ + tài khoản NH theo số tiền; thiếu quyền ⇒ ẩn nút", async () => {
     const paid = stop({ result: "GIAO_DU", resultLabel: "Giao đủ", due: "200000", cash: "150000", transfer: "50000" });
-    const t = trip({ status: "SETTLED", statusLabel: "Đã đối soát", stops: [paid], totals: { expected: "200000", cash: "150000", transfer: "50000", debt: "0", discount: "0", over: "0", diff: "0" } });
+    const t = trip({ status: "SETTLED", statusLabel: "Đã đối soát", stops: [paid], totals: { expected: "200000", cash: "150000", transfer: "50000", debt: "0", discount: "0", over: "0", diff: "0", expense: "0" } });
     const { unmount } = render(<TripDetail trip={t} perms={allPerms} accounts={accounts} />);
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận đã nhận tiền" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Đã nhận tiền" }));

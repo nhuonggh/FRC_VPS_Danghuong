@@ -33,6 +33,7 @@ export const receiptSchema = z.object({
 /** Phiếu chi (58, 59). CHI_PHI và TAT_TOAN_CK do chi phí hoạt động / tất toán chiết khấu tạo, không qua form này. */
 export const paymentSchema = z.object({
   advancedById: id("Người ứng tiền không hợp lệ.").nullable().optional(),
+  advancedByDriverId: id("Người ứng tiền không hợp lệ.").nullable().optional(),
   kind: z.enum(PAYMENT_KINDS, { errorMap: () => ({ message: "Chọn loại phiếu chi." }) }),
   partnerId: id("Chọn đối tác.").nullable(),
   cashAccountId: id("Chọn quỹ/tài khoản."),

@@ -1,5 +1,6 @@
 "use client";
 
+import { advancerFields } from "@/lib/advancer";
 import { Receipt, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -26,7 +27,7 @@ export function ExpenseForm({ id, code, today, types, accounts, initial, people 
     if (typeId === "") throw new Error("Chọn loại chi phí.");
     if (!accountId) throw new Error("Chọn quỹ/tài khoản.");
     if (!(Number(amount) > 0)) throw new Error("Nhập số tiền lớn hơn 0.");
-    const body = { advancedById: advancedBy ? Number(advancedBy.value) : null, expenseTypeId: typeId, cashAccountId: accountId, amount: Number(amount), date, note };
+    const body = { ...advancerFields(advancedBy), expenseTypeId: typeId, cashAccountId: accountId, amount: Number(amount), date, note };
     if (editing) await apiFetch(`/api/expenses/${id}`, { method: "PATCH", json: body });
     else await apiFetch("/api/expenses", { method: "POST", json: body, idempotencyKey: idem.key });
     router.replace("/accounting/expenses");

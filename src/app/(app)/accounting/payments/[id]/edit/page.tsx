@@ -4,7 +4,7 @@ import { assertCan } from "@/lib/permissions/guard";
 import { prisma } from "@/lib/prisma";
 import { ictYmd } from "@/lib/time";
 import { requireActor } from "@/server/auth/session";
-import { getVoucher, listActiveCashAccounts } from "@/server/cash/queries";
+import { getVoucher, listActiveCashAccounts, listAdvancers } from "@/server/cash/queries";
 import { DomainError } from "@/server/http/errors";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,6 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
   const v = await getVoucher(prisma, actor, "PAYMENT", id).catch((e: unknown) => { if (e instanceof DomainError && e.status === 404) return null; throw e; });
   if (!v) notFound();
   if (v.isCancelled || v.reviewStatus === "REVIEWED" || ["COC", "CHI_PHI", "TAT_TOAN_CK"].includes(v.type)) redirect("/accounting/payments/" + id);
-  return <VoucherForm doc="PAYMENT" id={id} code={v.code} today={ictYmd(new Date())} accounts={await listActiveCashAccounts(prisma)} people={(await prisma.user.findMany({ where: { isLocked: false }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } })).map(u => ({ value: u.id, label: u.fullName }))}
-    initial={{ advancedBy: v.advancedById ? { value: v.advancedById, label: v.advancedByName ?? "" } : null, type: v.type, partner: v.partnerId ? { value: v.partnerId, label: v.partnerName ?? "" } : null, order: v.orderId ? { value: v.orderId, label: v.orderCode ?? "" } : null, cashAccountId: v.cashAccountId, amount: v.amount, date: v.dateYmd, note: v.note ?? "" }} />;
+  return <VoucherForm doc="PAYMENT" id={id} code={v.code} today={ictYmd(new Date())} accounts={await listActiveCashAccounts(prisma)} people={await listAdvancers(prisma)}
+    initial={{ advancedBy: v.advancedById ? { value: v.advancedById, label: v.advancedByName ?? "" } : v.advancedByDriverId ? { value: -v.advancedByDriverId, label: v.advancedByName ?? "" } : null, type: v.type, partner: v.partnerId ? { value: v.partnerId, label: v.partnerName ?? "" } : null, order: v.orderId ? { value: v.orderId, label: v.orderCode ?? "" } : null, cashAccountId: v.cashAccountId, amount: v.amount, date: v.dateYmd, note: v.note ?? "" }} />;
 }

@@ -69,7 +69,7 @@ export async function listVouchers(db: Db, actor: Actor, doc: VoucherDoc, params
 }
 
 export interface VoucherDetailDTO extends VoucherRowDTO {
-  advancedById?: number | null; advancedByName?: string | null;
+  advancedById?: number | null; advancedByDriverId?: number | null; advancedByName?: string | null;
   /** Khoản chi phí hoạt động tương ứng (phiếu chi loại CHI_PHI) — sửa ở màn Chi phí. */
   expenseId: number | null;
   partnerId: number | null; orderId: number | null; cashAccountId: number; dateYmd: string; reviewedByName: string | null; reviewedAt: Date | null;
@@ -90,12 +90,14 @@ export async function getVoucher(db: Db, actor: Actor, doc: VoucherDoc, id: numb
   const accounts = new Map((await db.cashAccount.findMany({ where: { id: { in: adjustments.flatMap((a) => (a.newCashAccountId ? [a.newCashAccountId] : [])) } }, select: { id: true, name: true } })).map((a) => [a.id, a.name]));
   const names = await fullName(db, [base.createdBy, ...(base.reviewedBy ? [base.reviewedBy] : []), ...events.map((e) => e.userId), ...adjustments.flatMap((a) => [a.requestedBy, ...(a.decidedBy ? [a.decidedBy] : [])])]);
   const advancedById = "advancedById" in base ? base.advancedById : null;
+  const advancedByDriverId = "advancedByDriverId" in base ? base.advancedByDriverId : null;
   const advancedBy = advancedById ? await db.user.findUnique({ where: { id: advancedById }, select: { fullName: true } }) : null;
+  const advancedByDriver = advancedByDriverId ? await db.driver.findUnique({ where: { id: advancedByDriverId }, select: { name: true } }) : null;
   const type = "type" in base ? base.type : base.kind;
   const expense = type === "CHI_PHI" ? await db.operatingExpense.findUnique({ where: { paymentId: id }, select: { id: true, expenseType: { select: { name: true } } } }) : null;
   const at = base.at; const t = new Date(at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
   return {
-    advancedById, advancedByName: advancedBy?.fullName ?? null,
+    advancedById, advancedByDriverId, advancedByName: advancedBy?.fullName ?? advancedByDriver?.name ?? null,
     id, doc, code: base.code, at, type, typeLabel: expense ? `Chi phí — ${expense.expenseType.name}` : (doc === "RECEIPT" ? RECEIPT_TYPE_LABEL : PAYMENT_KIND_LABEL)[type] ?? type, expenseId: expense?.id ?? null, partnerId: base.partnerId, partnerName: base.partner?.name ?? null,
     orderId: "orderId" in base ? base.orderId : null, orderCode: "order" in base ? (base.order?.code ?? null) : null, amount: base.amount.toString(), cashAccountId: base.cashAccountId, cashAccountName: base.cashAccount.name,
     reviewStatus: base.reviewStatus, isCancelled: base.isCancelled, note: base.note, createdByName: names.get(base.createdBy) ?? null, dateYmd: t,
@@ -210,6 +212,15 @@ export async function listActiveCashAccounts(db: Db): Promise<{ id: number; name
   return db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ type: "asc" }, { name: "asc" }], select: { id: true, name: true, type: true } });
 }
 
+/** Người có thể là "người ứng tiền": người dùng chưa khóa (id dương) + lái xe/phụ xe đang hoạt động (id âm, xem `advancerFields`). */
+export async function listAdvancers(db: Db): Promise<{ value: number; label: string }[]> {
+  const [users, drivers] = await Promise.all([
+    db.user.findMany({ where: { isLocked: false }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
+    db.driver.findMany({ where: { isActive: true }, select: { id: true, name: true, isAssistant: true }, orderBy: { name: "asc" } }),
+  ]);
+  return [...users.map((u) => ({ value: u.id, label: u.fullName })), ...drivers.map((d) => ({ value: -d.id, label: `${d.name} (${d.isAssistant ? "phụ xe" : "lái xe"})` }))];
+}
+
 // ───────────────────────────── CHI PHÍ HOẠT ĐỘNG (66) ─────────────────────────────
 export const EXPENSE_FILTER_KEYS = ["type", "status"] as const;
 export interface ExpenseRowDTO { id: number; paymentId: number; code: string; at: Date; expenseTypeId: number; expenseTypeName: string; amount: string; cashAccountName: string; note: string | null; reviewStatus: CashReviewStatus; isCancelled: boolean; createdByName: string | null; advancedByName: string | null }
@@ -230,7 +241,7 @@ export async function listExpenses(db: Db, actor: Actor, params: ListParams, opt
   };
   const where: Prisma.OperatingExpenseWhereInput = { payment: paymentWhere, ...(types.length ? { expenseTypeId: { in: types } } : {}) };
   const [list, total, liveRows] = await Promise.all([
-    db.operatingExpense.findMany({ where, orderBy: [{ payment: { at: "desc" } }, { id: "desc" }], ...(opts.all ? {} : { skip: (params.page - 1) * params.pageSize, take: params.pageSize }), include: { expenseType: { select: { name: true } }, payment: { include: { cashAccount: { select: { name: true } } } } } }),
+    db.operatingExpense.findMany({ where, orderBy: [{ payment: { at: "desc" } }, { id: "desc" }], ...(opts.all ? {} : { skip: (params.page - 1) * params.pageSize, take: params.pageSize }), include: { expenseType: { select: { name: true } }, payment: { include: { cashAccount: { select: { name: true } }, advancedByDriver: { select: { name: true } } } } } }),
     db.operatingExpense.count({ where }),
     db.operatingExpense.findMany({ where: { ...where, payment: { ...paymentWhere, isCancelled: false } }, select: { expenseTypeId: true, expenseType: { select: { name: true } }, payment: { select: { amount: true, at: true } } } }),
   ]);
@@ -243,17 +254,17 @@ export async function listExpenses(db: Db, actor: Actor, params: ListParams, opt
   }
   return {
     total,
-    rows: list.map((e) => ({ id: e.id, paymentId: e.paymentId, code: e.payment.code, at: e.payment.at, expenseTypeId: e.expenseTypeId, expenseTypeName: e.expenseType.name, amount: e.payment.amount.toString(), cashAccountName: e.payment.cashAccount.name, note: e.payment.note, reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled, createdByName: names.get(e.payment.createdBy) ?? null, advancedByName: e.payment.advancedById ? names.get(e.payment.advancedById) ?? null : null })),
+    rows: list.map((e) => ({ id: e.id, paymentId: e.paymentId, code: e.payment.code, at: e.payment.at, expenseTypeId: e.expenseTypeId, expenseTypeName: e.expenseType.name, amount: e.payment.amount.toString(), cashAccountName: e.payment.cashAccount.name, note: e.payment.note, reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled, createdByName: names.get(e.payment.createdBy) ?? null, advancedByName: e.payment.advancedById ? names.get(e.payment.advancedById) ?? null : e.payment.advancedByDriver?.name ?? null })),
     summary: { total: sum.toString(), count: liveRows.length, byType: [...byType.entries()].map(([expenseTypeId, v]) => ({ expenseTypeId, name: v.name, amount: v.amount.toString() })).sort((a, b) => Number(b.amount) - Number(a.amount)), byMonth: [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([month, amount]) => ({ month, amount: amount.toString() })) },
   };
 }
 
 export async function getExpense(db: Db, actor: Actor, id: number) {
   assertCan(actor.perms, "expense.manage");
-  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: { include: { advancedBy: { select: { id: true, fullName: true } } } }, expenseType: { select: { name: true } } } });
+  const e = await db.operatingExpense.findUnique({ where: { id }, include: { payment: { include: { advancedBy: { select: { id: true, fullName: true } }, advancedByDriver: { select: { id: true, name: true } } } }, expenseType: { select: { name: true } } } });
   if (!e) throw new DomainError("Không tìm thấy khoản chi phí.", 404);
   const at = new Date(e.payment.at.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
-  return { advancedBy: e.payment.advancedBy ? { value: e.payment.advancedBy.id, label: e.payment.advancedBy.fullName } : null, id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
+  return { advancedBy: e.payment.advancedBy ? { value: e.payment.advancedBy.id, label: e.payment.advancedBy.fullName } : e.payment.advancedByDriver ? { value: -e.payment.advancedByDriver.id, label: `${e.payment.advancedByDriver.name} (lái xe)` } : null, id: e.id, paymentId: e.paymentId, code: e.payment.code, expenseTypeId: e.expenseTypeId, cashAccountId: e.payment.cashAccountId, amount: e.payment.amount.toString(), dateYmd: at, note: e.payment.note ?? "", reviewStatus: e.payment.reviewStatus, isCancelled: e.payment.isCancelled };
 }
 
 export async function listExpenseTypes(db: Db): Promise<{ id: number; name: string }[]> {

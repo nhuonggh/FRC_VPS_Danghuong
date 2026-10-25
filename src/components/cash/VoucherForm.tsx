@@ -1,5 +1,6 @@
 "use client";
 
+import { advancerFields } from "@/lib/advancer";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserRound, Wallet } from "lucide-react";
@@ -55,7 +56,7 @@ export function VoucherForm({ doc, id, code, today, accounts, initial, people = 
     if (!accountId) throw new Error("Chọn quỹ/tài khoản.");
     const body = receipt
       ? { type, partnerId: partner ? Number(partner.value) : null, orderId: type === "THU_NO" && order !== "" ? order : null, cashAccountId: accountId, amount: Number(amount), date, note }
-      : { kind: type, partnerId: needsPartner && partner ? Number(partner.value) : null, cashAccountId: accountId, amount: Number(amount), date, note, advancedById: advancedBy ? Number(advancedBy.value) : null };
+      : { kind: type, partnerId: needsPartner && partner ? Number(partner.value) : null, cashAccountId: accountId, amount: Number(amount), date, note, ...advancerFields(advancedBy) };
     const res = editing
       ? await apiFetch<{ id: number }>(`/api/vouchers/${URL_KIND[doc]}/${id}`, { method: "PATCH", json: body })
       : await apiFetch<{ id: number }>(`/api/vouchers/${URL_KIND[doc]}`, { method: "POST", json: body, idempotencyKey: idem.key });

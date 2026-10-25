@@ -21,16 +21,22 @@ const OVER_REASONS = ["Khách trả nợ cũ", "Khách trả dư, trừ vào đ�
 const DISCOUNT_REASONS = ["Làm tròn số tiền", "Khách quen, bớt lẻ", "Khách trả tiền mặt, bớt tiền chẵn", "Hàng lỗi/giao thiếu nhẹ, giảm giá", "Chủ/sale đồng ý bớt"];
 const RESULT_TONE = { GIAO_DU: "success", GHI_NO: "warning", HEN_TRA: "warning", KHONG_GIAO: "danger", GIAO_MOT_PHAN: "info" } as const;
 
-export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; perms: TripPerms; accounts: { id: number; name: string; type: "CASH" | "BANK" }[] }) {
+export function TripDetail({ trip, perms, accounts, expenseTypes = [] }: { trip: TripDetailDTO; perms: TripPerms; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; expenseTypes?: { id: number; name: string }[] }) {
   const router = useRouter();
   const idem = useIdempotencyKey();
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<"cancel" | "settle" | "confirm" | null>(null);
+  const [dialog, setDialog] = useState<"cancel" | "settle" | "confirm" | "expense" | null>(null);
   const [stop, setStop] = useState<StopDTO | null>(null);
   const base = `/api/trips/${trip.id}`;
   const open = trip.status === "PLANNED" || trip.status === "ON_ROAD" || trip.status === "RETURNED";
   const hasResults = trip.stops.some((s) => s.result !== null);
   const totals = trip.totals;
+  const hasExpense = trip.expenses.length > 0;
+  const canAddExpense = perms.canManage && trip.status !== "CANCELLED" && trip.status !== "CONFIRMED";
+  async function removeExpense(id: number) {
+    const ok = await confirm({ title: "Xóa khoản chi phí lái xe ứng?", description: "Khoản này chưa vào sổ quỹ nên xóa được.", confirmLabel: "Xóa", danger: true });
+    if (ok) await run(() => apiFetch(`${base}/expense-remove`, { method: "POST", json: { expenseId: id } }));
+  }
 
   async function run(fn: () => Promise<unknown>) { if (busy) return; setBusy(true); try { await fn(); idem.reset(); router.refresh(); } finally { setBusy(false); } }
   const depart = () => run(() => apiFetch(`${base}/depart`, { method: "POST" }));
@@ -61,9 +67,10 @@ export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; per
       {trip.status === "SETTLED" && <div role="status" className="rounded-sm border border-warning bg-warning-soft p-3 text-sm">Đã đối soát{trip.settled?.byName ? ` bởi ${trip.settled.byName}` : ""}. Tiền lái xe thu <strong>chưa vào quỹ</strong> cho tới khi thủ quỹ xác nhận đã nhận.{trip.settled?.diffReason ? ` Chênh lệch: ${trip.settled.diffReason}.` : ""}</div>}
       {trip.confirmed && <div role="status" className="rounded-sm border border-success bg-success-soft p-3 text-sm">Thủ quỹ {trip.confirmed.byName} đã nhận tiền {formatDateTime(trip.confirmed.at)}{trip.confirmed.cashAccountName ? ` · tiền mặt vào ${trip.confirmed.cashAccountName}` : ""}{trip.confirmed.transferAccountName ? ` · chuyển khoản vào ${trip.confirmed.transferAccountName}` : ""}. Phiếu thu: {trip.receipts.map((r, i) => <span key={r.id}>{i ? ", " : ""}<Link href={`/accounting/receipts/${r.id}`} className="font-mono text-accent hover:underline">{r.code}</Link></span>)}.</div>}
 
-      <div className="grid gap-3 sm:grid-cols-5">
-        <Stat label="Phải thu" value={totals.expected} /><Stat label="Tiền mặt" value={totals.cash} /><Stat label="Chuyển khoản" value={totals.transfer} /><Stat label="Ghi nợ / hẹn trả" value={totals.debt} />
+      <div className={`grid gap-3 ${hasExpense ? "sm:grid-cols-4 lg:grid-cols-7" : "sm:grid-cols-5"}`}>
+        <Stat label="Phải thu" value={totals.expected} /><Stat label="Tiền mặt" value={totals.cash} /><Stat label="Chuyển khoản" value={totals.transfer} /><Stat label="Ghi nợ" value={totals.debt} />
         <Stat label="Chênh lệch" value={totals.diff} tone={Number(totals.diff) === 0 ? "success" : "danger"} />
+        {hasExpense && <><Stat label="Lái xe ứng chi" value={totals.expense} /><Stat label="Tiền mặt nộp quỹ" value={String(Number(totals.cash) - Number(totals.expense))} /></>}
       </div>
 
       <section className="overflow-x-auto rounded-md border border-border bg-surface">
@@ -90,12 +97,66 @@ export function TripDetail({ trip, perms, accounts }: { trip: TripDetailDTO; per
         </table>
       </section>
 
+      {(hasExpense || canAddExpense) && (
+        <section className="rounded-md border border-border bg-surface">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <div><h2 className="text-sm font-semibold">Chi phí lái xe ứng từ tiền thu</h2><p className="text-xs text-fg-muted">Đổ dầu, mua giấy… lái xe chi từ tiền khách đưa. Khi thủ quỹ xác nhận chuyến, hệ thống tự lập phiếu chi phí (người ứng là lái xe) và trừ vào quỹ.</p></div>
+            {canAddExpense && <button type="button" disabled={busy} onClick={() => setDialog("expense")} className="h-9 rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover disabled:opacity-50">+ Thêm chi phí</button>}
+          </div>
+          {hasExpense ? (
+            <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
+              <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Loại chi phí</th><th className="px-3 py-2">Quỹ</th><th className="px-3 py-2 text-right">Số tiền</th><th className="px-3 py-2">Ghi chú</th><th className="px-3 py-2 text-right">Phiếu chi</th></tr></thead>
+              <tbody>{trip.expenses.map((e) => (
+                <tr key={e.id} className="border-t border-border"><td className="px-3 py-2">{e.expenseTypeName}</td><td className="px-3 py-2">{e.cashAccountName}</td><td className="px-3 py-2 text-right tabular">{formatCurrency(e.amount)}</td><td className="px-3 py-2 text-fg-secondary">{e.note}</td>
+                  <td className="px-3 py-2 text-right">{e.paymentId ? <Link href={`/accounting/payments/${e.paymentId}`} className="font-mono text-xs text-accent hover:underline">{e.paymentCode}</Link> : canAddExpense ? <button type="button" disabled={busy} onClick={() => removeExpense(e.id)} aria-label={`Xóa chi phí ${e.expenseTypeName}`} className="h-8 rounded-sm border border-danger px-2 text-xs text-danger hover:bg-danger-soft disabled:opacity-50">Xóa</button> : <span className="text-xs text-fg-muted">chờ lập phiếu</span>}</td></tr>
+              ))}</tbody>
+            </table></div>
+          ) : <p className="px-3 py-3 text-sm text-fg-muted">Chưa có chi phí lái xe ứng.</p>}
+        </section>
+      )}
+
       <ReasonDialog open={dialog === "cancel"} onClose={() => setDialog(null)} title={`Hủy chuyến ${trip.code}?`} description="Các đơn trong chuyến trở về trạng thái chưa xếp." confirmLabel="Hủy chuyến"
         onConfirm={async (reason) => { await apiFetch(`${base}/cancel`, { method: "POST", json: { reason } }); router.refresh(); }} />
       {stop && <ResultDialog key={stop.id} stop={stop} tripId={trip.id} accounts={accounts} onClose={() => setStop(null)} onDone={() => { idem.reset(); router.refresh(); }} idemKey={idem.key} />}
+      {dialog === "expense" && <ExpenseDialog tripId={trip.id} accounts={accounts} types={expenseTypes} onClose={() => setDialog(null)} onDone={() => { idem.reset(); router.refresh(); }} />}
       <SettleDialog open={dialog === "settle"} onClose={() => setDialog(null)} trip={trip} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />
       <ConfirmDialog open={dialog === "confirm"} onClose={() => setDialog(null)} trip={trip} accounts={accounts} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />
     </div>
+  );
+}
+
+/** Thêm chi phí lái xe ứng từ tiền thu (đổ dầu, mua giấy…): chỉ ghi nhận; phiếu chi phí lập khi thủ quỹ xác nhận chuyến. */
+function ExpenseDialog({ tripId, accounts, types, onClose, onDone }: { tripId: number; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; types: { id: number; name: string }[]; onClose: () => void; onDone: () => void }) {
+  const cashAccounts = accounts.filter((a) => a.type === "CASH");
+  const [typeId, setTypeId] = useState<number | "">("");
+  const [accountId, setAccountId] = useState<number | "">(cashAccounts.length === 1 ? cashAccounts[0]!.id : "");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  async function submit() {
+    if (busy) return;
+    if (typeId === "") { setError("Chọn loại chi phí."); return; }
+    if (!(Number(amount) > 0)) { setError("Nhập số tiền."); return; }
+    if (accountId === "") { setError("Chọn quỹ tiền mặt bị trừ."); return; }
+    setBusy(true); setError(null);
+    try { await apiFetch(`/api/trips/${tripId}/expense-add`, { method: "POST", json: { expenseTypeId: typeId, cashAccountId: accountId, amount: Number(amount), note } }); onDone(); onClose(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Không lưu được chi phí."); } finally { setBusy(false); }
+  }
+  return (
+    <Dialog.Root open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+      <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
+        <Dialog.Content className={shell}>
+          <Dialog.Title className="text-base font-semibold">Chi phí lái xe ứng từ tiền thu</Dialog.Title>
+          <Dialog.Description className="text-sm text-fg-secondary">Lái xe chi từ tiền khách đưa (đổ dầu, mua giấy…). Số tiền này trừ vào quỹ tiền mặt khi thủ quỹ xác nhận chuyến.</Dialog.Description>
+          <InlineField id="te-type" label="Loại chi phí" required><select id="te-type" value={typeId} onChange={(e) => setTypeId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn loại…</option>{types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></InlineField>
+          <InlineField id="te-amount" label="Số tiền" required><NumberInput id="te-amount" value={amount} onValueChange={setAmount} placeholder="0" className={`${igInput} tabular text-right`} /></InlineField>
+          <InlineField id="te-acc" label="Trừ vào quỹ" required><select id="te-acc" value={accountId} onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn quỹ…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>
+          <InlineField id="te-note" label="Ghi chú" multiline><textarea id="te-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Lưu chi phí</button></div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -113,26 +174,38 @@ export function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey 
   const cashAccounts = accounts.filter((a) => a.type === "CASH"), bankAccounts = accounts.filter((a) => a.type === "BANK");
   const [cashId, setCashId] = useState<number | "">(stop.cashAccountId ?? (cashAccounts.length === 1 ? cashAccounts[0]!.id : ""));
   const [bankId, setBankId] = useState<number | "">(stop.transferAccountId ?? (bankAccounts.length === 1 ? bankAccounts[0]!.id : ""));
-  const [result, setResult] = useState<(typeof RESULT_KINDS)[number]>(stop.result ?? "GIAO_DU");
-  const [cash, setCash] = useState(stop.result ? stop.cash : stop.suggestedDue);
-  const [transfer, setTransfer] = useState(stop.result ? stop.transfer : "0");
-  const [debt, setDebt] = useState(stop.result ? stop.debt : "0");
-  const [discount, setDiscount] = useState(stop.result ? stop.discount : "0");
-  const [promise, setPromise] = useState(stop.promiseDate ?? "");
+  // "Giao, hẹn trả" (cũ) đã bỏ: mở lại kết quả cũ thì coi như ghi nợ
+  const [result, setResult] = useState<(typeof RESULT_KINDS)[number]>(stop.result === "HEN_TRA" ? "GHI_NO" : stop.result ?? "GIAO_DU");
+  const blank0 = (v: string) => (Number(v) === 0 ? "" : v); // ô tiền không để sẵn "0" (gõ số mới khỏi bị thừa số 0)
+  const [cash, setCash] = useState(stop.result ? blank0(stop.cash) : stop.suggestedDue);
+  const [transfer, setTransfer] = useState(stop.result ? blank0(stop.transfer) : "");
+  const [debt, setDebt] = useState(stop.result ? blank0(stop.debt) : "");
+  const [discount, setDiscount] = useState(stop.result ? blank0(stop.discount) : "");
+  const [cashTouched, setCashTouched] = useState(Boolean(stop.result)); // đã sửa tay ⇒ không tự gợi ý đè lên nữa
+  const [debtTouched, setDebtTouched] = useState(Boolean(stop.result));
   const [note, setNote] = useState(stop.resultNote ?? "");
   const [qty, setQty] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const due = Number(stop.suggestedDue);
+  const n = (v: string) => Number(v || 0);
   const bot = Number(discount || 0);
   const over = Math.max(0, Number(cash || 0) + Number(transfer || 0) + bot - due);
   const needNote = result === "KHONG_GIAO" || bot > 0 || over > 0;
   const addReason = (text: string) => setNote((n) => (n.includes(text) ? n : n.trim() ? `${n.trim()}; ${text}` : text));
 
+  /** Gợi ý số tiền theo phải thu − bớt − chuyển khoản (chỉ là gợi ý: ô đã sửa tay thì giữ nguyên). */
+  function suggest(kind: (typeof RESULT_KINDS)[number], p: { discount?: string; transfer?: string; cash?: string }, force = false) {
+    const d = n(p.discount ?? discount), t = n(p.transfer ?? transfer);
+    let c = n(p.cash ?? cash);
+    if (kind === "GIAO_DU" || kind === "GIAO_MOT_PHAN") { if (force || (!cashTouched && p.cash === undefined)) { c = Math.max(0, due - d - t); setCash(c ? String(c) : ""); } }
+    if (kind === "GHI_NO" && (force || !debtTouched)) { const left = Math.max(0, due - d - t - c); setDebt(left ? String(left) : ""); }
+  }
   function pick(next: (typeof RESULT_KINDS)[number]) {
     setResult(next); setError(null);
-    if (next === "KHONG_GIAO") { setCash("0"); setTransfer("0"); setDebt("0"); setDiscount("0"); }
-    else if (next === "GHI_NO" || next === "HEN_TRA") { setCash("0"); setDebt(String(due)); }
-    else if (next === "GIAO_DU") { setCash(String(due)); setDebt("0"); }
+    if (next === "KHONG_GIAO") { setCash(""); setTransfer(""); setDebt(""); setDiscount(""); return; }
+    setCashTouched(false); setDebtTouched(false);
+    if (next === "GHI_NO") { setCash(""); setDebt(""); suggest(next, { cash: "" }, true); }
+    else { setDebt(""); suggest(next, {}, true); }
   }
   async function submit() {
     if (busy) return;
@@ -146,12 +219,12 @@ export function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey 
     if (result !== "KHONG_GIAO" && Number(transfer || 0) > 0 && bankId === "") { setError("Chọn tài khoản ngân hàng nhận chuyển khoản."); return; }
     setBusy(true); setError(null);
     try {
-      await apiFetch(`/api/trips/${tripId}/result`, { method: "POST", json: { orderId: stop.orderId, result, lines: result === "GIAO_MOT_PHAN" ? lines : [], cashAmount: Number(cash || 0), transferAmount: Number(transfer || 0), cashAccountId: Number(cash || 0) > 0 && cashId !== "" ? cashId : null, transferAccountId: Number(transfer || 0) > 0 && bankId !== "" ? bankId : null, debtAmount: Number(debt || 0), discountAmount: Number(discount || 0), promiseDate: result === "HEN_TRA" ? promise || null : null, note }, idempotencyKey: `${idemKey}-${stop.id}` });
+      await apiFetch(`/api/trips/${tripId}/result`, { method: "POST", json: { orderId: stop.orderId, result, lines: result === "GIAO_MOT_PHAN" ? lines : [], cashAmount: Number(cash || 0), transferAmount: Number(transfer || 0), cashAccountId: Number(cash || 0) > 0 && cashId !== "" ? cashId : null, transferAccountId: Number(transfer || 0) > 0 && bankId !== "" ? bankId : null, debtAmount: Number(debt || 0), discountAmount: Number(discount || 0), note }, idempotencyKey: `${idemKey}-${stop.id}` });
       onDone(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Không lưu được kết quả."); } finally { setBusy(false); }
   }
   const money = (id: string, label: string, value: string, set: (v: string) => void) => (
-    <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} className={`${igInput} tabular text-right`} /></InlineField>
+    <InlineField id={id} label={label}><NumberInput id={id} value={value} onValueChange={set} placeholder="0" onFocus={(e) => e.currentTarget.select()} className={`${igInput} tabular text-right`} /></InlineField>
   );
   const acct = (id: string, label: string, list: { id: number; name: string }[], value: number | "", set: (v: number | "") => void, placeholder: string) => {
     const options = list.map((a) => ({ value: a.id, label: a.name }));
@@ -174,11 +247,10 @@ export function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey 
             </div>
           )}
           {result !== "KHONG_GIAO" && (
-            <div className="grid gap-3">{money("rs-cash", "Tiền mặt", cash, setCash)}{Number(cash || 0) > 0 && acct("rs-cash-acc", "Nhận vào quỹ", cashAccounts, cashId, setCashId, "Chọn quỹ…")}{money("rs-transfer", "Chuyển khoản", transfer, setTransfer)}{Number(transfer || 0) > 0 && acct("rs-bank-acc", "Nhận vào tài khoản", bankAccounts, bankId, setBankId, "Chọn tài khoản…")}{result !== "GIAO_DU" && money("rs-debt", result === "HEN_TRA" ? "Hẹn trả" : "Ghi nợ", debt, setDebt)}{money("rs-discount", "Bớt cho khách", discount, setDiscount)}</div>
+            <div className="grid gap-3">{money("rs-discount", "Bớt cho khách", discount, (v) => { setDiscount(v); suggest(result, { discount: v }); })}{money("rs-cash", "Tiền mặt", cash, (v) => { setCash(v); setCashTouched(true); suggest(result, { cash: v }); })}{Number(cash || 0) > 0 && acct("rs-cash-acc", "Nhận vào quỹ", cashAccounts, cashId, setCashId, "Chọn quỹ…")}{money("rs-transfer", "Chuyển khoản", transfer, (v) => { setTransfer(v); suggest(result, { transfer: v }); })}{Number(transfer || 0) > 0 && acct("rs-bank-acc", "Nhận vào tài khoản", bankAccounts, bankId, setBankId, "Chọn tài khoản…")}{result === "GHI_NO" && money("rs-debt", "Ghi nợ", debt, (v) => { setDebt(v); setDebtTouched(true); })}</div>
           )}
           {result !== "KHONG_GIAO" && over > 0 && <p role="status" className="rounded-sm border border-warning bg-warning-soft px-3 py-2 text-xs">Thu vượt phải thu <strong className="tabular">{formatCurrency(over)}</strong> — phần này trừ vào công nợ cũ / thành số dư của khách (không tính vào đơn này). Nhập lý do bên dưới.</p>}
           {result !== "KHONG_GIAO" && bot > 0 && <p role="status" className="rounded-sm border border-border bg-hover px-3 py-2 text-xs">Tiền bớt <strong className="tabular">{formatCurrency(bot)}</strong> ghi giảm công nợ của khách, không vào quỹ.</p>}
-          {result === "HEN_TRA" && <InlineField id="rs-promise" label="Ngày khách hẹn trả" required><input id="rs-promise" type="date" value={promise} onChange={(e) => setPromise(e.target.value)} className={igInput} /></InlineField>}
           <InlineField id="rs-note" label={result === "KHONG_GIAO" ? "Lý do không giao được" : bot > 0 || over > 0 ? "Lý do bớt / thu vượt" : "Ghi chú"} required={needNote} multiline><textarea id="rs-note" rows={2} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} /></InlineField>
           {result !== "KHONG_GIAO" && (bot > 0 || over > 0) && (
             <div className="flex flex-wrap gap-1.5" aria-label="Lý do gợi ý">
@@ -244,7 +316,7 @@ function ConfirmDialog({ open, onClose, trip, accounts, idemKey, onDone }: { ope
       <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-scrim bg-[var(--overlay-scrim)]" />
         <Dialog.Content className={shell}>
           <Dialog.Title className="text-base font-semibold">Xác nhận nhận tiền — {trip.code}</Dialog.Title>
-          <Dialog.Description className="text-sm text-fg-secondary">Thủ quỹ đã nhận: tiền mặt <strong className="tabular">{formatCurrency(trip.totals.cash)}</strong>, chuyển khoản <strong className="tabular">{formatCurrency(trip.totals.transfer)}</strong>. Hệ thống sinh phiếu thu vào quỹ (chờ hậu kiểm); công nợ khách không đổi vì đã ghi lúc nhập kết quả.</Dialog.Description>
+          <Dialog.Description className="text-sm text-fg-secondary">Thủ quỹ đã nhận: tiền mặt <strong className="tabular">{formatCurrency(trip.totals.cash)}</strong>, chuyển khoản <strong className="tabular">{formatCurrency(trip.totals.transfer)}</strong>.{Number(trip.totals.expense) > 0 && <> Lái xe đã ứng chi <strong className="tabular">{formatCurrency(trip.totals.expense)}</strong> (tiền mặt thực nộp <strong className="tabular">{formatCurrency(String(Number(trip.totals.cash) - Number(trip.totals.expense)))}</strong>) — hệ thống tự lập phiếu chi phí trừ vào quỹ.</>} Hệ thống sinh phiếu thu vào quỹ (chờ hậu kiểm); công nợ khách không đổi vì đã ghi lúc nhập kết quả.</Dialog.Description>
           {needCash && <InlineField id="cf-cash" label="Tiền mặt vào quỹ" required><select id="cf-cash" value={cashId} onChange={(e) => setCashId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn quỹ…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
           {needBank && <InlineField id="cf-bank" label="Chuyển khoản vào tài khoản" required><select id="cf-bank" value={bankId} onChange={(e) => setBankId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn tài khoản…</option>{bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
