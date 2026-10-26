@@ -113,6 +113,11 @@ describe("kết quả giao (40)", () => {
     expect((await errOf(result(t3.id, c.id, { result: "GHI_NO", cashAmount: 0, debtAmount: 200_000 })))?.code).toBe("CREDIT_LIMIT");
     expect(await prisma.deliveryNote.count({ where: { orderId: c.id, isCancelled: false } })).toBe(0); // rollback trọn
   });
+  it("khách lẻ thân quen (không hạn mức) vẫn ghi nợ được khi giao", async () => {
+    const kl = await makePartner({ isCustomer: true, allowCredit: true, isRegularRetail: true, phoneKey: "0349631425" }); const a = await order({ partnerId: kl.id }); const t = await trip([a.id], { date: "2026-09-19" });
+    await result(t.id, a.id, { result: "GHI_NO", cashAmount: 0, debtAmount: 200_000 });
+    expect(await prisma.partnerLedger.count({ where: { partnerId: kl.id } })).toBeGreaterThan(0);
+  });
   it("ghi nợ (không còn hẹn trả) → DEBT; không giao được → FAILED, không phiếu giao; tiền vượt phải thu bị chặn; schema bắt buộc lý do/ngày hẹn", async () => {
     const [a, b] = [await order(), await order()]; const t = await trip([a.id, b.id]);
     await result(t.id, a.id, { result: "GHI_NO", cashAmount: 0, debtAmount: 200_000 });

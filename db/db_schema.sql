@@ -2546,3 +2546,111 @@ UPDATE "products" SET
   "searchText" = regexp_replace("searchText", ' mua vo$', ''),
   "updatedAt" = now()
 WHERE "code" IN ('BANMCVCK', 'BATMCVCK', 'DBKCO2T', 'MBKOXT') AND "name" LIKE '% – Mua vỏ';
+
+-- >>> prisma/migrations/20261026100000_sale_order_print_debt/migration.sql
+-- Cờ in nợ cũ trên hóa đơn bán hàng (mặc định in như trước).
+ALTER TABLE "sale_orders" ADD COLUMN "printDebt" BOOLEAN NOT NULL DEFAULT true;
+
+-- >>> prisma/migrations/20261026200000_sale_order_ship_address/migration.sql
+-- Địa chỉ giao hàng nhập riêng trên từng đơn bán (tự điền từ khách, sửa được).
+ALTER TABLE "sale_orders" ADD COLUMN "shipAddress" TEXT;
+
+-- >>> prisma/migrations/20261026300000_bom_delete_permission/migration.sql
+-- Quyền xóa hẳn định mức NVL: chỉ nhóm "Giám đốc" (nhóm giữ mọi quyền) được cấp mặc định.
+INSERT INTO "permissions" (code, label, "groupName", "isSensitive")
+VALUES ('bom.delete', 'Xóa hẳn định mức NVL', 'Sản xuất', true)
+ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, "groupName"=EXCLUDED."groupName", "isSensitive"=true;
+
+INSERT INTO "role_permissions" ("roleId", "permissionId")
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE p.code='bom.delete' AND r.name='Giám đốc'
+ON CONFLICT DO NOTHING;
+
+-- Xóa hẳn định mức (Giám đốc): trigger bất biến D-19 chỉ cho DELETE khi giao dịch tự bật cờ cục bộ
+-- `app.bom_delete = on` (service `deleteBoms` bật sau khi đã kiểm quyền + kiểm đơn bán). UPDATE vẫn bị chặn như cũ.
+CREATE OR REPLACE FUNCTION bom_lines_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM "bom_versions" v JOIN "boms" b ON b."id" = v."bomId"
+      WHERE v."id" = NEW."bomVersionId" AND b."productId" = NEW."materialProductId"
+    ) THEN
+      RAISE EXCEPTION 'BOM: nguyên vật liệu không được trùng với chính thành phẩm' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'DELETE' AND current_setting('app.bom_delete', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'BOM: dòng định mức bất biến (tạo phiên bản mới thay vì sửa/xoá)' USING ERRCODE = '23514';
+END $$;
+
+CREATE OR REPLACE FUNCTION bom_versions_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF current_setting('app.bom_delete', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'BOM: không xoá phiên bản (chuyển sang CANCELLED)' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."bomId" IS DISTINCT FROM OLD."bomId" OR NEW."versionNo" IS DISTINCT FROM OLD."versionNo"
+     OR NEW."validFrom" IS DISTINCT FROM OLD."validFrom" OR NEW."note" IS DISTINCT FROM OLD."note"
+     OR NEW."createdBy" IS DISTINCT FROM OLD."createdBy" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt" THEN
+    RAISE EXCEPTION 'BOM: phiên bản bất biến, chỉ được đổi trạng thái' USING ERRCODE = '23514';
+  END IF;
+  IF NOT (NEW."status" = OLD."status"
+          OR (OLD."status" = 'DRAFT' AND NEW."status" IN ('ACTIVE', 'CANCELLED'))
+          OR (OLD."status" = 'ACTIVE' AND NEW."status" = 'CANCELLED')) THEN
+    RAISE EXCEPTION 'BOM: chuyển trạng thái phiên bản không hợp lệ' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+-- >>> prisma/migrations/20261026400000_sale_order_round_amounts/migration.sql
+-- Tùy chọn theo từng đơn: làm tròn LÊN nghìn đồng cho thành tiền từng dòng (mặc định bật = hành vi cũ).
+-- Tắt: thành tiền dòng = SL × đơn giá (làm tròn 2 số), để đối chiếu với phần mềm cũ không làm tròn.
+ALTER TABLE "sale_orders" ADD COLUMN "roundAmounts" BOOLEAN NOT NULL DEFAULT true;
+
+-- >>> prisma/migrations/20261026500000_sale_order_round_total/migration.sql
+-- Làm tròn ở mức TỔNG tiền hàng (lên nghìn đồng), thành tiền từng dòng không làm tròn.
+-- Mặc định tắt: đơn cũ giữ nguyên (đơn bật "roundAmounts" vẫn làm tròn từng dòng như trước).
+ALTER TABLE "sale_orders" ADD COLUMN "roundTotal" BOOLEAN NOT NULL DEFAULT false;
+
+-- >>> prisma/migrations/20261026600000_trip_expenses_driver_advancer/migration.sql
+-- Người ứng tiền có thể là lái xe/phụ xe (không có tài khoản đăng nhập)
+ALTER TABLE "payments" ADD COLUMN "advancedByDriverId" INTEGER;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_advancedByDriverId_fkey"
+  FOREIGN KEY ("advancedByDriverId") REFERENCES "drivers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_advanced_one_chk"
+  CHECK ("advancedById" IS NULL OR "advancedByDriverId" IS NULL);
+
+-- Chi phí lái xe ứng từ tiền thu của chuyến giao
+CREATE TABLE "trip_expenses" (
+  "id" SERIAL NOT NULL,
+  "tripId" INTEGER NOT NULL,
+  "expenseTypeId" INTEGER NOT NULL,
+  "cashAccountId" INTEGER NOT NULL,
+  "amount" DECIMAL(18,2) NOT NULL,
+  "note" TEXT,
+  "paymentId" INTEGER,
+  "createdBy" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "trip_expenses_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "trip_expenses_amount_chk" CHECK ("amount" > 0)
+);
+CREATE UNIQUE INDEX "trip_expenses_paymentId_key" ON "trip_expenses"("paymentId");
+CREATE INDEX "trip_expenses_tripId_idx" ON "trip_expenses"("tripId");
+ALTER TABLE "trip_expenses" ADD CONSTRAINT "trip_expenses_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "trips"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "trip_expenses" ADD CONSTRAINT "trip_expenses_expenseTypeId_fkey" FOREIGN KEY ("expenseTypeId") REFERENCES "expense_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "trip_expenses" ADD CONSTRAINT "trip_expenses_cashAccountId_fkey" FOREIGN KEY ("cashAccountId") REFERENCES "cash_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "trip_expenses" ADD CONSTRAINT "trip_expenses_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- >>> prisma/migrations/20261026700000_sale_line_main_stock_ratio/migration.sql
+-- Dòng bán có kiểu gia công theo định mức: ngoài các NVL trong định mức, còn trừ CHÍNH mã đang bán × tỷ lệ trừ kho của kiểu gia công.
+-- Lưu tỷ lệ đã dùng làm snapshot (NULL = đơn cũ / không trừ thêm), nên đổi tỷ lệ của kiểu sau này không đổi đơn đã lập.
+ALTER TABLE "sale_order_lines" ADD COLUMN "mainStockRatio" DECIMAL(18,4);
+
+-- >>> prisma/migrations/20261026800000_retail_allow_credit/migration.sql
+-- Khách lẻ thân quen được ghi nợ (khách quen giao xong hẹn chiều trả). Bỏ CHECK cấm nợ; hạn mức 0 = không giới hạn.
+ALTER TABLE "partners" DROP CONSTRAINT "partners_regular_retail_nocredit";
+UPDATE "partners" SET "allowCredit" = true WHERE "isRegularRetail" = true;

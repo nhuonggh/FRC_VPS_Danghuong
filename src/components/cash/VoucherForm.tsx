@@ -7,6 +7,7 @@ import { UserRound, Wallet } from "lucide-react";
 import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { filterComboOptions } from "@/components/ui/Combobox";
 import { apiFetch } from "@/lib/api-fetch";
+import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { PAYMENT_KIND_LABEL, PAYMENT_KINDS, RECEIPT_TYPE_LABEL, RECEIPT_TYPES, type VoucherDoc } from "@/server/cash/schemas";
 
@@ -48,6 +49,16 @@ export function VoucherForm({ doc, id, code, today, accounts, initial, people = 
     return () => { cancelled = true; };
   }, [receipt, type, partner, editing]);
 
+  // Công nợ hiện tại của đối tác đã chọn: phiếu chi trả NCC ⇒ mình còn nợ; phiếu thu nợ ⇒ khách còn nợ. Thiếu quyền xem nợ ⇒ không hiện.
+  const [debt, setDebt] = useState<string | null>(null);
+  const debtKind = receipt ? (type === "THU_NO" ? "receivable" : null) : type === "TRA_NCC" ? "payable" : null;
+  useEffect(() => {
+    if (!debtKind || !partner) { setDebt(null); return; }
+    let cancelled = false;
+    apiFetch<{ payable: string; receivable: string } | null>(`/api/cash/debt-hint?partnerId=${partner.value}`).then((h) => { if (!cancelled) setDebt(h ? h[debtKind] : null); }).catch(() => { if (!cancelled) setDebt(null); });
+    return () => { cancelled = true; };
+  }, [debtKind, partner]);
+
   const load = (q: string) => apiFetch<ComboOption[]>(`/api/cash/partners?role=${partnerRole}&q=${encodeURIComponent(q)}`);
 
   async function submit() {
@@ -86,6 +97,13 @@ export function VoucherForm({ doc, id, code, today, accounts, initial, people = 
               <div className={igCombo}>
                 <Combobox hideLabel label={partnerRole === "supplier" ? "Nhà cung cấp" : partnerRole === "customer" ? "Khách hàng" : "Đối tác (tuỳ chọn)"} value={partner} loadOptions={load} placeholder="Tìm theo mã hoặc tên…" onChange={(p) => { setPartner(p); setOrder(""); }} />
               </div>
+              {debt !== null && partner && (
+                <p role="status" className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-fg-secondary">{receipt ? "Khách đang nợ" : "Đang nợ NCC"}:</span>
+                  <b className={`tabular ${Number(debt) > 0 ? "text-danger" : ""}`}>{formatCurrency(debt)}</b>
+                  {Number(debt) > 0 && <button type="button" onClick={() => setAmount(String(Math.round(Number(debt))))} className="h-8 rounded-sm border border-border px-2 text-xs font-medium hover:bg-hover">{receipt ? "Thu hết" : "Trả hết"}</button>}
+                </p>
+              )}
             </InlineField>
           )}
           {receipt && type === "THU_NO" && (

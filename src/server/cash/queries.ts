@@ -6,6 +6,7 @@ import { escapeLike, normalizeSearch } from "@/lib/search";
 import { resolveTimeRange, timeRangeWhere } from "@/lib/time-presets";
 import { DomainError } from "@/server/http/errors";
 import { getOpenPeriod } from "@/server/period/guard";
+import { partnerBalance } from "@/server/debt/balance";
 import { cashBalance } from "./balance";
 import { PAYMENT_KIND_LABEL, RECEIPT_TYPE_LABEL, type VoucherDoc } from "./schemas";
 
@@ -199,6 +200,17 @@ export async function searchCashPartners(db: Db, actor: Actor, q: string, role: 
     orderBy: { name: "asc" }, take: 20, select: { id: true, code: true, name: true, isCustomer: true, isSupplier: true },
   });
   return rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}`, hint: [r.isCustomer ? "Khách" : null, r.isSupplier ? "NCC" : null].filter(Boolean).join(" · ") }));
+}
+
+/**
+ * Số mình còn nợ NCC (`payable`, >0) và số khách còn nợ mình (`receivable`, >0) để gợi ý khi lập phiếu chi/thu.
+ * Chỉ trả khi có `debt.view` (không thì `null`); sổ cái: dương = đối tác nợ mình, âm = mình nợ đối tác.
+ */
+export async function partnerDebtHint(db: Db, actor: Actor, partnerId: number): Promise<{ payable: string; receivable: string } | null> {
+  assertCan(actor.perms, "cash.transaction.create");
+  if (!actor.perms.has("debt.view")) return null;
+  const { balance } = await partnerBalance(db, partnerId);
+  return { payable: balance.lt(0) ? balance.neg().toString() : "0", receivable: balance.gt(0) ? balance.toString() : "0" };
 }
 
 /** Đơn của khách để thu nợ theo đơn: đơn chính thức chưa hủy, mới nhất trước. */

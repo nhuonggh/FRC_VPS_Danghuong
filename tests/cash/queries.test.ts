@@ -4,7 +4,9 @@ import type { Actor } from "@/lib/permissions/scope";
 import { parseListParams } from "@/lib/query-params";
 import { decideAdjustment, requestAdjustment } from "@/server/cash/adjust";
 import { exportCashBookXlsx } from "@/server/cash/export";
-import { getVoucher, listCashBook, listPartnerOrders, listReviewQueue, listVouchers, QUEUE_FILTER_KEYS, searchCashPartners, VOUCHER_FILTER_KEYS } from "@/server/cash/queries";
+import { getVoucher, listCashBook, listPartnerOrders, listReviewQueue, listVouchers, QUEUE_FILTER_KEYS, partnerDebtHint, searchCashPartners, VOUCHER_FILTER_KEYS } from "@/server/cash/queries";
+import { postPartnerLedger } from "@/server/debt/ledger";
+import { getOpenPeriod } from "@/server/period/guard";
 import { adjustmentRequestSchema, paymentSchema, receiptSchema } from "@/server/cash/schemas";
 import { createPayment, createReceipt, returnVoucher, reviewVoucher } from "@/server/cash/vouchers";
 import { getDebtDetail } from "@/server/debt/queries";
@@ -166,5 +168,16 @@ describe("ô chọn trong form", () => {
     expect((await searchCashPartners(prisma, acc, "", "supplier")).map((o) => o.value)).toEqual([supplier.id]);
     expect(await listPartnerOrders(prisma, acc, customer.id)).toEqual([]);
     await expect(searchCashPartners(prisma, { userId: 1, perms: new Set() }, "", "any")).rejects.toMatchObject({ message: expect.stringMatching(/quyền/i) });
+  });
+});
+
+describe("gợi ý công nợ khi lập phiếu", () => {
+  it("NCC: mình nợ ⇒ payable > 0; khách nợ ⇒ receivable > 0; thiếu debt.view ⇒ null", async () => {
+    const period = await getOpenPeriod(prisma);
+    await tx((t) => postPartnerLedger(t, { periodId: period.id, partnerId: supplier.id, side: "credit", amount: 750_000, docType: "PURCHASE", docId: 1, at: NOW, createdBy: w.userId }));
+    await tx((t) => postPartnerLedger(t, { periodId: period.id, partnerId: customer.id, side: "debit", amount: 200_000, docType: "DELIVERY", docId: 1, at: NOW, createdBy: w.userId }));
+    expect(await partnerDebtHint(prisma, acc, supplier.id)).toEqual({ payable: "750000", receivable: "0" });
+    expect(await partnerDebtHint(prisma, acc, customer.id)).toEqual({ payable: "0", receivable: "200000" });
+    expect(await partnerDebtHint(prisma, { userId: w.userId, perms: new Set(["cash.transaction.create"]) }, supplier.id)).toBeNull();
   });
 });
