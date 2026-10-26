@@ -13,5 +13,5 @@ export default async function BankbookPage({ searchParams }: { searchParams: Pro
   const account = raw && /^\d{1,9}$/.test(raw) ? Number(raw) : null;
   const params = parseTimedListParams(sp, []);
   const book = await listCashBook(prisma, actor, "BANK", account, params);
-  return <CashBook book={book} params={params} type="BANK" base="/accounting/bankbook" canClose={actor.perms.has("cash.close")} canReopen={actor.perms.has("cash.close.reopen")} nowIso={new Date(Date.now() + 7 * 3600_000).toISOString()} />;
+  return <CashBook book={book} params={params} type="BANK" base="/accounting/bankbook" canClose={actor.perms.has("cash.close")} canReopen={actor.perms.has("cash.close.reopen")} canReview={actor.perms.has("cash.review")} nowIso={new Date(Date.now() + 7 * 3600_000).toISOString()} />;
 }

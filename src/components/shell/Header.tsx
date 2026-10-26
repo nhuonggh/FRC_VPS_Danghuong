@@ -1,6 +1,7 @@
 import type { NavModule } from "@/config/app.config";
 import { APP_NAME } from "@/lib/version";
 import { Breadcrumb } from "./Breadcrumb";
+import { FavoritesMenu } from "./FavoritesMenu";
 import { QuickAccess } from "./QuickAccess";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { UserMenu } from "./UserMenu";
@@ -19,6 +20,7 @@ export function Header({ nav, user }: { nav: NavModule[]; user: { fullName: stri
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
         {nav.some(module => module.categories.some(category => category.functions.some(fn => fn.key === "supplier-orders"))) && <SupplierOrderBell />}
+        <FavoritesMenu nav={nav} />
         <QuickAccess nav={nav} />
         <ThemeSwitch />
         <UserMenu fullName={user.fullName} username={user.username} />

@@ -1,12 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, Star } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { NavModule } from "@/config/app.config";
 import { findActiveFunction } from "@/lib/nav";
-import { allPinned, moduleForPath, restoreHref, setSidebarCollapsed } from "@/lib/workspace";
+import { moduleForPath, restoreHref, setSidebarCollapsed } from "@/lib/workspace";
 import { moduleGuideHref } from "@/lib/guide-links";
 import { useWorkspace } from "@/lib/workspace-store";
 import { APP_NAME } from "@/lib/version";
@@ -22,7 +22,6 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
   const prefs = useWorkspace((s) => s.prefs);
   const update = useWorkspace((s) => s.update);
   const collapsed = !!prefs.sidebarCollapsed; // lưu theo tài khoản (DB), không còn theo trình duyệt
-  const favorites = allPinned(nav, prefs);
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -74,27 +73,6 @@ export function Sidebar({ nav }: { nav: NavModule[] }) {
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-        {favorites.length > 0 && (
-          <div className="mb-2 border-b border-border pb-2" aria-label="Yêu thích">
-            {collapsed ? (
-              <button type="button" title="Yêu thích — mở rộng thanh bên để xem" aria-label="Yêu thích" onClick={toggleCollapsed} className="flex h-10 w-full items-center justify-center rounded-sm text-warning hover:bg-hover"><Star size={18} className="fill-current" aria-hidden /></button>
-            ) : (
-              <>
-                <div className="hidden items-center gap-2 px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-[0.04em] text-fg-secondary lg:flex"><Star size={14} className="fill-current text-warning" aria-hidden />Yêu thích</div>
-                <div className="hidden lg:block">
-                  {favorites.map(({ module: m, fn: f }) => {
-                    const on = active?.fn.key === f.key && active.module.key === m.key;
-                    return (
-                      <Link key={`${m.key}:${f.key}`} href={f.path} title={`${m.label} › ${f.label}`} aria-current={on ? "page" : undefined} className={clsx("flex h-9 items-center gap-2 rounded-sm border-l-[3px] px-3 text-sm", on ? "border-accent bg-accent-soft font-medium text-accent" : "border-transparent text-fg-secondary hover:bg-hover")}>
-                        <Icon name={f.icon} size={16} /><span className="truncate">{f.label}</span><span className="ml-auto truncate text-xs text-fg-muted">{m.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
         {nav.map((m) => {
           const isActiveModule = activeModuleKey === m.key || (m.type === "flat" && pathname === m.path);
           const expanded = !collapsed && m.type === "accordion" && open[m.key];

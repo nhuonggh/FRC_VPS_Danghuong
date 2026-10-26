@@ -138,7 +138,7 @@ describe("CashBook", () => {
     periodName: "Kỳ 1", total: 1,
     accounts: [{ id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" }],
     selected: { id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" },
-    entries: [{ id: 1, at: new Date("2026-09-15T03:00:00Z"), docType: "RECEIPT", docLabel: "Phiếu thu", docCode: "PT000001", docHref: "/accounting/receipts/1", reviewStatus: "PENDING_REVIEW", amountIn: "500000", amountOut: "0", running: "1500000", content: "Thu nợ — test", counterparty: "Khách A", reviewerName: null }],
+    entries: [{ id: 1, at: new Date("2026-09-15T03:00:00Z"), docType: "RECEIPT", docId: 1, docLabel: "Phiếu thu", docCode: "PT000001", docHref: "/accounting/receipts/1", reviewStatus: "PENDING_REVIEW", amountIn: "500000", amountOut: "0", running: "1500000", content: "Thu nợ — test", counterparty: "Khách A", reviewerName: null }],
     closes: [{ id: 3, closeAt: new Date("2026-09-14T10:00:00Z"), expected: "1000000", actual: "990000", diff: "-10000", reason: "thiếu 10k", createdByName: "Thủ quỹ", createdAt: new Date(), voided: false, voidReason: null }],
   });
   it("3 chỉ số vận hành / đã kiểm / chờ kiểm, chi tiết có số dư chạy; chốt quỹ gửi mốc giờ VN + số kiểm đếm", async () => {
@@ -150,6 +150,15 @@ describe("CashBook", () => {
     await userEvent.type(screen.getByLabelText(/Tiền kiểm đếm/), "1300000");
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Chốt quỹ" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/cash/closes", expect.objectContaining({ json: { cashAccountId: 1, closeAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:59\.999\+07:00$/), actual: 1300000, reason: "", handOver: false } })));
+  });
+  it("có quyền kiểm tra ⇒ nút Xác nhận ngay trên dòng chờ kiểm tra gọi API review; không quyền ⇒ không hiện", async () => {
+    render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose canReopen canReview nowIso="2026-09-15T10:30:00.000Z" />);
+    await userEvent.click(screen.getByRole("button", { name: "Xác nhận đã kiểm tra PT000001" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/vouchers/receipts/1/review", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    cleanup();
+    render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose canReopen nowIso="2026-09-15T10:30:00.000Z" />);
+    expect(screen.queryByRole("button", { name: /Xác nhận đã kiểm tra/ })).not.toBeInTheDocument();
   });
   it("không có quyền chốt/hủy chốt ⇒ không hiện nút", () => {
     render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose={false} canReopen={false} nowIso="2026-09-15T10:30:00.000Z" />);

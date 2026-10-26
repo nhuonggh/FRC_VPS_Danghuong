@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, EmptyState, ReasonDialog, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
+import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { CashBookDTO } from "@/server/cash/queries";
@@ -17,12 +18,27 @@ import { PaginationFooter } from "@/components/ui/PaginationFooter";
 const TONE = { PENDING_REVIEW: "warning", REVIEWED: "success", RETURNED: "danger" } as const;
 
 /** Sổ quỹ tiền mặt (60) / sổ tiền gửi ngân hàng (61): số dư vận hành = đã kiểm tra + chờ kiểm tra, chi tiết có số dư chạy, chốt quỹ. */
-export function CashBook({ book, type, base, canClose, canReopen, canHandOver = false, nowIso, params }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; canHandOver?: boolean; nowIso: string; params?: ListParams }) {
+export function CashBook({ book, type, base, canClose, canReopen, canHandOver = false, canReview = false, nowIso, params }: { book: CashBookDTO; type: "CASH" | "BANK"; base: string; canClose: boolean; canReopen: boolean; canHandOver?: boolean; canReview?: boolean; nowIso: string; params?: ListParams }) {
   const router = useRouter();
   const s = book.selected;
   const [closing, setClosing] = useState(false);
   const [voiding, setVoiding] = useState<number | null>(null);
   const idem = useIdempotencyKey();
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const pendingRows = s ? book.entries.filter((e) => canReview && e.reviewStatus === "PENDING_REVIEW" && (e.docType === "RECEIPT" || e.docType === "PAYMENT")) : [];
+  const reviewOne = (e: { docType: string; docId: number }) => apiFetch(`/api/vouchers/${e.docType === "RECEIPT" ? "receipts" : "payments"}/${e.docId}/review`, { method: "POST", idempotencyKey: `${idem.key}-r${e.docType}${e.docId}` });
+  async function review(rows: typeof pendingRows, label: string) {
+    if (reviewing) return;
+    setReviewError(null); setReviewing(label);
+    try { for (const e of rows) await reviewOne(e); router.refresh(); }
+    catch (err) { setReviewError(err instanceof Error ? err.message : "Không xác nhận được."); router.refresh(); }
+    finally { setReviewing(null); }
+  }
+  async function reviewAll() {
+    const ok = await confirm({ title: `Xác nhận ${pendingRows.length} phiếu đang chờ?`, description: "Chỉ các phiếu chờ kiểm tra trong trang này. Phiếu đã kiểm tra bị khoá sửa/hủy trực tiếp; muốn đổi phải yêu cầu điều chỉnh.", confirmLabel: "Xác nhận tất cả" });
+    if (ok) await review(pendingRows, "all");
+  }
   const title = type === "CASH" ? "Sổ quỹ tiền mặt" : "Sổ tiền gửi ngân hàng";
 
   return (
@@ -55,7 +71,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
             <div className="overflow-x-auto rounded-md border border-border bg-surface">
               {book.entries.length === 0 ? <EmptyState kind="empty" title="Chưa có phát sinh" /> : (
                 <table className="w-full min-w-[1040px] text-sm">
-                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Chứng từ</th><th className="px-3 py-2">Nội dung thu/chi</th><th className="px-3 py-2">Người nộp/nhận</th><th className="px-3 py-2">Kiểm tra</th><th className="px-3 py-2">Người kiểm tra</th><th className="px-3 py-2 text-right">Thu</th><th className="px-3 py-2 text-right">Chi</th><th className="px-3 py-2 text-right">Số dư</th></tr></thead>
+                  <thead><tr className="bg-hover text-left text-xs font-semibold text-fg-secondary"><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Chứng từ</th><th className="px-3 py-2">Nội dung thu/chi</th><th className="px-3 py-2">Người nộp/nhận</th><th className="px-3 py-2"><span className="flex items-center gap-2">Kiểm tra{pendingRows.length > 1 && <button type="button" disabled={!!reviewing} onClick={reviewAll} className="h-7 rounded-sm border border-accent px-2 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50">Xác nhận tất cả ({pendingRows.length})</button>}</span></th><th className="px-3 py-2">Người kiểm tra</th><th className="px-3 py-2 text-right">Thu</th><th className="px-3 py-2 text-right">Chi</th><th className="px-3 py-2 text-right">Số dư</th></tr></thead>
                   <tbody>
                     {book.entries.map((e) => (
                       <tr key={e.id} className="border-t border-border">
@@ -63,7 +79,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
                         <td className="px-3 py-2">{e.docLabel} {e.docHref ? <Link href={e.docHref} className="font-mono text-xs text-accent hover:underline">{e.docCode}</Link> : e.docCode}</td>
                         <td className="max-w-[260px] px-3 py-2 text-fg-secondary">{e.content ?? ""}</td>
                         <td className="px-3 py-2">{e.counterparty ?? ""}</td>
-                        <td className="px-3 py-2">{e.reviewStatus && <Badge tone={TONE[e.reviewStatus]}>{REVIEW_LABEL[e.reviewStatus]}</Badge>}</td>
+                        <td className="px-3 py-2"><span className="flex items-center gap-2">{e.reviewStatus && <Badge tone={TONE[e.reviewStatus]}>{REVIEW_LABEL[e.reviewStatus]}</Badge>}{canReview && e.reviewStatus === "PENDING_REVIEW" && (e.docType === "RECEIPT" || e.docType === "PAYMENT") && <button type="button" disabled={!!reviewing} onClick={() => review([e], `${e.docType}${e.docId}`)} aria-label={`Xác nhận đã kiểm tra ${e.docCode ?? "phiếu"}`} className="h-7 rounded-sm bg-accent px-2 text-xs font-medium text-fg-on-accent hover:bg-accent-600 disabled:opacity-50">{reviewing === `${e.docType}${e.docId}` || reviewing === "all" ? "Đang lưu…" : "Xác nhận"}</button>}</span></td>
                         <td className="px-3 py-2 whitespace-nowrap">{e.reviewerName ?? ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(e.amountIn) ? formatCurrency(e.amountIn) : ""}</td>
                         <td className="px-3 py-2 text-right tabular">{Number(e.amountOut) ? formatCurrency(e.amountOut) : ""}</td>

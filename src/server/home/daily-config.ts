@@ -8,6 +8,7 @@ export const DAILY_ITEMS = [
   { key: "undelivered", label: "Hàng không giao được trả kho", group: "Trả hàng & kho", perm: "return.manage", moneyPerm: "sale_price.view" },
   { key: "loss", label: "Điều chỉnh hao hụt", group: "Trả hàng & kho", perm: "stock_adjust.manage", moneyPerm: "cost.view" },
   { key: "debt", label: "Điều chỉnh công nợ", group: "Công nợ & chiết khấu", perm: "debt.adjust" },
+  { key: "debt-transfer", label: "Gộp / chuyển công nợ", group: "Công nợ & chiết khấu", perm: "debt.adjust" },
   { key: "discount-orders", label: "Đơn có chiết khấu", group: "Công nợ & chiết khấu", perm: "order.view", moneyPerm: "sale_price.view" },
   { key: "settlements", label: "Tất toán chiết khấu", group: "Công nợ & chiết khấu", perm: "debt.view" },
   { key: "receipts", label: "Phiếu thu", group: "Thu chi & nhập hàng", perm: "receipt.manage" },

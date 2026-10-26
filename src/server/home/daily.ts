@@ -31,6 +31,7 @@ export interface DailySummary { item: DailyItem; totals: DailyTotals | null }
 export function dailyAmountLabels(key: DailyKey): [string, string | null] {
   switch (key) {
     case "debt": return ["Tăng số dư công nợ", "Giảm số dư công nợ"];
+    case "debt-transfer": return ["Số tiền chuyển", "CK tích lũy chuyển kèm"];
     case "discount-orders": return ["Chiết khấu trực tiếp", "Chiết khấu tích lũy"];
     case "settlements": return ["Chi tiền", "Trừ công nợ"];
     case "loss": return ["Giá vốn hao hụt / xuất hủy", null];
@@ -56,6 +57,11 @@ function source(actor: Actor, key: DailyKey): Prisma.Sql {
       NULL::text AS href, r."isCancelled" AS cancelled, CASE WHEN r."isCancelled" THEN 'Đã hủy' ELSE 'Đã ghi sổ' END AS status,
       r.note, GREATEST(r.amount,0) AS amount, GREATEST(-r.amount,0) AS extra, ''::text AS type, ''::text AS method
       FROM debt_adjustments r JOIN partners p ON p.id = r."partnerId" WHERE true ${scope}`;
+    case "debt-transfer": return Prisma.sql`SELECT r.id, r.code, r.at, p.name AS partner,
+      CASE WHEN r.kind::text = 'MERGE' THEN 'Gộp mã' ELSE 'Chuyển' END || ' → ' || t.name AS related,
+      '/accounting/debt-transfers' AS href, r."isCancelled" AS cancelled, CASE WHEN r."isCancelled" THEN 'Đã hủy' ELSE 'Đã ghi sổ' END AS status,
+      COALESCE(r.note,'') AS note, ABS(r.amount) AS amount, r."discountMoved" AS extra, ''::text AS type, ''::text AS method
+      FROM debt_transfers r JOIN partners p ON p.id = r."fromPartnerId" JOIN partners t ON t.id = r."toPartnerId" WHERE true ${scope}`;
     case "discount-orders": return Prisma.sql`SELECT o.id, o.code, o."orderDate" AS at, p.name AS partner, ''::text AS related,
       '/sales/orders/' || o.id AS href, o."isCancelled" AS cancelled, CASE WHEN o."isCancelled" THEN 'Đã hủy' ELSE 'Đã xác nhận' END AS status,
       COALESCE(o.note,'') AS note, d.amount, d.extra, ''::text AS type, ''::text AS method, o."updatedAt" AS revision

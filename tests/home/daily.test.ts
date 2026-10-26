@@ -36,6 +36,8 @@ describe("daily review and Excel (real test DB)", () => {
     await prisma.saleOrder.create({ data: { ...base, code: "DH-draft", partnerId, orderDate: now, expectedDeliveryDate: now, originalDeliveryDate: now, isDraft: true, lines: { create: { productId: product.id, qty: 1, qtyBase: 1, factorUsed: 1, unit: "md", salePrice: 100, discountNow: 80, at: now } } } });
     await prisma.debtAdjustment.create({ data: { ...base, code: "DC-plus", partnerId, at: now, amount: 300, reason: "KHAC", note: "Tăng" } });
     await prisma.debtAdjustment.create({ data: { ...base, code: "DC-minus", partnerId, at: now, amount: -70, reason: "HANG_LOI", note: "Giảm" } });
+    const dest = await makePartner({ ownerUserId: owner });
+    await prisma.debtTransfer.create({ data: { ...base, code: "GC-1", kind: "MERGE", fromPartnerId: partnerId, toPartnerId: dest.id, amount: 400, discountMoved: 25, at: now } });
     const settlementPayment = await prisma.payment.create({ data: { ...base, code: "PC-settlement", at: now, amount: 50, cashAccountId: account.id, kind: "TAT_TOAN_CK" } });
     for (const method of ["CASH", "OFFSET"] as const) await prisma.discountSettlement.create({ data: { ...base, code: `CK-${method}`, partnerId, at: now, amount: 50, method, paymentId: method === "CASH" ? settlementPayment.id : null } });
     await prisma.receipt.create({ data: { ...base, code: "PT1", partnerId, at: now, amount: 500, cashAccountId: account.id, type: "THU_NO" } });
@@ -53,9 +55,9 @@ describe("daily review and Excel (real test DB)", () => {
     await prisma.goodsReturn.create({ data: { ...base, code: "R-partial", kind: "BY_ORDER", partnerId, orderId: order.id, at: now, totalAmount: 10, undelivered: true, lines: { create: { productId: product.id, orderLineId: order.lines[0]!.id, qty: 2, qtyBase: 2, factorUsed: 1, unit: "md", unitPrice: 5, amount: 10, at: now } } } });
   });
 
-  it("all eleven sources execute and errors are not silently converted to zero", async () => {
+  it("all twelve sources execute and errors are not silently converted to zero", async () => {
     const summary = await loadDailySummary(prisma, actor, params, now);
-    expect(summary).toHaveLength(11);
+    expect(summary).toHaveLength(12);
     for (const r of summary) expect(r.totals, r.item.key).not.toBeNull();
     for (const item of DAILY_ITEMS) expect((await loadDailyItem(prisma, actor, item.key, params, now)).rows.length).toBeGreaterThan(0);
   });
