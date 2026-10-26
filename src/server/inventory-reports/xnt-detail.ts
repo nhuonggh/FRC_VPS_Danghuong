@@ -32,6 +32,9 @@ const HREF: Record<string, (id: number) => string> = {
   PRODUCTION_OUT: (id) => `/production/orders/${id}`, PRODUCTION_USE: (id) => `/production/orders/${id}`,
 };
 
+/** Đơn giá theo đơn vị dòng → theo đơn vị gốc. SL gốc = SL ÷ hệ số (convertToBase) nên giá gốc = giá × hệ số. */
+export const priceToBase = (price: Prisma.Decimal, factor: Prisma.Decimal) => (factor.gt(0) ? price.times(factor) : price).toDecimalPlaces(2).toString();
+
 /** Chi tiết xuất nhập tồn của 1 sản phẩm trong [from, to): tồn đầu + từng dòng sổ kho (kèm đối tác, giá nhập/bán/vốn) + số dư chạy. */
 export async function xntDetail(db: PrismaClient, actor: Actor, productId: number, from: Date, to: Date): Promise<XntDetail | null> {
   const product = await db.product.findUnique({ where: { id: productId }, select: { id: true, code: true, name: true, baseUnit: true } });
@@ -54,7 +57,7 @@ export async function xntDetail(db: PrismaClient, actor: Actor, productId: numbe
   ]);
   const purchaseOf = new Map(purchases.map((x) => [x.id, x])), orderOf = new Map(orders.map((x) => [x.id, x])), returnOf = new Map(returns.map((x) => [x.id, x]));
   const purchaseLineOf = new Map(purchaseLines.map((x) => [x.id, x])), saleLineOf = new Map(saleLines.map((x) => [x.id, x]));
-  const perBase = (price: Prisma.Decimal, factor: Prisma.Decimal) => (factor.gt(0) ? price.div(factor) : price).toDecimalPlaces(2).toString();
+  const perBase = priceToBase;
 
   const opening = new Prisma.Decimal(before._sum.qtyIn ?? 0).minus(before._sum.qtyOut ?? 0);
   let balance = opening, inQty = new Prisma.Decimal(0), outQty = new Prisma.Decimal(0);

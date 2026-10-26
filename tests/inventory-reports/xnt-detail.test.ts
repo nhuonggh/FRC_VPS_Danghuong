@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { xntDetail } from "@/server/inventory-reports/xnt-detail";
+import { Prisma } from "@prisma/client";
+import { priceToBase, xntDetail } from "@/server/inventory-reports/xnt-detail";
 import { prisma, resetDb } from "../helpers/db";
 import { buy, engine, newWorld, sell, T, useNoopCostOwners } from "../inventory/helpers";
 
@@ -25,6 +26,11 @@ describe("chi tiết xuất nhập tồn theo sản phẩm", () => {
     expect(full).toMatchObject({ opening: "0", inQty: "100", outQty: "50", closing: "50" });
     expect(full.rows[0]).toMatchObject({ qtyIn: "100", unitCost: "20000" });
     expect(full.rows[1]).toMatchObject({ qtyOut: "30", unitCostOut: "20000" });
+  });
+
+  it("giá phiếu quy về đơn vị gốc: nhân hệ số (17.600 × 3,25 = 57.200), khớp giá vốn lô", () => {
+    expect(priceToBase(new Prisma.Decimal(17_600), new Prisma.Decimal(3.25))).toBe("57200");
+    expect(priceToBase(new Prisma.Decimal(20_000), new Prisma.Decimal(1))).toBe("20000");
   });
 
   it("sản phẩm không tồn tại ⇒ null", async () => {
