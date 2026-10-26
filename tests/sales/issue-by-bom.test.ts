@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { getOnHand } from "@/server/inventory";
-import { cancelSaleOrderTx } from "@/server/sales/lifecycle";
+import { cancelSaleOrderTx, editSaleOrderTx } from "@/server/sales/lifecycle";
 import { getOrder } from "@/server/sales/queries";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
@@ -87,5 +87,39 @@ describe("issueByBom — định mức theo ngày đơn", () => {
     expect([await onHand(m1.id), await onHand(m2.id)]).toEqual(["100", "100"]);
     await assertLedgerBalanced(m1.id, w.periodId);
     await assertLedgerBalanced(m2.id, w.periodId);
+  });
+});
+
+describe("issueByBom — tỷ lệ trừ kho của kiểu gia công (trừ thêm chính mã bán)", () => {
+  const editQty = (orderId: number, lineId: number, qty: number, now: Date) => editSaleOrderTx(prisma, actor, orderId, saleOrderSchema.parse({
+    partnerId: customer.id, date: "2026-09-15", expectedDeliveryDate: "2026-09-15", note: "",
+    lines: [{ id: lineId, productId: fg.id, unit: fg.baseUnit, qty, salePrice: 50_000, discountNow: 0, discountAccum: 0, processingTypeId: pt.id }],
+  }), now);
+
+  it("kiểu có tỷ lệ trừ kho ⇒ trừ chính mã bán × tỷ lệ cùng các NVL; giá vốn có cả tôn; hủy hoàn đủ", async () => {
+    await prisma.processingType.update({ where: { id: pt.id }, data: { stockRatio: "1" } });
+    const run = engine(w);
+    await run([fg.id], (ctx) => buy(ctx, fg.id, 100, 40_000, T(2), 3));
+    const o = await bomOrder("2026-09-15", 10, new Date("2026-09-15T03:00:00Z"));
+    const d = await getOrder(prisma, actor, o.id);
+    expect(d.lines[0]!.issues!.map((i) => [i.productCode, i.qtyBase])).toEqual([[fg.code, "10"], [expect.any(String), "12"], [expect.any(String), "5"]]);
+    expect(d.lines[0]!.unitCostFifo).toBe("53000"); // 40000 (tôn) + 13000 (NVL phụ)
+    expect(await onHand(fg.id)).toBe("90");
+    await cancelSaleOrderTx(prisma, actor, o.id, "Khách đổi ý");
+    expect(await onHand(fg.id)).toBe("100");
+    await assertLedgerBalanced(fg.id, w.periodId);
+  });
+
+  it("dòng đã lưu giữ snapshot tỷ lệ: đổi tỷ lệ của kiểu sau đó không đổi cách trừ khi sửa đơn; đơn cũ (không snapshot) không bị trừ thêm", async () => {
+    actor = { userId: w.userId, perms: new Set([...PERMS, "order.edit"]) };
+    const run = engine(w);
+    await run([fg.id], (ctx) => buy(ctx, fg.id, 100, 40_000, T(2), 3));
+    const old = await bomOrder("2026-09-15", 10, new Date("2026-09-15T03:00:00Z")); // chưa có tỷ lệ ⇒ không trừ tôn
+    await prisma.processingType.update({ where: { id: pt.id }, data: { stockRatio: "1" } });
+    const created = await bomOrder("2026-09-15", 10, new Date("2026-09-15T04:00:00Z"));
+    await prisma.processingType.update({ where: { id: pt.id }, data: { stockRatio: "2" } });
+    await editQty(old.id, (await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId: old.id } })).id, 20, new Date("2026-09-15T05:00:00Z"));
+    await editQty(created.id, (await prisma.saleOrderLine.findFirstOrThrow({ where: { orderId: created.id } })).id, 20, new Date("2026-09-15T05:00:00Z"));
+    expect(await onHand(fg.id)).toBe("80"); // đơn cũ không trừ tôn; đơn mới trừ 20 × 1 (không phải × 2)
   });
 });

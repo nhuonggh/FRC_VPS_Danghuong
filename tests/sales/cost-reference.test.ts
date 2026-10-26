@@ -228,3 +228,16 @@ it("applies one plan to many products of a type in one transaction and skips pro
   const all = await prisma.$transaction(tx => bulkCreateReferenceCostPlans(tx, actor, bulkReferenceCostPlanSchema.parse({ ...input, productIds: undefined, allLinked: true, validFrom: "2026-09-21" }), new Date("2026-09-20T01:00:00Z")));
   expect(all.created).toBe(2);
 });
+
+it("tôn là chính mã bán + kiểu có tỷ lệ trừ kho ⇒ không cảnh báo thiếu tôn trong BOM, tôn tính theo tỷ lệ trừ kho", async () => {
+  const { type, finished, save } = await plannedWorld(false);
+  await prisma.processingType.update({ where: { id: type.id }, data: { stockRatio: "1" } });
+  await prisma.productProcessingRatio.update({ where: { productId_processingTypeId: { productId: finished.id, processingTypeId: type.id } }, data: { ratio: "1.08" } });
+  await prisma.product.update({ where: { id: finished.id }, data: { canUseAsMaterial: true } });
+  await buy(finished.id, 100);
+  await save({ tonProductId: finished.id, fixedPricePerM2: null, feePerMeter: 2000 });
+  const ref = await costReference(prisma, actor, finished.id, type.id, at);
+  expect(ref?.stockWarning).toBeUndefined();
+  expect(ref?.message).toContain("tỷ lệ trừ kho");
+  expect(ref?.primary?.perBase).toBe("2125"); // 100 (giá nhập tôn) × 1 + 0.5 × 50 (phụ) + 2000 (phí)
+});
