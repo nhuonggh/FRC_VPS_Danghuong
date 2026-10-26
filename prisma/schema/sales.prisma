@@ -113,6 +113,8 @@ model SaleOrderLine {
   processingTypeId Int?
   /// Snapshot phiên bản BOM đã dùng (D-20) — đơn cũ không đổi khi BOM đổi.
   bomVersionId     Int?
+  /// Tỷ lệ trừ kho của kiểu gia công đã dùng lúc lập dòng (snapshot): ngoài NVL trong định mức còn trừ CHÍNH mã bán × tỷ lệ này. NULL = không trừ thêm (đơn cũ).
+  mainStockRatio   Decimal? @db.Decimal(18, 4)
   /// STOCK: issue this product; BOM: issue snapshotted components; LEGACY: old draft behavior.
   issueMode        String @default("LEGACY")
   at               DateTime

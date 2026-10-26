@@ -60,6 +60,8 @@ export interface PlannedLine {
   qtyBase: Prisma.Decimal;
   issues: PlannedIssue[];
   bomVersionId: number | null;
+  /** Tỷ lệ trừ kho của kiểu gia công đã áp (snapshot ghi vào dòng); null = không trừ thêm chính mã bán. */
+  mainStockRatio: Prisma.Decimal | null;
 }
 
 /** Lập đơn cần đủ hai quyền: tạo đơn và xem giá bán (giá gợi ý và thành tiền luôn được tính). */
@@ -77,7 +79,7 @@ export interface PlanOptions {
   /** Mã đang có trong đơn được phép giữ dù đã ngừng bán (khi sửa đơn cũ). */
   keepInactive?: ReadonlySet<number>;
   /** id dòng hiện có → phiên bản BOM đã dùng: dòng không đổi mã/kiểu gia công GIỮ định mức cũ (đơn cũ không đổi khi BOM đổi). */
-  pinned?: ReadonlyMap<number, { productId: number; processingTypeId: number | null; bomVersionId: number | null; issueMode?: string }>;
+  pinned?: ReadonlyMap<number, { productId: number; processingTypeId: number | null; bomVersionId: number | null; issueMode?: string; mainStockRatio?: Prisma.Decimal | null }>;
 }
 
 export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: PlanOptions = {}): Promise<PlannedLine[]> {
@@ -100,18 +102,20 @@ export async function planLines(db: Db, input: SaleOrderInput, at: Date, opts: P
     const sameLine = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId;
     const mode = line.issueMode ?? (sameLine ? (pin.issueMode ?? (pin.bomVersionId ? "BOM" : "STOCK")) : "LEGACY");
     if (mode === "STOCK" || line.processingTypeId === null) {
-      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null });
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null, mainStockRatio: null });
       continue;
     }
     // Chưa có định mức nào cho (SP × kiểu gia công): bán như hàng thường (xuất chính mã này), kiểu gia công chỉ ghi trên dòng
     const hasBom = mode === "BOM" ? 1 : await db.bom.count({ where: { productId: product.id, processingTypeId: line.processingTypeId, versions: { some: { status: "ACTIVE" } } } });
     if (!hasBom) {
-      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null });
+      out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: [{ productId: await stockProductId(db, product.id, line.processingTypeId), qtyBase }], bomVersionId: null, mainStockRatio: null });
       continue;
     }
     const pinnedVersionId = pin && pin.productId === product.id && pin.processingTypeId === line.processingTypeId ? pin.bomVersionId : null;
-    const plan = await planBomIssues(db, { n, product, processingTypeId: line.processingTypeId, qtyBase, at, pinnedVersionId });
-    out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: plan.issues, bomVersionId: plan.bomVersionId });
+    // Tỷ lệ trừ kho: dòng đã lưu giữ snapshot cũ (đơn cũ không bị trừ thêm tôn); dòng mới lấy theo kiểu gia công.
+    const mainStockRatio = pinnedVersionId ? pin!.mainStockRatio ?? null : (await db.processingType.findUnique({ where: { id: line.processingTypeId }, select: { stockRatio: true } }))?.stockRatio ?? null;
+    const plan = await planBomIssues(db, { n, product, processingTypeId: line.processingTypeId, qtyBase, at, pinnedVersionId, mainStockRatio });
+    out.push({ index, input: line, productCode: product.code, factor, qtyBase, issues: plan.issues, bomVersionId: plan.bomVersionId, mainStockRatio: plan.mainStockRatio });
   }
   return out;
 }
@@ -232,7 +236,7 @@ export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleO
       data: {
         referenceCostSnapshot: referenceSnapshots[li], orderId: id, productId: l.input.productId, qty: D(l.input.qty), unit: l.input.unit, factorUsed: l.factor, qtyBase: l.qtyBase,
         salePrice: D(l.input.salePrice), discountNow: D(l.input.discountNow).plus(shares[li]!), discountOrder: shares[li]!, discountAccum: D(l.input.discountAccum), note: l.input.note || null,
-        processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", bomVersionId: l.bomVersionId, at,
+        processingTypeId: l.input.processingTypeId, issueMode: l.bomVersionId === null ? "STOCK" : "BOM", bomVersionId: l.bomVersionId, mainStockRatio: l.mainStockRatio, at,
       },
     });
     for (const issue of l.issues) {
