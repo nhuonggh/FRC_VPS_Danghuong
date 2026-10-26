@@ -70,6 +70,13 @@ describe("DebtTransferForm (65)", () => {
     expect(replace).toHaveBeenCalledWith("/accounting/debt-transfers");
   });
 
+  it("chọn đối tác ⇒ hiện công nợ hiện tại của bên đó", async () => {
+    apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/debts/partners") ? [{ value: 7, label: "KH000007 — Nguyễn Văn Đạt", hint: "Khách · Nợ 1.200.000 ₫", balance: "1200000", discount: "0" }] : {}));
+    render(<DebtTransferForm today="2026-09-15" />);
+    await pick("Bên chuyển (giảm số dư)", "dat", 0);
+    expect(await screen.findByText(/Công nợ hiện tại/)).toHaveTextContent("Nợ 1.200.000");
+  });
+
   it("chuyển một phần cần số tiền > 0", async () => {
     render(<DebtTransferForm today="2026-09-15" />);
     await pick("Bên chuyển (giảm số dư)", "dat", 0);

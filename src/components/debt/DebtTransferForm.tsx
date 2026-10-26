@@ -5,7 +5,17 @@ import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
+import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
+
+type PartnerOption = ComboOption & { balance?: string; discount?: string };
+/** Số dư hiện tại của đối tác vừa chọn: dương = đối tác còn nợ mình, âm = mình nợ đối tác. */
+function BalanceLine({ option, merge }: { option: ComboOption | null; merge: boolean }) {
+  const o = option as PartnerOption | null;
+  if (!o || o.balance === undefined) return null;
+  const n = Number(o.balance);
+  return <p className="mt-1 text-sm tabular text-fg-secondary">Công nợ hiện tại: <strong className={n > 0 ? "text-warning" : n < 0 ? "text-info" : ""}>{n > 0 ? `Nợ ${formatCurrency(o.balance)}` : n < 0 ? `Mình nợ ${formatCurrency(String(Math.abs(n)))}` : "0 ₫"}</strong>{merge && Number(o.discount) > 0 && <> · CK tích lũy {formatCurrency(o.discount)}</>}</p>;
+}
 
 /** Gộp / chuyển công nợ (65). Gộp mã: chuyển TOÀN BỘ số dư + chiết khấu tích lũy rồi ngừng mã cũ. */
 export function DebtTransferForm({ today }: { today: string }) {
@@ -38,10 +48,10 @@ export function DebtTransferForm({ today }: { today: string }) {
             </select>
           </InlineField>
           <InlineField id="from" label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} required labelClass="sm:min-w-44">
-            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} value={from} loadOptions={load} placeholder="Tìm đối tác…" onChange={setFrom} /></div>
+            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã cần gộp (sẽ ngừng)" : "Bên chuyển (giảm số dư)"} value={from} loadOptions={load} placeholder="Tìm đối tác…" onChange={setFrom} /></div><BalanceLine option={from} merge={merge} />
           </InlineField>
           <InlineField id="to" label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} required labelClass="sm:min-w-44">
-            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} value={to} loadOptions={load} placeholder="Tìm đối tác…" onChange={setTo} /></div>
+            <div className={igCombo}><Combobox hideLabel label={merge ? "Mã giữ lại" : "Bên nhận (tăng số dư)"} value={to} loadOptions={load} placeholder="Tìm đối tác…" onChange={setTo} /></div><BalanceLine option={to} merge={merge} />
           </InlineField>
           {!merge && (
             <InlineField id="amount" label="Số tiền" required>

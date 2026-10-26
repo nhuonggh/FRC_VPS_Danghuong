@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FavoritesMenu } from "@/components/shell/FavoritesMenu";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { APP_NAV } from "@/config/app.config";
 import { buildNav } from "@/lib/nav";
@@ -17,12 +18,11 @@ beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); state.puts.len
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Sidebar + không gian làm việc", () => {
-  it("khu vực Yêu thích gom tab ghim của nhiều module; không có gì ghim ⇒ không hiện", () => {
-    wrap(emptyPrefs()); expect(screen.queryByLabelText("Yêu thích")).toBeNull(); cleanup();
-    let p = togglePin(emptyPrefs(), "sales", "quote-list"); p = togglePin(p, "inventory", nav.find((m) => m.key === "inventory")!.categories[0]!.functions[0]!.key);
-    wrap(p);
-    const fav = screen.getByLabelText("Yêu thích");
-    expect(fav.querySelectorAll("a")).toHaveLength(2); expect(fav.querySelector('a[href="/sales/quotes"]')).not.toBeNull();
+  it("Yêu thích không còn nằm trong sidebar mà là dropdown trên header; không ghim gì ⇒ không hiện nút", () => {
+    const withMenu = (prefs: Prefs) => render(<WorkspaceProvider prefs={prefs}><Sidebar nav={nav} /><FavoritesMenu nav={nav} /></WorkspaceProvider>);
+    withMenu(emptyPrefs()); expect(screen.queryByTitle("Yêu thích")).toBeNull(); cleanup();
+    withMenu(togglePin(emptyPrefs(), "sales", "quote-list"));
+    expect(screen.getByTitle("Yêu thích")).toBeInTheDocument(); expect(screen.queryByLabelText("Yêu thích")).toBeNull();
   });
 
   it("bấm module ⇒ về chức năng đang làm dở nếu còn hợp lệ, không thì trang Chức năng", () => {
