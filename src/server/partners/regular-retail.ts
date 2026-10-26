@@ -12,7 +12,7 @@ const searchTextOf = (code: string, name: string, phone: string) => normalizeSea
 /**
  * Khách lẻ thân quen: hồ sơ nhẹ (tên + SĐT). Có SĐT ⇒ nhận diện theo SĐT chuẩn hoá; chỉ có tên ⇒ nhận diện theo tên
  * (trùng tên không phân biệt hoa/thường với hồ sơ chưa có SĐT ⇒ dùng lại). Có rồi ⇒ dùng lại (giữ tên cũ); chưa có ⇒ tạo mới.
- * Nhóm khách do nơi gọi truyền vào (= nhóm của khách chung KHL ⇒ giá gợi ý "cùng nhóm" không đổi). Không cho ghi nợ (CHECK DB).
+ * Nhóm khách do nơi gọi truyền vào (= nhóm của khách chung KHL ⇒ giá gợi ý "cùng nhóm" không đổi). Cho ghi nợ (hạn mức 0 = không giới hạn); lấy hàng tại quầy vẫn phải trả đủ.
  */
 export async function ensureRegularRetail(prisma: PrismaClient, v: { name: string; phone: string; groupId: number }): Promise<{ id: number; created: boolean }> {
   const key = normalizePhone(v.phone);
@@ -35,7 +35,7 @@ export async function ensureRegularRetail(prisma: PrismaClient, v: { name: strin
         const [code] = await nextPartnerCodesWithPrefix(tx, REGULAR_RETAIL_PREFIX, 1);
         const label = name || v.phone.trim();
         const phone = key ? v.phone.trim() : null;
-        const row = await tx.partner.create({ data: { code: code!, name: label, searchText: searchTextOf(code!, label, phone ?? ""), groupId: v.groupId, isCustomer: true, allowCredit: false, phone, phoneKey: key || null, isRegularRetail: true } });
+        const row = await tx.partner.create({ data: { code: code!, name: label, searchText: searchTextOf(code!, label, phone ?? ""), groupId: v.groupId, isCustomer: true, allowCredit: true, phone, phoneKey: key || null, isRegularRetail: true } });
         return row.id;
       });
       return { id, created: true };

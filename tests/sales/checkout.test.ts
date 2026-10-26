@@ -117,7 +117,7 @@ describe("khách lẻ thân quen (có SĐT)", () => {
     await makePartnerGroup();
     const o1 = await retail("Chú Mạnh", "0349 631 425");
     const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
-    expect(kh).toMatchObject({ code: "KL000001", name: "Chú Mạnh", phone: "0349 631 425", phoneKey: "0349631425", allowCredit: false, isCustomer: true });
+    expect(kh).toMatchObject({ code: "KL000001", name: "Chú Mạnh", phone: "0349 631 425", phoneKey: "0349631425", allowCredit: true, isCustomer: true });
     expect(await prisma.saleOrder.findUniqueOrThrow({ where: { id: o1.id } })).toMatchObject({ partnerId: kh.id, walkInName: "Chú Mạnh", walkInPhone: "0349 631 425", paymentStatus: "PAID" });
     const o2 = await retail("", "+84349631425");
     expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(kh.id);
@@ -141,7 +141,7 @@ describe("khách lẻ thân quen (có SĐT)", () => {
     await makePartnerGroup();
     const o1 = await retail("Khách vãng lai", "");
     const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
-    expect(kh).toMatchObject({ code: "KL000001", name: "Khách vãng lai", phone: null, phoneKey: null, allowCredit: false });
+    expect(kh).toMatchObject({ code: "KL000001", name: "Khách vãng lai", phone: null, phoneKey: null, allowCredit: true });
     expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o1.id } })).partnerId).toBe(kh.id);
     const o2 = await retail("khách VÃNG lai", "12ab");
     expect((await prisma.saleOrder.findUniqueOrThrow({ where: { id: o2.id } })).partnerId).toBe(kh.id);
@@ -163,11 +163,11 @@ describe("khách lẻ thân quen (có SĐT)", () => {
     expect(await counts()).toEqual(before);
   });
 
-  it("hồ sơ khách lẻ thân quen không cho đặt hạn mức/ghi nợ (CHECK DB); nâng thành đối tác xong thì cho", async () => {
+  it("hồ sơ khách lẻ thân quen cho ghi nợ (không còn CHECK DB); nâng thành đối tác vẫn được", async () => {
     await makePartnerGroup();
     await retail("Chú Mạnh", "0349631425");
     const kh = await prisma.partner.findFirstOrThrow({ where: { isRegularRetail: true } });
-    await expect(prisma.partner.update({ where: { id: kh.id }, data: { allowCredit: true } })).rejects.toThrow();
+    await expect(prisma.partner.update({ where: { id: kh.id }, data: { allowCredit: true, debtLimit: 1000 } })).resolves.toBeTruthy();
     const { promoteRegularRetail } = await import("@/server/partners/regular-retail");
     await prisma.$transaction((t) => promoteRegularRetail(t, { userId: w.userId, perms: new Set(["partner.manage"]) }, kh.id));
     expect(await prisma.partner.findUniqueOrThrow({ where: { id: kh.id } })).toMatchObject({ isRegularRetail: false, phoneKey: null });

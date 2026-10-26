@@ -86,7 +86,6 @@ export async function updatePartnerProfile(db: Db, actor: Actor, id: number, v: 
 }
 export async function setPartnerCredit(db: Db, actor: Actor, id: number, v: { debtLimit: number; allowCredit: boolean }) {
   assertCan(actor.perms, "partner.manage"); const before = await loadEditable(db, actor, id);
-  if (before.isRegularRetail && (v.allowCredit || v.debtLimit > 0)) throw new DomainError("Khách lẻ thân quen không có công nợ — hãy nâng thành đối tác trước khi đặt hạn mức.", 409);
   await db.partner.update({ where: { id }, data: { debtLimit: new Prisma.Decimal(v.debtLimit), allowCredit: v.allowCredit } });
   await writeAudit(db, { userId: actor.userId, action: "partner.set_credit", entity: "Partner", entityId: id, before: { debtLimit: before.debtLimit.toString(), allowCredit: before.allowCredit }, after: { debtLimit: String(v.debtLimit), allowCredit: v.allowCredit } });
 }

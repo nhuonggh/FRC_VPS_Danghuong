@@ -17,6 +17,7 @@ import type { ProductOption } from "@/server/products/queries";
 export const emptyPurchaseLine = { productId: undefined, qty: undefined, unit: "", factor: 1, purchasePrice: undefined, rollInfo: "" } as unknown as PurchaseInput["lines"][number];
 const asNumber = (value: unknown) => Number(value) || 0;
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
+const round2 = (value: number) => Math.round(value * 100) / 100;
 
 type FormProps = { form: UseFormReturn<PurchaseInput> };
 
@@ -100,6 +101,7 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
   const productKey = lines.map((l) => l?.productId ?? 0).join(",");
   useEffect(() => { for (const id of new Set(productKey.split(",").map(Number))) ensureTypes(id || undefined); }, [productKey, ensureTypes]);
   const [products, setProducts] = useState(() => new Map(initialProducts.map((product) => [product.value, product])));
+  const [priceBy, setPriceBy] = useState<Map<string, string>>(() => new Map()); // field.id → đơn vị tính giá (mặc định đơn vị gốc)
   const loadProducts = async (q: string) => {
     const result = await apiFetch<ProductOption[]>(`/api/products/search?capability=canPurchase&q=${encodeURIComponent(q)}`);
     setProducts((current) => new Map([...current, ...result.map((row) => [row.value, row] as const)]));
@@ -174,6 +176,15 @@ export function PurchaseLinesFields({ form, initialProducts = [], quickProduct, 
               const opt = (typeOptions.get(line.productId) ?? []).find((t) => Number(t.value) === line.processingTypeId);
               const ratio = parseDimNote(line.rollInfo)?.ratio ?? opt?.ratio ?? 1; // dòng tách theo chiều dài ghi sẵn tỷ lệ trong ghi chú cuộn
               if (opt?.priceBasis === "AREA" && ratio > 0 && line.unit === product?.baseUnit) return <><NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} value={asNumber(line.purchasePrice) ? pricePerM2(asNumber(line.purchasePrice), ratio) : ""} onValueChange={(val) => setValue(`lines.${index}.purchasePrice`, val === "" ? (undefined as never) : pricePerMd(Number(val), ratio), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} /><p className="mt-0.5 text-right text-xs text-fg-muted">đ/m²</p></>;
+              // Nhập SL theo đơn vị gốc (cây nguyên) nhưng đơn giá theo đơn vị quy đổi (kg…): giá lưu = giá quy đổi × tỷ trọng (qtyBase = qty ÷ tỷ trọng).
+              const others = product && line.unit === product.baseUnit ? units.filter((u) => u.unit !== product.baseUnit && Number(u.factor) > 0) : [];
+              const by = others.find((u) => u.unit === priceBy.get(field.id));
+              if (others.length > 0) {
+                const f = by ? Number(by.factor) : 1, perBase = asNumber(line.purchasePrice);
+                return <><NumberInput maxFrac={2} aria-label={`Đơn giá dòng ${index + 1}`} value={by ? (perBase ? round2(perBase / f) : "") : (perBase || "")} onValueChange={(val) => setValue(`lines.${index}.purchasePrice`, val === "" ? (undefined as never) : round2(Number(val) * f), { shouldValidate: true, shouldDirty: true })} className={`${inputClass(error?.purchasePrice)} tabular text-right`} />
+                  <select aria-label={`Giá theo đơn vị dòng ${index + 1}`} value={by?.unit ?? ""} onChange={(e) => setPriceBy((m) => new Map(m).set(field.id, e.target.value))} className={`${inputClass()} mt-1 h-8 text-xs`}><option value="">đ/{product!.baseUnit}</option>{others.map((u) => <option key={u.unit} value={u.unit}>đ/{u.unit}</option>)}</select>
+                  {by && perBase > 0 && <p className="mt-0.5 text-right text-xs text-fg-muted">= {formatCurrency(perBase)}/{product!.baseUnit}</p>}</>;
+              }
               return <RhfNumberInput aria-label={`Đơn giá dòng ${index + 1}`} maxFrac={2} control={control} name={`lines.${index}.purchasePrice`} className={`${inputClass(error?.purchasePrice)} tabular text-right`} />;
             })()}</td>
             <td className="px-2 py-2 text-right tabular" data-label="Thành tiền">{formatCurrency(asNumber(line.qty) * asNumber(line.purchasePrice))}</td>
