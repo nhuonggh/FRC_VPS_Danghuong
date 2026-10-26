@@ -144,7 +144,7 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams) 
 export interface CashAccountSummaryDTO { id: number; name: string; bankNo: string | null; type: "CASH" | "BANK"; opening: string; in: string; out: string; balance: string; reviewed: string; pending: string }
 export interface CashEntryDTO { id: number; at: Date; docType: string; docId: number; docLabel: string; docCode: string | null; docHref: string | null; reviewStatus: CashReviewStatus | null; amountIn: string; amountOut: string; running: string; content: string | null; counterparty: string | null; reviewerName: string | null }
 export interface CashCloseDTO { id: number; closeAt: Date; expected: string; actual: string; diff: string; reason: string | null; createdByName: string | null; createdAt: Date; voided: boolean; voidReason: string | null }
-export interface CashBookDTO { accounts: CashAccountSummaryDTO[]; selected: CashAccountSummaryDTO | null; entries: CashEntryDTO[]; total: number; closes: CashCloseDTO[]; periodName: string }
+export interface CashBookDTO { accounts: CashAccountSummaryDTO[]; selected: CashAccountSummaryDTO | null; entries: CashEntryDTO[]; total: number; closes: CashCloseDTO[]; periodName: string; /** Số dư ngay trước khoảng ngày đang lọc (null = không lọc ngày). */ rangeOpening: string | null }
 const DOC_LABEL: Record<string, string> = { RECEIPT: "Phiếu thu", PAYMENT: "Phiếu chi", CASH_ADJ: "Điều chỉnh phiếu" };
 
 export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", accountId: number | null, params: ListParams): Promise<CashBookDTO> {
@@ -158,13 +158,14 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
     accounts.push({ id: a.id, name: a.name, bankNo: a.bankNo, type: a.type, opening: b.opening.toString(), in: b.in.toString(), out: b.out.toString(), balance: b.balance.toString(), reviewed: b.reviewed.toString(), pending: b.pending.toString() });
   }
   const selected = accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null;
-  if (!selected) return { accounts, selected: null, entries: [], total: 0, closes: [], periodName: periodRow.name };
+  if (!selected) return { accounts, selected: null, entries: [], total: 0, closes: [], periodName: periodRow.name, rangeOpening: null };
   const rows = await db.cashLedger.findMany({ where: { periodId: period.id, cashAccountId: selected.id }, orderBy: [{ at: "asc" }, { id: "asc" }] });
   let run = new Prisma.Decimal(selected.opening);
   const withRun = rows.map((r) => { run = run.plus(r.amountIn).minus(r.amountOut); return { r, running: run }; });
   const range = params.timePreset ? resolveTimeRange(params.timePreset, new Date(), { start: params.timeStart, end: params.timeEnd }) : null;
   // Calculate running balances BEFORE filtering, retaining earlier movements.
   const filtered = withRun.filter(({ r }) => !range || (r.at >= range.start && r.at < range.end));
+  const rangeOpening = range ? (withRun.filter(({ r }) => r.at < range.start).at(-1)?.running ?? new Prisma.Decimal(selected.opening)).toString() : null;
   const pageRows = filtered.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
   const idsOf = (t: string) => pageRows.filter((x) => x.r.docType === t).map((x) => x.r.docId);
   const [receipts, payments, adjs, closes] = await Promise.all([
@@ -182,7 +183,7 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   payments.forEach((r) => info.set(`PAYMENT:${r.id}`, { code: r.code, href: `/accounting/payments/${r.id}`, status: r.reviewStatus, content: contentOf(PAYMENT_KIND_LABEL[r.kind], r.note), counterparty: r.partner?.name ?? r.expense?.expenseType.name ?? nm(r.advancedById), reviewerName: nm(r.reviewedBy) }));
   adjs.forEach((a, i) => { const d = adjDocs[i]; if (d) info.set(`CASH_ADJ:${a.id}`, { code: d.code, href: `/accounting/${a.docType === "RECEIPT" ? "receipts" : "payments"}/${d.id}`, status: "REVIEWED", content: contentOf("Điều chỉnh", d.note), counterparty: d.partner?.name ?? ("expense" in d ? d.expense?.expenseType.name ?? null : null) ?? ("advancedById" in d ? nm(d.advancedById) : null), reviewerName: nm(a.decidedBy) }); });
   return {
-    accounts, selected, total: filtered.length, periodName: periodRow.name,
+    accounts, selected, total: filtered.length, periodName: periodRow.name, rangeOpening,
     entries: pageRows.map(({ r, running }) => { const i = info.get(`${r.docType}:${r.docId}`); return { id: r.id, at: r.at, docType: r.docType, docId: r.docId, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: i?.code ?? null, docHref: i?.href ?? null, reviewStatus: i?.status ?? null, amountIn: r.amountIn.toString(), amountOut: r.amountOut.toString(), running: running.toString(), content: i?.content ?? null, counterparty: i?.counterparty ?? null, reviewerName: i?.reviewerName ?? null }; }),
     closes: closes.map((c) => ({ id: c.id, closeAt: c.closeAt, expected: c.expected.toString(), actual: c.actual.toString(), diff: c.diff.toString(), reason: c.reason, createdByName: names.get(c.createdBy) ?? null, createdAt: c.createdAt, voided: c.voidedAt !== null, voidReason: c.voidReason })),
   };

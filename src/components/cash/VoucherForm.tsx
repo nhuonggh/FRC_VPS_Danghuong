@@ -38,7 +38,7 @@ export function VoucherForm({ doc, id, code, today, accounts, initial, people = 
   const editing = id !== undefined;
 
   const partnerRole = receipt ? (type === "THU_NO" ? "customer" : "any") : type === "TRA_NCC" ? "supplier" : "customer";
-  const needsPartner = receipt ? type === "THU_NO" : type !== "KHAC";
+  const needsPartner = receipt ? type === "THU_NO" : type === "TRA_NCC" || type === "HOAN_KHACH";
   const partnerOptional = receipt && type === "KHAC";
   const showPartner = needsPartner || partnerOptional;
 

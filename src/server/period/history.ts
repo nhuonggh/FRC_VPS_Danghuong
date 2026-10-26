@@ -174,7 +174,7 @@ export async function periodOrders(db: Db, actor: Actor, id: number, opts: { q?:
     db.saleOrder.count({ where }),
     db.saleOrder.findMany({
       where, orderBy: [{ orderDate: "desc" }, { id: "desc" }], skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize,
-      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, roundAmounts: true, roundTotal: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+      select: { id: true, code: true, orderDate: true, isCancelled: true, isDraft: true, deliveryStatus: true, roundAmounts: true, roundTotal: true, roundNearest: true, partner: { select: { name: true } }, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
     }),
   ]);
   return {

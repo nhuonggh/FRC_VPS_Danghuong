@@ -11,7 +11,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { CashBookDTO } from "@/server/cash/queries";
 import { REVIEW_LABEL } from "@/server/cash/labels";
-import { buildListHref, type ListParams } from "@/lib/query-params";
+import { buildExportHref, buildListHref, type ListParams } from "@/lib/query-params";
 import { QuickTimeFilter } from "@/components/ui/QuickTimeFilter";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 
@@ -46,7 +46,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{title}</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {s && <a href={`/api/cash/book/export?type=${type}&account=${s.id}`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">{params?.timePreset ? "Xuất sổ cả kỳ" : "Xuất Excel"}</a>}
+          {s && <a href={params ? buildExportHref(`/api/cash/book/export?type=${type}&account=${s.id}`, params) : `/api/cash/book/export?type=${type}&account=${s.id}`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">{params?.timePreset && params.timePreset !== "all" ? "Xuất sổ theo ngày" : "Xuất Excel"}</a>}
           {s && canClose && <button type="button" onClick={() => setClosing(true)} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Chốt quỹ</button>}
         </div>
       </div>
