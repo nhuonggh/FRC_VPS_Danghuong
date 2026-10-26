@@ -6,6 +6,7 @@ import { onHandList } from "./on-hand";
 import { rollLookup } from "./rolls";
 import { stockCardList } from "./stock-card";
 import { xntList } from "./xnt";
+import { xntDetail } from "./xnt-detail";
 
 const qty = { numFmt: "#,##0.###" } as const;
 const money = { numFmt: "#,##0 \"₫\"" } as const;
@@ -28,6 +29,20 @@ export async function exportXntXlsx(db: PrismaClient, actor: Actor, from: Date, 
       { header: "Giá trị xuất", key: "outValue", ...money }, { header: "Giá trị tồn cuối", key: "closingValue", ...money },
     ] : []),
   ], rows.map((row) => ({ ...row })));
+}
+
+export async function exportXntDetailXlsx(db: PrismaClient, actor: Actor, productId: number, from: Date, to: Date) {
+  const detail = await xntDetail(db, actor, productId, from, to);
+  if (!detail) return null;
+  const { rows } = detail, unit = detail.product.baseUnit;
+  const inPrice = rows.some((r) => r.purchasePrice !== undefined || r.unitCost !== undefined), salePrice = rows.some((r) => r.salePrice !== undefined), costOut = rows.some((r) => r.unitCostOut !== undefined);
+  const buffer = await buildXlsx("Chi tiết XNT", [
+    { header: "Ngày", key: "at" }, { header: "Chứng từ", key: "label", width: 24 }, { header: "Mã chứng từ", key: "code", text: true }, { header: "Khách hàng / NCC", key: "partner", width: 28 },
+    { header: `SL nhập (${unit})`, key: "qtyIn", ...qty }, ...(inPrice ? [{ header: `Giá nhập / ${unit}`, key: "inPrice", ...money }] : []),
+    { header: `SL xuất (${unit})`, key: "qtyOut", ...qty }, ...(salePrice ? [{ header: `Giá bán / ${unit}`, key: "salePrice", ...money }] : []), ...(costOut ? [{ header: `Giá vốn xuất / ${unit}`, key: "unitCostOut", ...money }] : []),
+    { header: `Tồn sau (${unit})`, key: "balance", ...qty },
+  ], rows.map((r) => ({ ...r, inPrice: r.purchasePrice ?? r.unitCost })));
+  return { code: detail.product.code, buffer };
 }
 
 export async function exportStockCardXlsx(db: PrismaClient, actor: Actor, productId: number, from?: Date, to?: Date) {
