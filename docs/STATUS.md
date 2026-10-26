@@ -267,6 +267,11 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 27/10/2026 — 3 việc (ĐÃ LÀM xong code + test, chờ user duyệt commit/push — có migration `20261027100000_sale_order_round_nearest`)
+- Phiếu chi "Nộp lại quỹ" không còn bắt chọn khách (form lệch server) — `VoucherForm.tsx`.
+- Sổ quỹ / sổ ngân hàng: "Xuất sổ theo ngày" lọc theo khoảng ngày đang chọn + dòng số dư đầu/cuối kỳ (`listCashBook.rangeOpening`, `exportCashBookXlsx`).
+- Làm tròn tổng đơn: cột mới `roundNearest` — lẻ ≥ 500đ lên, < 500đ xuống (102.650→103.000; 102.480→102.000). Đơn cũ giữ làm tròn lên; lưu/sửa qua form thì áp quy tắc mới. Chênh làm tròn có thể âm (−500..+500) khi chia vào phí giao.
+
 ### YÊU CẦU KHÁCH 26/10/2026 — Nhập kết quả giao + người ứng tiền (ĐÃ LÀM xong code + test, chờ user duyệt commit/push — có migration `20261026600000_trip_expenses_driver_advancer`)
 Đã làm: (1) bỏ `HEN_TRA` khỏi lựa chọn/schema (enum DB giữ cho dữ liệu cũ, hiển thị "Giao, ghi nợ (hẹn trả — cũ)"; mở sửa kết quả cũ thì coi như ghi nợ; bỏ ô ngày hẹn); (2) dialog kết quả: "Bớt cho khách" ngay dưới "Kết quả", gợi ý tiền mặt = phải thu − bớt − CK (ghi nợ = phải thu − bớt − thu), ô đã sửa tay không bị đè, ô tiền trống + placeholder 0 + chọn hết khi focus; (3) bảng mới `trip_expenses` + mục "Chi phí lái xe ứng từ tiền thu" ở chi tiết chuyến (thêm/xóa tới khi thủ quỹ xác nhận; API `POST /api/trips/:id/expense-add|expense-remove`); `confirmTripCash` tự lập phiếu chi phí (người ứng = lái xe, trừ đúng quỹ tiền mặt đã chọn) ⇒ quỹ thực nhận = tiền thu − chi phí; (4) `payments.advancedByDriverId` (cột mới, CHECK chỉ một người ứng) + `listAdvancers`: ô "Người ứng tiền" ở Lập chi phí/Phiếu chi liệt kê cả người dùng lẫn lái xe/phụ xe (option lái xe có id ÂM, xem `src/lib/advancer.ts`).
 Yêu cầu gốc (giữ để đối chiếu):

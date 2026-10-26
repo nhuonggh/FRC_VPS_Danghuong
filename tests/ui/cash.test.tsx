@@ -134,7 +134,7 @@ describe("ReviewQueue", () => {
 });
 
 describe("CashBook", () => {
-  const book = (): CashBookDTO => ({
+  const book = (): CashBookDTO => ({ rangeOpening: null,
     periodName: "Kỳ 1", total: 1,
     accounts: [{ id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" }],
     selected: { id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" },

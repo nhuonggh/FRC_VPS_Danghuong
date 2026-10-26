@@ -23,13 +23,15 @@ export const lineAmountOf = (l: { qty: Prisma.Decimal; salePrice: Prisma.Decimal
 
 /** Làm tròn LÊN nghìn đồng. */
 export const ceilThousand = (v: Prisma.Decimal) => v.div(1000).ceil().times(1000);
-type RoundFlags = { roundAmounts: boolean; roundTotal: boolean };
+/** Làm tròn thường tới nghìn đồng: phần lẻ ≥ 500đ lên, < 500đ xuống (102.650 → 103.000, 102.480 → 102.000). */
+export const roundThousand = (v: Prisma.Decimal) => v.div(1000).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).times(1000);
+type RoundFlags = { roundAmounts: boolean; roundTotal: boolean; roundNearest?: boolean };
 /** Tổng tiền hàng của đơn = Σ thành tiền dòng; đơn bật `roundTotal` thì làm tròn LÊN nghìn đồng ở mức TỔNG (thành tiền dòng không đổi). Chưa gồm phí vận chuyển. */
 export const goodsTotalOf = (lines: readonly { qty: Prisma.Decimal; salePrice: Prisma.Decimal; discountNow: Prisma.Decimal }[], o: RoundFlags) => {
   const sum = lines.reduce((s, l) => s.plus(lineAmountOf(l, o.roundAmounts)), D(0));
-  return o.roundTotal ? ceilThousand(sum) : sum;
+  return o.roundTotal ? (o.roundNearest ? roundThousand(sum) : ceilThousand(sum)) : sum;
 };
-/** Phần chênh do làm tròn tổng (0 ≤ x < 1.000đ): chia theo giá trị hàng giao như phí vận chuyển. */
+/** Phần chênh do làm tròn tổng (đơn cũ: 0 ≤ x < 1.000đ; quy tắc 500đ: −500 < x ≤ 500): chia theo giá trị hàng giao như phí vận chuyển. */
 export const roundDeltaOf = (lines: Parameters<typeof goodsTotalOf>[0], o: RoundFlags) =>
   o.roundTotal ? goodsTotalOf(lines, o).minus(goodsTotalOf(lines, { ...o, roundTotal: false })) : D(0);
 

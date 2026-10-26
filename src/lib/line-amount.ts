@@ -3,5 +3,7 @@
  * Đơn tắt làm tròn: giữ SL × đơn giá (2 số thập phân). Chiết khấu trừ sau.
  */
 export const roundUpThousand = (v: number) => Math.ceil(Math.round((v + Number.EPSILON) * 100) / 100 / 1000 - 1e-9) * 1000 || 0;
+/** Làm tròn thường tới nghìn đồng ở tổng đơn: phần lẻ ≥ 500đ lên, < 500đ xuống (102.650 → 103.000, 102.480 → 102.000). */
+export const roundNearestThousand = (v: number) => Math.round(Math.round((v + Number.EPSILON) * 100) / 100 / 1000) * 1000 || 0;
 export const grossAmount = (qty: number, price: number, roundUp = true) =>
   roundUp ? roundUpThousand(qty * price) : Math.round((qty * price + Number.EPSILON) * 100) / 100;

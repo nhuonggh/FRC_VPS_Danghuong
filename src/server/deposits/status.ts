@@ -24,7 +24,7 @@ export async function orderPaid(tx: Tx, orderId: number, exceptStopId?: number):
 export async function syncPaymentStatus(tx: Tx, orderId: number): Promise<PaymentStatus> {
   const order = await tx.saleOrder.findUniqueOrThrow({
     where: { id: orderId },
-    select: { paymentStatus: true, shippingFee: true, roundAmounts: true, roundTotal: true, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
+    select: { paymentStatus: true, shippingFee: true, roundAmounts: true, roundTotal: true, roundNearest: true, lines: { select: { qty: true, salePrice: true, discountNow: true } } },
   });
   const total = goodsTotalOf(order.lines, order).plus(order.shippingFee);
   const paid = await orderPaid(tx, orderId);

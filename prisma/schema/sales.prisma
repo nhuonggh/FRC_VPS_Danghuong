@@ -53,6 +53,8 @@ model SaleOrder {
   roundAmounts         Boolean        @default(true)
   /// Làm tròn LÊN nghìn đồng ở mức TỔNG tiền hàng (Σ thành tiền dòng, chưa gồm phí ship); thành tiền dòng = SL × giá, không làm tròn.
   roundTotal           Boolean        @default(false)
+  /// Quy tắc làm tròn tổng: true = làm tròn thường tới nghìn (phần lẻ ≥ 500đ lên, < 500đ xuống); false (đơn cũ) = luôn làm tròn LÊN. Chỉ có nghĩa khi roundTotal.
+  roundNearest         Boolean        @default(false)
   /// Địa chỉ giao hàng riêng của đơn (mặc định điền từ khách khi lập, sửa được). null = chưa nhập.
   shipAddress          String?
   /// Chiết khấu cả đơn do người dùng nhập; đã được PHÂN BỔ vào `discountNow` của từng dòng (xem `discountOrder`).

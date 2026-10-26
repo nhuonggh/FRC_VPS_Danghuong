@@ -26,7 +26,7 @@ import type { SalePricingDTO } from "@/server/sales/pricing";
 import { buildDimNote, parseDimNote, parseLengthExpr, pricePerM2, pricePerMd, termArea, termNote, termQty, type LengthTerm } from "@/lib/length-expr";
 
 import type { TypeOption } from "@/components/sales/QuickDimensionEntry";
-import { grossAmount, roundUpThousand } from "@/lib/line-amount";
+import { grossAmount, roundNearestThousand } from "@/lib/line-amount";
 
 const LABEL = "sm:min-w-40";
 /** Nhãn trong ô tìm khách là "MÃ — Tên"; lấy phần mã để hiện ở ô "Mã khách hàng". */
@@ -230,7 +230,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   const orderDiscount = num(watch("orderDiscount"));
   const shippingFee = num(watch("shippingFee"));
   const goodsNet = linesTotal - orderDiscount;
-  const total = round2((watch("roundTotal") === true ? roundUpThousand(goodsNet) : goodsNet) + shippingFee);
+  const total = round2((watch("roundTotal") === true ? roundNearestThousand(goodsNet) : goodsNet) + shippingFee);
   const accounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "CASH" : a.type === "BANK"));
   const otherAccounts = options.cashAccounts.filter((a) => (payKind === "CASH" ? a.type === "BANK" : a.type === "CASH"));
   const paid = (payKind === "CASH" || payKind === "TRANSFER" ? num(payAmount) : 0) + num(secAmount);
@@ -464,7 +464,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
           </InlineField>
           <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm md:min-h-9">
             <input type="checkbox" {...register("roundTotal")} className="h-4 w-4 cursor-pointer accent-[var(--accent)]" />
-            <span><span className="font-medium">Làm tròn tổng tiền hàng</span> <span className="text-fg-secondary">— làm tròn lên nghìn đồng ở tổng (476.650 → 477.000); thành tiền từng dòng giữ đúng SL × đơn giá</span></span>
+            <span><span className="font-medium">Làm tròn tổng tiền hàng</span> <span className="text-fg-secondary">— làm tròn tổng tới nghìn đồng: lẻ từ 500đ lên, dưới 500đ xuống (102.650 → 103.000; 102.480 → 102.000); thành tiền từng dòng giữ đúng SL × đơn giá</span></span>
           </label>
           {!walkIn && (
             <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm md:min-h-9">
