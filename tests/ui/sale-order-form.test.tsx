@@ -556,6 +556,23 @@ describe("SaleOrderForm — nhóm hàng trên dòng", () => {
     expect(screen.getAllByText(/= 7,344 m²/)).not.toHaveLength(0);
   });
 
+  it("đổi kiểu gia công không xoá đơn giá đã nhập (giữ giá + nhắc kiểm tra); đổi sang kiểu bán theo đơn vị riêng thì xoá giá", async () => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: 1.08, priceBasis: "AREA" }, { value: 5, label: "Não", priceBasis: "LENGTH" }, { value: 6, label: "Cuộn", priceBasis: "UNIT", unit: "cuộn" }] : base(url, init)));
+    render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
+    await pick("Khách hàng", "dat");
+    await pick("Sản phẩm dòng 1", "ton");
+    await waitFor(() => expect(within(screen.getByLabelText("Kiểu gia công dòng 1")).getByRole("option", { name: "Não" })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công dòng 1"), "4");
+    const m2 = await screen.findByLabelText("Đơn giá dòng 1");
+    await userEvent.clear(m2); await userEvent.type(m2, "150000");
+    await userEvent.selectOptions(screen.getByLabelText("Kiểu gia công dòng 1"), "5");
+    await waitFor(() => expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue("162.000"));
+    expect(screen.getByText(/Giữ đơn giá của kiểu cũ/)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("Đơn giá dòng 1"));
+    expect(screen.getByText(/Chưa có đơn giá cho kiểu này/)).toBeInTheDocument();
+  });
+
   it("sửa Số tấm / Dài ngay tại dòng kích thước: SL (md) và diện tích tự tính lại, giá/md giữ nguyên", async () => {
     const base = apiFetch.getMockImplementation()!;
     apiFetch.mockImplementation(async (url: string, init?: { method?: string }) => (url.startsWith("/api/orders/options/processing-types") ? [{ value: 4, label: "Tôn xốp,11 sóng", ratio: 1.08, priceBasis: "AREA" }] : base(url, init)));

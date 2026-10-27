@@ -417,6 +417,7 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
                 <LineRow key={field._key} index={index} form={form} products={products} setProducts={setProducts} loadProducts={loadProducts}
                   onProductPicked={() => entry.onProductPicked(index)} onQtyKeyDown={entry.onQtyKeyDown(index)}
                   dto={pricingForLine(lines[index])}
+                  suggestedFor={(typeId) => { const l = lines[index]; return l?.productId && pricingPartnerId ? pricing.get(key(l.productId, typeId, l.issueMode))?.units.find((u) => u.unit === l.unit)?.suggestedPrice : undefined; }}
                   onExpand={(terms, ratio) => expandDimensions(index, terms, ratio)}
                   canEditPrice={canEditPrice} canRemove={fields.length > 1} onRemove={() => remove(index)} />
               ))}
@@ -515,8 +516,10 @@ export function SaleOrderForm({ today, canEditPrice, edit, options, retail }: { 
   );
 }
 
-function LineRow({ index, form, products, setProducts, loadProducts, dto, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown, onExpand }: {
+function LineRow({ index, form, products, setProducts, loadProducts, dto, suggestedFor, canEditPrice, canRemove, onRemove, onProductPicked, onQtyKeyDown, onExpand }: {
   onExpand: (terms: LengthTerm[], ratio: number) => void;
+  /** Giá gợi ý (đã tải) của kiểu gia công `typeId` cho dòng này; chưa có ⇒ undefined. */
+  suggestedFor: (typeId: number | null) => number | string | null | undefined;
   onProductPicked: () => void; onQtyKeyDown: (e: React.KeyboardEvent) => void;
   index: number; form: UseFormReturn<SaleOrderInput>; products: Map<number, ProductOption>;
   setProducts: React.Dispatch<React.SetStateAction<Map<number, ProductOption>>>; loadProducts: (q: string) => Promise<ProductOption[]>;
@@ -539,6 +542,7 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, người bán sửa rồi lưu cho lần sau
   const [lengthExpr, setLengthExpr] = useState("");
   const [dimError, setDimError] = useState("");
+  const [keptPrice, setKeptPrice] = useState<number | null>(null); // giá giữ lại từ kiểu gia công cũ khi đổi kiểu
   const productId = line?.productId;
   useEffect(() => {
     if (!productId) { setTypes([]); return; }
@@ -642,14 +646,26 @@ function LineRow({ index, form, products, setProducts, loadProducts, dto, canEdi
       <td data-label="CK tích lũy" className={cell}><RhfNumberInput aria-label={`Chiết khấu tích lũy dòng ${index + 1}`} control={control} name={`lines.${index}.discountAccum`} className={`${inputClass(err?.discountAccum)} tabular text-right`} /></td>
       <td data-label="Gia công" className={cell}>
         <select aria-label={`Cách xuất kho dòng ${index + 1}`} {...register(`lines.${index}.issueMode`)} className={inputClass(err?.issueMode)}><option value="LEGACY">Theo kiểu gia công</option><option value="STOCK">Xuất tồn sản phẩm</option><option value="BOM">Gia công theo định mức</option></select>
-        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { setValue(`lines.${index}.processingTypeId`, e.target.value ? Number(e.target.value) : null, { shouldDirty: true }); if (line?.id === undefined) setValue(`lines.${index}.salePrice`, undefined as never); setLengthExpr(""); setDimError("");
-          const t = e.target.value ? types.find((x) => Number(x.value) === Number(e.target.value)) : null;
-          if (t?.priceBasis === "UNIT" && t.unit) { const u = product?.units.find((x) => sameUnit(x.unit, t.unit)); if (u) setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); else setDimError(`Sản phẩm chưa khai đơn vị "${t.unit}" (Sản phẩm → Đơn vị & quy đổi).`); }
+        <select aria-label={`Kiểu gia công dòng ${index + 1}`} value={line?.processingTypeId ?? ""} onChange={(e) => { const newId = e.target.value ? Number(e.target.value) : null; setValue(`lines.${index}.processingTypeId`, newId, { shouldDirty: true }); setLengthExpr(""); setDimError("");
+          const t = newId ? types.find((x) => Number(x.value) === newId) : null;
+          let unitChanged = false;
+          if (t?.priceBasis === "UNIT" && t.unit) { const u = product?.units.find((x) => sameUnit(x.unit, t.unit)); if (u) { unitChanged = !sameUnit(u.unit, line?.unit ?? ""); setValue(`lines.${index}.unit`, u.unit, { shouldValidate: true, shouldDirty: true }); } else setDimError(`Sản phẩm chưa khai đơn vị "${t.unit}" (Sản phẩm → Đơn vị & quy đổi).`); }
+          // Đổi kiểu không làm mất đơn giá: ưu tiên giá gợi ý của kiểu mới, không có thì giữ giá đang nhập; chỉ xoá khi đơn vị dòng bị đổi theo kiểu mới (giá cũ hết nghĩa)
+          if (line?.id === undefined) {
+            const suggested = suggestedFor(newId);
+            if (suggested != null) { setValue(`lines.${index}.salePrice`, Number(suggested), { shouldValidate: true, shouldDirty: true }); setKeptPrice(null); }
+            else if (unitChanged) { setValue(`lines.${index}.salePrice`, undefined as never); setKeptPrice(null); }
+            else setKeptPrice(num(line?.salePrice) > 0 ? num(line?.salePrice) : null);
+          }
+          // Dòng tách theo chiều dài: ghi chú ghi tỷ lệ m²/md của kiểu cũ → đổi theo kiểu mới (giá/md không đổi nên thành tiền giữ nguyên)
+          if (dim && t?.priceBasis === "AREA" && t.ratio && Number(t.ratio) !== dim.ratio) setValue(`lines.${index}.note`, buildDimNote(dim.user, { length: dim.length, pieces: dim.pieces }, Number(t.ratio)), { shouldDirty: true });
         }} className={inputClass()}>
           <option value="">Không</option>
           {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         {line?.issueMode !== "BOM" && currentType && !currentType.hasBom && <p className="mt-1 text-xs text-fg-muted">Chưa có định mức: bán như hàng thường (kho trừ chính sản phẩm).</p>}
+        {typeId && keptPrice !== null && num(line?.salePrice) === keptPrice && <p role="status" className="mt-1 text-xs text-warning">Giữ đơn giá của kiểu cũ — kiểm tra lại.</p>}
+        {typeId && !num(line?.salePrice) && <p className="mt-1 text-xs text-danger">Chưa có đơn giá cho kiểu này, nhập đơn giá.</p>}
         {typeId && (
           <div className="mt-2 space-y-1.5 text-xs">
             {!isUnitBasis && !ratioKnown && (
