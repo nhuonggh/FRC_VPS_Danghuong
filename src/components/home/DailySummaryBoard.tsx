@@ -70,20 +70,20 @@ export function DailySummaryBoard({ entries, params, reviewTab, reviewable, sele
       })}
     </nav>
     {groups.filter((g) => visible.some((r) => r.item.group === g.label)).map((group) => <section key={group.key} aria-label={group.label} className="overflow-hidden rounded-md border border-border bg-surface">
-      <div className={`flex flex-wrap items-center justify-between gap-2 border-l-4 px-4 py-3 ${group.header}`}><h2 className="text-lg font-semibold">{group.label}</h2><span className="text-xs text-fg-secondary tabular-nums">{formatNumber(entries.filter((r) => r.item.group === group.label).reduce((sum, r) => sum + (r.totals?.count ?? 0), 0))} chứng từ</span></div>
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-l-4 px-4 py-3 md:grid md:grid-cols-[minmax(0,1fr)_5rem_minmax(10rem,15rem)_1.5rem] md:gap-3 ${group.header}`}><h2 className="text-lg font-semibold">{group.label}</h2><span className="text-right text-xs text-fg-secondary tabular-nums">{formatNumber(entries.filter((r) => r.item.group === group.label).reduce((sum, r) => sum + (r.totals?.count ?? 0), 0))} chứng từ</span></div>
       <ul>{visible.filter((r) => r.item.group === group.label).map(({ item, totals, state }) => {
         const selected = item.key === selectedKey;
         const zero = totals?.count === 0;
         const [amountLabel, extraLabel] = dailyAmountLabels(item.key);
         return <li key={item.key} className="border-t border-border">
           <Link href={buildListHref(selected ? base : `${base}&item=${item.key}`, params, { page: 1 })} aria-expanded={selected} aria-controls={selected ? `daily-detail-${item.key}` : undefined} scroll={false}
-            className={`grid min-h-11 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent md:grid-cols-[minmax(0,1fr)_5rem_minmax(10rem,15rem)_1.5rem] ${zero ? "text-fg-secondary" : ""}`}>
-            <span className="flex flex-wrap items-center gap-2 font-semibold">{item.label}{!zero && state && <DailyReviewBadge state={state} />}</span>
-            {totals ? <><span className="text-right font-semibold tabular-nums">{formatNumber(totals.count)}<span className="block text-xs font-normal text-fg-secondary">chứng từ</span></span>
-              <span className="col-span-2 col-start-1 row-start-2 whitespace-nowrap text-sm font-semibold tabular-nums md:col-span-1 md:col-start-auto md:row-start-auto md:text-right">
-                {zero || totals.amount === null ? "—" : <>{extraLabel && <span className="block text-xs font-normal text-fg-secondary">{amountLabel}</span>}{formatCurrency(totals.amount)}{extraLabel && totals.extra !== null && totals.extra !== "0" && <span className="block text-xs font-normal text-fg-secondary">{extraLabel}: {formatCurrency(totals.extra)}</span>}</>}
+            className={`grid min-h-11 grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3 p-4 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent md:grid-cols-[minmax(0,1fr)_5rem_minmax(10rem,15rem)_1.5rem] ${zero ? "text-fg-secondary" : ""}`}>
+            <span className="flex flex-wrap items-center gap-2 font-semibold leading-6">{item.label}{!zero && state && <DailyReviewBadge state={state} />}</span>
+            {totals ? <><span className="text-right font-semibold leading-6 tabular-nums">{formatNumber(totals.count)}<span className="block text-xs font-normal text-fg-secondary">chứng từ</span></span>
+              <span className="col-span-2 col-start-1 row-start-2 whitespace-nowrap text-sm font-semibold leading-6 tabular-nums md:col-span-1 md:col-start-auto md:row-start-auto md:text-right">
+                {zero || totals.amount === null ? "—" : <>{formatCurrency(totals.amount)}{extraLabel && <span className="block text-xs font-normal leading-4 text-fg-secondary">{amountLabel}</span>}{extraLabel && totals.extra !== null && totals.extra !== "0" && <span className="block text-xs font-normal leading-4 text-fg-secondary">{extraLabel}: {formatCurrency(totals.extra)}</span>}</>}
               </span></> : <span role="status" className="text-sm text-danger md:col-span-2 md:text-right">Chưa tải được · bấm để thử lại</span>}
-            <ChevronRight size={18} aria-hidden className={`col-start-3 row-start-1 justify-self-end text-fg-secondary md:col-start-auto ${selected ? "rotate-90" : ""}`} />
+            <ChevronRight size={18} aria-hidden className={`col-start-3 row-start-1 mt-0.5 justify-self-end text-fg-secondary md:col-start-auto ${selected ? "rotate-90" : ""}`} />
           </Link>
           {selected && <div id={`daily-detail-${item.key}`} className="space-y-3 border-t border-dashed border-border bg-canvas p-3 md:p-4">{detail}</div>}
         </li>;
