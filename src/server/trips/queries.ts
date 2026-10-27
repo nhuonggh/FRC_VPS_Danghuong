@@ -139,7 +139,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     where: { id },
     include: {
       route: { select: { name: true } }, vehicle: { select: { plate: true } }, driver: { select: { name: true } }, assistant: { select: { name: true } },
-      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } }, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true } } } } } } } },
+      stops: { orderBy: { seq: "asc" }, include: { order: { include: { partner: { select: { id: true, name: true, phone: true, address: true, allowCredit: true, debtLimit: true } }, lines: { orderBy: { id: "asc" }, include: { product: { select: { code: true, name: true } }, processingType: { select: { name: true } }, returnLines: { where: { goodsReturn: { isCancelled: false, undelivered: true } }, select: { qty: true } }, deliveryLines: { where: { deliveryNote: { isCancelled: false } }, select: { qty: true, deliveryNoteId: true } } } } } } } },
     },
   });
   if (!t) throw new DomainError("Không tìm thấy chuyến giao.", 404);
@@ -154,12 +154,14 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     const paid = await orderPaid(db, o.id, s.id);
     const total = goodsTotalOf(o.lines, o).plus(o.shippingFee);
     const suggested = total.minus(paid).gt(0) ? total.minus(paid) : D(0);
+    // Sửa kết quả đã nhập: server hoàn tác phiếu giao của chính điểm này trước ⇒ số còn giao phải cộng lại phần đó
+    const own = (l: { deliveryLines: { qty: Prisma.Decimal; deliveryNoteId: number }[] }) => l.deliveryLines.filter((d) => s.deliveryNoteId !== null && d.deliveryNoteId === s.deliveryNoteId).reduce((a, d) => a.plus(d.qty), D(0));
     stops.push({
       id: s.id, seq: s.seq, orderId: o.id, orderCode: o.code, orderTotal: total.toString(), partnerId: o.partner.id, partnerName: o.partner.name, phone: o.partner.phone, address: o.partner.address, allowCredit: o.partner.allowCredit, debtLimit: o.partner.debtLimit.toString(),
       result: s.result, resultLabel: s.result ? RESULT_LABEL[s.result] : null, due: s.dueAmount?.toString() ?? null, cash: s.cashAmount.toString(), transfer: s.transferAmount.toString(), cashAccountId: s.cashAccountId, transferAccountId: s.transferAccountId, debt: s.debtAmount.toString(), discount: s.discountAmount.toString(), over: s.overAmount.toString(), promiseDate: s.promiseDate ? ymd(s.promiseDate) : null, resultNote: s.resultNote, resultAt: s.resultAt,
       suggestedDue: suggested.toString(), deliveryNoteId: s.deliveryNoteId, handledNote: s.handledNote,
       canCancelResult: s.result !== null && (t.status === "PLANNED" || t.status === "ON_ROAD" || t.status === "RETURNED"),
-      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: remainingToDeliver(l).toString() }; }),
+      lines: o.lines.map((l) => { const done = l.deliveryLines.reduce((a, d) => a.plus(d.qty), D(0)); return { orderLineId: l.id, productCode: l.product.code, productName: l.product.name, processingTypeName: l.processingType?.name ?? null, unit: l.unit, qty: l.qty.toString(), delivered: done.toString(), remaining: remainingToDeliver(l).plus(own(l)).toString() }; }),
     });
   }
   const sum = (f: (s: StopDTO) => string | null) => stops.reduce((a, s) => a.plus(f(s) ?? 0), D(0));

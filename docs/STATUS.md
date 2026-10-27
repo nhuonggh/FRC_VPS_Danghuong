@@ -267,6 +267,10 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 27/10/2026 (đợt 3) — 2 sửa nhỏ (không migration)
+- Form Tạo đơn hàng (`SaleLineEntry`): ô Số lượng không còn gợi ý/mặc định "1" (để trống).
+- Nhập kết quả giao (`ResultDialog`): sửa lại kết quả đã nhập rồi chọn "Giao một phần" thì danh sách "Số lượng thực giao" trống (số còn giao tính ra 0 vì phiếu giao cũ của chính điểm này chưa được hoàn tác). `getTrip` giờ cộng lại phần đó (`own()` ở `src/server/trips/queries.ts`); hết hàng thật thì hiện dòng giải thích.
+
 ### YÊU CẦU KHÁCH 27/10/2026 (đợt 2) — phiếu nhập + XNT (ĐÃ LÀM xong code, tsc + vitest inventory-reports/debt xanh, chờ user duyệt commit/push; không migration)
 - Dropdown Combobox: tên sản phẩm xuống dòng, không cắt "…"; danh sách rộng tối thiểu 480px.
 - Phiếu nhập/đặt hàng NCC: hiện "Nợ cũ" dưới ô NCC (API mới `/api/debts/partners/[id]/balance`, cần `debt.view`, chỉ NCC); phiếu nhập thêm "Nợ NCC sau phiếu" ở footer. Helper `partnerBalances` ở `src/server/debt/queries.ts`.
