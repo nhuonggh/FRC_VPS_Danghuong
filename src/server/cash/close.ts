@@ -5,6 +5,7 @@ import { writeAudit } from "@/server/audit/write";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { assertPeriodOpen, getOpenPeriod } from "@/server/period/guard";
+import { formatCurrency } from "@/lib/format";
 import { ictYmd } from "@/lib/time";
 import { cashBalance } from "./balance";
 import type { CashCloseInput } from "./schemas";
@@ -31,6 +32,8 @@ export async function createCashClose(tx: Tx, actor: Actor, input: CashCloseInpu
   const expected = (await cashBalance(tx, period.id, input.cashAccountId, closeAt)).balance;
   const actual = D(input.actual);
   const diff = actual.minus(expected);
+  // Nhận lại tiền = chi đúng số kiểm đếm; lớn hơn số dư sổ sẽ làm quỹ âm (vd kế toán đã nộp lại quỹ trước đó).
+  if (input.handOver && actual.gt(expected)) throw new DomainError(`Số kiểm đếm (${formatCurrency(actual.toString())}) lớn hơn số dư sổ (${formatCurrency(expected.toString())}) nên không thể "Giám đốc nhận lại". Kiểm tra phiếu nộp lại quỹ đã lập hoặc xử lý chênh lệch trước.`, 400, "HANDOVER_EXCEEDS_BALANCE");
   if (!diff.isZero() && !input.reason) throw new DomainError("Có chênh lệch giữa sổ và tiền kiểm đếm — nhập lý do.", 400, "DIFF_REASON_REQUIRED");
   const row = await tx.cashClose.create({
     data: { periodId: period.id, cashAccountId: input.cashAccountId, closeAt, expected, actual, diff, reason: input.reason || null, createdBy: actor.userId },

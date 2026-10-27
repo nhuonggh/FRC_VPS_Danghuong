@@ -127,6 +127,19 @@ describe("sổ quỹ / sổ ngân hàng", () => {
     expect(readonly!.tasksHref).toBeUndefined();
     expect(readonly!.tasks[0]!.href).toContain("/accounting/bankbook?");
   });
+  it("sổ quỹ lọc theo loại chứng từ và tìm theo mã/nội dung/người nộp; tổng theo bộ lọc, số dư chạy giữ nguyên", async () => {
+    const r = await rec({ amount: 500_000 }); await pay({ kind: "KHAC", partnerId: null, amount: 200_000, note: "Mua văn phòng phẩm" });
+    const keys = ["docType"] as const;
+    const onlyReceipts = await listCashBook(prisma, acc, "CASH", cash.id, P({ "docType": "RECEIPT" }, keys));
+    expect(onlyReceipts.total).toBe(1); expect(onlyReceipts.entries[0]).toMatchObject({ docType: "RECEIPT", docCode: r.code, running: "500000" });
+    const bad = await listCashBook(prisma, acc, "CASH", cash.id, P({ "docType": "XYZ" }, keys));
+    expect(bad.total).toBe(2);
+    const byCode = await listCashBook(prisma, acc, "CASH", cash.id, P({ q: r.code.toLowerCase() }, keys));
+    expect(byCode.entries.map((e) => e.docCode)).toEqual([r.code]);
+    const byNote = await listCashBook(prisma, acc, "CASH", cash.id, P({ q: "van phong pham" }, keys));
+    expect(byNote.total).toBe(1); expect(byNote.entries[0]).toMatchObject({ docType: "PAYMENT", amountOut: "200000" });
+    expect((await listCashBook(prisma, acc, "CASH", cash.id, P({ q: "khong co" }, keys))).total).toBe(0);
+  });
   it("lọc ngày sổ ngân hàng không bỏ số dư chạy từ phát sinh trước đó", async () => {
     const first = await rec({ cashAccountId: bank.id, amount: 300_000 });
     await prisma.cashLedger.updateMany({ where: { docType: "RECEIPT", docId: first.id }, data: { at: new Date("2026-09-14T03:00:00Z") } });
