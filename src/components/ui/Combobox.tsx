@@ -44,7 +44,7 @@ interface Props {
 }
 
 interface ListPos { left: number; top?: number; bottom?: number; width: number; maxHeight: number }
-const LIST_MAX = 320, LIST_MIN_WIDTH = 360, LIST_GAP = 4;
+const LIST_MAX = 320, LIST_MIN_WIDTH = 480, LIST_GAP = 4;
 
 const BLUR_CLOSE_MS = 120; // chờ để click vào 1 dòng kịp chạy trước khi đóng danh sách
 
@@ -159,7 +159,7 @@ export function Combobox({ label, value, onChange, loadOptions, placeholder = "T
             <li key={o.value} id={`${uid}-o${i}`} role="option" aria-selected={value?.value === o.value}
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}
               className={clsx("flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-sm px-3 py-2 text-sm md:min-h-9", i === active && "bg-hover")}>
-              <span className="truncate">{o.label}</span>
+              <span className="min-w-0 break-words">{o.label}</span>
               {o.hint && <span className="shrink-0 text-xs text-fg-muted">{o.hint}</span>}
             </li>
           ))}

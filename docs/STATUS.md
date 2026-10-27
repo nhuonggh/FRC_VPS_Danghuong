@@ -267,6 +267,11 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 27/10/2026 (đợt 2) — phiếu nhập + XNT (ĐÃ LÀM xong code, tsc + vitest inventory-reports/debt xanh, chờ user duyệt commit/push; không migration)
+- Dropdown Combobox: tên sản phẩm xuống dòng, không cắt "…"; danh sách rộng tối thiểu 480px.
+- Phiếu nhập/đặt hàng NCC: hiện "Nợ cũ" dưới ô NCC (API mới `/api/debts/partners/[id]/balance`, cần `debt.view`, chỉ NCC); phiếu nhập thêm "Nợ NCC sau phiếu" ở footer. Helper `partnerBalances` ở `src/server/debt/queries.ts`.
+- XNT: lọc nhiều nhóm hàng (`?group=1,2,none`), áp cho bảng, thẻ thống kê, Excel; nút "In báo cáo" mở `/inventory/xnt/print` (in toàn bộ dòng đã lọc, cột giá trị theo `cost.view`; chỉ in các cột khách tick ở nút chọn cột của bảng — đọc localStorage `table:stock-xnt:hidden`, component `XntPrintTable`; cột "Mã" luôn in).
+
 ### YÊU CẦU KHÁCH 27/10/2026 — 3 việc (ĐÃ LÀM xong code + test, chờ user duyệt commit/push — có migration `20261027100000_sale_order_round_nearest`)
 - Phiếu chi "Nộp lại quỹ" không còn bắt chọn khách (form lệch server) — `VoucherForm.tsx`.
 - Sổ quỹ / sổ ngân hàng: "Xuất sổ theo ngày" lọc theo khoảng ngày đang chọn + dòng số dư đầu/cuối kỳ (`listCashBook.rangeOpening`, `exportCashBookXlsx`).

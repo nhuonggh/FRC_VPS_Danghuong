@@ -26,6 +26,8 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProdu
   const lines = form.watch("lines");
   const goodsTotal = lines.reduce((s, l) => s + (Number(l?.qty) || 0) * (Number(l?.purchasePrice) || 0), 0);
   const paid = num(cashAmount) + num(bankAmount);
+  const [balance, setBalance] = useState<number | null>(null);
+  const owedAfter = balance === null ? null : goodsTotal - paid - balance; // dương = mình nợ NCC sau phiếu này
 
   const submit = form.handleSubmit(async (input) => {
     if (paid > goodsTotal + 0.004) throw new Error("Số tiền trả vượt tiền hàng của phiếu nhập.");
@@ -50,10 +52,11 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProdu
         <>
           <span className="text-sm font-semibold">Tiền hàng: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(goodsTotal)}</b></span>
           {payAccounts && <span className="text-sm font-semibold">{paid > goodsTotal ? "Trả thừa" : "Ghi nợ NCC"}: <b className={`ml-1 text-lg tabular ${paid > goodsTotal ? "text-danger" : "text-accent"}`}>{formatCurrency(Math.abs(goodsTotal - paid))}</b></span>}
+          {owedAfter !== null && <span className="text-sm font-semibold">{owedAfter < 0 ? "NCC nợ mình sau phiếu" : "Nợ NCC sau phiếu"}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(Math.abs(owedAfter))}</b></span>}
         </>
       )}>
       <FormCard icon={Truck} title="Thông tin chung">
-        <div className="space-y-3"><PurchaseHeaderFields form={form} maxDate={today} supplierGroups={supplierGroups} /><PurchaseNoteField form={form} /></div>
+        <div className="space-y-3"><PurchaseHeaderFields form={form} maxDate={today} supplierGroups={supplierGroups} onBalance={setBalance} /><PurchaseNoteField form={form} /></div>
       </FormCard>
       <FormCard icon={Package} title="Danh sách sản phẩm">
         <PurchaseLinesFields form={form} quickProduct={quickProduct} />

@@ -207,9 +207,17 @@ export async function searchDebtPartners(db: Db, actor: Actor, q: string) {
     where: { mergedIntoId: null, ...partnerScopeWhere(actor), AND: terms.map((t) => ({ OR: [{ searchText: { contains: escapeLike(t) } }, { code: { contains: escapeLike(t.toUpperCase()) } }] })) },
     orderBy: { name: "asc" }, take: 20, select: { id: true, code: true, name: true, isCustomer: true, isSupplier: true },
   });
-  // Số dư hiện tại (kỳ đang mở): dương = đối tác nợ mình, âm = mình nợ đối tác. Hiện ngay trong ô chọn để khỏi mở sổ công nợ.
+  const bal = await partnerBalances(db, rows.map((r) => r.id));
+  return rows.map((r) => {
+    const { balance, discount } = bal.get(r.id)!;
+    const debtText = balance.gt(0) ? `Nợ ${formatCurrency(balance.toString())}` : balance.lt(0) ? `Có ${formatCurrency(balance.abs().toString())}` : "Công nợ 0";
+    return { value: r.id, label: `${r.code} — ${r.name}`, hint: [r.isCustomer ? "Khách" : null, r.isSupplier ? "NCC" : null, debtText].filter(Boolean).join(" · "), balance: balance.toString(), discount: discount.toString() };
+  });
+}
+
+/** Số dư hiện tại (kỳ đang mở): dương = đối tác nợ mình, âm = mình nợ đối tác. Hiện ngay trong ô chọn để khỏi mở sổ công nợ. */
+export async function partnerBalances(db: Db, ids: number[]) {
   const period = await getOpenPeriod(db);
-  const ids = rows.map((r) => r.id);
   const [ledger, opening, discIn, discOpen] = await Promise.all([
     db.partnerLedger.groupBy({ by: ["partnerId"], where: { periodId: period.id, partnerId: { in: ids } }, _sum: { debit: true, credit: true } }),
     db.openingDebt.findMany({ where: { periodId: period.id, partnerId: { in: ids } }, select: { partnerId: true, amount: true } }),
@@ -218,10 +226,8 @@ export async function searchDebtPartners(db: Db, actor: Actor, q: string) {
   ]);
   const led = new Map(ledger.map((l) => [l.partnerId, l._sum])), open = new Map(opening.map((o) => [o.partnerId, o.amount]));
   const dl = new Map(discIn.map((l) => [l.partnerId, l._sum])), dOpen = new Map(discOpen.map((o) => [o.partnerId, o.amount]));
-  return rows.map((r) => {
-    const balance = (open.get(r.id) ?? D(0)).plus(led.get(r.id)?.debit ?? 0).minus(led.get(r.id)?.credit ?? 0);
-    const discount = (dOpen.get(r.id) ?? D(0)).plus(dl.get(r.id)?.amountIn ?? 0).minus(dl.get(r.id)?.amountOut ?? 0);
-    const debtText = balance.gt(0) ? `Nợ ${formatCurrency(balance.toString())}` : balance.lt(0) ? `Có ${formatCurrency(balance.abs().toString())}` : "Công nợ 0";
-    return { value: r.id, label: `${r.code} — ${r.name}`, hint: [r.isCustomer ? "Khách" : null, r.isSupplier ? "NCC" : null, debtText].filter(Boolean).join(" · "), balance: balance.toString(), discount: discount.toString() };
-  });
+  return new Map(ids.map((id) => [id, {
+    balance: (open.get(id) ?? D(0)).plus(led.get(id)?.debit ?? 0).minus(led.get(id)?.credit ?? 0),
+    discount: (dOpen.get(id) ?? D(0)).plus(dl.get(id)?.amountIn ?? 0).minus(dl.get(id)?.amountOut ?? 0),
+  }]));
 }
