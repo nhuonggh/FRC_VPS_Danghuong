@@ -31,7 +31,7 @@ export function deliveredValue(net: Prisma.Decimal, lineQty: Prisma.Decimal, cum
  * đúng bằng phí). `before`/`now` là giá trị hàng đã giao trước đó / lần này; `linesTotal` = thành tiền hàng cả đơn.
  */
 export function shippingShare(fee: Prisma.Decimal, linesTotal: Prisma.Decimal, before: Prisma.Decimal, now: Prisma.Decimal): Prisma.Decimal {
-  if (!fee.gt(0) || !linesTotal.gt(0)) return D(0);
+  if (fee.isZero() || !linesTotal.gt(0)) return D(0); // fee có thể ÂM (làm tròn tổng xuống), vẫn phải chia vào phiếu giao
   return deliveredValue(fee, linesTotal, before, now);
 }
 

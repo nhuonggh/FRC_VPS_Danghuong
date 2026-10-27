@@ -80,6 +80,20 @@ describe("làm tròn tổng tiền hàng theo đơn (thành tiền dòng không 
     expect(debit).toBe(477000);
   });
 
+  it("giao hàng: làm tròn tổng XUỐNG (phần lẻ < 500đ) cũng ghi công nợ đúng tổng đã làm tròn, kể cả giao nhiều lần", async () => {
+    // 356.400 + 120.050 = 476.450 → làm tròn tổng xuống 476.000 (chênh −450), không phí ship
+    const o = await create({ lines: [
+      { productId: fg.id, unit: fg.baseUnit, qty: 1.5, salePrice: 237_600, discountNow: 0, discountAccum: 0, processingTypeId: null },
+      { productId: fg.id, unit: fg.baseUnit, qty: 1, salePrice: 120_050, discountNow: 0, discountAccum: 0, processingTypeId: null },
+    ] });
+    expect(await total(o.id)).toBe("476000");
+    const lines = await prisma.saleOrderLine.findMany({ where: { orderId: o.id }, orderBy: { id: "asc" } });
+    const deliver = (qtys: number[]) => prisma.$transaction((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: lines.map((l, i) => ({ orderLineId: l.id, qty: qtys[i]! })).filter((l) => l.qty > 0) }), NOW));
+    await deliver([1, 0]); await deliver([0.5, 1]);
+    const debit = (await prisma.partnerLedger.findMany({ where: { docType: "DELIVERY" } })).reduce((s, r) => s + Number(r.debit), 0);
+    expect(debit).toBe(476000);
+  });
+
   it("chiết khấu tối đa theo giá trị dòng: dòng không làm tròn, chỉ đơn cũ (roundAmounts=true) được tính tròn", () => {
     const line = (discountNow: number) => ({ productId: 1, unit: "m", qty: 1.5, salePrice: 237_600, discountNow, discountAccum: 0, processingTypeId: null });
     const base = { partnerId: 1, date: "2026-09-15", expectedDeliveryDate: "2026-09-15", note: "" };
