@@ -289,6 +289,8 @@ describe("SaleOrderForm — thông tin khác, lưu nháp, thêm khách, tìm nha
     apiFetch.mockImplementation(async (url: string) => (url.startsWith("/api/products/search") ? [{ ...PRODUCT, imageUrl: "https://img.example/tx01.png" }] : url.startsWith("/api/orders/pricing") ? pricing : []));
     render(<SaleOrderForm options={OPTS} today="2026-09-15" canEditPrice />);
     await pick("Tên sản phẩm", "ton");
+    expect(await screen.findByLabelText("Số lượng")).toHaveValue(""); // không còn gợi ý/mặc định 1
+    await userEvent.type(screen.getByLabelText("Số lượng"), "1");
     await userEvent.type(await screen.findByLabelText("Đơn giá"), "30000");
     await userEvent.click(screen.getByRole("button", { name: /Thêm vào đơn/ }));
     await waitFor(() => expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue("1"));
