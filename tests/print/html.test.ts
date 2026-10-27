@@ -100,6 +100,23 @@ describe("HTML in trực tiếp", () => {
     expect(renderHtmlPrint(model, true, false, "n")).toContain("Từ 01/10/2026 đến 15/10/2026");
     expect(renderHtmlPrint({ ...model, body: { ...model.body, doc: { date: "24/10/2026", period: "" } } }, true, false, "n")).not.toContain("Kỳ đối chiếu");
   });
+  it("hóa đơn: ghi chú nằm cùng hàng với khối tổng tiền; ẩn thông tin công ty + QR khi giao đi người khác", () => {
+    const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026", note: "= 3.620.000đ đơn 15-10" }, lines: [], totals: { total: "100" } }, company: { name: "Công ty ABC", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "MB", accountHolder: "A", accountNo: "123", branch: "" }, version: 1 }, signer: "", footer: "", qr: "https://img.example/qr.png", lines: [], summary: [{ label: "Tổng đơn", value: "100" }], words: "", notices: [] };
+    const full = renderHtmlPrint(model, true, false, "n");
+    expect(full).toContain('<div class="totrow"><p class="note">Ghi chú: = 3.620.000đ đơn 15-10</p><div class="tot">');
+    expect(full).toContain("Công ty ABC</h1>");
+    expect(full).toContain("QR thanh toán");
+    expect(full).toContain("☐ Ẩn thông tin công ty");
+    expect(full).toContain('href="?mode=mono&amp;hideCompany=1"');
+    const hidden = renderHtmlPrint(model, true, false, "n", { hideCompany: true });
+    expect(hidden).not.toContain("Công ty ABC</h1>");
+    expect(hidden).not.toContain("QR thanh toán");
+    expect(hidden).not.toContain('<header class="head">');
+    expect(hidden).toContain("☑ Ẩn thông tin công ty");
+    expect(hidden).toContain('href="?mode=mono&amp;hideCompany=1&amp;debt=1&amp;auto=1"'); // giữ lựa chọn khi bấm In
+    const noNote = renderHtmlPrint({ ...model, body: { ...model.body, doc: { date: "24/10/2026" } } }, true, false, "n");
+    expect(noNote).not.toContain("totrow\"");
+  });
   it("hóa đơn: ẩn dòng tổng số tấm nhưng giữ dòng kích thước; nút in đặt ở thanh đáy", () => {
     const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026" }, lines: [], totals: { total: "100" } }, company: { name: "Công ty", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [{ name: "Tôn", note: "", qty: "1", unit: "m²", price: "1", amount: "1", cuts: "3,28 m × 14 Tấm", pieces: "14", ratio: "0,4" }], summary: [], words: "", notices: [] };
     const shown = renderHtmlPrint(model, true, false, "n");
