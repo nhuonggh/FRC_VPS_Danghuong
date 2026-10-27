@@ -153,16 +153,14 @@ export async function cancelDeliveryNoteCore(tx: Tx, actor: Actor, id: number): 
   await writeAudit(tx, { userId: actor.userId, action: "delivery.cancel", entity: "DeliveryNote", entityId: id, before: { code: note.code }, after: { isCancelled: true } });
 }
 
-/**
- * Ghi lại công nợ của MỌI phiếu giao còn hiệu lực theo thành tiền/SL dòng HIỆN TẠI (sau khi sửa đơn đã giao một phần).
- * Duyệt phiếu theo thứ tự thời gian, cộng dồn SL từng dòng — cùng công thức làm tròn luỹ kế lúc tạo phiếu.
- */
-export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: number): Promise<void> {
-  const order = await tx.saleOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
-  const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
+type OrderForValue = Prisma.SaleOrderGetPayload<{ include: { lines: true } }>;
+type NoteForValue = Prisma.DeliveryNoteGetPayload<{ include: { lines: true } }>;
+/** Giá trị công nợ đúng của từng phiếu giao còn hiệu lực (`notes` đã sắp theo thời gian): hàng giao + phần phí ship/chênh làm tròn tổng chia theo giá trị hàng giao. */
+export function deliveryValuesOf(order: OrderForValue, notes: readonly NoteForValue[]): Map<number, Prisma.Decimal> {
   const lineById = new Map(order.lines.map((l) => [l.id, l]));
   const cum = new Map<number, Prisma.Decimal>();
   const linesTotal = goodsTotalOf(order.lines, { ...order, roundTotal: false }), extraFee = order.shippingFee.plus(roundDeltaOf(order.lines, order)); // phí vận chuyển + phần chênh làm tròn tổng, chia theo giá trị hàng giao
+  const out = new Map<number, Prisma.Decimal>();
   let valueSoFar = D(0);
   for (const note of notes) {
     let value = D(0);
@@ -173,8 +171,22 @@ export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: numbe
       cum.set(line.id, before.plus(dl.qty));
     }
     const goods = value;
-    value = value.plus(shippingShare(extraFee, linesTotal, valueSoFar, goods));
+    out.set(note.id, value.plus(shippingShare(extraFee, linesTotal, valueSoFar, goods)));
     valueSoFar = valueSoFar.plus(goods);
+  }
+  return out;
+}
+
+/**
+ * Ghi lại công nợ của MỌI phiếu giao còn hiệu lực theo thành tiền/SL dòng HIỆN TẠI (sau khi sửa đơn đã giao một phần).
+ * Duyệt phiếu theo thứ tự thời gian, cộng dồn SL từng dòng — cùng công thức làm tròn luỹ kế lúc tạo phiếu.
+ */
+export async function rewriteDeliveryLedger(tx: Tx, actor: Actor, orderId: number): Promise<void> {
+  const order = await tx.saleOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
+  const notes = await tx.deliveryNote.findMany({ where: { orderId, isCancelled: false }, orderBy: [{ at: "asc" }, { id: "asc" }], include: { lines: true } });
+  const values = deliveryValuesOf(order, notes);
+  for (const note of notes) {
+    const value = values.get(note.id)!;
     await removePartnerLedger(tx, "DELIVERY", note.id);
     if (value.gt(0)) {
       await postPartnerLedger(tx, { periodId: note.periodId, partnerId: order.partnerId, side: "debit", amount: value, docType: "DELIVERY", docId: note.id, at: note.at, createdBy: actor.userId });
