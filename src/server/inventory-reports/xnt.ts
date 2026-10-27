@@ -6,8 +6,15 @@ import { getOpenPeriod } from "@/server/period/guard";
 export interface XntRow { productId: number; code: string; name: string; baseUnit: string; opening: string; inQty: string; outQty: string; closing: string; openingValue?: string; inValue?: string; outValue?: string; closingValue?: string }
 /** XNT theo sổ kho: tồn đầu + nhập − xuất = tồn cuối; giá trị chỉ trả khi actor có cost.view. */
 export interface XntTotals { opening: string; inQty: string; outQty: string; closing: string; openingValue?: string; inValue?: string; outValue?: string; closingValue?: string }
-export interface XntListOptions { from: Date; to: Date; q?: string; page: number; pageSize: number }
-export async function xntReport(db: PrismaClient, actor: Actor, from: Date, to: Date): Promise<{ rows: XntRow[]; totals: XntTotals }> {
+/** Lọc nhóm hàng: id nhóm (chuỗi số) hoặc "none" = chưa phân nhóm; rỗng/không có = mọi nhóm. */
+export interface XntListOptions { from: Date; to: Date; q?: string; groups?: string[]; page: number; pageSize: number }
+export const XNT_NO_GROUP = "none";
+function groupWhere(groups?: string[]): Prisma.ProductWhereInput {
+  if (!groups?.length) return {};
+  const ids = groups.filter((g) => /^\d+$/.test(g)).map(Number);
+  return { OR: [...(ids.length ? [{ groupId: { in: ids } }] : []), ...(groups.includes(XNT_NO_GROUP) ? [{ groupId: null }] : [])] };
+}
+export async function xntReport(db: PrismaClient, actor: Actor, from: Date, to: Date, groups?: string[]): Promise<{ rows: XntRow[]; totals: XntTotals }> {
   const period = await getOpenPeriod(db);
   // Giá trị dùng đúng khoảng nửa mở [from, to), giống số lượng trên sổ kho.
   const sums = (where: Prisma.Sql) => db.$queryRaw<{ productId: number; inValue: Prisma.Decimal; outValue: Prisma.Decimal }[]>`
@@ -16,7 +23,7 @@ export async function xntReport(db: PrismaClient, actor: Actor, from: Date, to: 
     WHERE sl."periodId" = ${period.id} AND ${where}
     GROUP BY sl."productId"`;
   const [products, before, range, beforeValues, rangeValues] = await Promise.all([
-    db.product.findMany({ orderBy: { code: "asc" } }),
+    db.product.findMany({ where: groupWhere(groups), orderBy: { code: "asc" } }),
     db.stockLedger.groupBy({ by: ["productId"], where: { periodId: period.id, at: { lt: from } }, _sum: { qtyIn: true, qtyOut: true } }),
     db.stockLedger.groupBy({ by: ["productId"], where: { periodId: period.id, at: { gte: from, lt: to } }, _sum: { qtyIn: true, qtyOut: true } }),
     sums(Prisma.sql`sl.at < ${from}`), sums(Prisma.sql`sl.at >= ${from} AND sl.at < ${to}`),
@@ -39,7 +46,7 @@ export async function xntReport(db: PrismaClient, actor: Actor, from: Date, to: 
 
 /** Danh sách XNT có tìm kiếm và phân trang; totals luôn tính trên toàn bộ tập đã lọc. */
 export async function xntList(db: PrismaClient, actor: Actor, options: XntListOptions) {
-  const report = await xntReport(db, actor, options.from, options.to);
+  const report = await xntReport(db, actor, options.from, options.to, options.groups);
   const needle = options.q?.trim().toLocaleLowerCase("vi-VN");
   const matched = needle ? report.rows.filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("vi-VN").includes(needle)) : report.rows;
   const totals = matched.reduce<XntTotals>((sum, row) => ({

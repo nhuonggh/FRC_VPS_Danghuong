@@ -18,8 +18,8 @@ export async function exportOnHandXlsx(db: PrismaClient, actor: Actor, params: L
   return buildXlsx(belowMinOnly ? "Định mức tồn" : "Tồn kho", columns, rows.map((row) => ({ ...row })));
 }
 
-export async function exportXntXlsx(db: PrismaClient, actor: Actor, from: Date, to: Date, q?: string) {
-  const { rows } = await xntList(db, actor, { from, to, q, page: 1, pageSize: Number.MAX_SAFE_INTEGER });
+export async function exportXntXlsx(db: PrismaClient, actor: Actor, from: Date, to: Date, q?: string, groups?: string[]) {
+  const { rows } = await xntList(db, actor, { from, to, q, groups, page: 1, pageSize: Number.MAX_SAFE_INTEGER });
   const withValue = rows.some((row) => row.closingValue !== undefined);
   return buildXlsx("Xuất nhập tồn", [
     { header: "Mã", key: "code", text: true }, { header: "Sản phẩm", key: "name", width: 32 }, { header: "Đơn vị", key: "baseUnit" },

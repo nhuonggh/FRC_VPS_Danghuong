@@ -28,11 +28,26 @@ export function dropEmptyPurchaseLines(form: UseFormReturn<PurchaseInput>) {
   if (kept.length > 0 && kept.length < lines.length) form.setValue("lines", kept, { shouldDirty: true });
 }
 
-/** Nhà cung cấp · ngày nhập · cước vận chuyển. */
-export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, supplierGroups, ordering = false }: FormProps & { initialSupplier?: ComboOption | null; ordering?: boolean; maxDate: string; /** Có = hiện nút thêm nhanh nhà cung cấp (cần quyền quản lý đối tác). */ supplierGroups?: ComboOption[] }) {
+/** Công nợ hiện tại của NCC đang chọn (dương = NCC nợ mình, âm = mình nợ NCC); null = chưa chọn / không có quyền xem công nợ. */
+function useSupplierBalance(partnerId: number | undefined) {
+  const [balance, setBalance] = useState<number | null>(null);
+  useEffect(() => {
+    setBalance(null);
+    if (!partnerId) return;
+    let stale = false;
+    apiFetch<{ balance: string | null }>(`/api/debts/partners/${partnerId}/balance`).then((r) => { if (!stale && r.balance !== null) setBalance(Number(r.balance)); }).catch(() => {});
+    return () => { stale = true; };
+  }, [partnerId]);
+  return balance;
+}
+
+/** Nhà cung cấp · ngày nhập · cước vận chuyển. `onBalance` báo công nợ NCC cho form (tính "nợ sau phiếu"). */
+export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, supplierGroups, ordering = false, onBalance }: FormProps & { initialSupplier?: ComboOption | null; ordering?: boolean; maxDate: string; onBalance?: (balance: number | null) => void; /** Có = hiện nút thêm nhanh nhà cung cấp (cần quyền quản lý đối tác). */ supplierGroups?: ComboOption[] }) {
   const { register, control, watch, setValue, formState: { errors } } = form;
   const [picked, setPicked] = useState<ComboOption | null>(initialSupplier);
   const supplier = watch("partnerId") ? picked : null;
+  const balance = useSupplierBalance(watch("partnerId"));
+  useEffect(() => { onBalance?.(balance); }, [balance]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadSuppliers = (q: string) => apiFetch<ComboOption[]>(`/api/partner-lists/suppliers/search?q=${encodeURIComponent(q)}`);
   return <FormGrid>
     <InlineField id="supplier" label="Nhà cung cấp" required error={errors.partnerId?.message} className="md:col-span-2">
@@ -41,6 +56,7 @@ export function PurchaseHeaderFields({ form, initialSupplier = null, maxDate, su
         {supplierGroups && <div className="flex items-center border-l border-border px-1"><QuickCustomerDialog kind="supplier" groups={supplierGroups} onCreated={(c) => { setPicked(c); setValue("partnerId", Number(c.value), { shouldDirty: true, shouldValidate: true }); }} /></div>}
       </>} />
     </InlineField>
+    {balance !== null && <p className="-mt-2 text-sm tabular text-fg-secondary md:col-span-2">Nợ cũ: <strong className={balance > 0 ? "text-info" : balance < 0 ? "text-warning" : ""}>{balance < 0 ? `Mình nợ NCC ${formatCurrency(Math.abs(balance))}` : balance > 0 ? `NCC nợ mình ${formatCurrency(balance)}` : "0 ₫"}</strong></p>}
     <InlineField id="date" label={ordering ? "Ngày đặt" : "Ngày nhập"} required error={errors.date?.message}><input id="date" type="date" max={maxDate} {...register("date")} aria-invalid={!!errors.date} className={igInput} /></InlineField>
     {!ordering && <InlineField id="freightCost" label="Cước vận chuyển (₫)" hint="Phân bổ vào giá vốn theo giá trị dòng hàng" error={errors.freightCost?.message} labelClass="sm:min-w-44"><RhfNumberInput id="freightCost" control={control} name={"freightCost"} aria-invalid={!!errors.freightCost} className={`${igInput} tabular text-right`} /></InlineField>}
   </FormGrid>;
