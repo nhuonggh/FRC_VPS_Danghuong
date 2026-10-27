@@ -35,7 +35,7 @@ export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPri
   const [ratioInput, setRatioInput] = useState("1"); // chưa có tỷ lệ ⇒ mặc định 1, lưu cho lần sau
   const [unit, setUnit] = useState("");
   const [len, setLen] = useState("");
-  const [qty, setQty] = useState("1");
+  const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
   const [note, setNote] = useState("");
@@ -49,11 +49,11 @@ export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPri
   const [m2Str, setM2Str] = useState<string | null>(null); // đang gõ ở ô Giá/m² (ô gốc, giữ nguyên số đã gõ); null = giá/md là ô gốc, giá/m² tính ra
   const chooseMode = (m: "market" | "weight") => { setPriceMode(m); setWeightStr(null); setM2Str(null); try { localStorage.setItem("sale-price-mode", m); } catch { /* không lưu được thì thôi */ } };
 
-  const reset = () => { setProduct(null); setTypes([]); setTypeId(null); setUnit(""); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setPickKey((k) => k + 1); setWeightUnit(""); setWeightStr(null); setM2Str(null); };
+  const reset = () => { setProduct(null); setTypes([]); setTypeId(null); setUnit(""); setLen(""); setQty(""); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setPickKey((k) => k + 1); setWeightUnit(""); setWeightStr(null); setM2Str(null); };
   const pickProduct = (o: ComboOption | null) => {
     const p = o as ProductOption | null;
     if (!p) { reset(); return; }
-    setProduct(p); setTypes([]); setTypeId(null); setUnit(p.baseUnit); setLen(""); setQty("1"); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setWeightUnit(p.units?.[0]?.unit ?? ""); setWeightStr(null); setM2Str(null);
+    setProduct(p); setTypes([]); setTypeId(null); setUnit(p.baseUnit); setLen(""); setQty(""); setPrice(""); setPriceTouched(false); setNote(""); setError(""); setDto(null); setWeightUnit(p.units?.[0]?.unit ?? ""); setWeightStr(null); setM2Str(null);
     apiFetch<TypeOption[]>(`/api/orders/options/processing-types?productId=${p.value}`).then(setTypes).catch(() => setTypes([]));
   };
 
@@ -169,7 +169,7 @@ export function SaleLineEntry({ date, loadProducts, pricingPartnerId, canEditPri
           <input id="se-len" value={len} onChange={(e) => { setLen(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} placeholder="7.1*7+6.8*1" autoComplete="off" className={igInput} />
         </InlineField>}
         <InlineField id="se-qty" label="Số lượng" labelClass={LABEL}>
-          <NumberInput id="se-qty" maxFrac={3} value={useLength ? "" : qty} disabled={useLength} placeholder={useLength ? "Tính từ chiều dài" : "1"} onValueChange={setQty} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
+          <NumberInput id="se-qty" maxFrac={3} value={useLength ? "" : qty} disabled={useLength} placeholder={useLength ? "Tính từ chiều dài" : ""} onValueChange={setQty} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className={`${igInput} tabular text-right`} />
           <select aria-label="Đơn vị tính" value={useLength ? product.baseUnit : unit} disabled={useLength} onChange={(e) => { setUnit(e.target.value); setPriceTouched(false); }} className="h-11 shrink-0 cursor-pointer border-l border-border bg-hover px-2 text-sm outline-none disabled:opacity-60 md:h-9">
             {(product.units ?? []).map((u) => <option key={u.unit} value={u.unit}>{u.unit}</option>)}
           </select>
