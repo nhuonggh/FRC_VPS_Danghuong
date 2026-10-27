@@ -5,7 +5,8 @@ import { assertCan } from "@/lib/permissions/guard";
 import { formatCurrency, formatQty } from "@/lib/format";
 import { parseDimNote } from "@/lib/length-expr";
 import { getCompany, type CompanyDTO } from "@/server/company/queries";
-import { getOrder } from "@/server/sales/queries";
+import { getOrder, goodsTotalOf } from "@/server/sales/queries";
+import { ictYmd } from "@/lib/time";
 import { getPurchase } from "@/server/purchase/queries";
 import { getQuote } from "@/server/quotes/queries";
 import { DomainError } from "@/server/http/errors";
@@ -19,6 +20,7 @@ import fontFaces from "./html-fonts.json";
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const e = escapeHtml;
+const dmy = (d: Date) => { const [, m, day] = ictYmd(d).split("-"); return `${day}/${m}`; };
 const image = (url: string, cls: string, alt: string) => /^(https:\/\/|\/(?!\/))/.test(url) ? `<img class="${cls}" src="${e(url)}" alt="${e(alt)}">` : "";
 type PrintType = string;
 /** Ba mẫu gốc có CSS riêng; các phiếu còn lại dùng chung CSS của hóa đơn (cùng phong cách). */
@@ -30,6 +32,8 @@ export interface HtmlPrintDocument {
   lines: Line[]; summary: { label: string; value: string; big?: boolean }[]; words: string; notices: string[];
   /** Địa chỉ giao hàng nhập trên đơn (hóa đơn bán hàng). */
   shipAddress?: string;
+  /** Hóa đơn bán hàng, chế độ "Chọn đơn nợ cũ": các đơn cũ của khách còn nợ để tích chọn (đã chọn → cộng vào phiếu). */
+  priorOptions?: { id: number; label: string; amount: string; selected: boolean }[];
 }
 
 /** Adjacent cuts of the same product/price become the cut list shown in the supplied invoice. */
@@ -65,8 +69,8 @@ async function debtBefore(db: PrismaClient, partnerId: number, periodId: number,
 }
 
 /** Only exposes the presentation fields. Costs, profit and secrets never enter the HTML. */
-/** `opts.debt` ghi đè cờ printDebt của đơn (chọn in có/không nợ cũ ngay lúc in). */
-export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: string, id: number, opts: { debt?: boolean; range?: { from: string; to: string } } = {}): Promise<HtmlPrintDocument> {
+/** `opts.debt` ghi đè cờ printDebt của đơn (chọn in có/không nợ cũ ngay lúc in). `opts.prior` (đã định nghĩa, kể cả rỗng) = chỉ cộng các đơn cũ được chọn thay cho toàn bộ nợ cũ. */
+export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: string, id: number, opts: { debt?: boolean; prior?: number[]; range?: { from: string; to: string } } = {}): Promise<HtmlPrintDocument> {
   assertCan(actor.perms, "print.use");
   if (!hasLocalPrint(type)) throw new DomainError("Loại phiếu này chưa có mẫu HTML.", 404);
   assertCan(actor.perms, printDoc(type)!.perm);
@@ -89,15 +93,33 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
     if (order.walkInName) body.partner = { ...(body.partner ?? { code: "", name: "", phone: "", address: "" }), name: order.walkInName, phone: order.walkInPhone ?? body.partner?.phone ?? "" };
     const total = D(order.orderTotal ?? 0);
     // Same accounting definition as the order list: opening + ledger strictly before orderDate.
-    const old = actor.perms.has("debt.view") && (opts.debt ?? raw.printDebt) ? await debtBefore(db, order.partnerId, raw.periodId, order.orderDate) : null;
     const { orderPaid } = await import("@/server/deposits/status");
     const paid = await orderPaid(db, id);
-    const remaining = total.plus(old ?? 0).minus(paid);
+    const pickMode = actor.perms.has("debt.view") && opts.prior !== undefined;
+    const old = !pickMode && actor.perms.has("debt.view") && (opts.debt ?? raw.printDebt) ? await debtBefore(db, order.partnerId, raw.periodId, order.orderDate) : null;
+    // Chọn đơn nợ cũ: các đơn gần đây của CHÍNH khách này còn chưa thu đủ (giá trị đơn − tiền đã thu gắn với đơn)
+    let picked: { code: string; date: Date; amount: Prisma.Decimal }[] = [];
+    if (pickMode) {
+      const rows = await db.saleOrder.findMany({ where: { partnerId: order.partnerId, isCancelled: false, id: { not: id }, orderDate: { lte: order.orderDate } }, orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 30, include: { lines: true } });
+      const options: { id: number; code: string; date: Date; amount: Prisma.Decimal }[] = [];
+      for (const o of rows) {
+        const left = goodsTotalOf(o.lines, o).plus(o.shippingFee).minus(await orderPaid(db, o.id));
+        if (left.gt(0)) options.push({ id: o.id, code: o.code, date: o.orderDate, amount: left });
+      }
+      const chosen = new Set(opts.prior);
+      picked = options.filter((o) => chosen.has(o.id));
+      result.priorOptions = options.map((o) => ({ id: o.id, label: `${o.code} · ${dmy(o.date)}`, amount: formatCurrency(o.amount.toString()), selected: chosen.has(o.id) }));
+    }
+    const carried = picked.reduce((a, o) => a.plus(o.amount), D(0)).plus(old ?? 0);
+    const remaining = total.plus(carried).minus(paid);
+    const hasCarry = old !== null || picked.length > 0;
     result.summary = [
       { label: "Tổng đơn", value: formatCurrency(total.toString()) },
-      ...(old !== null ? [{ label: "Nợ cũ", value: formatCurrency(old.toString()) }, { label: "Tổng cộng", value: formatCurrency(total.plus(old).toString()) }] : []),
+      ...(old !== null ? [{ label: "Nợ cũ", value: formatCurrency(old.toString()) }] : []),
+      ...picked.map((o) => ({ label: `Nợ đơn ${o.code} (${dmy(o.date)})`, value: formatCurrency(o.amount.toString()) })),
+      ...(hasCarry ? [{ label: "Tổng cộng", value: formatCurrency(total.plus(carried).toString()) }] : []),
       { label: "Đã thu", value: formatCurrency(paid.toString()) },
-      { label: old === null ? "Còn phải trả của đơn" : "Còn phải trả", value: formatCurrency(remaining.toString()), big: true },
+      { label: hasCarry ? "Còn phải trả" : "Còn phải trả của đơn", value: formatCurrency(remaining.toString()), big: true },
     ];
     result.words = moneyInWords(remaining.toFixed(0));
     // Chưa cấu hình ảnh QR cố định ở mẫu in → tự sinh VietQR từ tài khoản công ty, kèm số tiền còn phải trả + mã đơn.
@@ -232,7 +254,7 @@ function tableHtml(spec: TableSpec, lines: Line[]): string {
 const infoBlock = (items: [string, string | undefined, boolean?][]) => `<div class="cust">${items.filter(([, v]) => v).map(([label, v, full]) => `<div${full ? ' class="full"' : ""}><span>${e(label)}:</span> <b>${e(v)}</b></div>`).join("")}</div>`;
 
 /** `hidePieces`: bỏ dòng tổng số tấm (giữ dòng kích thước) để chụp gửi bên đặt hàng. `debt`: lựa chọn nợ cũ đang áp dụng, giữ khi chuyển chế độ. */
-export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: boolean, nonce: string, opts: { hidePieces?: boolean; debt?: boolean; paper?: "A4" | "A5" } = {}): string {
+export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: boolean, nonce: string, opts: { hidePieces?: boolean; debt?: boolean; prior?: number[]; paper?: "A4" | "A5" } = {}): string {
   const { body: b, company: c, type } = model;
   const a5 = opts.paper === "A5" && type === "SALE_INVOICE";
   /** Phiếu thu/chi in dạng bill nhỏ (khổ 80mm như máy in siêu thị): không đầu trang công ty. */
@@ -264,19 +286,27 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const sum = delivery ? "" : `<tr class="sum"><td colspan="${cols.length - 1}" class="c">${invoice ? "Tổng" : "Tổng tiền hàng"}</td><td class="r">${e(b.totals.total)}</td></tr>`;
   const table = voucher ? "" : TABLES[type] ? tableHtml(TABLES[type], model.lines) : `<table><colgroup>${widths.map((width) => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${cols.map((col) => `<th scope="col">${col}</th>`).join("")}</tr></thead><tbody>${rows}${sum}</tbody></table>`;
   const signs = SIGNS[type] ?? [];
-  const href = (o: { mode?: string; hidePieces?: boolean; debt?: boolean; auto?: boolean; paper?: "A4" | "A5" }) => {
+  /** `prior`: undefined = giữ lựa chọn đơn nợ cũ đang có; null = thoát chế độ chọn đơn. */
+  const href = (o: { mode?: string; hidePieces?: boolean; debt?: boolean; auto?: boolean; paper?: "A4" | "A5"; prior?: number[] | null }) => {
     const q = new URLSearchParams({ mode: o.mode ?? (mono ? "mono" : "color") });
     if ((o.paper ?? (a5 ? "A5" : "A4")) === "A5") q.set("paper", "A5");
     if (o.hidePieces ?? opts.hidePieces) q.set("hidePieces", "1");
+    const prior = o.prior === undefined ? opts.prior : o.prior ?? undefined;
     const debt = o.debt ?? opts.debt;
-    if (debt !== undefined) q.set("debt", debt ? "1" : "0");
+    if (prior) { q.set("debt", "pick"); if (prior.length) q.set("prior", prior.join(",")); }
+    else if (debt !== undefined) q.set("debt", debt ? "1" : "0");
     if (o.auto) q.set("auto", "1");
     return `?${q}`;
   };
   const showDebt = model.summary.some((s) => s.label === "Nợ cũ");
+  const pickMode = opts.prior !== undefined && model.priorOptions !== undefined;
+  const nav = (p: number[]) => e(href({ prior: p }));
+  const picker = saleInvoice && pickMode
+    ? `<nav class="picker" aria-label="Chọn đơn nợ cũ"><b>Chọn các đơn cũ cần cộng vào phiếu này:</b>${model.priorOptions!.length ? model.priorOptions!.map((o) => `<a href="${nav(o.selected ? opts.prior!.filter((x) => x !== o.id) : [...opts.prior!, o.id])}" role="checkbox" aria-checked="${o.selected}">${o.selected ? "☑" : "☐"} ${e(o.label)} · còn nợ ${e(o.amount)}</a>`).join("") : "<span>Khách không có đơn cũ nào còn nợ.</span>"}</nav>`
+    : "";
   // Hóa đơn bán hàng: xem trước rộng, nút in dính đáy màn hình; các phiếu khác giữ thanh công cụ cũ.
   const toolbar = saleInvoice
-    ? `<nav class="toolbar bar" aria-label="Công cụ in"><a href="${e(href({ hidePieces: !opts.hidePieces }))}" role="checkbox" aria-checked="${!!opts.hidePieces}">${opts.hidePieces ? "☑" : "☐"} Ẩn tổng số tấm</a><a href="${e(href({ debt: !showDebt }))}" role="checkbox" aria-checked="${showDebt}">${showDebt ? "☑" : "☐"} Hiện nợ cũ</a><a href="${e(href({ mode: mono ? "color" : "mono" }))}">${mono ? "Bản màu" : "Bản đen trắng"}</a><a href="${e(href({ paper: a5 ? "A4" : "A5" }))}" role="checkbox" aria-checked="${a5}">${a5 ? "☑" : "☐"} Khổ A5</a><a href="${e(href({ debt: false, auto: true }))}">In đơn hàng không có công nợ cũ</a><a class="pri" href="${e(href({ debt: true, auto: true }))}">In đơn hàng</a></nav>`
+    ? `<nav class="toolbar bar" aria-label="Công cụ in"><a href="${e(href({ hidePieces: !opts.hidePieces }))}" role="checkbox" aria-checked="${!!opts.hidePieces}">${opts.hidePieces ? "☑" : "☐"} Ẩn tổng số tấm</a><a href="${e(href({ debt: !showDebt, prior: null }))}" role="checkbox" aria-checked="${showDebt}">${showDebt ? "☑" : "☐"} Hiện nợ cũ</a><a href="${e(href(pickMode ? { debt: false, prior: null } : { prior: [] }))}" role="checkbox" aria-checked="${pickMode}">${pickMode ? "☑" : "☐"} Chọn đơn nợ cũ</a><a href="${e(href({ mode: mono ? "color" : "mono" }))}">${mono ? "Bản màu" : "Bản đen trắng"}</a><a href="${e(href({ paper: a5 ? "A4" : "A5" }))}" role="checkbox" aria-checked="${a5}">${a5 ? "☑" : "☐"} Khổ A5</a><a href="${e(href({ debt: false, prior: null, auto: true }))}">In đơn hàng không có công nợ cũ</a><a class="pri" href="${e(href(pickMode ? { auto: true } : { debt: true, auto: true }))}">In đơn hàng</a></nav>`
     : `<nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button" class="pri">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>${slip ? "Khổ 80mm (máy in bill)" : "A4"} · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt</span></nav>`;
   const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : type === "TRIP_CASH" ? "Chuyến" : "Số";
   const dateLabel = type === "TRIP_CASH" ? "Thời gian thu" : "Ngày";
@@ -296,6 +326,7 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   @page{size:${slip ? "80mm auto" : a5 ? "A5" : "A4"};margin:${slip ? "2mm" : a5 ? "8mm 8mm 7mm" : "12mm 12mm 10mm"}}
   ${slip ? ".page{width:80mm;min-height:0;padding:3mm;border-top:0}.titlebar{display:block;text-align:center;margin:0 0 6px}.titlebar h2{border-left:0;padding:0;font-size:15px}.meta{text-align:center;font-size:11px}.cust{display:block;font-size:11px;padding:4px 0;background:none;border-top:1px dashed var(--ink);border-bottom:1px dashed var(--ink);border-radius:0;margin-bottom:6px}.cust div{padding:1px 0}.tot{width:auto;font-size:12px;margin:6px 0 2px}.tot .big{font-size:15px}.words{text-align:center;font-size:11px;margin-bottom:8px}" + (type === "TRIP_CASH" ? "table{font-size:11px}th,td{padding:3px 4px}.note{font-size:10px}" : "") + ".sign{flex-wrap:wrap}.sign div{flex:1 1 45%;min-height:54px;font-size:11px}.sign small{font-size:9px}.sign em{margin-top:20px}.terms{font-size:9.5px;margin-top:8px}@media print{.page{width:auto;padding:0}}" : ""}
   ${a5 ? "@media print{body{font-size:11px}.head{gap:8px;padding-bottom:6px}.head img.logo{height:48px}.co h1{font-size:15px}.co{font-size:10px}.titlebar{margin:8px 0 6px}.titlebar h2{font-size:15px}.meta{font-size:11px}.cust{font-size:11px;padding:5px 8px;margin-bottom:8px}table{font-size:10.5px}th,td{padding:4px 5px}.cut{font-size:10px}.qr,.qr .box{width:84px}.qr .box{height:84px}.qr{font-size:9px}.tot{width:230px;font-size:11px}.tot .big{font-size:13px}.sign div{min-height:64px}.sign em{margin-top:28px}.terms{font-size:9.5px;margin-top:8px}}" : ""}
-  @media print{.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body>${toolbar}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>${dateLabel}:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  .picker{display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:210mm;margin:0 auto 12px;padding:10px 12px;background:var(--soft);color:var(--ink);border-radius:6px;font-size:13px}.picker a{padding:6px 10px;border:1px solid var(--line);border-radius:6px;color:inherit;text-decoration:none}
+  @media print{.picker,.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
+  </style></head><body>${toolbar}${picker}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>${dateLabel}:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }

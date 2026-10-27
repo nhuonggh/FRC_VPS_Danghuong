@@ -8,7 +8,7 @@ import { getPurchase } from "@/server/purchase/queries";
 
 vi.mock("@/server/company/queries", () => ({ getCompany: vi.fn(async () => ({ name: "Công ty thật", address: "Hà Nội", phone: "0901", taxCode: "", logo: "/logo.svg", bank: { accountNo: "123", bankName: "MB", accountHolder: "A", branch: "" } })) }));
 vi.mock("@/server/print/contracts", () => ({ buildContract: vi.fn(async () => ({ docCode: "PG1", partner: { name: "Khách", phone: "", address: "", code: "KH1" }, doc: { code: "PG1", date: "19/10/2026", orderCode: "DH1" }, lines: [{ name: "Tôn", qty: "14", unit: "m", processing: "Xốp" }], totals: {} })) }));
-vi.mock("@/server/sales/queries", () => ({ getOrder: vi.fn() }));
+vi.mock("@/server/sales/queries", () => ({ getOrder: vi.fn(), goodsTotalOf: (lines: { t: number }[]) => new Prisma.Decimal(lines.reduce((a, l) => a + l.t, 0)) }));
 vi.mock("@/server/purchase/queries", () => ({ getPurchase: vi.fn() }));
 vi.mock("@/server/deposits/status", () => ({ orderPaid: vi.fn(async () => new Prisma.Decimal(14000000)) }));
 const actor = { userId: 2, perms: new Set(["print.use", "order.view"]) };
@@ -41,6 +41,33 @@ describe("HTML in trực tiếp", () => {
     // Không có quyền xem nợ thì ?debt=1 cũng không lộ nợ cũ.
     const noPerm = await buildHtmlPrint(db as never, { ...actor, perms: new Set(["print.use", "sale_price.view"]) }, "SALE_INVOICE", 1, { debt: true });
     expect(noPerm.summary.some((r) => r.label === "Nợ cũ")).toBe(false);
+  });
+  it("chọn đơn nợ cũ: chỉ cộng các đơn cũ còn nợ được chọn của chính khách, không cộng toàn bộ nợ cũ", async () => {
+    vi.mocked(getOrder).mockResolvedValue({ partnerId: 1, orderDate: new Date("2026-10-01"), orderTotal: "14700000", shippingFee: "0", lines: [{ qty: "14", lineAmount: "14700000", note: null }] } as never);
+    const findMany = vi.fn(async () => [
+      { id: 5, code: "DH5", orderDate: new Date("2026-09-15"), shippingFee: new Prisma.Decimal(0), lines: [{ t: 20000000 }] }, // còn nợ 20tr − 14tr (mock đã thu) = 6tr
+      { id: 6, code: "DH6", orderDate: new Date("2026-09-10"), shippingFee: new Prisma.Decimal(0), lines: [{ t: 10000000 }] }, // đã thu đủ → không đưa vào danh sách
+    ]);
+    const aggregate = vi.fn();
+    const db = { printTemplate: { findFirst: async () => null }, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1, printDebt: true }), findMany }, partnerLedger: { aggregate } };
+    const withDebt = { ...actor, perms: new Set(["print.use", "sale_price.view", "debt.view"]) };
+    const picked = await buildHtmlPrint(db as never, withDebt, "SALE_INVOICE", 1, { prior: [5, 6] });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ partnerId: 1, id: { not: 1 } }) }));
+    expect(aggregate).not.toHaveBeenCalled(); // không tính toàn bộ nợ cũ
+    expect(picked.priorOptions?.map((o) => o.id)).toEqual([5]);
+    expect(picked.summary.find((r) => r.label === "Nợ đơn DH5 (15/09)")?.value).toContain("6.000.000");
+    expect(picked.summary.some((r) => r.label === "Nợ cũ")).toBe(false);
+    expect(picked.summary.find((r) => r.label === "Còn phải trả")?.value).toContain("6.700.000"); // 14,7tr + 6tr − 14tr đã thu
+    const none = await buildHtmlPrint(db as never, withDebt, "SALE_INVOICE", 1, { prior: [] });
+    expect(none.summary.at(-1)).toMatchObject({ label: "Còn phải trả của đơn" });
+    expect(none.summary.at(-1)?.value).toContain("700.000");
+    const noPerm = await buildHtmlPrint(db as never, { ...actor, perms: new Set(["print.use", "sale_price.view"]) }, "SALE_INVOICE", 1, { prior: [5] });
+    expect(noPerm.priorOptions).toBeUndefined();
+    const html = renderHtmlPrint(picked, true, false, "n", { prior: [5] });
+    expect(html).toContain("☑ Chọn đơn nợ cũ");
+    expect(html).toContain("☑ DH5 · 15/09 · còn nợ");
+    expect(html).toContain('href="?mode=mono&amp;debt=pick"'); // bỏ tích đơn duy nhất
+    expect(renderHtmlPrint(none, true, false, "n", { prior: [] })).toContain('href="?mode=mono&amp;debt=pick&amp;prior=5"');
   });
   it("hóa đơn in địa chỉ giao hàng nhập trên đơn; đơn không nhập thì không có dòng đó", async () => {
     const db = { printTemplate: { findFirst: async () => null }, saleOrder: { findUniqueOrThrow: async () => ({ periodId: 1, printDebt: false }) } };

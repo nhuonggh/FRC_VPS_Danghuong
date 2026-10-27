@@ -267,6 +267,10 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 27/10/2026 (đợt 4) — in hóa đơn: chọn đơn nợ cũ (ĐÃ LÀM code + test, chờ user duyệt merge; không migration)
+- Màn xem trước in hóa đơn bán hàng: thêm tích "Chọn đơn nợ cũ" (cạnh "Hiện nợ cũ"). Bật lên hiện danh sách tối đa 30 đơn gần đây của CHÍNH khách còn nợ (giá trị đơn − `orderPaid`), tích đơn nào thì phiếu in dòng "Nợ đơn DHxxx (dd/mm)" + "Tổng cộng" + "Còn phải trả"; không cộng toàn bộ nợ cũ. Query `?debt=pick&prior=id,id`; cần `debt.view`. Code: `buildHtmlPrint` (`opts.prior`) + `renderHtmlPrint` (`.picker`) + route in HTML. Ước tính theo từng đơn (khách trả chung không gắn đơn thì chỉ tham khảo).
+- CI #73 từng đỏ vì test dải nhập SP giả định SL mặc định 1 → sửa ở #74.
+
 ### YÊU CẦU KHÁCH 27/10/2026 (đợt 3) — 2 sửa nhỏ (không migration)
 - Form Tạo đơn hàng (`SaleLineEntry`): ô Số lượng không còn gợi ý/mặc định "1" (để trống).
 - Nhập kết quả giao (`ResultDialog`): sửa lại kết quả đã nhập rồi chọn "Giao một phần" thì danh sách "Số lượng thực giao" trống (số còn giao tính ra 0 vì phiếu giao cũ của chính điểm này chưa được hoàn tác). `getTrip` giờ cộng lại phần đó (`own()` ở `src/server/trips/queries.ts`); hết hàng thật thì hiện dòng giải thích.
