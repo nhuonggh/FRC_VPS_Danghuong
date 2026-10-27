@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Actor } from "@/lib/permissions/scope";
 import { deliveryNoteSchema } from "@/server/delivery/schemas";
+import { findDeliveryMismatches, repairDeliveryMismatches } from "@/server/delivery/repair-rounding";
 import { createDeliveryNote } from "@/server/delivery/service";
 import { editSaleOrderTx } from "@/server/sales/lifecycle";
 import { getOrder, getOrderForEdit } from "@/server/sales/queries";
@@ -100,5 +101,30 @@ describe("làm tròn tổng tiền hàng theo đơn (thành tiền dòng không 
     expect(saleOrderSchema.safeParse({ ...base, roundAmounts: true, lines: [line(356_800)] }).success).toBe(true); // ≤ 357.000
     expect(saleOrderSchema.safeParse({ ...base, lines: [line(356_800)] }).success).toBe(false); // > 356.400
     expect(saleOrderSchema.safeParse({ ...base, lines: [line(356_400)] }).success).toBe(true);
+  });
+});
+
+describe("sửa công nợ giao hàng đơn làm tròn xuống đã giao trước bản sửa", () => {
+  it("dò phiếu lệch, ghi lại đúng tổng đã làm tròn; chạy lại không còn lệch; kỳ đã kết sổ bị bỏ qua", async () => {
+    const o = await create({ lines: [
+      { productId: fg.id, unit: fg.baseUnit, qty: 1.5, salePrice: 237_600, discountNow: 0, discountAccum: 0, processingTypeId: null },
+      { productId: fg.id, unit: fg.baseUnit, qty: 1, salePrice: 120_050, discountNow: 0, discountAccum: 0, processingTypeId: null },
+    ] });
+    const lines = await prisma.saleOrderLine.findMany({ where: { orderId: o.id }, orderBy: { id: "asc" } });
+    const note = await prisma.$transaction((t) => createDeliveryNote(t, actor, deliveryNoteSchema.parse({ orderId: o.id, date: "2026-09-15", note: "", lines: lines.map((l) => ({ orderLineId: l.id, qty: Number(l.qty) })) }), NOW));
+    expect(await findDeliveryMismatches(prisma)).toEqual([]);
+    // Giả lập dữ liệu cũ: công nợ giao hàng ghi theo tổng CHƯA làm tròn (476.450)
+    await prisma.partnerLedger.updateMany({ where: { docType: "DELIVERY", docId: note.id }, data: { debit: 476_450 } });
+    const bad = await findDeliveryMismatches(prisma);
+    expect(bad).toEqual([expect.objectContaining({ orderId: o.id, noteId: note.id, current: "476450", expected: "476000", periodOpen: true })]);
+    // Kỳ đã kết sổ ⇒ bỏ qua, không ghi gì
+    const skipped = await prisma.$transaction((t) => repairDeliveryMismatches(t, actor, bad.map((m) => ({ ...m, periodOpen: false }))));
+    expect(skipped).toEqual({ fixed: [], skipped: [o.id] });
+    expect(Number((await prisma.partnerLedger.findFirstOrThrow({ where: { docType: "DELIVERY", docId: note.id } })).debit)).toBe(476_450);
+    const done = await prisma.$transaction((t) => repairDeliveryMismatches(t, actor, bad));
+    expect(done).toEqual({ fixed: [o.id], skipped: [] });
+    expect(Number((await prisma.partnerLedger.findFirstOrThrow({ where: { docType: "DELIVERY", docId: note.id } })).debit)).toBe(476_000);
+    expect(await findDeliveryMismatches(prisma)).toEqual([]);
+    expect(await prisma.auditLog.count({ where: { action: "delivery.ledger_repair", entityId: String(o.id) } })).toBe(1);
   });
 });
