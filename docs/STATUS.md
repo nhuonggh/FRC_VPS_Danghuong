@@ -267,6 +267,10 @@ Quy ước VPS dùng chung (bám theo): mỗi dự án = `deploy_<slug>`, `<slug
 
 ## 6. CHƯA HOÀN THÀNH / SẼ HOÀN THÀNH (theo thứ tự)
 
+### YÊU CẦU KHÁCH 27/10/2026 (đợt 5) — in hóa đơn: ghi chú cùng hàng tổng tiền + ẩn thông tin công ty (ĐÃ LÀM code + test, chờ user duyệt merge; không migration)
+- Hóa đơn bán hàng/phiếu A4-A5: "Ghi chú" nằm cột trái, khối Tổng đơn/Đã thu/Còn phải trả cột phải (`.totrow`); phiếu bill nhỏ giữ ghi chú bên dưới.
+- Màn xem trước hóa đơn: tích "Ẩn thông tin công ty" (`?hideCompany=1`) bỏ cả khối đầu phiếu (logo, tên/địa chỉ/SĐT/STK, QR) khi giao đi cho người khác; giữ khi bấm In. Chọn lúc in, không lưu vào đơn.
+
 ### YÊU CẦU KHÁCH 27/10/2026 (đợt 4) — in hóa đơn: chọn đơn nợ cũ (ĐÃ LÀM code + test, chờ user duyệt merge; không migration)
 - Màn xem trước in hóa đơn bán hàng: thêm tích "Chọn đơn nợ cũ" (cạnh "Hiện nợ cũ"). Bật lên hiện danh sách tối đa 30 đơn gần đây của CHÍNH khách còn nợ (giá trị đơn − `orderPaid`), tích đơn nào thì phiếu in dòng "Nợ đơn DHxxx (dd/mm)" + "Tổng cộng" + "Còn phải trả"; không cộng toàn bộ nợ cũ. Query `?debt=pick&prior=id,id`; cần `debt.view`. Code: `buildHtmlPrint` (`opts.prior`) + `renderHtmlPrint` (`.picker`) + route in HTML. Ước tính theo từng đơn (khách trả chung không gắn đơn thì chỉ tham khảo).
 - CI #73 từng đỏ vì test dải nhập SP giả định SL mặc định 1 → sửa ở #74.

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docType: st
     const range = parseYmd(from) && parseYmd(to) ? { from, to } : undefined; // đối chiếu công nợ theo khoảng ngày
     const model = await buildHtmlPrint(prisma, actor, p.docType.toUpperCase(), idParam.parse(p.docId), { debt, prior, range });
     const nonce = randomUUID();
-    return new Response(renderHtmlPrint(model, req.nextUrl.searchParams.get("mode") !== "color", sp.get("auto") === "1", nonce, { hidePieces: sp.get("hidePieces") === "1", debt, prior, paper: sp.get("paper") === "A5" ? "A5" : "A4" }), { headers: {
+    return new Response(renderHtmlPrint(model, req.nextUrl.searchParams.get("mode") !== "color", sp.get("auto") === "1", nonce, { hidePieces: sp.get("hidePieces") === "1", hideCompany: sp.get("hideCompany") === "1", debt, prior, paper: sp.get("paper") === "A5" ? "A5" : "A4" }), { headers: {
       "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
       "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' https:; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
     } });
