@@ -134,7 +134,7 @@ describe("ReviewQueue", () => {
 });
 
 describe("CashBook", () => {
-  const book = (): CashBookDTO => ({ rangeOpening: null,
+  const book = (): CashBookDTO => ({ rangeOpening: null, handOversToday: [],
     periodName: "Kỳ 1", total: 1,
     accounts: [{ id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" }],
     selected: { id: 1, name: "Tiền mặt", bankNo: null, type: "CASH", opening: "1000000", in: "500000", out: "200000", balance: "1300000", reviewed: "1500000", pending: "-200000" },
@@ -150,6 +150,19 @@ describe("CashBook", () => {
     await userEvent.type(screen.getByLabelText(/Tiền kiểm đếm/), "1300000");
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Chốt quỹ" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/cash/closes", expect.objectContaining({ json: { cashAccountId: 1, closeAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:59\.999\+07:00$/), actual: 1300000, reason: "", handOver: false } })));
+  });
+  it("hộp thoại chốt quỹ hiện số dư sổ + chênh lệch, cảnh báo đã có phiếu nộp lại, chặn tích nhận lại khi kiểm đếm lớn hơn sổ", async () => {
+    render(<CashBook book={{ ...book(), handOversToday: [{ code: "PC000010", amount: "490618120" }] }} type="CASH" base="/accounting/cashbook" canClose canReopen canHandOver nowIso="2026-09-15T10:30:00.000Z" />);
+    await userEvent.click(screen.getByRole("button", { name: "Chốt quỹ" }));
+    const dlg = within(screen.getByRole("dialog"));
+    expect(dlg.getByText(/Số dư trong sổ hiện tại/)).toBeInTheDocument();
+    expect(dlg.getByText(/Hôm nay đã có phiếu Nộp lại quỹ: PC000010/)).toBeInTheDocument();
+    await userEvent.type(dlg.getByLabelText(/Tiền kiểm đếm/), "2000000");
+    await userEvent.click(dlg.getByRole("checkbox"));
+    expect(dlg.getByRole("alert")).toHaveTextContent(/lớn hơn số dư sổ/);
+    expect(dlg.getByRole("button", { name: "Chốt quỹ" })).toBeDisabled();
+    await userEvent.click(dlg.getByRole("checkbox"));
+    expect(dlg.getByRole("button", { name: "Chốt quỹ" })).toBeEnabled();
   });
   it("có quyền kiểm tra ⇒ nút Xác nhận ngay trên dòng chờ kiểm tra gọi API review; không quyền ⇒ không hiện", async () => {
     render(<CashBook book={book()} type="CASH" base="/accounting/cashbook" canClose canReopen canReview nowIso="2026-09-15T10:30:00.000Z" />);

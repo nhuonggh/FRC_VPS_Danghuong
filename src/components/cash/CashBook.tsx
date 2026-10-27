@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Badge, EmptyState, ReasonDialog, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
+import { Badge, EmptyState, MultiSelectFilter, ReasonDialog, SearchBox, InlineField, igInput, igArea, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { confirm } from "@/lib/confirm-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -59,7 +59,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
               </Link>
             ))}
           </nav>
-          {s && params && <div className="space-y-2"><QuickTimeFilter basePath={`${base}?account=${s.id}`} params={params} /><p className="text-xs text-fg-secondary">Phát sinh trong kỳ {book.periodName}, theo khoảng ngày đã chọn. Các số dư phía dưới là số hiện tại của kỳ.</p></div>}
+          {s && params && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><SearchBox basePath={`${base}?account=${s.id}`} params={params} placeholder="Tìm mã phiếu, nội dung, người nộp/nhận…" /><QuickTimeFilter basePath={`${base}?account=${s.id}`} params={params} /><MultiSelectFilter label="Chứng từ" paramKey="docType" basePath={`${base}?account=${s.id}`} params={params} options={[{ value: "RECEIPT", label: "Phiếu thu" }, { value: "PAYMENT", label: "Phiếu chi" }, { value: "CASH_ADJ", label: "Điều chỉnh phiếu" }]} /></div><p className="text-xs text-fg-secondary">Phát sinh trong kỳ {book.periodName}, theo khoảng ngày đã chọn. Các số dư phía dưới là số hiện tại của kỳ.</p></div>}
           {s && (
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Số dư vận hành" value={s.balance} hint={`Đầu kỳ ${formatCurrency(s.opening)} + thu ${formatCurrency(s.in)} − chi ${formatCurrency(s.out)}`} />
@@ -107,7 +107,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
           )}
         </>
       )}
-      {s && <CloseDialog canHandOver={canHandOver && type === "CASH"} open={closing} onClose={() => setClosing(false)} accountId={s.id} accountName={s.name} nowIso={nowIso} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />}
+      {s && <CloseDialog canHandOver={canHandOver && type === "CASH"} balance={s.balance} handOvers={book.handOversToday} open={closing} onClose={() => setClosing(false)} accountId={s.id} accountName={s.name} nowIso={nowIso} idemKey={idem.key} onDone={() => { idem.reset(); router.refresh(); }} />}
       <ReasonDialog open={voiding !== null} onClose={() => setVoiding(null)} title="Hủy lần chốt quỹ?" description="Lần chốt được đánh dấu vô hiệu (vẫn giữ để truy vết). Sổ quỹ không đổi." confirmLabel="Hủy chốt"
         onConfirm={async (reason) => { await apiFetch(`/api/cash/closes/${voiding}`, { method: "DELETE", json: { reason }, idempotencyKey: `${idem.key}-v${voiding}` }); router.refresh(); }} />
     </div>
@@ -124,9 +124,11 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
   );
 }
 
-function CloseDialog({ canHandOver, open, onClose, accountId, accountName, nowIso, idemKey, onDone }: { canHandOver: boolean; open: boolean; onClose: () => void; accountId: number; accountName: string; nowIso: string; idemKey: string; onDone: () => void }) {
+function CloseDialog({ canHandOver, balance, handOvers, open, onClose, accountId, accountName, nowIso, idemKey, onDone }: { canHandOver: boolean; balance: string; handOvers: { code: string; amount: string }[]; open: boolean; onClose: () => void; accountId: number; accountName: string; nowIso: string; idemKey: string; onDone: () => void }) {
   const [at, setAt] = useState(nowIso.slice(0, 16)); const [actual, setActual] = useState(""); const [reason, setReason] = useState(""); const [handOver, setHandOver] = useState(false);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const diff = actual === "" ? null : Number(actual) - Number(balance);
+  const overBalance = handOver && diff !== null && diff > 0;
   // Mỗi lần mở hộp thoại lấy giờ hiện tại (giờ Việt Nam) — không dùng giờ lúc trang được dựng
   useEffect(() => { if (open) setAt(new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 16)); }, [open]);
   async function submit() {
@@ -148,10 +150,13 @@ function CloseDialog({ canHandOver, open, onClose, accountId, accountName, nowIs
           <InlineField id="close-at" label="Mốc chốt — tính đến hết phút này (giờ Việt Nam)" required><input id="close-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={igInput} /></InlineField>
           <button type="button" onClick={() => setAt(new Date(Date.now() + 7 * 3600_000 - 86_400_000).toISOString().slice(0, 10) + "T23:59")} className="text-xs text-accent hover:underline">Chốt cho cuối ngày hôm qua (23:59)</button>
           <InlineField id="close-actual" label="Tiền kiểm đếm thực tế" required><NumberInput maxFrac={3} id="close-actual" value={actual} onValueChange={setActual} className={`${igInput} tabular`} /></InlineField>
+          <p className="text-sm">Số dư trong sổ hiện tại: <strong className="tabular">{formatCurrency(balance)}</strong>{diff !== null && <> · Chênh lệch: <strong className={`tabular ${diff === 0 ? "text-success" : "text-warning"}`}>{diff === 0 ? "khớp" : formatCurrency(diff)}</strong></>}</p>
           <InlineField id="close-reason" label="Lý do chênh lệch (nếu có)" multiline><textarea id="close-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>
+          {canHandOver && handOvers.length > 0 && <p role="status" className="rounded-sm bg-warning-soft p-2 text-xs text-warning">Hôm nay đã có phiếu Nộp lại quỹ: {handOvers.map((h) => `${h.code} (${formatCurrency(h.amount)})`).join(", ")}. Nếu giám đốc đã nhận tiền theo phiếu này thì không cần tích “nhận lại” nữa.</p>}
           {canHandOver && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={handOver} onChange={(e) => setHandOver(e.target.checked)} className="mt-1" /><span>Giám đốc nhận lại toàn bộ tiền kiểm đếm — tự lập phiếu chi “Nộp lại quỹ” bằng số kiểm đếm, ghi vào ngày của mốc chốt (quỹ về 0).</span></label>}
+          {overBalance && <p role="alert" className="text-xs text-danger">Số kiểm đếm lớn hơn số dư sổ — không thể tích “nhận lại”. Bỏ tích hoặc xử lý chênh lệch trước.</p>}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-          <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Chốt quỹ</button></div>
+          <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-sm border border-border px-4 text-sm hover:bg-hover disabled:opacity-50 md:h-10">Đóng</button><button type="button" onClick={submit} disabled={busy || overBalance} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent disabled:opacity-60 md:h-10">Chốt quỹ</button></div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

@@ -99,6 +99,16 @@ describe("bổ sung quỹ + báo cáo quỹ", () => {
     expect(rep.leftoverDays).toBe(1);
   });
 
+  it("nhận lại khi số kiểm đếm lớn hơn số dư sổ bị chặn (không làm quỹ âm); không tích nhận lại vẫn chốt được", async () => {
+    await topUp("2026-09-14", D1);
+    const closeAt = "2026-09-14T23:59:59.999+07:00";
+    await expect(tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt, actual: 12_000_000, reason: "Dư", handOver: true }, NEXT_MORNING))).rejects.toMatchObject({ code: "HANDOVER_EXCEEDS_BALANCE" });
+    expect(await prisma.cashClose.count()).toBe(0);
+    expect(await prisma.payment.count({ where: { kind: "NOP_LAI_QUY" } })).toBe(0);
+    await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt, actual: 12_000_000, reason: "Dư", handOver: false }, NEXT_MORNING));
+    expect(await prisma.cashClose.count()).toBe(1);
+  });
+
   it("dashboard Thu/Chi không tính bổ sung quỹ và nộp lại quỹ", async () => {
     await topUp("2026-09-15", D2, 10_000_000); await spend("2026-09-15", D2, 300_000);
     await tx((t) => createCashClose(t, tre, { cashAccountId: cash.id, closeAt: "2026-09-15T23:59:59.999+07:00", actual: 10_700_000, reason: "", handOver: true }, new Date("2026-09-16T01:00:00Z")));

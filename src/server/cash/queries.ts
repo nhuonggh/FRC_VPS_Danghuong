@@ -12,6 +12,7 @@ import { PAYMENT_KIND_LABEL, RECEIPT_TYPE_LABEL, type VoucherDoc } from "./schem
 
 type Db = Prisma.TransactionClient | PrismaClient;
 export const VOUCHER_FILTER_KEYS = ["status", "type", "account", "cashType"] as const;
+export const CASHBOOK_FILTER_KEYS = ["docType"] as const;
 export const QUEUE_FILTER_KEYS = ["kind", "status", "account", "cashType"] as const;
 
 function accountScope(params: ListParams): { cashAccountId?: number; cashAccount?: { type: "BANK" | "CASH" } } {
@@ -144,7 +145,7 @@ export async function listReviewQueue(db: Db, actor: Actor, params: ListParams) 
 export interface CashAccountSummaryDTO { id: number; name: string; bankNo: string | null; type: "CASH" | "BANK"; opening: string; in: string; out: string; balance: string; reviewed: string; pending: string }
 export interface CashEntryDTO { id: number; at: Date; docType: string; docId: number; docLabel: string; docCode: string | null; docHref: string | null; reviewStatus: CashReviewStatus | null; amountIn: string; amountOut: string; running: string; content: string | null; counterparty: string | null; reviewerName: string | null }
 export interface CashCloseDTO { id: number; closeAt: Date; expected: string; actual: string; diff: string; reason: string | null; createdByName: string | null; createdAt: Date; voided: boolean; voidReason: string | null }
-export interface CashBookDTO { accounts: CashAccountSummaryDTO[]; selected: CashAccountSummaryDTO | null; entries: CashEntryDTO[]; total: number; closes: CashCloseDTO[]; periodName: string; /** Số dư ngay trước khoảng ngày đang lọc (null = không lọc ngày). */ rangeOpening: string | null }
+export interface CashBookDTO { accounts: CashAccountSummaryDTO[]; selected: CashAccountSummaryDTO | null; entries: CashEntryDTO[]; total: number; closes: CashCloseDTO[]; periodName: string; /** Số dư ngay trước khoảng ngày đang lọc (null = không lọc ngày). */ rangeOpening: string | null; /** Phiếu chi "Nộp lại quỹ" còn hiệu lực lập trong ngày hôm nay của quỹ đang chọn — để cảnh báo khi chốt quỹ. */ handOversToday: { code: string; amount: string }[] }
 const DOC_LABEL: Record<string, string> = { RECEIPT: "Phiếu thu", PAYMENT: "Phiếu chi", CASH_ADJ: "Điều chỉnh phiếu" };
 
 export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", accountId: number | null, params: ListParams): Promise<CashBookDTO> {
@@ -158,7 +159,9 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
     accounts.push({ id: a.id, name: a.name, bankNo: a.bankNo, type: a.type, opening: b.opening.toString(), in: b.in.toString(), out: b.out.toString(), balance: b.balance.toString(), reviewed: b.reviewed.toString(), pending: b.pending.toString() });
   }
   const selected = accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null;
-  if (!selected) return { accounts, selected: null, entries: [], total: 0, closes: [], periodName: periodRow.name, rangeOpening: null };
+  if (!selected) return { accounts, selected: null, entries: [], total: 0, closes: [], periodName: periodRow.name, rangeOpening: null, handOversToday: [] };
+  const today = resolveTimeRange("today", new Date())!;
+  const handOversToday = (await db.payment.findMany({ where: { periodId: period.id, cashAccountId: selected.id, kind: "NOP_LAI_QUY", isCancelled: false, at: { gte: today.start, lt: today.end } }, select: { code: true, amount: true }, orderBy: { id: "asc" } })).map((p) => ({ code: p.code, amount: p.amount.toString() }));
   const rows = await db.cashLedger.findMany({ where: { periodId: period.id, cashAccountId: selected.id }, orderBy: [{ at: "asc" }, { id: "asc" }] });
   let run = new Prisma.Decimal(selected.opening);
   const withRun = rows.map((r) => { run = run.plus(r.amountIn).minus(r.amountOut); return { r, running: run }; });
@@ -166,8 +169,13 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   // Calculate running balances BEFORE filtering, retaining earlier movements.
   const filtered = withRun.filter(({ r }) => !range || (r.at >= range.start && r.at < range.end));
   const rangeOpening = range ? (withRun.filter(({ r }) => r.at < range.start).at(-1)?.running ?? new Prisma.Decimal(selected.opening)).toString() : null;
-  const pageRows = filtered.reverse().slice((params.page - 1) * params.pageSize, params.page * params.pageSize);
-  const idsOf = (t: string) => pageRows.filter((x) => x.r.docType === t).map((x) => x.r.docId);
+  const types = (params.filters.docType ?? []).filter((t) => t in DOC_LABEL);
+  const ordered = filtered.filter(({ r }) => !types.length || types.includes(r.docType)).reverse();
+  const needle = params.q ? normalizeSearch(params.q) : "";
+  const pageStart = (params.page - 1) * params.pageSize;
+  // Có từ khóa tìm → nạp chứng từ của mọi dòng đã lọc để so khớp; không thì chỉ nạp trang hiện tại.
+  const lookup = needle ? ordered : ordered.slice(pageStart, pageStart + params.pageSize);
+  const idsOf = (t: string) => lookup.filter((x) => x.r.docType === t).map((x) => x.r.docId);
   const [receipts, payments, adjs, closes] = await Promise.all([
     db.receipt.findMany({ where: { id: { in: idsOf("RECEIPT") } }, select: { id: true, code: true, reviewStatus: true, type: true, note: true, reviewedBy: true, partner: { select: { name: true } } } }),
     db.payment.findMany({ where: { id: { in: idsOf("PAYMENT") } }, select: { id: true, code: true, reviewStatus: true, kind: true, note: true, reviewedBy: true, advancedById: true, partner: { select: { name: true } }, expense: { select: { expenseType: { select: { name: true } } } } } }),
@@ -182,8 +190,10 @@ export async function listCashBook(db: Db, actor: Actor, type: "CASH" | "BANK", 
   receipts.forEach((r) => info.set(`RECEIPT:${r.id}`, { code: r.code, href: `/accounting/receipts/${r.id}`, status: r.reviewStatus, content: contentOf(RECEIPT_TYPE_LABEL[r.type], r.note), counterparty: r.partner?.name ?? null, reviewerName: nm(r.reviewedBy) }));
   payments.forEach((r) => info.set(`PAYMENT:${r.id}`, { code: r.code, href: `/accounting/payments/${r.id}`, status: r.reviewStatus, content: contentOf(PAYMENT_KIND_LABEL[r.kind], r.note), counterparty: r.partner?.name ?? r.expense?.expenseType.name ?? nm(r.advancedById), reviewerName: nm(r.reviewedBy) }));
   adjs.forEach((a, i) => { const d = adjDocs[i]; if (d) info.set(`CASH_ADJ:${a.id}`, { code: d.code, href: `/accounting/${a.docType === "RECEIPT" ? "receipts" : "payments"}/${d.id}`, status: "REVIEWED", content: contentOf("Điều chỉnh", d.note), counterparty: d.partner?.name ?? ("expense" in d ? d.expense?.expenseType.name ?? null : null) ?? ("advancedById" in d ? nm(d.advancedById) : null), reviewerName: nm(a.decidedBy) }); });
+  const matched = needle ? ordered.filter(({ r }) => { const i = info.get(`${r.docType}:${r.docId}`); return normalizeSearch([i?.code, i?.content, i?.counterparty, DOC_LABEL[r.docType]].filter(Boolean).join(" ")).includes(needle); }) : ordered;
+  const pageRows = matched.slice(pageStart, pageStart + params.pageSize);
   return {
-    accounts, selected, total: filtered.length, periodName: periodRow.name, rangeOpening,
+    accounts, selected, total: matched.length, periodName: periodRow.name, rangeOpening, handOversToday,
     entries: pageRows.map(({ r, running }) => { const i = info.get(`${r.docType}:${r.docId}`); return { id: r.id, at: r.at, docType: r.docType, docId: r.docId, docLabel: DOC_LABEL[r.docType] ?? r.docType, docCode: i?.code ?? null, docHref: i?.href ?? null, reviewStatus: i?.status ?? null, amountIn: r.amountIn.toString(), amountOut: r.amountOut.toString(), running: running.toString(), content: i?.content ?? null, counterparty: i?.counterparty ?? null, reviewerName: i?.reviewerName ?? null }; }),
     closes: closes.map((c) => ({ id: c.id, closeAt: c.closeAt, expected: c.expected.toString(), actual: c.actual.toString(), diff: c.diff.toString(), reason: c.reason, createdByName: names.get(c.createdBy) ?? null, createdAt: c.createdAt, voided: c.voidedAt !== null, voidReason: c.voidReason })),
   };
