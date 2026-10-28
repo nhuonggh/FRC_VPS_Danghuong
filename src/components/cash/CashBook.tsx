@@ -47,6 +47,7 @@ export function CashBook({ book, type, base, canClose, canReopen, canHandOver = 
         <h1 className="text-xl font-semibold">{title}</h1>
         <div className="flex flex-wrap items-center gap-2">
           {s && <a href={params ? buildExportHref(`/api/cash/book/export?type=${type}&account=${s.id}`, params) : `/api/cash/book/export?type=${type}&account=${s.id}`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">{params?.timePreset && params.timePreset !== "all" ? "Xuất sổ theo ngày" : "Xuất Excel"}</a>}
+          {s && params && <a href={buildExportHref(`/accounting/cashbook/print?type=${type}&account=${s.id}`, params)} target="_blank" rel="noreferrer" className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">In sổ (PDF)</a>}
           {s && canClose && <button type="button" onClick={() => setClosing(true)} className="h-11 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10">Chốt quỹ</button>}
         </div>
       </div>

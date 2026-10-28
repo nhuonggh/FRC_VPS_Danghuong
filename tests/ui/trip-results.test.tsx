@@ -34,32 +34,24 @@ describe("delivery results reference layout", () => {
     expect(screen.getByRole("navigation", { name: "Kết quả thu" })).toBeInTheDocument();
     expect(screen.getByText(/điểm chưa nhập chưa được cộng tiền/)).toBeInTheDocument();
   });
-  it("expands stop details on desktop and mobile, highlights matching customers, and links to stop entry", () => {
-    render(<TripResultsView {...props} detail={detail} params={params({ detail: "1", customer: "7" })} />);
+  it("is view-only: expands stop details, highlights matching customers, and sends entry to the trip detail page", () => {
+    render(<TripResultsView {...props} detail={detail} params={params({ detail: "1", customer: "7", entry: "first" })} />);
+    expect(screen.getByRole("heading", { name: "Kết quả giao" })).toBeInTheDocument();
     expect(screen.getAllByText("Khách Đạt").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Xem điểm giao CH000001" })[0]).toHaveAttribute("aria-expanded", "true");
-    const entry = screen.getAllByRole("link", { name: "Nhập kết quả DH000011" })[0];
-    expect(entry.getAttribute("href")).toContain("entry=10");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Nhập kết quả DH000011/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Xem chuyến CH000001" })[0]).toHaveAttribute("href", "/delivery/trips/1");
+    expect(screen.getAllByRole("link", { name: /Nhập \/ sửa kết quả tại chi tiết chuyến/ })[0]).toHaveAttribute("href", "/delivery/trips/1");
     expect(screen.getAllByText("DH000011").length).toBeGreaterThan(0);
   });
-  it("saves through the existing idempotent endpoint and closes back to the expanded trip", async () => {
-    api.mockResolvedValue({});
-    render(<TripResultsView {...props} detail={detail} params={params({ detail: "1", entry: "first", customer: "7" })} />);
-    const dialog = screen.getByRole("dialog", { name: "Kết quả giao — DH000011" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "Lưu kết quả" }));
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/trips/1/result", expect.objectContaining({ json: expect.objectContaining({ orderId: 11, cashAmount: 200000, cashAccountId: 1 }), idempotencyKey: expect.any(String) })));
-    expect(replace).toHaveBeenCalledWith(expect.stringContaining("detail=1"), { scroll: false });
-    expect(replace.mock.calls[0][0]).not.toContain("entry=");
-  });
-  it("closed periods and settled trips cannot open result-entry dialogs", () => {
-    const { unmount } = render(<TripResultsView {...props} detail={detail} params={params({ detail: "1", entry: "first" })} closedPeriodName="Tháng 9" />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  it("closed periods and settled trips show a read-only notice", () => {
+    const { unmount } = render(<TripResultsView {...props} detail={detail} params={params({ detail: "1" })} closedPeriodName="Tháng 9" />);
     expect(screen.getAllByText(/đã đóng, kết quả chỉ được xem/)).toHaveLength(2);
-    expect(screen.queryByRole("link", { name: "Nhập kết quả DH000011" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Nhập \/ sửa kết quả/ })).not.toBeInTheDocument();
     unmount();
-    render(<TripResultsView {...props} rows={[{ ...row, status: "SETTLED" }]} detail={{ ...detail, status: "SETTLED" }} params={params({ detail: "1", entry: "first" })} />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Nhập kết quả CH000001" })).not.toBeInTheDocument();
+    render(<TripResultsView {...props} rows={[{ ...row, status: "SETTLED" }]} detail={{ ...detail, status: "SETTLED" }} params={params({ detail: "1" })} />);
+    expect(screen.queryByRole("link", { name: /Nhập \/ sửa kết quả/ })).not.toBeInTheDocument();
   });
   it("settles then confirms in one click under the stop table when the same user holds both permissions", async () => {
     api.mockResolvedValue({});
@@ -73,13 +65,5 @@ describe("delivery results reference layout", () => {
   it("hides the settle panel without settle/confirm permission", () => {
     render(<TripResultsView {...props} detail={{ ...detail, status: "RETURNED" }} perms={{ canSettle: false, canConfirm: false }} params={params({ detail: "1" })} />);
     expect(screen.queryByRole("button", { name: /Đối soát|Xác nhận đã nhận/ })).not.toBeInTheDocument();
-  });
-  it("searches account references inside the dialog before saving the selected account", async () => {
-    api.mockResolvedValue({});
-    render(<TripResultsView {...props} accounts={[{ id: 1, name: "Quỹ Kế toán", type: "CASH" }, { id: 3, name: "Quỹ Thu ngân", type: "CASH" }]} detail={detail} params={params({ detail: "1", entry: "first" })} />);
-    await userEvent.type(screen.getByRole("combobox", { name: "Nhận vào quỹ" }), "thu ngan");
-    await userEvent.click(await screen.findByRole("option", { name: "Quỹ Thu ngân" }));
-    await userEvent.click(screen.getByRole("button", { name: "Lưu kết quả" }));
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/trips/1/result", expect.objectContaining({ json: expect.objectContaining({ cashAccountId: 3 }) })));
   });
 });
