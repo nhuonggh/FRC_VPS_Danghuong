@@ -1,0 +1,22 @@
+.root { background: var(--bg-surface); color: var(--text-primary); padding: var(--space-4); }
+.table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.table th, .table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+.table th { background: var(--bg-hover); text-align: left; }
+.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sum td { font-weight: 600; }
+.sign { display: flex; justify-content: space-around; margin-top: 32px; min-height: 110px; }
+.sign div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.sign span { font-size: var(--text-xs); font-style: italic; }
+@media print {
+  :global(body):has(.root) * { visibility: hidden; }
+  :global(body):has(.root) :global(div):has(.root),
+  :global(body):has(.root) :global(main):has(.root) { position: static; display: block; height: auto; max-height: none; overflow: visible; }
+  .root, .root * { visibility: visible !important; }
+  .root { position: absolute; inset: 0; width: 100%; padding: 0; color: #000; background: #fff; }
+  .table th, .table td { border-color: #000; }
+  .table th { background: #eee; }
+  .table tr { break-inside: avoid; }
+  .table thead { display: table-header-group; }
+  .sign { break-inside: avoid; }
+  .root :global(button) { display: none; }
+}

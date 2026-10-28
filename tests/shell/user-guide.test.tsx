@@ -44,8 +44,8 @@ describe("hướng dẫn sử dụng — màn hình và đường vào", () => {
   });
   it("đọc đúng bài được liên kết, mở đúng màn hình và có thể quay lại module", () => {
     render(<ModuleGuide module={nav.find((m) => m.key === "delivery")!} topic="trip-result" />);
-    expect(screen.getByRole("heading", { level: 2, name: "Nhập kết quả giao" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Mở Nhập kết quả giao" })).toHaveAttribute("href", "/delivery/results");
+    expect(screen.getByRole("heading", { level: 2, name: "Kết quả giao" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mở Kết quả giao" })).toHaveAttribute("href", "/delivery/results");
     expect(screen.getByRole("link", { name: "Quay lại Giao hàng" })).toHaveAttribute("href", "/m/delivery");
     expect(screen.getByRole("heading", { name: "Làm xong thì thấy gì?" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tất cả hướng dẫn" })).toBeNull();

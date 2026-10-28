@@ -2,15 +2,12 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ChevronRight, ClipboardPen, ExternalLink, Plus, X } from "lucide-react";
+import { ChevronRight, ExternalLink, Plus, X } from "lucide-react";
 import { Badge, EmptyState, ListPageLayout, MultiSelectFilter, PaginationFooter, QuickTimeFilter, SearchBox } from "@/components/ui";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { buildListHref, type ListParams, type ListPatch } from "@/lib/query-params";
 import { RESULT_STATUS_TONE, RESULT_TRIP_TABS, resultTripLabel } from "@/lib/trip-results";
-import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import type { TripDetailDTO, TripResultsSummary, TripRowDTO, TripStatsDTO } from "@/server/trips/queries";
-import { ResultDialog } from "./TripDetail";
 import { TripSettlePanel } from "./TripSettlePanel";
 
 const BASE = "/delivery/results";
@@ -25,53 +22,42 @@ export function TripResultsView({ rows, total, stats, summary, params, vehicles,
   vehicles: { id: number; name: string }[]; customers: { id: number; name: string }[]; routes: { id: number; name: string }[];
   detail: TripDetailDTO | null; accounts: { id: number; name: string; type: "CASH" | "BANK" }[]; closedPeriodName?: string;
 }) {
-  const router = useRouter();
-  const idem = useIdempotencyKey();
   const tab = RESULT_TRIP_TABS.find((t) => t.key === params.filters.resultState?.[0]) ?? RESULT_TRIP_TABS[0];
   const collection = params.filters.collection?.length === 1 ? params.filters.collection[0] : "all";
   const href = (patch: ListPatch = {}) => buildListHref(BASE, params, { ...patch, filters: { detail: [], entry: [], ...patch.filters } });
   const expandHref = (id: number) => href({ filters: { detail: detail?.id === id ? [] : [String(id)] }, page: params.page });
-  const entryHref = (id: number, stop = "first") => href({ filters: { detail: [String(id)], entry: [stop] }, page: params.page });
-  const closeEntry = () => router.replace(buildListHref(BASE, params, { filters: { entry: [] }, page: params.page }), { scroll: false });
-  const entry = params.filters.entry?.[0];
-  const stop = detail && editable(detail.status) && !closedPeriodName && entry ? entry === "first" ? detail.stops.find((s) => s.result === null) ?? detail.stops[0] : detail.stops.find((s) => String(s.id) === entry) : undefined;
   const filterOptions = [{ key: "customer", label: "Khách hàng", options: customers }, { key: "route", label: "Tuyến", options: [...routes, { id: "none", name: "Chưa gán tuyến" }] }, { key: "vehicle", label: "Xe", options: vehicles }];
   const filtered = !!(params.q || params.timePreset || ["customer", "route", "vehicle", "collection", "resultState"].some((key) => params.filters[key]?.length));
   const clearHref = href({ q: undefined, timePreset: undefined, timeStart: undefined, timeEnd: undefined, filters: Object.fromEntries(Object.keys(params.filters).map((key) => [key, []])) });
-  const showStopActions = detail && editable(detail.status) && !closedPeriodName;
+  const canEnter = detail && editable(detail.status) && !closedPeriodName;
   function collectionBadge(row: TripRowDTO) {
     return row.collectionStatus ? <Badge tone={row.collectionStatus === "paid" ? "success" : "warning"}>{row.collectionStatus === "paid" ? "Đã thu" : "Chờ thu"}</Badge> : <span className="text-fg-secondary">—</span>;
   }
   function actions(row: TripRowDTO) {
-    const canEdit = editable(row.status) && !(detail?.id === row.id && closedPeriodName);
-    const hasAllResults = row.stops > 0 && row.done === row.stops;
-    return row.status === "CANCELLED" ? null : <Link href={canEdit ? entryHref(row.id) : `/delivery/trips/${row.id}`} scroll={false}
-      aria-label={`${canEdit ? hasAllResults ? "Sửa kết quả" : "Nhập kết quả" : "Xem chuyến"} ${row.code}`} title={canEdit ? hasAllResults ? "Nhập / sửa kết quả" : "Nhập kết quả" : "Đã khóa kết quả · xem chuyến"}
+    return row.status === "CANCELLED" ? null : <Link href={`/delivery/trips/${row.id}`} aria-label={`Xem chuyến ${row.code}`} title="Xem chuyến"
       className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border text-accent hover:bg-accent-soft md:min-h-9 md:min-w-9 ${focus}`}>
-      {canEdit ? <ClipboardPen size={16} aria-hidden /> : <ExternalLink size={16} aria-hidden />}
+      <ExternalLink size={16} aria-hidden />
     </Link>;
   }
   function stopDetails(mobile = false) {
     if (!detail) return null;
     const cell = "px-3 py-3 text-sm";
     return <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">Điểm giao · {detail.code}</p><Link href={`/delivery/trips/${detail.id}`} className={`inline-flex min-h-11 items-center gap-1 text-xs text-accent ${focus}`}>Chi tiết chuyến<ExternalLink size={14} aria-hidden /></Link></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">Điểm giao · {detail.code}</p><Link href={`/delivery/trips/${detail.id}`} className={`inline-flex min-h-11 items-center gap-1 text-xs text-accent ${focus}`}>{canEnter ? "Nhập / sửa kết quả tại chi tiết chuyến" : "Chi tiết chuyến"}<ExternalLink size={14} aria-hidden /></Link></div>
       {closedPeriodName && <p role="status" className="text-sm text-warning">Kỳ {closedPeriodName} đã đóng, kết quả chỉ được xem.</p>}
       {!editable(detail.status) && detail.status !== "CANCELLED" && <p className="text-xs text-fg-secondary">Chuyến đã đối soát / xác nhận nhận tiền, kết quả được khóa.</p>}
       {mobile ? <ul className="space-y-2">{detail.stops.map((s) => <li key={s.id} className={`space-y-2 rounded-sm border border-border p-3 ${params.filters.customer?.includes(String(s.partnerId)) ? "bg-accent-soft" : "bg-surface"}`}>
         <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{s.partnerName}</span><Badge tone={s.result ? resultTone[s.result] : "info"}>{s.resultLabel ?? "Chờ giao"}</Badge></div>
         <p className="font-mono text-xs text-fg-secondary">{s.orderCode}</p><dl className="space-y-1 text-sm">{[{ label: "Phải thu", value: s.due }, { label: "Tiền mặt", value: s.result ? s.cash : null }, { label: "Chuyển khoản", value: s.result ? s.transfer : null }].map((field) => <div key={field.label} className="flex justify-between gap-3"><dt className="text-fg-secondary">{field.label}</dt><dd className="tabular-nums">{formatCurrency(field.value)}</dd></div>)}</dl>
-        {showStopActions && <Link href={entryHref(detail.id, String(s.id))} scroll={false} className={`inline-flex min-h-11 items-center gap-2 text-sm text-accent ${focus}`}><ClipboardPen size={16} aria-hidden />{s.result ? "Sửa kết quả" : "Nhập kết quả"} {s.orderCode}</Link>}
-      </li>)}</ul> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs text-fg-secondary"><tr><th scope="col" className={cell}>Khách hàng / đơn</th><th scope="col" className={cell}>Kết quả giao</th><th scope="col" className={`${cell} text-right`}>Phải thu</th><th scope="col" className={`${cell} text-right`}>Tiền mặt</th><th scope="col" className={`${cell} text-right`}>Chuyển khoản</th><th scope="col"><span className="sr-only">Thao tác điểm giao</span></th></tr></thead><tbody>{detail.stops.map((s) => <tr key={s.id} className={`border-t border-border ${params.filters.customer?.includes(String(s.partnerId)) ? "bg-accent-soft" : ""}`}>
+      </li>)}</ul> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs text-fg-secondary"><tr><th scope="col" className={cell}>Khách hàng / đơn</th><th scope="col" className={cell}>Kết quả giao</th><th scope="col" className={`${cell} text-right`}>Phải thu</th><th scope="col" className={`${cell} text-right`}>Tiền mặt</th><th scope="col" className={`${cell} text-right`}>Chuyển khoản</th></tr></thead><tbody>{detail.stops.map((s) => <tr key={s.id} className={`border-t border-border ${params.filters.customer?.includes(String(s.partnerId)) ? "bg-accent-soft" : ""}`}>
         <td className={cell}><span className="font-medium">{s.partnerName}</span><span className="block font-mono text-xs text-fg-secondary">{s.orderCode}</span></td><td className={cell}><Badge tone={s.result ? resultTone[s.result] : "info"}>{s.resultLabel ?? "Chờ giao"}</Badge></td>
         <td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.due)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.result ? s.cash : null)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(s.result ? s.transfer : null)}</td>
-        <td className={`${cell} text-right`}>{showStopActions && <Link href={entryHref(detail.id, String(s.id))} scroll={false} title={s.result ? "Sửa kết quả" : "Nhập kết quả"} aria-label={`${s.result ? "Sửa kết quả" : "Nhập kết quả"} ${s.orderCode}`} className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border text-accent hover:bg-accent-soft md:min-h-9 md:min-w-9 ${focus}`}><ClipboardPen size={16} aria-hidden /></Link>}</td>
       </tr>)}</tbody></table></div>}
       {!closedPeriodName && perms && <TripSettlePanel trip={detail} accounts={accounts} canSettle={perms.canSettle} canConfirm={perms.canConfirm} />}
     </div>;
   }
   return <>
-    <ListPageLayout title="Nhập kết quả giao"
+    <ListPageLayout title="Kết quả giao"
       actions={<Link href="/delivery/trips/new" className={`inline-flex min-h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent ${focus}`}><Plus size={16} aria-hidden />Xếp chuyến</Link>}
       statsClassName="grid grid-cols-2 lg:grid-cols-4"
       stats={<>
@@ -101,6 +87,5 @@ export function TripResultsView({ rows, total, stats, summary, params, vehicles,
         <ul className="space-y-3 p-3 md:hidden">{rows.map((row) => <li key={row.id} className="space-y-3 rounded-md border border-border bg-surface p-4"><div className="flex flex-wrap items-center justify-between gap-2"><Link href={expandHref(row.id)} aria-expanded={detail?.id === row.id} aria-label={`Xem điểm giao ${row.code}`} scroll={false} className={`inline-flex min-h-11 items-center gap-1 font-mono text-sm font-semibold text-accent ${focus}`}><ChevronRight size={16} aria-hidden className={detail?.id === row.id ? "rotate-90" : undefined} />{row.code}</Link><Badge tone={RESULT_STATUS_TONE[row.status]}>{resultTripLabel(row.status)}</Badge></div><p className="text-sm font-medium">{row.routeName ?? "Chưa có tuyến"} · {row.vehiclePlate}</p><p className="text-xs text-fg-secondary">{row.driverName} · {row.date.split("-").reverse().join("/")}</p><dl className="space-y-2 text-sm">{[{ label: "Điểm giao", value: `${row.done}/${row.stops}` }, { label: "Phải thu", value: row.status === "CANCELLED" ? "—" : formatCurrency(row.expected) }, { label: "Đã thu", value: row.status === "CANCELLED" ? "—" : formatCurrency(row.collected) }].map((field) => <div key={field.label} className="flex justify-between gap-3"><dt className="text-fg-secondary">{field.label}</dt><dd className="tabular-nums">{field.value}</dd></div>)}</dl><div className="flex items-center justify-between gap-3">{collectionBadge(row)}{actions(row)}</div>{detail?.id === row.id && <div className="border-t border-dashed border-border pt-3">{stopDetails(true)}</div>}</li>)}</ul>
       </>}
     </ListPageLayout>
-    {stop && detail && <ResultDialog key={`${detail.id}-${stop.id}`} stop={stop} tripId={detail.id} accounts={accounts} onClose={closeEntry} onDone={() => idem.reset()} idemKey={idem.key} />}
   </>;
 }
