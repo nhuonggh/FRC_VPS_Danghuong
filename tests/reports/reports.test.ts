@@ -100,7 +100,7 @@ describe("68 — lãi lỗ toàn xưởng", () => {
   });
   it("điều chỉnh công nợ: tăng cộng lãi, giảm trừ lãi; CHIET_KHAU và phiếu hủy không tính; dòng tháng có ym để xem chi tiết", async () => {
     const period = await prisma.period.findFirstOrThrow();
-    const mk = (code: string, reason: string, amount: number, over: { isCancelled?: boolean } = {}) =>
+    const mk = (code: string, reason: "KHAC" | "HANG_LOI" | "CHIET_KHAU", amount: number, over: { isCancelled?: boolean } = {}) =>
       prisma.debtAdjustment.create({ data: { id: Number(code.slice(2)), code, periodId: period.id, partnerId: a.id, reason, amount, at: new Date("2026-09-16T03:00:00Z"), note: "x", createdBy: w.userId, ...(over.isCancelled ? { isCancelled: true, cancelledAt: NOW, cancelledBy: w.userId, cancelReason: "nhầm" } : {}) } });
     await mk("DC1", "KHAC", 30_000);
     await mk("DC2", "HANG_LOI", -12_000);
