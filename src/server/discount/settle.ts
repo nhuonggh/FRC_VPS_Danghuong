@@ -45,7 +45,7 @@ export async function settleDiscount(tx: Tx, actor: Actor, input: SettleInput, n
   return forfeit ? { ...main, forfeit } : main;
 }
 
-async function createSettlement(tx: Tx, actor: Actor, v: { partnerId: number; method: SettleInput["method"]; amount: Prisma.Decimal; input: SettleInput; periodId: number; at: Date }, now: Date): Promise<{ id: number; code: string }> {
+export async function createSettlement(tx: Tx, actor: Actor, v: { partnerId: number; method: SettleInput["method"]; amount: Prisma.Decimal; input: SettleInput; periodId: number; at: Date }, now: Date): Promise<{ id: number; code: string }> {
   const { input, method, amount, periodId, at } = v;
   const period = { id: periodId };
   const id = await nextDocId(tx, "discount_settlements");

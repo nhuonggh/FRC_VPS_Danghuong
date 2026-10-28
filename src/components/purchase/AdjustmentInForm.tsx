@@ -11,17 +11,22 @@ import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { adjustmentInSchema, type AdjustmentInInput } from "@/server/purchase/adjustment-schemas";
 import type { ProductOption } from "@/server/products/queries";
 const blank = { productId: undefined, qty: undefined, unitCost: null } as unknown as AdjustmentInInput["lines"][number];
-export function AdjustmentInForm({ today, canSetCost }: { today: string; canSetCost: boolean }) {
- const router = useRouter(), idem = useIdempotencyKey(), [meta, setMeta] = useState<Record<number, ProductOption>>({});
- const form = useForm<AdjustmentInInput>({ resolver: zodResolver(adjustmentInSchema), defaultValues: { date: today, note: "", lines: [blank] } }); const { fields, append, remove, update } = useFieldArray({ control: form.control, name: "lines" });
+export interface AdjustmentInEdit { id: number; code: string; date: string; note: string; lines: { productId: number; qty: number; unitCost: number | null; label: string; baseUnit: string }[] }
+export function AdjustmentInForm({ today, canSetCost, edit }: { today: string; canSetCost: boolean; edit?: AdjustmentInEdit }) {
+ const router = useRouter(), idem = useIdempotencyKey();
+ const [meta, setMeta] = useState<Record<number, ProductOption>>(() => Object.fromEntries((edit?.lines ?? []).map((l) => [l.productId, { value: l.productId, label: l.label, hint: "", baseUnit: l.baseUnit, units: [] } as ProductOption])));
+ const form = useForm<AdjustmentInInput>({ resolver: zodResolver(adjustmentInSchema), defaultValues: edit ? { date: edit.date, note: edit.note, lines: edit.lines.map((l) => ({ productId: l.productId, qty: l.qty, unitCost: l.unitCost })) } : { date: today, note: "", lines: [blank] } }); const { fields, append, remove, update } = useFieldArray({ control: form.control, name: "lines" });
  const entry = useLineEntry({ count: fields.length, getLines: () => form.getValues("lines"), append, remove, blank, qtyLabel: (i) => `Số lượng dòng ${i + 1}` });
  const addProducts = (picked: ProductOption[]) => addPickedLines(picked, form.getValues("lines"), (p) => ({ ...blank, productId: p.value }), { update, append: (vs) => append(vs) });
  const load = async (q: string) => { const rows = await apiFetch<ProductOption[]>(`/api/products/search?q=${encodeURIComponent(q)}`); setMeta((x) => ({ ...x, ...Object.fromEntries(rows.map((p) => [p.value, p])) })); return rows; };
- const submit = form.handleSubmit(async (value) => { const r = await apiFetch<{ id: number }>("/api/stock-adjustments-in", { method: "POST", json: value, idempotencyKey: idem.key }); router.replace(`/purchase/adjustments-in/${r.id}`); });
+ const submit = form.handleSubmit(async (value) => {
+  const r = edit ? await apiFetch<{ id: number }>(`/api/stock-adjustments-in/${edit.id}`, { method: "PUT", json: value }) : await apiFetch<{ id: number }>("/api/stock-adjustments-in", { method: "POST", json: value, idempotencyKey: idem.key });
+  router.replace(`/purchase/adjustments-in/${r.id}`); router.refresh();
+ });
  const err = form.formState.errors;
  const lineIds = form.watch("lines").flatMap((l) => (l?.productId ? [l.productId as number] : []));
  return (
-  <NewPage wide bare backHref="/purchase/adjustments-in" backLabel="Quay lại nhập kho không NCC" title="Nhập kho không NCC" submitLabel="Lưu phiếu" isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
+  <NewPage wide bare backHref={edit ? `/purchase/adjustments-in/${edit.id}` : "/purchase/adjustments-in"} backLabel={edit ? `Quay lại phiếu ${edit.code}` : "Quay lại nhập kho không NCC"} title={edit ? `Sửa phiếu ${edit.code}` : "Nhập kho không NCC"} submitLabel={edit ? "Lưu thay đổi" : "Lưu phiếu"} isDirty={() => form.formState.isDirty} onSubmit={async () => { entry.dropEmptyLines(); await submit(); }}>
    <FormCard icon={PackagePlus} title="Thông tin chung">
     <p className="mb-3 text-sm text-fg-secondary">Cho hàng lệch, hàng dư không theo nhà cung cấp; tạo lô FIFO mới và không sinh công nợ.</p>
     <FormGrid cols={2}>

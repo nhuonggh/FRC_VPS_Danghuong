@@ -24,11 +24,26 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
   const orderProfit = report.key === "order-profit";
   const debtRecon = report.key === "debt-reconciliation";
   const closeHref = buildListHref(base, params, { filters: { order: [] } });
+  const byDim = report.key === "profit-by-group" || report.key === "profit-by-processing";
+  const drilled = byDim && !!params.filters.item?.length;
+  /** Dòng bấm được: tháng → Lãi từng đơn của tháng đó; nhóm/kiểu → chi tiết từng sản phẩm. */
+  const rowLink = (row: Record<string, Cell>): { href: string; label: string } | null => {
+    if (report.key === "period-pnl" && row.ym) {
+      const ym = String(row.ym); const [y, mo] = ym.split("-").map(Number); const last = new Date(Date.UTC(y!, mo!, 0)).getUTCDate();
+      return { href: `/reports/order-profit?timePreset=custom&timeStart=${ym}-01&timeEnd=${ym}-${String(last).padStart(2, "0")}`, label: `Xem lãi từng đơn tháng ${row.month}` };
+    }
+    if (byDim && !drilled) return { href: buildListHref(base, params, { filters: { item: [String(row.id)] } }), label: `Xem chi tiết: ${row.name}` };
+    return null;
+  };
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
       {/* Đầu trang (tiêu đề, KPI, bộ lọc) cố định; chỉ bảng cuộn; ghi chú ghim đáy khung. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{report.title}</h1>
+        <div>
+          <h1 className="text-xl font-semibold">{report.title}</h1>
+          {report.subtitle && <p className="text-sm text-fg-secondary">{report.subtitle}</p>}
+          {drilled && <Link href={buildListHref(base, params, { filters: { item: [] } })} className="text-sm font-medium text-accent hover:underline">← Quay lại tổng hợp</Link>}
+        </div>
         <Link href={buildExportHref(`/api/reports/${report.key}/export`, orderProfit ? { ...params, filters: { ...params.filters, order: [] } } : params)} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-hover md:h-10">Xuất Excel</Link>
       </div>
       {orderProfit && <section aria-label="Thống kê lãi từng đơn" className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
@@ -57,8 +72,9 @@ export function ReportView({ report, params, base, showSearch = true, negFilter 
               {report.rows.map((row, i) => {
                 const rowCls = `border-t border-border ${neg(row) ? "bg-danger-soft text-danger" : orderProfit && String(row.id) === params.filters.order?.[0] ? "bg-accent-soft" : "hover:bg-hover"}`;
                 const cells = report.columns.map((c) => <td key={c.key} className={`px-3 py-2 ${c.kind === "money" || c.kind === "qty" || c.kind === "pct" || c.kind === "int" ? "text-right tabular" : ""}`}>{orderProfit && c.key === "code" ? <Link href={buildListHref(base, params, { filters: { order: [String(row.id)] } })} className="inline-flex min-h-11 items-center font-medium text-accent hover:underline" aria-label={`Xem lãi lỗ đơn ${row.code}`}>{row.code}</Link> : fmt(c.kind, row[c.key] ?? null)}</td>);
-                return debtRecon
-                  ? <ClickableRow key={i} href={`/reports/debt-reconciliation/${row.id}`} label={`Xem chi tiết: ${row.item}`} className={rowCls}>{cells}</ClickableRow>
+                const link = debtRecon ? { href: `/reports/debt-reconciliation/${row.id}`, label: `Xem chi tiết: ${row.item}` } : rowLink(row);
+                return link
+                  ? <ClickableRow key={i} href={link.href} label={link.label} className={rowCls}>{cells}</ClickableRow>
                   : <tr key={i} className={rowCls}>{cells}</tr>;
               })}
             </tbody>

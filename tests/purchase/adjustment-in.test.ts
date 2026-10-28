@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { cancelAdjustmentInTx, createAdjustmentInIdempotent, getAdjustmentIn } from "@/server/purchase/adjustment-in";
+import { cancelAdjustmentInTx, createAdjustmentInIdempotent, getAdjustmentIn, updateAdjustmentInTx } from "@/server/purchase/adjustment-in";
 import { prisma, resetDb } from "../helpers/db";
 import { assertLedgerBalanced, newWorld, useNoopCostOwners } from "../inventory/helpers";
 
@@ -28,6 +28,24 @@ describe("nhập kho không NCC", () => {
     await expect(createAdjustmentInIdempotent(prisma, actor, "adjustment-no-cost", input(w.p.id, null))).rejects.toThrow("Chưa có giá nhập gần nhất");
     expect(await prisma.stockAdjustment.count()).toBe(0);
     expect(await prisma.costLayer.count()).toBe(0);
+  });
+
+  it("sửa phiếu: thay dòng hàng, giữ mã + giá cũ khi để trống giá, sổ kho/FIFO khớp; phiếu đã hủy không sửa được", async () => {
+    const w = await newWorld();
+    const writer = { userId: w.userId, perms: new Set(["stock_adjust.manage", "cost.view"]) };
+    const created = await createAdjustmentInIdempotent(prisma, writer, "adjustment-edit", input(w.p.id));
+    const edited = await updateAdjustmentInTx(prisma, writer, created.id, { date: "2026-09-01", note: "Sửa số lượng", lines: [{ productId: w.p.id, qty: 4, unitCost: null }] });
+    expect(edited).toEqual({ id: created.id, code: created.code });
+    const detail = await getAdjustmentIn(prisma, writer, created.id);
+    expect(detail.note).toBe("Sửa số lượng");
+    expect(detail.lines).toHaveLength(1);
+    expect(detail.lines[0]).toMatchObject({ qty: "4", unitCost: "12500" });
+    expect(await prisma.stockAdjustment.count()).toBe(1);
+    expect(await prisma.stockLedger.count()).toBe(1);
+    expect(await prisma.costLayer.count()).toBe(1);
+    await assertLedgerBalanced(w.p.id, w.periodId);
+    await cancelAdjustmentInTx(prisma, writer, created.id, "Nhập nhầm");
+    await expect(updateAdjustmentInTx(prisma, writer, created.id, input(w.p.id))).rejects.toMatchObject({ status: 409 });
   });
 
   it("hủy phiếu hoàn lớp và ẩn đơn giá cho người thiếu cost.view", async () => {

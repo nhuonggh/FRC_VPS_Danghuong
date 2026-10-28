@@ -16,6 +16,8 @@ export interface ReportResult {
 export const REPORTS = [
   { key: "order-profit", code: "67", title: "Lãi từng đơn", perm: "order.analysis.view" },
   { key: "period-pnl", code: "68", title: "Lãi lỗ toàn xưởng", perm: "order.analysis.view" },
+  { key: "profit-by-group", code: "74", title: "Lãi theo nhóm hàng", perm: "order.analysis.view" },
+  { key: "profit-by-processing", code: "75", title: "Lãi theo kiểu gia công", perm: "order.analysis.view" },
   { key: "by-customer", code: "69", title: "Bán hàng theo khách", perm: "report.view" },
   { key: "by-group", code: "70", title: "Bán hàng theo nhóm khách", perm: "report.view" },
   { key: "issue-by-order", code: "71", title: "Xuất kho theo đơn", perm: "report.view" },
@@ -25,4 +27,4 @@ export const REPORTS = [
   { key: "consumption-compare", code: "53", title: "Đối chiếu định mức", perm: "bom.manage" },
 ] as const;
 export type ReportKey = (typeof REPORTS)[number]["key"];
-export const REPORT_FILTER_KEYS = ["neg", "customer", "order"] as const;
+export const REPORT_FILTER_KEYS = ["neg", "customer", "order", "item"] as const;

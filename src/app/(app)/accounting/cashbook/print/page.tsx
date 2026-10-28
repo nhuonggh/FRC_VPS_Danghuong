@@ -27,11 +27,9 @@ export default async function CashbookPrintPage({ searchParams }: { searchParams
   const title = type === "CASH" ? "SỔ QUỸ TIỀN MẶT" : "SỔ TIỀN GỬI NGÂN HÀNG";
   const period = range ? `Từ ${formatDate(range.start)} đến ${formatDate(new Date(range.end.getTime() - 1))}` : "Toàn bộ";
   return <article className={styles.root}>
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="w-full text-center">
-        <h1 className="text-xl font-bold">{title}</h1>
-        <p className="text-sm">{book.selected?.name ?? ""} · {period}</p>
-      </div>
+    <div className={styles.head}>
+      <h1 className="text-xl font-bold">{title}</h1>
+      <p className="text-sm">{book.selected?.name ?? ""} · {period}</p>
       <OrderPrintButton label="In / Lưu PDF" />
     </div>
     <table className={styles.table}>

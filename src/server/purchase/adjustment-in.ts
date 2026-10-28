@@ -16,8 +16,8 @@ export { adjustmentInSchema, type AdjustmentInInput };
 const uniqueSorted = (ids: number[]) => [...new Set(ids)].sort((a, b) => a - b);
 const decimal = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value);
 
-export async function createAdjustmentIn(ctx: EngineCtx, actor: Actor, input: AdjustmentInInput, now = new Date()) {
-  assertCan(actor.perms, "stock_adjust.manage");
+/** Kiểm sản phẩm + chốt giá vốn từng dòng. `keep` = giá cũ theo sản phẩm (khi sửa phiếu, dòng để trống giá giữ giá cũ thay vì lấy lại giá nhập gần nhất). */
+async function costLines(ctx: EngineCtx, actor: Actor, input: AdjustmentInInput, keep: Map<number, Prisma.Decimal> = new Map()) {
   if (input.lines.some((line) => line.unitCost !== null)) assertCan(actor.perms, "cost.view");
   const products = await ctx.tx.product.findMany({ where: { id: { in: uniqueSorted(input.lines.map((line) => line.productId)) } } });
   const byId = new Map(products.map((product) => [product.id, product]));
@@ -25,20 +25,58 @@ export async function createAdjustmentIn(ctx: EngineCtx, actor: Actor, input: Ad
   for (const [index, line] of input.lines.entries()) {
     const product = byId.get(line.productId);
     if (!product) throw new DomainError(`Dòng ${index + 1}: sản phẩm không tồn tại.`, 400);
-    if (!product.isActive) throw new DomainError(`Dòng ${index + 1}: sản phẩm ${product.code} đã ngừng bán.`, 400);
-    const cost = line.unitCost === null ? await lastPurchaseCost(ctx.tx, product.id) : decimal(line.unitCost);
+    if (!product.isActive && !keep.has(product.id)) throw new DomainError(`Dòng ${index + 1}: sản phẩm ${product.code} đã ngừng bán.`, 400);
+    const cost = line.unitCost !== null ? decimal(line.unitCost) : keep.get(product.id) ?? await lastPurchaseCost(ctx.tx, product.id);
     if (cost === null) throw new DomainError(`Chưa có giá nhập gần nhất của ${product.code} — hãy nhập đơn giá (cần quyền xem giá vốn) hoặc lập phiếu nhập mua trước.`, 400);
     costs.push(cost);
   }
-  const id = await nextDocId(ctx.tx, "stock_adjustments"), code = formatDocCode("NK", id), at = docTimestamp(input.date, now);
-  await ctx.tx.stockAdjustment.create({ data: { id, code, periodId: ctx.period.id, type: "IN_NO_SUPPLIER", at, note: input.note || null, createdBy: actor.userId } });
+  return costs;
+}
+
+async function postLines(ctx: EngineCtx, id: number, input: AdjustmentInInput, costs: Prisma.Decimal[], at: Date) {
   for (const [index, line] of input.lines.entries()) {
     const row = await ctx.tx.stockAdjustmentLine.create({ data: { adjustmentId: id, productId: line.productId, qty: decimal(line.qty), unitCost: costs[index]! } });
     const { seq } = await postReceipt(ctx, { productId: line.productId, qty: line.qty, unitCost: costs[index]!, docType: "ADJ_IN", docId: id, docLineId: row.id, at });
     await ctx.tx.stockAdjustmentLine.update({ where: { id: row.id }, data: { seq } });
   }
+}
+
+export async function createAdjustmentIn(ctx: EngineCtx, actor: Actor, input: AdjustmentInInput, now = new Date()) {
+  assertCan(actor.perms, "stock_adjust.manage");
+  const costs = await costLines(ctx, actor, input);
+  const id = await nextDocId(ctx.tx, "stock_adjustments"), code = formatDocCode("NK", id), at = docTimestamp(input.date, now);
+  await ctx.tx.stockAdjustment.create({ data: { id, code, periodId: ctx.period.id, type: "IN_NO_SUPPLIER", at, note: input.note || null, createdBy: actor.userId } });
+  await postLines(ctx, id, input, costs, at);
   await writeAudit(ctx.tx, { userId: actor.userId, action: "stock_adjustment.create", entity: "StockAdjustment", entityId: id, after: { code, type: "IN_NO_SUPPLIER", lineCount: input.lines.length } });
   return { id, code };
+}
+
+/** Sửa phiếu nhập kho không NCC (kỳ đang mở, chưa hủy): gỡ chứng từ khỏi engine FIFO rồi ghi lại các dòng mới — cùng cách `updatePurchase`. */
+export async function updateAdjustmentIn(ctx: EngineCtx, actor: Actor, id: number, input: AdjustmentInInput, now = new Date()) {
+  assertCan(actor.perms, "stock_adjust.manage");
+  await ctx.tx.$queryRaw`SELECT id FROM stock_adjustments WHERE id = ${id} FOR UPDATE`;
+  const current = await ctx.tx.stockAdjustment.findUnique({ where: { id }, include: { lines: true } });
+  if (!current || current.type !== "IN_NO_SUPPLIER") throw new DomainError("Không tìm thấy phiếu nhập kho.", 404);
+  if (current.isCancelled) throw new DomainError("Phiếu đã hủy, không sửa được.", 409);
+  if (current.periodId !== ctx.period.id) throw new PeriodClosedError();
+  if ((await productsOfDocument(ctx.tx, "ADJ_IN", id)).some((productId) => !ctx.locked.has(productId))) throw new DomainError("Phiếu vừa được người khác sửa, hãy tải lại trang rồi thử lại.", 409);
+  const costs = await costLines(ctx, actor, input, new Map(current.lines.map((line) => [line.productId, line.unitCost])));
+  const sameDay = new Date(current.at.getTime() + 7 * 3600_000).toISOString().slice(0, 10) === input.date;
+  const at = sameDay ? current.at : docTimestamp(input.date, now);
+  await removeDocument(ctx, "ADJ_IN", id);
+  await ctx.tx.stockAdjustmentLine.deleteMany({ where: { adjustmentId: id } });
+  await postLines(ctx, id, input, costs, at);
+  await ctx.tx.stockAdjustment.update({ where: { id }, data: { at, note: input.note || null } });
+  await writeAudit(ctx.tx, { userId: actor.userId, action: "stock_adjustment.update", entity: "StockAdjustment", entityId: id, before: { code: current.code, lineCount: current.lines.length }, after: { code: current.code, lineCount: input.lines.length } });
+  return { id, code: current.code };
+}
+
+export async function updateAdjustmentInTx(prisma: PrismaClient, actor: Actor, id: number, input: AdjustmentInInput) {
+  assertCan(actor.perms, "stock_adjust.manage");
+  const pre = await prisma.stockAdjustment.findUnique({ where: { id }, select: { periodId: true } });
+  if (!pre) throw new DomainError("Không tìm thấy phiếu nhập kho.", 404);
+  const products = uniqueSorted([...(await productsOfDocument(prisma, "ADJ_IN", id)), ...input.lines.map((line) => line.productId)]);
+  return withInventoryTx(prisma, { userId: actor.userId, periodId: pre.periodId, products }, (ctx) => updateAdjustmentIn(ctx, actor, id, input));
 }
 
 export async function createAdjustmentInIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: AdjustmentInInput) {

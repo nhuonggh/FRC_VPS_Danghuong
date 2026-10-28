@@ -18,8 +18,11 @@ export const debtAdjustmentSchema = z.object({
   amount: money,
   date: ymd,
   note: z.string().trim().min(1, "Nhập ghi chú.").max(300, "Ghi chú tối đa 300 ký tự."),
+  /** Chỉ cho lý do CHIET_KHAU: phần chiết khấu còn dư sau khi trừ — giữ lại quỹ (mặc định) hoặc chuyển vào lãi công ty. */
+  discountRemainder: z.enum(["KEEP", "FORFEIT"]).optional(),
 }).superRefine((v, ctx) => {
   if (v.reason === "CHIET_KHAU" && v.direction !== "DECREASE") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["direction"], message: "Trừ bằng chiết khấu chỉ để giảm nợ." });
+  if (v.reason !== "CHIET_KHAU" && v.discountRemainder !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discountRemainder"], message: "Chỉ áp dụng khi trừ bằng chiết khấu tích lũy." });
 });
 
 /** Chuyển (65): TRANSFER chuyển một phần số dư từ đối tác này sang đối tác kia; MERGE chuyển toàn bộ rồi gộp mã. */
