@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import { partnerScopeWhere, type Actor } from "@/lib/permissions/scope";
 import { writeAudit } from "@/server/audit/write";
+import { createSettlement } from "@/server/discount/settle";
 import { DomainError } from "@/server/http/errors";
 import { withIdempotency } from "@/server/idempotency/with-idempotency";
 import { docTimestamp } from "@/server/inventory";
@@ -40,8 +41,9 @@ export async function createDebtAdjustment(tx: Tx, actor: Actor, input: DebtAdju
   const amount = D(input.amount);
   const signed = input.direction === "DECREASE" ? amount.negated() : amount;
 
+  let left = D(0);
   if (input.reason === "CHIET_KHAU") {
-    const left = await discountBalance(tx, partner.id);
+    left = await discountBalance(tx, partner.id);
     if (amount.gt(left)) throw new DomainError(`Số dư chiết khấu tích lũy của ${partner.code} chỉ còn ${left.toString()}, không đủ để trừ ${amount.toString()}.`, 400);
   }
   const id = await nextDocId(tx, "debt_adjustments");
@@ -50,6 +52,11 @@ export async function createDebtAdjustment(tx: Tx, actor: Actor, input: DebtAdju
   await postPartnerLedger(tx, { periodId: period.id, partnerId: partner.id, side: signed.gt(0) ? "debit" : "credit", amount: amount, docType: "DEBT_ADJ", docId: id, at, createdBy: actor.userId });
   if (input.reason === "CHIET_KHAU") {
     await tx.discountLedger.create({ data: { periodId: period.id, partnerId: partner.id, amountOut: amount, settleMethod: "OFFSET", docType: "DEBT_ADJ", docId: id, at, createdBy: actor.userId } });
+    // Phần chiết khấu còn dư: khách chọn chuyển vào lãi công ty (hết số dư) — mặc định giữ lại quỹ để tiếp tục tích lũy.
+    const rest = left.minus(amount);
+    if (input.discountRemainder === "FORFEIT" && rest.gt(0)) {
+      await createSettlement(tx, actor, { partnerId: partner.id, method: "FORFEIT", amount: rest, input: { partnerId: partner.id, method: "FORFEIT", amount: rest.toNumber(), cashAccountId: null, date: input.date, note: `Chuyển phần chiết khấu còn lại khi điều chỉnh công nợ ${code}` }, periodId: period.id, at }, now);
+    }
   }
   await writeAudit(tx, { userId: actor.userId, action: "debt.adjust", entity: "DebtAdjustment", entityId: id, after: { code, partnerCode: partner.code, reason: input.reason, amount: signed.toString() } });
   return { id, code };

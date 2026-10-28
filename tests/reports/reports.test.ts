@@ -98,6 +98,19 @@ describe("68 — lãi lỗ toàn xưởng", () => {
     expect(r.rows[0]).toMatchObject({ month: "09/2026", forfeit: "10000", gross: "10000", profit: "10000" });
     expect(r.totals).toMatchObject({ forfeit: "10000", profit: "10000" });
   });
+  it("điều chỉnh công nợ: tăng cộng lãi, giảm trừ lãi; CHIET_KHAU và phiếu hủy không tính; dòng tháng có ym để xem chi tiết", async () => {
+    const period = await prisma.period.findFirstOrThrow();
+    const mk = (code: string, reason: string, amount: number, over: { isCancelled?: boolean } = {}) =>
+      prisma.debtAdjustment.create({ data: { id: Number(code.slice(2)), code, periodId: period.id, partnerId: a.id, reason, amount, at: new Date("2026-09-16T03:00:00Z"), note: "x", createdBy: w.userId, ...(over.isCancelled ? { isCancelled: true, cancelledAt: NOW, cancelledBy: w.userId, cancelReason: "nhầm" } : {}) } });
+    await mk("DC1", "KHAC", 30_000);
+    await mk("DC2", "HANG_LOI", -12_000);
+    await mk("DC3", "CHIET_KHAU", -50_000);
+    await mk("DC4", "KHAC", 99_000, { isCancelled: true });
+    const r = await run("period-pnl");
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ ym: "2026-09", month: "09/2026", adjust: "18000", gross: "18000", profit: "18000" });
+    expect(r.totals).toMatchObject({ adjust: "18000" });
+  });
   it("chi phí đã hủy không tính; tháng khác tách dòng", async () => {
     const et = await prisma.expenseType.create({ data: { name: "Điện" } });
     await tx((t) => createExpense(t, actor, { expenseTypeId: et.id, cashAccountId: cash.id, amount: 10_000, date: "2026-09-15", note: "" }, NOW));
@@ -105,6 +118,32 @@ describe("68 — lãi lỗ toàn xưởng", () => {
     await prisma.payment.update({ where: { id: cancelled.paymentId }, data: { isCancelled: true, cancelledAt: NOW } });
     const r = await run("period-pnl");
     expect(r.totals).toMatchObject({ expense: "10000", profit: "-10000" });
+  });
+});
+
+describe("74/75 — lãi theo nhóm hàng / kiểu gia công", () => {
+  it("gom lãi theo nhóm hàng của sản phẩm; bấm vào nhóm xem từng sản phẩm; sản phẩm chưa có nhóm gom vào 'Chưa phân nhóm'", async () => {
+    await order(a.id); // tổng phải khớp Lãi từng đơn
+    const op = await run("order-profit");
+    const none = await run("profit-by-group");
+    expect(none.rows).toHaveLength(1);
+    expect(none.rows[0]).toMatchObject({ name: "Chưa phân nhóm", orders: 1 });
+    expect(none.totals).toMatchObject({ revenue: op.totals!.revenue, cost: op.totals!.cost, profit: op.totals!.profit });
+    const group = await prisma.productGroup.create({ data: { name: "Tôn lạnh" } });
+    await prisma.product.update({ where: { id: w.p.id }, data: { groupId: group.id } });
+    const byG = await run("profit-by-group");
+    expect(byG.rows[0]).toMatchObject({ name: "Tôn lạnh", id: group.id });
+    const drill = await run("profit-by-group", { item: String(group.id) });
+    expect(drill.subtitle).toBe("Nhóm hàng: Tôn lạnh");
+    expect(drill.rows).toHaveLength(1);
+    expect(drill.rows[0]).toMatchObject({ id: w.p.id });
+    expect(drill.totals).toMatchObject({ profit: op.totals!.profit });
+  });
+  it("lãi theo kiểu gia công: dòng không có kiểu gom vào 'Không gia công'; cần profit.view", async () => {
+    await order(a.id);
+    const r = await run("profit-by-processing");
+    expect(r.rows[0]).toMatchObject({ name: "Không gia công (bán nguyên)", id: 0 });
+    await expect(run("profit-by-processing", {}, { userId: 1, perms: new Set(["report.view"]) })).rejects.toMatchObject({ status: 403 });
   });
 });
 

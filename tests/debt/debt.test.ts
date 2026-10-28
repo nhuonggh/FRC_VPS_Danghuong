@@ -139,6 +139,19 @@ describe("điều chỉnh công nợ (64)", () => {
     expect(debtAdjustmentSchema.safeParse({ partnerId: a.id, reason: "CHIET_KHAU", direction: "INCREASE", amount: 1, date: "2026-09-15", note: "x" }).success).toBe(false);
   });
 
+  it("CHIET_KHAU + chuyển phần dư vào lãi: tạo phiếu FORFEIT cho phần còn lại, quỹ chiết khấu về 0; KEEP giữ nguyên", async () => {
+    await led(a.id, { debit: 500_000 }); await discount(a.id, 150_000); await discount(b.id, 150_000); await led(b.id, { debit: 500_000 });
+    await tx((t) => createDebtAdjustment(t, actor, adj({ reason: "CHIET_KHAU", amount: 100_000, discountRemainder: "KEEP" }), NOW));
+    expect((await getDebtDetail(prisma, actor, a.id, parseListParams({}, []))).discountBalance).toBe("50000");
+    expect(await prisma.discountSettlement.count()).toBe(0);
+    await tx((t) => createDebtAdjustment(t, actor, adj({ partnerId: b.id, reason: "CHIET_KHAU", amount: 100_000, discountRemainder: "FORFEIT" }), NOW));
+    expect(await bal(b.id)).toBe("400000");
+    expect((await getDebtDetail(prisma, actor, b.id, parseListParams({}, []))).discountBalance).toBe("0");
+    expect(await prisma.discountSettlement.findFirstOrThrow({ where: { partnerId: b.id } })).toMatchObject({ method: "FORFEIT", isCancelled: false });
+    expect((await prisma.discountSettlement.findFirstOrThrow({ where: { partnerId: b.id } })).amount.toString()).toBe("50000");
+    expect(debtAdjustmentSchema.safeParse({ ...adj(), discountRemainder: "FORFEIT" }).success).toBe(false);
+  });
+
   it("thiếu quyền debt.adjust bị chặn; retry cùng khoá không ghi hai lần", async () => {
     const view: Actor = { userId: w.userId, perms: new Set(["debt.view", "partner.view_all"]) };
     await expect(createDebtAdjustmentIdempotent(prisma, view, "k", adj(), NOW)).rejects.toThrow();

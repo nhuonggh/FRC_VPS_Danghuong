@@ -86,6 +86,8 @@ export const GUIDE_ARTICLES: Readonly<Record<string, GuideArticle>> = {
   "debt-transfer": article("Khi được phép gộp hoặc chuyển khoản nợ giữa các đối tác.", ["Chọn bên chuyển và bên nhận.", "Kiểm tra số tiền và lý do chuyển.", "Đọc kỹ thông tin xác nhận rồi lưu.", "Kiểm tra lại công nợ của cả hai bên."], "Khoản nợ được chuyển theo thông tin đã xác nhận.", "Đây là thao tác thay đổi bên đang có công nợ. Chỉ thực hiện khi đã thống nhất rõ với người phụ trách."),
   "rp-order-profit": report("lãi của từng đơn hàng"),
   "rp-period-pnl": report("lãi lỗ toàn xưởng"),
+  "rp-profit-by-group": report("lãi theo nhóm hàng"),
+  "rp-profit-by-processing": report("lãi theo kiểu gia công"),
   "rp-by-customer": report("bán hàng theo từng khách"),
   "rp-by-group": report("bán hàng theo nhóm khách"),
   "rp-issue-by-order": report("hàng xuất kho theo đơn"),

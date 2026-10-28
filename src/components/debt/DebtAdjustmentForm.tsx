@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Scale } from "lucide-react";
 import { Combobox, FormCard, FormGrid, igArea, igCombo, igInput, InlineField, NewPage, type ComboOption, NumberInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
+import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
 import { DEBT_REASONS, REASON_LABEL } from "@/server/debt/schemas";
 
@@ -18,12 +19,24 @@ export function DebtAdjustmentForm({ today, partner }: { today: string; partner:
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
   const [note, setNote] = useState("");
+  const [discBalance, setDiscBalance] = useState<number | null>(null);
+  const [remainder, setRemainder] = useState<"KEEP" | "FORFEIT">("KEEP");
+  const isDiscount = reason === "CHIET_KHAU";
+  const partnerId = p?.value;
+
+  useEffect(() => {
+    if (!isDiscount || !partnerId) { setDiscBalance(null); return; }
+    let alive = true;
+    apiFetch<{ balance: string | null }>(`/api/debts/partners/${partnerId}/discount`).then((r) => { if (alive) setDiscBalance(r.balance === null ? null : Number(r.balance)); }).catch(() => { if (alive) setDiscBalance(null); });
+    return () => { alive = false; };
+  }, [isDiscount, partnerId]);
+  const rest = isDiscount && discBalance !== null ? discBalance - (Number(amount) || 0) : 0;
 
   async function submit() {
     if (!p) throw new Error("Chọn đối tác.");
     if (!(Number(amount) > 0)) throw new Error("Nhập số tiền lớn hơn 0.");
     if (!note.trim()) throw new Error("Nhập ghi chú.");
-    await apiFetch("/api/debts/adjustments", { method: "POST", json: { partnerId: Number(p.value), reason, direction: reason === "CHIET_KHAU" ? "DECREASE" : direction, amount: Number(amount), date, note }, idempotencyKey: idem.key });
+    await apiFetch("/api/debts/adjustments", { method: "POST", json: { partnerId: Number(p.value), reason, direction: isDiscount ? "DECREASE" : direction, amount: Number(amount), date, note, ...(isDiscount && rest > 0 ? { discountRemainder: remainder } : {}) }, idempotencyKey: idem.key });
     router.replace(p ? `/accounting/debts/${p.value}` : "/accounting/debt-adjustments");
   }
   const load = (q: string) => apiFetch<ComboOption[]>(`/api/debts/partners?q=${encodeURIComponent(q)}`);
@@ -55,7 +68,23 @@ export function DebtAdjustmentForm({ today, partner }: { today: string; partner:
             <textarea id="note" rows={3} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} className={igArea} />
           </InlineField>
         </FormGrid>
-        {reason === "CHIET_KHAU" && <p className="mt-3 text-sm text-fg-secondary">Trừ nợ bằng chiết khấu tích lũy: số tiền tiêu hao số dư chiết khấu của đối tác, không vượt số dư còn.</p>}
+        {isDiscount && (
+          <div className="mt-3 space-y-2 rounded-sm border border-border bg-hover p-3 text-sm">
+            <p className="text-fg-secondary">Trừ nợ bằng chiết khấu tích lũy: số tiền tiêu hao số dư chiết khấu của đối tác, không vượt số dư còn.</p>
+            {p && discBalance !== null && (
+              <p>Chiết khấu tích lũy hiện có: <strong className="tabular">{formatCurrency(String(discBalance))}</strong>
+                {Number(amount) > 0 && <> · Sau khi trừ còn: <strong className={`tabular ${rest < 0 ? "text-danger" : ""}`}>{formatCurrency(String(rest))}</strong></>}</p>
+            )}
+            {rest > 0 && (
+              <fieldset className="space-y-1">
+                <legend className="font-medium">Phần chiết khấu còn dư {formatCurrency(String(rest))}:</legend>
+                <label className="flex cursor-pointer items-start gap-2"><input type="radio" name="remainder" checked={remainder === "KEEP"} onChange={() => setRemainder("KEEP")} className="mt-1" /><span>Giữ lại quỹ chiết khấu (tiếp tục tích lũy)</span></label>
+                <label className="flex cursor-pointer items-start gap-2"><input type="radio" name="remainder" checked={remainder === "FORFEIT"} onChange={() => setRemainder("FORFEIT")} className="mt-1" /><span>Chuyển vào lãi công ty (hết số dư, khách không còn quyền lợi này)</span></label>
+              </fieldset>
+            )}
+          </div>
+        )}
+        {!isDiscount && <p className="mt-3 text-sm text-fg-secondary">Tăng số dư = cộng vào lãi; giảm số dư = trừ khỏi lãi (hiện ở báo cáo Lãi lỗ toàn xưởng, cột &quot;Điều chỉnh công nợ&quot;).</p>}
       </FormCard>
     </NewPage>
   );

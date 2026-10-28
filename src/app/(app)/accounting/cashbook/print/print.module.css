@@ -1,8 +1,11 @@
 .root { background: var(--bg-surface); color: var(--text-primary); padding: var(--space-4); }
 .table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-.table th, .table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+.table th, .table td { border: 1px solid var(--text-secondary); padding: 4px 6px; vertical-align: top; }
 .table th { background: var(--bg-hover); text-align: left; }
-.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Đặt sau `.table th` + chọn kèm phần tử để thắng độ ưu tiên: tiêu đề Thu/Chi/Số dư canh phải cùng số liệu. */
+.table th.num, .table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.head { position: relative; margin-bottom: var(--space-4); text-align: center; }
+.head > :global(button), .head > :global(a) { position: absolute; top: 0; right: 0; }
 .sum td { font-weight: 600; }
 .sign { display: flex; justify-content: space-around; margin-top: 32px; min-height: 110px; }
 .sign div { display: flex; flex-direction: column; align-items: center; gap: 2px; }

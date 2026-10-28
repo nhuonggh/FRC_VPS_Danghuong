@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCan } from "@/lib/permissions/guard";
 import type { Actor } from "@/lib/permissions/scope";
-import { sortToOrderBy, type ListParams } from "@/lib/query-params";
+import { listTimeRange, sortToOrderBy, type ListParams } from "@/lib/query-params";
 import { DomainError } from "@/server/http/errors";
 import { getOpenPeriod } from "@/server/period/guard";
 
@@ -23,7 +23,9 @@ export async function listProductionOrders(db: PrismaClient, actor: Actor, param
   assertCan(actor.perms, "production.manage");
   const period = await getOpenPeriod(db), status = params.filters.status?.[0];
   const q = params.q?.trim();
-  const base = { periodId: period.id, ...(q ? { OR: [{ code: { contains: q, mode: "insensitive" as const } }, { outputs: { some: { product: { OR: [{ code: { contains: q, mode: "insensitive" as const } }, { name: { contains: q, mode: "insensitive" as const } }] } } } }] } : {}) };
+  const range = listTimeRange(params);
+  const productIds = (params.filters.product ?? []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0);
+  const base = { periodId: period.id, ...(range ? { at: { gte: range.start, lt: range.end } } : {}), ...(productIds.length ? { outputs: { some: { productId: { in: productIds } } } } : {}), ...(q ? { OR: [{ code: { contains: q, mode: "insensitive" as const } }, { outputs: { some: { product: { OR: [{ code: { contains: q, mode: "insensitive" as const } }, { name: { contains: q, mode: "insensitive" as const } }] } } } }] } : {}) };
   const where = { ...base, ...(status === "active" ? { isCancelled: false } : status === "cancelled" ? { isCancelled: true } : {}) };
   const [rows, total, all, cancelled] = await Promise.all([
     db.productionOrder.findMany({ where, include: { outputs: outputInclude, product: { select: { code: true, name: true, baseUnit: true } }, _count: { select: { materials: true } }, }, orderBy: [sortToOrderBy(params.sort, ["code", "at"], { at: "desc" }), { id: "desc" }], skip: (params.page - 1) * params.pageSize, take: params.pageSize }),
@@ -34,6 +36,13 @@ export async function listProductionOrders(db: PrismaClient, actor: Actor, param
     rows: rows.map((r): ProductionRowDTO => ({ outputs: r.outputs.map(outputDTO), id: r.id, code: r.code, at: r.at, productCode: r.product.code, productName: r.product.name, qty: r.qty.toString(), baseUnit: r.product.baseUnit, materialCount: r._count.materials, isCancelled: r.isCancelled, createdByName: names.get(r.createdBy) ?? null })),
     total, stats: { all, active: all - cancelled, cancelled },
   };
+}
+
+/** Sản phẩm đầu ra đã có lệnh trong kỳ hiện tại — nguồn cho bộ lọc "Sản phẩm" của danh sách lệnh. */
+export async function productionProductOptions(db: PrismaClient): Promise<{ value: string; label: string }[]> {
+  const period = await getOpenPeriod(db);
+  const rows = await db.productionOutput.findMany({ where: { order: { periodId: period.id } }, distinct: ["productId"], select: { product: { select: { id: true, code: true, name: true } } } });
+  return rows.map((r) => ({ value: String(r.product.id), label: `${r.product.code} — ${r.product.name}` })).sort((a, b) => a.label.localeCompare(b.label, "vi"));
 }
 
 export async function getProductionOrder(db: PrismaClient, actor: Actor, id: number): Promise<ProductionDetailDTO> {

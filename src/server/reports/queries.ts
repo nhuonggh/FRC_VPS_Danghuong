@@ -66,32 +66,77 @@ async function orderProfit(db: Db, actor: Actor, params: ListParams, range: Time
 
 /** 68 — Lãi lỗ toàn xưởng theo tháng: DT − hàng trả + vốn hàng trả − giá vốn − CK tích lũy − chi phí hoạt động. */
 async function periodPnl(db: Db, actor: Actor, _params: ListParams, range: TimeRange): Promise<ReportResult> {
-  const [orders, returns, expenses, forfeits] = await Promise.all([
+  const [orders, returns, expenses, forfeits, adjustments] = await Promise.all([
     liveOrders(db, actor, range),
     db.goodsReturn.findMany({ where: { isCancelled: false, kind: { not: "SUPPLIER" }, at: timeRangeWhere(range), partner: partnerScopeWhere(actor) }, select: { id: true, at: true, totalAmount: true, lines: { select: { discountAccumReversed: true } } } }),
     db.operatingExpense.findMany({ where: { payment: { isCancelled: false, at: timeRangeWhere(range) } }, select: { payment: { select: { at: true, amount: true } } } }),
     db.discountSettlement.findMany({ where: { method: "FORFEIT", isCancelled: false, at: timeRangeWhere(range), partner: partnerScopeWhere(actor) }, select: { at: true, amount: true } }),
+    // Điều chỉnh công nợ (trừ lý do CHIET_KHAU — chiết khấu đã trừ vào lãi lúc phát sinh đơn): tăng số dư = cộng lãi, giảm = trừ lãi.
+    db.debtAdjustment.findMany({ where: { isCancelled: false, reason: { not: "CHIET_KHAU" }, at: timeRangeWhere(range), partner: partnerScopeWhere(actor) }, select: { at: true, amount: true } }),
   ]);
   const layers = returns.length ? await db.costLayer.findMany({ where: { sourceDocType: "RETURN_IN", sourceDocId: { in: returns.map((r) => r.id) } }, select: { sourceDocId: true, qtyIn: true, unitCost: true } }) : [];
-  const m = new Map<string, { rev: Prisma.Decimal; ret: Prisma.Decimal; retCost: Prisma.Decimal; cost: Prisma.Decimal; acc: Prisma.Decimal; exp: Prisma.Decimal; fo: Prisma.Decimal }>();
-  const get = (k: string) => { let v = m.get(k); if (!v) { v = { rev: D(0), ret: D(0), retCost: D(0), cost: D(0), acc: D(0), exp: D(0), fo: D(0) }; m.set(k, v); } return v; };
+  const m = new Map<string, { rev: Prisma.Decimal; ret: Prisma.Decimal; retCost: Prisma.Decimal; cost: Prisma.Decimal; acc: Prisma.Decimal; exp: Prisma.Decimal; fo: Prisma.Decimal; adj: Prisma.Decimal }>();
+  const get = (k: string) => { let v = m.get(k); if (!v) { v = { rev: D(0), ret: D(0), retCost: D(0), cost: D(0), acc: D(0), exp: D(0), fo: D(0), adj: D(0) }; m.set(k, v); } return v; };
   for (const o of orders) { const f = orderFigures(o.lines, o.roundAmounts); const v = get(ymd(o.orderDate).slice(0, 7)); v.rev = v.rev.plus(f.revenue); v.cost = v.cost.plus(f.cost); v.acc = v.acc.plus(f.accum); }
   const retMonth = new Map(returns.map((r) => [r.id, ymd(r.at).slice(0, 7)]));
   for (const r of returns) { const v = get(ymd(r.at).slice(0, 7)); v.ret = v.ret.plus(r.totalAmount); v.acc = v.acc.minus(r.lines.reduce((s, l) => s.plus(l.discountAccumReversed), D(0))); }
   for (const l of layers) { const v = get(retMonth.get(l.sourceDocId)!); v.retCost = v.retCost.plus(l.qtyIn.times(l.unitCost)); }
   for (const e of expenses) { const v = get(ymd(e.payment.at).slice(0, 7)); v.exp = v.exp.plus(e.payment.amount); }
   for (const f of forfeits) { const v = get(ymd(f.at).slice(0, 7)); v.fo = v.fo.plus(f.amount); }
+  for (const a of adjustments) { const v = get(ymd(a.at).slice(0, 7)); v.adj = v.adj.plus(a.amount); }
   const rows = [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([month, v]) => {
-    const net = v.rev.minus(v.ret); const cost = v.cost.minus(v.retCost); const gross = net.minus(cost).minus(v.acc).plus(v.fo); const profit = gross.minus(v.exp);
-    return { month: `${month.slice(5)}/${month.slice(0, 4)}`, revenue: v.rev.toString(), returns: v.ret.toString(), cost: r2(cost).toString(), accum: r2(v.acc).toString(), forfeit: v.fo.toString(), gross: r2(gross).toString(), expense: v.exp.toString(), profit: r2(profit).toString() };
+    const net = v.rev.minus(v.ret); const cost = v.cost.minus(v.retCost); const gross = net.minus(cost).minus(v.acc).plus(v.fo).plus(v.adj); const profit = gross.minus(v.exp);
+    return { ym: month, month: `${month.slice(5)}/${month.slice(0, 4)}`, revenue: v.rev.toString(), returns: v.ret.toString(), cost: r2(cost).toString(), accum: r2(v.acc).toString(), forfeit: v.fo.toString(), adjust: v.adj.toString(), gross: r2(gross).toString(), expense: v.exp.toString(), profit: r2(profit).toString() };
   });
   const S = (k: keyof (typeof rows)[number]) => rows.reduce((s, r) => s.plus(r[k] as string), D(0)).toString();
   return {
     key: "period-pnl", title: "Lãi lỗ toàn xưởng", negativeKey: "profit", total: rows.length,
-    columns: [{ key: "month", label: "Tháng", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "returns", label: "Hàng trả", kind: "money" }, { key: "cost", label: "Giá vốn (đã trừ vốn hàng trả)", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "forfeit", label: "CK chuyển vào lãi", kind: "money" }, { key: "gross", label: "Lãi gộp", kind: "money" }, { key: "expense", label: "Chi phí hoạt động", kind: "money" }, { key: "profit", label: "Lãi ròng", kind: "money" }],
-    rows, totals: { month: "Tổng", revenue: S("revenue"), returns: S("returns"), cost: S("cost"), accum: S("accum"), forfeit: S("forfeit"), gross: S("gross"), expense: S("expense"), profit: S("profit") },
+    columns: [{ key: "month", label: "Tháng", kind: "text" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "returns", label: "Hàng trả", kind: "money" }, { key: "cost", label: "Giá vốn (đã trừ vốn hàng trả)", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "forfeit", label: "CK chuyển vào lãi", kind: "money" }, { key: "adjust", label: "Điều chỉnh công nợ", kind: "money" }, { key: "gross", label: "Lãi gộp", kind: "money" }, { key: "expense", label: "Chi phí hoạt động", kind: "money" }, { key: "profit", label: "Lãi ròng", kind: "money" }],
+    rows, totals: { month: "Tổng", revenue: S("revenue"), returns: S("returns"), cost: S("cost"), accum: S("accum"), forfeit: S("forfeit"), adjust: S("adjust"), gross: S("gross"), expense: S("expense"), profit: S("profit") },
     summary: [{ label: "Doanh thu", value: S("revenue"), money: true }, { label: "Lãi gộp", value: S("gross"), money: true, tone: D(S("gross")).lt(0) ? "danger" : "success" }, { label: "Chi phí hoạt động", value: S("expense"), money: true }, { label: "Lãi ròng", value: S("profit"), money: true, tone: D(S("profit")).lt(0) ? "danger" : "success" }],
-    notes: ["Lãi ròng = doanh thu − hàng trả − giá vốn (đã cộng lại vốn hàng trả) − CK tích lũy + CK chuyển vào lãi − chi phí hoạt động.", "CK chuyển vào lãi = phần chiết khấu tích lũy khách không nhận, được tất toán \"Chuyển vào lãi công ty\" (tính theo ngày phiếu, bỏ phiếu đã hủy).", "Chi phí tính theo phiếu chi CHI_PHI chưa hủy (kể cả chưa kiểm tra)."],
+    notes: ["Lãi ròng = doanh thu − hàng trả − giá vốn (đã cộng lại vốn hàng trả) − CK tích lũy + CK chuyển vào lãi ± điều chỉnh công nợ − chi phí hoạt động.", "Điều chỉnh công nợ = phiếu điều chỉnh chưa hủy theo ngày phiếu: tăng số dư (+) cộng vào lãi, giảm số dư (−) trừ khỏi lãi; lý do \"Trừ bằng chiết khấu tích lũy\" không tính (đã trừ lúc phát sinh đơn).", "CK chuyển vào lãi = phần chiết khấu tích lũy khách không nhận, được tất toán \"Chuyển vào lãi công ty\" (tính theo ngày phiếu, bỏ phiếu đã hủy).", "Chi phí tính theo phiếu chi CHI_PHI chưa hủy (kể cả chưa kiểm tra)."],
+  };
+}
+
+/**
+ * 74/75 — Lãi theo nhóm hàng / theo kiểu gia công: gom từng DÒNG đơn (đã giao dịch, không nháp/hủy) theo nhóm của sản phẩm
+ * hoặc kiểu gia công của dòng. Lãi dòng = thành tiền (sau CK trừ ngay) − CK tích lũy − giá vốn FIFO. Bấm một dòng (`item`)
+ * để xem chi tiết theo từng sản phẩm trong nhóm/kiểu đó. Chưa trừ hàng trả, chưa cộng CK chuyển vào lãi (như Lãi từng đơn).
+ */
+async function profitByDimension(db: Db, actor: Actor, params: ListParams, range: TimeRange, by: "group" | "processing"): Promise<ReportResult> {
+  const lines = await db.saleOrderLine.findMany({
+    where: { order: { isCancelled: false, isDraft: false, orderDate: timeRangeWhere(range), partner: partnerScopeWhere(actor) } },
+    select: { orderId: true, qty: true, salePrice: true, discountNow: true, discountAccum: true, unitCostFifo: true, qtyBase: true, isProvisional: true, order: { select: { roundAmounts: true } }, product: { select: { id: true, code: true, name: true, groupId: true, group: { select: { name: true } } } }, processingType: { select: { id: true, name: true } } },
+  });
+  const none = by === "group" ? "Chưa phân nhóm" : "Không gia công (bán nguyên)";
+  const dimOf = (l: (typeof lines)[number]) => (by === "group" ? { id: l.product.groupId ?? 0, name: l.product.group?.name ?? none } : { id: l.processingType?.id ?? 0, name: l.processingType?.name ?? none });
+  const itemId = Number(params.filters.item?.[0]);
+  const drill = Number.isSafeInteger(itemId) && itemId >= 0 && params.filters.item?.length ? itemId : null;
+  type Acc = { id: number; code: string; name: string; orders: Set<number>; rev: Prisma.Decimal; acc: Prisma.Decimal; cost: Prisma.Decimal; prov: boolean };
+  const m = new Map<number, Acc>();
+  let drillName = "";
+  for (const l of lines) {
+    const d = dimOf(l);
+    if (drill !== null && d.id !== drill) continue;
+    if (drill !== null) drillName = d.name;
+    const key = drill === null ? d.id : l.product.id;
+    let v = m.get(key);
+    if (!v) { v = drill === null ? { id: d.id, code: "", name: d.name, orders: new Set(), rev: D(0), acc: D(0), cost: D(0), prov: false } : { id: l.product.id, code: l.product.code, name: l.product.name, orders: new Set(), rev: D(0), acc: D(0), cost: D(0), prov: false }; m.set(key, v); }
+    v.orders.add(l.orderId);
+    v.rev = v.rev.plus(lineNet(l, l.order.roundAmounts)); v.acc = v.acc.plus(l.discountAccum); v.cost = v.cost.plus(l.unitCostFifo.times(l.qtyBase)); v.prov ||= l.isProvisional;
+  }
+  const q = (params.q ?? "").trim().toLowerCase();
+  const list = [...m.values()].filter((v) => !q || v.name.toLowerCase().includes(q) || v.code.toLowerCase().includes(q)).map((v) => ({ v, profit: r2(v.rev.minus(v.acc).minus(v.cost)) })).sort((a, b) => b.profit.comparedTo(a.profit));
+  const tot = list.reduce((s, x) => ({ rev: s.rev.plus(x.v.rev), acc: s.acc.plus(x.v.acc), cost: s.cost.plus(x.v.cost), profit: s.profit.plus(x.profit) }), { rev: D(0), acc: D(0), cost: D(0), profit: D(0) });
+  const label = by === "group" ? "Nhóm hàng" : "Kiểu gia công";
+  const cols = drill === null ? [{ key: "name", label, kind: "text" as const }] : [{ key: "code", label: "Mã", kind: "text" as const }, { key: "name", label: "Sản phẩm", kind: "text" as const }];
+  return {
+    key: by === "group" ? "profit-by-group" : "profit-by-processing", title: by === "group" ? "Lãi theo nhóm hàng" : "Lãi theo kiểu gia công", subtitle: drill === null ? undefined : `${label}: ${drillName || none}`, negativeKey: "profit", total: list.length,
+    summary: [{ label: drill === null ? label : "Sản phẩm", value: list.length }, { label: "Doanh thu", value: tot.rev.toString(), money: true }, { label: "Giá vốn", value: tot.cost.toString(), money: true }, { label: "Lãi / lỗ", value: tot.profit.toString(), money: true, tone: tot.profit.lt(0) ? "danger" : "success" }],
+    columns: [...cols, { key: "orders", label: "Số đơn", kind: "int" }, { key: "revenue", label: "Doanh thu", kind: "money" }, { key: "accum", label: "CK tích lũy", kind: "money" }, { key: "cost", label: "Giá vốn", kind: "money" }, { key: "profit", label: "Lãi", kind: "money" }, { key: "margin", label: "% lãi", kind: "pct" }],
+    rows: list.map(({ v, profit }) => ({ id: v.id, code: v.code, name: v.prov ? `${v.name} (có dòng thiếu tồn)` : v.name, orders: v.orders.size, revenue: r2(v.rev).toString(), accum: r2(v.acc).toString(), cost: r2(v.cost).toString(), profit: profit.toString(), margin: pct(profit, v.rev) })),
+    totals: { name: "Tổng", revenue: r2(tot.rev).toString(), accum: r2(tot.acc).toString(), cost: r2(tot.cost).toString(), profit: tot.profit.toString(), margin: pct(tot.profit, tot.rev) },
+    notes: ["Lãi = thành tiền dòng (sau chiết khấu trừ ngay) − CK tích lũy − giá vốn FIFO. Chưa trừ hàng trả; chưa cộng CK chuyển vào lãi và chưa trừ chi phí hoạt động (xem Lãi lỗ toàn xưởng).", "Số đơn = số đơn có dòng thuộc mục đó (một đơn nhiều nhóm/kiểu được tính ở mỗi mục). Bấm một dòng để xem theo từng sản phẩm."],
   };
 }
 
@@ -185,7 +230,7 @@ export async function runReport(db: Db, actor: Actor, key: string, params: ListP
   const def = REPORTS.find((r) => r.key === key);
   if (!def) throw new DomainError("Không tìm thấy báo cáo.", 404);
   assertCan(actor.perms, def.perm);
-  if (key === "order-profit" || key === "period-pnl") {
+  if (key === "order-profit" || key === "period-pnl" || key === "profit-by-group" || key === "profit-by-processing") {
     assertCan(actor.perms, "order.analysis.view");
     assertCan(actor.perms, "profit.view");
   }
@@ -193,6 +238,8 @@ export async function runReport(db: Db, actor: Actor, key: string, params: ListP
   const k = key as ReportKey;
   const res = k === "order-profit" ? await orderProfit(db, actor, params, range)
     : k === "period-pnl" ? await periodPnl(db, actor, params, range)
+    : k === "profit-by-group" ? await profitByDimension(db, actor, params, range, "group")
+    : k === "profit-by-processing" ? await profitByDimension(db, actor, params, range, "processing")
     : k === "by-customer" ? await salesBy(db, actor, range, "customer", params)
     : k === "by-group" ? await salesBy(db, actor, range, "group", params)
     : k === "issue-by-order" ? await issueByOrder(db, actor, params, range)
