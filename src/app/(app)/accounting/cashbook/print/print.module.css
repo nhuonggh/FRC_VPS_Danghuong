@@ -12,9 +12,7 @@
   :global(body):has(.root) :global(div):has(.root),
   :global(body):has(.root) :global(main):has(.root) { position: static; display: block; height: auto; max-height: none; overflow: visible; }
   .root, .root * { visibility: visible !important; }
-  .root { position: absolute; inset: 0; width: 100%; padding: 0; color: #000; background: #fff; }
-  .table th, .table td { border-color: #000; }
-  .table th { background: #eee; }
+  .root { position: absolute; inset: 0; width: 100%; padding: 0; }
   .table tr { break-inside: avoid; }
   .table thead { display: table-header-group; }
   .sign { break-inside: avoid; }
