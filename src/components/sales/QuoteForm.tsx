@@ -16,6 +16,8 @@ import type { ProductOption } from "@/server/products/queries";
 import type { SalePricingDTO } from "@/server/sales/pricing";
 import { quoteSchema, type QuoteInput } from "@/server/quotes/schemas";
 import { grossAmount } from "@/lib/line-amount";
+import { QuickDimensionEntry } from "@/components/sales/QuickDimensionEntry";
+import type { SaleOrderInput } from "@/server/sales/schemas";
 
 const emptyLine = { productId: undefined, unit: "", qty: undefined, salePrice: undefined, note: "", processingTypeId: null } as unknown as QuoteInput["lines"][number];
 const num = (v: unknown) => Number(v) || 0;
@@ -85,6 +87,18 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
     addPickedLines(picked, getValues("lines"), (p) => ({ ...emptyLine, productId: p.value, unit: p.baseUnit }), { update, append: (vs) => append(vs) });
   };
 
+  // Nhập nhanh theo kích thước (giống đơn bán): mỗi số hạng một dòng, lấp dòng trống trước rồi mới thêm dòng.
+  const addDimensionRows = (product: ProductOption, rows: SaleOrderInput["lines"]) => {
+    setProducts((m) => new Map(m).set(product.value, product));
+    ensureTypes(product.value);
+    const current = getValues("lines");
+    const blanks = current.flatMap((l, i) => (l?.productId ? [] : [i]));
+    const mapped = rows.map((r) => ({ productId: r.productId, unit: r.unit, qty: r.qty, salePrice: r.salePrice, note: r.note ?? "", processingTypeId: r.processingTypeId ?? null }));
+    mapped.slice(0, blanks.length).forEach((r, k) => update(blanks[k], r));
+    const rest = mapped.slice(blanks.length);
+    if (rest.length) append(rest.slice(0, Math.max(0, 200 - current.length)));
+  };
+
   // Một trang: thông tin chung ở trên, dòng hàng ở dưới.
   return (
     <NewPage wide bare backHref={edit ? `/sales/quotes/${edit.quoteId}` : "/sales/quotes"} backLabel={edit ? `Quay lại báo giá ${edit.code}` : "Quay lại danh sách báo giá"}
@@ -108,6 +122,7 @@ export function QuoteForm({ today, edit }: { today: string; edit?: QuoteEdit }) 
       </FormCard>
       <FormCard icon={Package} title="Dòng hàng">
         <div className="space-y-3">
+          <QuickDimensionEntry loadProducts={loadProducts} pricingPartnerId={partnerId} canEditPrice disabled={fields.length >= 200} onAdd={addDimensionRows} />
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="line-table w-full min-w-[940px] text-sm">
               <thead><tr className="border-b border-border bg-hover text-left text-xs font-semibold text-fg-secondary">
