@@ -58,7 +58,10 @@ export async function ensureWalkInCustomer(prisma: PrismaClient): Promise<number
   return p.id;
 }
 
-export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: SaleOrderInput, checkout: CheckoutInput, now: Date = new Date()) {
+/** Tùy chọn nội bộ (không qua API bán hàng): nhập đơn từ phần mềm cũ ghi mã đơn cũ, và chặn đơn thiếu tồn thay vì để thành đơn treo. */
+export interface CheckoutInternalOpts { legacyCode?: string; blockProvisional?: boolean }
+
+export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, actor: Actor, key: string, input: SaleOrderInput, checkout: CheckoutInput, now: Date = new Date(), internal: CheckoutInternalOpts = {}) {
   assertWriter(actor, "order.create");
   const pays = [...(checkout.payments ?? []), ...(checkout.payment ? [checkout.payment] : [])].filter((p) => p.amount > 0);
   if (pays.length) assertCan(actor.perms, "deposit.manage");
@@ -81,13 +84,13 @@ export async function createCheckoutSaleOrderIdempotent(prisma: PrismaClient, ac
   }
   const planned = await planLines(prisma, order, docTimestamp(order.date, now));
   const products = [...new Set(planned.flatMap((l) => l.issues.map((i) => i.productId)))].sort((a, b) => a - b);
-  const extra = checkout.walkIn ? { walkInName: checkout.walkIn.name || null, walkInPhone: checkout.walkIn.phone || null } : undefined;
+  const extra = checkout.walkIn || internal.legacyCode ? { ...(checkout.walkIn ? { walkInName: checkout.walkIn.name || null, walkInPhone: checkout.walkIn.phone || null } : {}), ...(internal.legacyCode ? { legacyCode: internal.legacyCode } : {}) } : undefined;
 
   let createdId = 0;
   // Cờ treo (thiếu tồn) chỉ có SAU flush của engine ⇒ kiểm ở finalize (vẫn trong giao dịch: ném lỗi = huỷ cả đơn/phiếu thu/phiếu giao)
   const finalize = async (ctx: { tx: Prisma.TransactionClient }) => {
-    if (checkout.pickupNow && createdId && (await ctx.tx.saleOrderLine.count({ where: { orderId: createdId, isProvisional: true } })) > 0) {
-      throw new DomainError("Không đủ tồn để giao ngay cho khách. Hãy lập đơn thường (đơn treo) hoặc nhập bổ sung hàng.", 409);
+    if ((checkout.pickupNow || internal.blockProvisional) && createdId && (await ctx.tx.saleOrderLine.count({ where: { orderId: createdId, isProvisional: true } })) > 0) {
+      throw new DomainError(checkout.pickupNow ? "Không đủ tồn để giao ngay cho khách. Hãy lập đơn thường (đơn treo) hoặc nhập bổ sung hàng." : "Không đủ tồn kho cho đơn này (đang chọn chặn đơn thiếu tồn).", 409);
     }
   };
   return withIdempotentInventoryTx(prisma, { userId: actor.userId, products, scope: "sale.checkout", key, finalize }, async (ctx) => {

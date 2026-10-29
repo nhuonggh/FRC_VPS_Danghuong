@@ -207,7 +207,7 @@ export async function createDraftSaleOrderIdempotent(prisma: PrismaClient, actor
   return withIdempotency(prisma, { userId: actor.userId, scope: "sale.create_draft", key }, (tx) => createDraftSaleOrder(tx, actor, input, now));
 }
 
-export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleOrderInput, now: Date = new Date(), extra?: { walkInName: string | null; walkInPhone: string | null }): Promise<{ id: number; code: string }> {
+export async function createSaleOrder(ctx: EngineCtx, actor: Actor, input: SaleOrderInput, now: Date = new Date(), extra?: { walkInName?: string | null; walkInPhone?: string | null; legacyCode?: string }): Promise<{ id: number; code: string }> {
   assertWriter(actor, "order.create");
   if (input.lines.some((l) => l.id !== undefined)) throw new DomainError("Đơn mới không được kèm id dòng.", 400);
   const tx = ctx.tx;

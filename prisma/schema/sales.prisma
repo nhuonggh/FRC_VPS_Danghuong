@@ -55,6 +55,8 @@ model SaleOrder {
   roundTotal           Boolean        @default(false)
   /// Quy tắc làm tròn tổng: true = làm tròn thường tới nghìn (phần lẻ ≥ 500đ lên, < 500đ xuống); false (đơn cũ) = luôn làm tròn LÊN. Chỉ có nghĩa khi roundTotal.
   roundNearest         Boolean        @default(false)
+  /// Mã đơn của phần mềm cũ khi đơn được nhập từ báo cáo xuất ra (chống nhập trùng); null = đơn lập trong hệ thống.
+  legacyCode           String?        @unique
   /// Địa chỉ giao hàng riêng của đơn (mặc định điền từ khách khi lập, sửa được). null = chưa nhập.
   shipAddress          String?
   /// Chiết khấu cả đơn do người dùng nhập; đã được PHÂN BỔ vào `discountNow` của từng dòng (xem `discountOrder`).
@@ -378,4 +380,17 @@ enum SalePaymentMethod {
   COD
 
   @@map("sale_payment_method")
+}
+
+/// Ghi nhớ cách ghép tên (hàng / khách / kiểu gia công) của phần mềm cũ sang bản ghi của hệ thống, để lần nhập sau khỏi chọn lại.
+/// kind: PRODUCT | PARTNER | PROCESSING; legacyKey = tên đã chuẩn hóa (không dấu, chữ thường); targetId = 0 với PROCESSING nghĩa là "không kiểu gia công".
+model LegacyAlias {
+  kind      String
+  legacyKey String
+  targetId  Int
+  createdBy Int
+  createdAt DateTime @default(now())
+
+  @@id([kind, legacyKey])
+  @@map("legacy_aliases")
 }
