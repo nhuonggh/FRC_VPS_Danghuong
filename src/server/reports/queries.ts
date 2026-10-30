@@ -176,20 +176,22 @@ async function salesByProduct(db: Db, actor: Actor, params: ListParams, range: T
   });
   const ql = q.toLowerCase();
   type Child = Record<string, Cell>;
-  const m = new Map<number, { code: string; name: string; unit: string; qty: Prisma.Decimal; amount: Prisma.Decimal; orderIds: Set<number>; children: Child[] }>();
+  const m = new Map<number, { code: string; name: string; units: Map<string, Prisma.Decimal>; amount: Prisma.Decimal; orderIds: Set<number>; children: Child[] }>();
   for (const o of orders) for (const l of o.lines) {
     const p = l.product;
     if (ql && !p.code.toLowerCase().includes(ql) && !p.name.toLowerCase().includes(ql)) continue;
     let v = m.get(p.id);
-    if (!v) { v = { code: p.code, name: p.name, unit: p.baseUnit, qty: D(0), amount: D(0), orderIds: new Set(), children: [] }; m.set(p.id, v); }
+    if (!v) { v = { code: p.code, name: p.name, units: new Map(), amount: D(0), orderIds: new Set(), children: [] }; m.set(p.id, v); }
     const amount = r2(lineNet(l, o.roundAmounts));
-    v.qty = v.qty.plus(l.qtyBase); v.amount = v.amount.plus(amount); v.orderIds.add(o.id);
+    v.units.set(l.unit, (v.units.get(l.unit) ?? D(0)).plus(l.qty)); v.amount = v.amount.plus(amount); v.orderIds.add(o.id);
     v.children.push({ code: p.code, name: p.name, order: o.code, orderId: o.id, date: ymd(o.orderDate), customer: o.partner.name, qty: l.qty.toString(), unit: l.unit, price: l.salePrice.toString(), amount: amount.toString() });
   }
   const list = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "vi") || a.code.localeCompare(b.code));
   const rows: Child[] = [];
   for (const v of list) {
-    rows.push({ group: 1, code: v.code, name: v.name, order: `${v.orderIds.size} đơn`, qty: v.qty.toString(), unit: v.unit, amount: v.amount.toString() });
+    // Số lượng theo đơn vị của đơn bán; nhiều đơn vị khác nhau thì không cộng gộp (sai nghĩa), chỉ hiện tổng tiền.
+    const one = v.units.size === 1 ? [...v.units][0] : null;
+    rows.push({ group: 1, code: v.code, name: v.name, order: `${v.orderIds.size} đơn`, qty: one ? one[1].toString() : null, unit: one ? one[0] : "nhiều ĐVT", amount: v.amount.toString() });
     rows.push(...v.children);
   }
   const total = list.reduce((s, v) => s.plus(v.amount), D(0));
@@ -199,7 +201,7 @@ async function salesByProduct(db: Db, actor: Actor, params: ListParams, range: T
     summary: [{ label: "Sản phẩm", value: list.length }, { label: "Số đơn", value: orderCount }, { label: "Doanh thu", value: total.toString(), money: true }],
     columns: [{ key: "code", label: "Mã", kind: "text" }, { key: "name", label: "Sản phẩm", kind: "text" }, { key: "order", label: "Đơn", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "customer", label: "Khách", kind: "text" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "price", label: "Đơn giá", kind: "money" }, { key: "amount", label: "Thành tiền", kind: "money" }],
     rows, totals: { name: "Tổng", amount: total.toString() },
-    notes: ["Chỉ tính hàng đã bán (đơn chưa hủy, không phải nháp); không trừ hàng trả. Số lượng dòng sản phẩm tính theo đơn vị gốc.", ...(orders.length === 500 ? ["Chỉ hiện 500 đơn mới nhất trong khoảng thời gian — thu hẹp bộ lọc để xem đủ."] : [])],
+    notes: ["Chỉ tính hàng đã bán (đơn chưa hủy, không phải nháp); không trừ hàng trả. Số lượng và đơn giá theo đơn vị ghi trên đơn bán; dòng sản phẩm chỉ cộng số lượng khi các đơn cùng đơn vị.", ...(orders.length === 500 ? ["Chỉ hiện 500 đơn mới nhất trong khoảng thời gian — thu hẹp bộ lọc để xem đủ."] : [])],
   };
 }
 
