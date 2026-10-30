@@ -25,7 +25,7 @@ export function UsersTable({
     { key: "email", label: "Email", render: (u) => u.email ? <span className="break-all text-xs">{u.email}</span> : NULL_TEXT },
     { key: "roles", label: "Nhóm quyền", render: (u) => <div className="flex flex-wrap gap-1">{u.roles.map((r) => <Badge key={r.id} tone="info">{r.name}</Badge>)}</div> },
     { key: "status", label: "Trạng thái", render: (u) => (u.isLocked ? <Badge tone="danger">Đã khóa</Badge> : <Badge tone="success">Hoạt động</Badge>) },
-    { key: "canAdvance", label: "Người ứng tiền", render: (u) => (u.canAdvance ? <Badge tone="info">Được ứng tiền</Badge> : NULL_TEXT) },
+    { key: "canAdvance", label: "Người ứng tiền", render: (u) => <Badge tone={u.canAdvance ? "success" : "neutral"}>{u.canAdvance ? "Được ứng tiền" : "Không"}</Badge> },
   ];
 
   async function guarded(fn: () => Promise<void>) {

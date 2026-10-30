@@ -45,13 +45,13 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
       key: "dang-nhap", label: "Thông tin đăng nhập", icon: KeyRound, fields: ["username", "fullName", "email"],
       render: () => (
         <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
-          <InlineField id="username" label="Tên đăng nhập" required error={errors.username?.message}>
+          <InlineField id="username" label="Tên đăng nhập" error={errors.username?.message}>
             <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} className={igInput} />
           </InlineField>
-          <InlineField id="fullName" label="Họ tên" required error={errors.fullName?.message}>
+          <InlineField id="fullName" label="Họ tên" error={errors.fullName?.message}>
             <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} className={igInput} />
           </InlineField>
-          <InlineField id="email" label="Email Google" error={errors.email?.message} hint="Không bắt buộc. Có email → người này đăng nhập được bằng tài khoản Google đúng email đó." className="md:col-span-2">
+          <InlineField id="email" label="Email đăng nhập Google (không bắt buộc)" error={errors.email?.message} hint="Có email → người này đăng nhập được bằng tài khoản Google đúng email đó." className="md:col-span-2">
             <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email} className={igInput} />
           </InlineField>
         </div>

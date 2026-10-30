@@ -9,7 +9,7 @@ import { ApiError, SessionExpiredError } from "@/lib/api-fetch";
 const push = vi.fn();
 const replace = vi.fn();
 const apiFetch = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh: vi.fn() }), usePathname: () => "/system/users/new", useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api-fetch", async (orig) => ({ ...(await orig<typeof import("@/lib/api-fetch")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
