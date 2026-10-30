@@ -30,7 +30,6 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProdu
   const owedAfter = balance === null ? null : goodsTotal - paid - balance; // dương = mình nợ NCC sau phiếu này
 
   const submit = form.handleSubmit(async (input) => {
-    if (paid > goodsTotal + 0.004) throw new Error("Số tiền trả vượt tiền hàng của phiếu nhập.");
     if (num(cashAmount) > 0 && cashAccount === "") throw new Error("Chọn quỹ tiền mặt.");
     if (num(bankAmount) > 0 && bankAccount === "") throw new Error("Chọn tài khoản ngân hàng.");
     const payments = [
@@ -51,7 +50,7 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProdu
       footerInfo={(
         <>
           <span className="text-sm font-semibold">Tiền hàng: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(goodsTotal)}</b></span>
-          {payAccounts && <span className="text-sm font-semibold">{paid > goodsTotal ? "Trả thừa" : "Ghi nợ NCC"}: <b className={`ml-1 text-lg tabular ${paid > goodsTotal ? "text-danger" : "text-accent"}`}>{formatCurrency(Math.abs(goodsTotal - paid))}</b></span>}
+          {payAccounts && <span className="text-sm font-semibold">{paid > goodsTotal ? "Trả thêm (trừ nợ cũ)" : "Ghi nợ NCC"}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(Math.abs(goodsTotal - paid))}</b></span>}
           {owedAfter !== null && <span className="text-sm font-semibold">{owedAfter < 0 ? "NCC nợ mình sau phiếu" : "Nợ NCC sau phiếu"}: <b className="ml-1 text-lg text-accent tabular">{formatCurrency(Math.abs(owedAfter))}</b></span>}
         </>
       )}>
@@ -69,7 +68,7 @@ export function PurchaseNewForm({ today, supplierGroups, payAccounts, quickProdu
             <InlineField id="pay-bank-amount" label="Trả chuyển khoản" labelClass="sm:min-w-40"><NumberInput id="pay-bank-amount" value={bankAmount} placeholder="0" onValueChange={setBankAmount} className={`${igInput} tabular text-right`} /></InlineField>
             <InlineField id="pay-bank-account" label="Ngân hàng" labelClass="sm:min-w-40">{accountSelect("pay-bank-account", bankList, bankAccount, setBankAccount)}</InlineField>
           </FormGrid>
-          <p className="mt-3 text-xs text-fg-muted">Phần chưa trả được ghi nợ nhà cung cấp. Cước vận chuyển tính riêng, không nằm trong khoản này.</p>
+          <p className="mt-3 text-xs text-fg-muted">Phần chưa trả được ghi nợ nhà cung cấp; trả nhiều hơn tiền hàng thì phần dư trừ vào nợ cũ. Cước vận chuyển tính riêng, không nằm trong khoản này.</p>
         </FormCard>
       )}
     </NewPage>
