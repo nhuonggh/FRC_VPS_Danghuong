@@ -44,7 +44,7 @@ describe("/system/users (server)", () => {
 
   it("đọc tham số qua parseListParams (status, role, q, sort, trang) rồi gọi listUsers", async () => {
     requireActor.mockResolvedValue(actor("user.view"));
-    listUsers.mockResolvedValue({ rows: [row], total: 1, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 1, stats });
     await page({ status: "locked", role: "1,2", q: "nam", sort: "-fullName", page: "2" });
     const params = listUsers.mock.calls[0]![1];
     expect(params).toMatchObject({ q: "nam", sort: "-fullName", page: 2, filters: { status: ["locked"], role: ["1", "2"] } });
@@ -52,7 +52,7 @@ describe("/system/users (server)", () => {
 
   it("3 thẻ thống kê: số đếm từ server, bấm để lọc; thẻ của bộ lọc đang chọn được đánh dấu", async () => {
     requireActor.mockResolvedValue(actor("user.view"));
-    listUsers.mockResolvedValue({ rows: [row], total: 1, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 1, stats });
     const tree = await page({ status: "active" });
     const cards = findAll(tree, StatCard).map((c) => c.props);
     expect(cards.map((c) => [c.label, c.value, c.active])).toEqual([
@@ -65,14 +65,14 @@ describe("/system/users (server)", () => {
 
   it("thẻ thống kê giữ tìm kiếm/nhóm quyền đang chọn nhưng bỏ trang", async () => {
     requireActor.mockResolvedValue(actor("user.view"));
-    listUsers.mockResolvedValue({ rows: [row], total: 40, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 40, stats });
     const tree = await page({ q: "nam", role: "2", page: "3" });
     const hrefs = findAll(tree, StatCard).map((c) => c.props.href);
     expect(hrefs[2]).toBe("/system/users?q=nam&role=2&status=locked");
   });
 
   it("nút 'Thêm mới' chỉ có khi có user.manage (ẩn hẳn, không disabled)", async () => {
-    listUsers.mockResolvedValue({ rows: [row], total: 1, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 1, stats });
     requireActor.mockResolvedValueOnce(actor("user.view"));
     const viewOnly = await page();
     expect((viewOnly as ReactElement<{ actions: unknown }>).props.actions).toBeFalsy();
@@ -85,14 +85,14 @@ describe("/system/users (server)", () => {
 
   it("truyền canManage và selfId (userId người xem) xuống bảng", async () => {
     requireActor.mockResolvedValue(actor("user.view", "user.manage"));
-    listUsers.mockResolvedValue({ rows: [row], total: 1, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 1, stats });
     const tree = await page();
     expect(findAll(tree, UsersTable)[0]!.props).toMatchObject({ canManage: true, selfId: 7 });
   });
 
   it("3 loại trạng thái rỗng: chưa có dữ liệu / lọc không ra kết quả", async () => {
     requireActor.mockResolvedValue(actor("user.view", "user.manage"));
-    listUsers.mockResolvedValue({ rows: [], total: 0, stats: { all: 0, active: 0, locked: 0 } });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [], total: 0, stats: { all: 0, active: 0, locked: 0 } });
     const empty = findAll(await page(), EmptyState)[0]!.props;
     expect(empty).toMatchObject({ kind: "empty", title: "Chưa có người dùng nào" });
     expect(empty.action).toBeTruthy(); // có quyền → gợi ý tạo
@@ -106,13 +106,13 @@ describe("/system/users (server)", () => {
 
   it("danh sách rỗng không có quyền quản lý → không gợi ý tạo mới", async () => {
     requireActor.mockResolvedValue(actor("user.view"));
-    listUsers.mockResolvedValue({ rows: [], total: 0, stats: { all: 0, active: 0, locked: 0 } });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [], total: 0, stats: { all: 0, active: 0, locked: 0 } });
     expect(findAll(await page(), EmptyState)[0]!.props.action).toBeUndefined();
   });
 
   it("có dữ liệu → hiện bảng, không hiện trạng thái rỗng; chân trang phân trang có mặt", async () => {
     requireActor.mockResolvedValue(actor("user.view"));
-    listUsers.mockResolvedValue({ rows: [row], total: 1, stats });
+    listUsers.mockResolvedValue({ roleCounts: {}, allCount: 0, rows: [row], total: 1, stats });
     const tree = await page();
     expect(findAll(tree, EmptyState)).toHaveLength(0);
     expect(findAll(tree, UsersTable)).toHaveLength(1);
