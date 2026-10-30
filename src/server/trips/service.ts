@@ -224,7 +224,7 @@ export async function clearTripResult(tx: Tx, actor: Actor, tripId: number, orde
 }
 
 // ── đối soát (41) ────────────────────────────────────────────────────────────────────────────────────────────────────
-export async function settleTrip(tx: Tx, actor: Actor, id: number, reason: string, now: Date = new Date()): Promise<{ diff: string }> {
+export async function settleTrip(tx: Tx, actor: Actor, id: number, reason: string, now: Date = new Date(), handedAmount: number | null = null): Promise<{ diff: string }> {
   assertCan(actor.perms, "trip.settle");
   const t = await lockTrip(tx, id);
   await assertTripPeriod(tx, t.periodId);
@@ -235,8 +235,8 @@ export async function settleTrip(tx: Tx, actor: Actor, id: number, reason: strin
   // Phải thu + phần thu vượt (đã có lý do ở từng điểm) = mặt + CK + ghi nợ + bớt
   const diff = expected.plus(sum((s) => s.overAmount)).minus(cash).minus(transfer).minus(debt).minus(sum((s) => s.discountAmount));
   if (!diff.isZero() && !reason) throw new DomainError(`Chênh lệch ${diff.toFixed(0)} giữa số phải thu và tiền mặt + chuyển khoản + ghi nợ + bớt — nhập lý do.`, 400, "DIFF_REASON_REQUIRED");
-  await tx.trip.update({ where: { id }, data: { status: "SETTLED", settledAt: now, settledBy: actor.userId, expectedAmount: expected, cashAmount: cash, transferAmount: transfer, debtAmount: debt, diffAmount: diff, diffReason: diff.isZero() ? null : reason } });
-  await writeAudit(tx, { userId: actor.userId, action: "trip.settle", entity: "Trip", entityId: id, after: { code: t.code, expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), diff: diff.toString(), reason } });
+  await tx.trip.update({ where: { id }, data: { status: "SETTLED", settledAt: now, settledBy: actor.userId, expectedAmount: expected, cashAmount: cash, transferAmount: transfer, debtAmount: debt, diffAmount: diff, diffReason: diff.isZero() ? null : reason, driverHandedAmount: handedAmount === null ? null : D(handedAmount).toDecimalPlaces(2) } });
+  await writeAudit(tx, { userId: actor.userId, action: "trip.settle", entity: "Trip", entityId: id, after: { code: t.code, expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), diff: diff.toString(), reason, handed: handedAmount } });
   return { diff: diff.toString() };
 }
 
@@ -342,7 +342,7 @@ export async function handleStop(tx: Tx, actor: Actor, stopId: number, note: str
 // ── bọc idempotency ──────────────────────────────────────────────────────────────────────────────────────────────────
 const idem = <R,>(prisma: PrismaClient, actor: Actor, scope: string, key: string, run: (tx: Tx) => Promise<R>) => withIdempotency(prisma, { userId: actor.userId, scope, key }, run);
 export const createTripIdempotent = (p: PrismaClient, a: Actor, key: string, i: TripInput, now: Date = new Date()) => { assertCan(a.perms, "trip.manage"); return idem(p, a, "trip.create", key, (tx) => createTrip(tx, a, i, now)); };
-export const settleTripIdempotent = (p: PrismaClient, a: Actor, key: string, id: number, reason: string) => { assertCan(a.perms, "trip.settle"); return idem(p, a, "trip.settle", key, async (tx) => ({ id, ...(await settleTrip(tx, a, id, reason)) })); };
+export const settleTripIdempotent = (p: PrismaClient, a: Actor, key: string, id: number, reason: string, handedAmount: number | null = null) => { assertCan(a.perms, "trip.settle"); return idem(p, a, "trip.settle", key, async (tx) => ({ id, ...(await settleTrip(tx, a, id, reason, undefined, handedAmount)) })); };
 export const confirmTripCashIdempotent = (p: PrismaClient, a: Actor, key: string, id: number, i: ConfirmTripInput) => { assertCan(a.perms, "trip.confirm_cash"); return idem(p, a, "trip.confirm_cash", key, async (tx) => ({ id, ...(await confirmTripCash(tx, a, id, i)) })); };
 export const recordTripResultIdempotent = (p: PrismaClient, a: Actor, key: string, id: number, i: TripResultInput, now: Date = new Date()) => { assertCan(a.perms, "trip.manage"); return idem(p, a, "trip.result", key, (tx) => recordTripResult(tx, a, id, i, now)); };
 export { lineAmountOf };

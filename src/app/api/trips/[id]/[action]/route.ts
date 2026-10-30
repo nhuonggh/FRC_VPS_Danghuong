@@ -19,7 +19,7 @@ export const POST = apiHandler<{ params: Promise<{ id: string; action: string }>
     case "clear-result": { const { orderId } = z.object({ orderId: idParam }).parse(await readJson(req)); await prisma.$transaction((tx) => clearTripResult(tx, actor, id, orderId)); return { id }; }
     case "expense-add": { const input = tripExpenseSchema.parse(await readJson(req)); return prisma.$transaction((tx) => addTripExpense(tx, actor, id, input)); }
     case "expense-remove": { const { expenseId } = removeTripExpenseSchema.parse(await readJson(req)); await prisma.$transaction((tx) => removeTripExpense(tx, actor, id, expenseId)); return { id }; }
-    case "settle": return settleTripIdempotent(prisma, actor, readIdempotencyKey(req), id, settleTripSchema.parse(await readJson(req)).reason);
+    case "settle": { const input = settleTripSchema.parse(await readJson(req)); return settleTripIdempotent(prisma, actor, readIdempotencyKey(req), id, input.reason, input.handedAmount); }
     case "confirm": return confirmTripCashIdempotent(prisma, actor, readIdempotencyKey(req), id, confirmTripSchema.parse(await readJson(req)));
     default: throw new DomainError("Thao tác không hợp lệ.", 404);
   }

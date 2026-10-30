@@ -235,13 +235,10 @@ export async function listActiveCashAccounts(db: Db): Promise<{ id: number; name
   return db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ type: "asc" }, { name: "asc" }], select: { id: true, name: true, type: true } });
 }
 
-/** Người có thể là "người ứng tiền": người dùng chưa khóa (id dương) + lái xe/phụ xe đang hoạt động (id âm, xem `advancerFields`). */
+/** Người có thể là "người ứng tiền": người dùng chưa khóa được bật `canAdvance` (id dương). Lái xe/phụ xe không còn nằm trong danh sách (trùng tên với tài khoản); phiếu cũ ghi `advancedByDriverId` (id âm) vẫn hiện đúng tên. */
 export async function listAdvancers(db: Db): Promise<{ value: number; label: string }[]> {
-  const [users, drivers] = await Promise.all([
-    db.user.findMany({ where: { isLocked: false }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
-    db.driver.findMany({ where: { isActive: true }, select: { id: true, name: true, isAssistant: true }, orderBy: { name: "asc" } }),
-  ]);
-  return [...users.map((u) => ({ value: u.id, label: u.fullName })), ...drivers.map((d) => ({ value: -d.id, label: `${d.name} (${d.isAssistant ? "phụ xe" : "lái xe"})` }))];
+  const users = await db.user.findMany({ where: { isLocked: false, canAdvance: true }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } });
+  return users.map((u) => ({ value: u.id, label: u.fullName }));
 }
 
 // ───────────────────────────── CHI PHÍ HOẠT ĐỘNG (66) ─────────────────────────────

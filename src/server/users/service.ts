@@ -187,6 +187,17 @@ export async function setUserRoles(db: Db, actor: Actor, userId: number, roleIds
   });
 }
 
+export async function setCanAdvance(db: Db, actor: Actor, userId: number, canAdvance: boolean) {
+  assertCan(actor.perms, "user.manage");
+  const u = await getUserOrThrow(db, userId);
+  if (u.canAdvance === canAdvance) return;
+  await db.user.update({ where: { id: userId }, data: { canAdvance } });
+  await writeAudit(db, {
+    userId: actor.userId, action: "user.set_can_advance", entity: "User", entityId: userId,
+    before: { canAdvance: u.canAdvance }, after: { canAdvance },
+  });
+}
+
 export async function setLocked(db: Db, actor: Actor, userId: number, locked: boolean) {
   assertCan(actor.perms, "user.manage");
   if (locked && userId === actor.userId) throw new DomainError("Bạn không thể tự khóa tài khoản của mình.");

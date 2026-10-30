@@ -117,30 +117,31 @@ describe("HTML in trực tiếp", () => {
     const noNote = renderHtmlPrint({ ...model, body: { ...model.body, doc: { date: "24/10/2026" } } }, true, false, "n");
     expect(noNote).not.toContain("totrow\"");
   });
-  it("hóa đơn: ẩn dòng tổng số tấm nhưng giữ dòng kích thước; nút in đặt ở thanh đáy", () => {
+  it("hóa đơn: bản không giá bán chỉ còn tên hàng + số lượng; nút in đặt ở thanh đáy", () => {
     const model: HtmlPrintDocument = { type: "SALE_INVOICE", body: { docCode: "DH1", partner: null, doc: { date: "24/10/2026" }, lines: [], totals: { total: "100" } }, company: { name: "Công ty", address: "", phone: "", taxCode: "", logo: "", bank: { bankName: "", accountHolder: "", accountNo: "", branch: "" }, version: 1 }, signer: "", footer: "", qr: "", lines: [{ name: "Tôn", note: "", qty: "1", unit: "m²", price: "1", amount: "1", cuts: "3,28 m × 14 Tấm", pieces: "14", ratio: "0,4" }], summary: [], words: "", notices: [] };
     const shown = renderHtmlPrint(model, true, false, "n");
     expect(shown).toContain("(14 Tấm)");
     expect(shown).toContain("In đơn hàng không có công nợ cũ");
     expect(shown).toContain('href="?mode=mono&amp;debt=0&amp;auto=1"');
-    expect(shown).toContain('href="?mode=mono&amp;hidePieces=1"');
+    expect(shown).toContain('href="?mode=mono&amp;noPrice=1"');
+    expect(shown).toContain("☐ Phiếu giao nhận không có giá bán");
     expect(shown).not.toContain("ready().then");
     expect(shown).toContain("☐ Hiện nợ cũ");
     expect(shown).toContain('href="?mode=mono&amp;debt=1"');
     const withOld = renderHtmlPrint({ ...model, summary: [{ label: "Nợ cũ", value: "1" }] }, true, false, "n", { debt: true });
     expect(withOld).toContain("☑ Hiện nợ cũ");
     expect(withOld).toContain('href="?mode=mono&amp;debt=0"');
-    const hidden = renderHtmlPrint(model, true, false, "n", { hidePieces: true, debt: false });
-    expect(hidden).not.toContain("(14 Tấm)");
-    expect(hidden).toContain("3,28 m × 14 Tấm");
-    expect(hidden).toContain("× 0,4");
+    const hidden = renderHtmlPrint({ ...model, qr: "data:image/png;base64,AA", summary: [{ label: "Nợ cũ", value: "9" }], words: "Một đồng" }, true, false, "n", { noPrice: true, debt: false });
+    expect(hidden).toContain("(14 Tấm)");
+    expect(hidden).toContain("☑ Phiếu giao nhận không có giá bán");
+    for (const t of ["Đơn giá", "Thành tiền", "Tổng</td>", "Nợ cũ", "QR thanh toán", "Một đồng", "Lưu ý:", "In đơn hàng không có công nợ cũ"]) expect(hidden).not.toContain(t);
     expect(shown).toContain("size:A4");
     expect(shown).toContain("☐ Khổ A5");
     const a5 = renderHtmlPrint(model, true, false, "n", { paper: "A5" });
     expect(a5).toContain("size:A5");
     expect(a5).toContain("☑ Khổ A5");
     expect(a5).toContain("?mode=mono&amp;paper=A5&amp;debt=1&amp;auto=1");
-    expect(hidden).toContain('href="?mode=mono&amp;hidePieces=1&amp;debt=1&amp;auto=1"');
+    expect(hidden).toContain('href="?mode=mono&amp;noPrice=1&amp;debt=0&amp;auto=1"');
     expect(Array.from(hidden.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)).every((m) => { new Script(m[1]); return true; })).toBe(true);
   });
   it("phiếu nhập giữ nguyên tổng tiền hàng và không gán tiền chi NCC vào phiếu", async () => {

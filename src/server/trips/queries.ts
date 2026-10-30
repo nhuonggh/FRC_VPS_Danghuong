@@ -129,7 +129,7 @@ export interface TripDetailDTO {
   totals: { expected: string; cash: string; transfer: string; debt: string; discount: string; over: string; diff: string; expense: string };
   /** Chi phí lái xe ứng từ tiền thu; sau khi thủ quỹ xác nhận có mã phiếu chi. */
   expenses: { id: number; expenseTypeName: string; cashAccountName: string; amount: string; note: string | null; paymentId: number | null; paymentCode: string | null }[];
-  settled: { at: Date; byName: string | null; diffReason: string | null } | null; confirmed: { at: Date; byName: string | null; cashAccountName: string | null; transferAccountName: string | null } | null; cancelReason: string | null;
+  settled: { at: Date; byName: string | null; diffReason: string | null; handedAmount: string | null } | null; confirmed: { at: Date; byName: string | null; cashAccountName: string | null; transferAccountName: string | null } | null; cancelReason: string | null;
   stops: StopDTO[]; receipts: { id: number; code: string; amount: string; accountName: string }[];
 }
 
@@ -171,7 +171,7 @@ export async function getTrip(db: Db, actor: Actor, id: number): Promise<TripDet
     departedAt: t.departedAt, returnedAt: t.returnedAt, createdByName: names.get(t.createdBy) ?? null,
     totals: { expected: expected.toString(), cash: cash.toString(), transfer: transfer.toString(), debt: debt.toString(), discount: discount.toString(), over: over.toString(), diff: expected.plus(over).minus(cash).minus(transfer).minus(debt).minus(discount).toString(), expense: expenseRows.reduce((a, e) => a.plus(e.amount), D(0)).toString() },
     expenses: expenseRows.map((e) => ({ id: e.id, expenseTypeName: e.expenseType.name, cashAccountName: e.cashAccount.name, amount: e.amount.toString(), note: e.note, paymentId: e.paymentId, paymentCode: e.payment?.code ?? null })),
-    settled: t.settledAt ? { at: t.settledAt, byName: t.settledBy ? (names.get(t.settledBy) ?? null) : null, diffReason: t.diffReason } : null,
+    settled: t.settledAt ? { at: t.settledAt, byName: t.settledBy ? (names.get(t.settledBy) ?? null) : null, diffReason: t.diffReason, handedAmount: t.driverHandedAmount?.toString() ?? null } : null,
     confirmed: t.confirmedAt ? { at: t.confirmedAt, byName: t.confirmedBy ? (names.get(t.confirmedBy) ?? null) : null, cashAccountName: t.cashAccountId ? (accName.get(t.cashAccountId) ?? null) : null, transferAccountName: t.transferAccountId ? (accName.get(t.transferAccountId) ?? null) : null } : null,
     cancelReason: t.cancelReason, stops, receipts: receipts.map((r) => ({ id: r.id, code: r.code, amount: r.amount.toString(), accountName: r.cashAccount.name })),
   };

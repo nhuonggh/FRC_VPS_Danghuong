@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { InlineField, igArea, igInput } from "@/components/ui";
+import { InlineField, NumberInput, igArea, igInput } from "@/components/ui";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatCurrency } from "@/lib/format";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -23,9 +23,14 @@ export function TripSettlePanel({ trip, accounts, canSettle, canConfirm }: { tri
   const [cashId, setCashId] = useState<number | "">(cashAccounts[0]?.id ?? "");
   const [bankId, setBankId] = useState<number | "">(bankAccounts.length === 1 ? bankAccounts[0]!.id : "");
   const [reason, setReason] = useState("");
+  // Tiền mặt lái xe thực đưa kế toán (chuỗi rỗng = đưa đúng số phải nộp). Phải nộp = tiền mặt thu − chi phí lái xe đã ứng.
+  const [handed, setHanded] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const diff = Number(trip.totals.diff);
+  const dueCash = Number(trip.totals.cash) - Number(trip.totals.expense);
+  const handedNum = handed === "" ? dueCash : Number(handed);
+  const change = handedNum - dueCash;
   const toSettle = trip.status === "RETURNED" && canSettle;
   const toConfirm = (trip.status === "SETTLED" || (toSettle)) && canConfirm;
   if (!toSettle && !(trip.status === "SETTLED" && canConfirm)) return null;
@@ -35,13 +40,14 @@ export function TripSettlePanel({ trip, accounts, canSettle, canConfirm }: { tri
 
   async function submit() {
     if (busy) return;
+    if (toSettle && (!Number.isFinite(handedNum) || handedNum < 0)) { setError("Số tiền lái xe giao nộp không hợp lệ."); return; }
     if (toSettle && diff !== 0 && !reason.trim()) { setError("Có chênh lệch — nhập lý do."); return; }
     if (needCash && cashId === "") { setError("Chọn quỹ tiền mặt nhận tiền."); return; }
     if (needBank && bankId === "") { setError("Chọn tài khoản ngân hàng nhận chuyển khoản."); return; }
     setBusy(true); setError(null);
     const base = `/api/trips/${trip.id}`;
     try {
-      if (toSettle) await apiFetch(`${base}/settle`, { method: "POST", json: { reason }, idempotencyKey: `${idem.key}-settle` });
+      if (toSettle) await apiFetch(`${base}/settle`, { method: "POST", json: { reason, handedAmount: handed === "" ? null : handedNum }, idempotencyKey: `${idem.key}-settle` });
       if (toConfirm) await apiFetch(`${base}/confirm`, { method: "POST", json: { cashAccountId: needCash ? cashId : null, transferAccountId: needBank ? bankId : null }, idempotencyKey: `${idem.key}-confirm` });
       idem.reset(); router.refresh();
     } catch (e) {
@@ -61,6 +67,10 @@ export function TripSettlePanel({ trip, accounts, canSettle, canConfirm }: { tri
         <div className="flex justify-between gap-3 border-t border-border pt-1 font-semibold sm:col-span-2 lg:col-span-3"><dt>Chênh lệch</dt><dd className={`tabular-nums ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
       </dl>
       {toSettle && diff !== 0 && <InlineField id={`${uid}-reason`} label="Lý do chênh lệch" required multiline><textarea id={`${uid}-reason`} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>}
+      {toSettle && dueCash > 0 && <div className="grid gap-3 sm:grid-cols-2">
+        <InlineField id={`${uid}-handed`} label="Lái xe giao nộp (tiền mặt thực nhận)"><NumberInput id={`${uid}-handed`} value={handed} onValueChange={setHanded} placeholder={formatCurrency(String(dueCash))} onFocus={(e) => e.currentTarget.select()} className={`${igInput} tabular text-right`} /></InlineField>
+        <div className="flex items-end pb-2 text-sm">{change === 0 ? <span className="text-fg-secondary">Lái xe nộp đúng {formatCurrency(String(dueCash))}.</span> : change > 0 ? <span>Kế toán trả lại lái xe: <strong className="tabular-nums">{formatCurrency(String(change))}</strong></span> : <span className="text-danger">Lái xe còn thiếu: <strong className="tabular-nums">{formatCurrency(String(-change))}</strong></span>}</div>
+      </div>}
       {(needCash || needBank) && <div className="grid gap-3 sm:grid-cols-2">
         {needCash && <InlineField id={`${uid}-cash`} label="Tiền mặt vào quỹ" required><select id={`${uid}-cash`} value={cashId} onChange={(e) => setCashId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn quỹ…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}
         {needBank && <InlineField id={`${uid}-bank`} label="Chuyển khoản vào tài khoản" required><select id={`${uid}-bank`} value={bankId} onChange={(e) => setBankId(e.target.value ? Number(e.target.value) : "")} className={igInput}><option value="">Chọn tài khoản…</option>{bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></InlineField>}

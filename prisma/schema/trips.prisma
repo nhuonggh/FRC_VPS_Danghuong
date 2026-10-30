@@ -43,6 +43,8 @@ model Trip {
   debtAmount        Decimal?   @db.Decimal(18, 2)
   diffAmount        Decimal?   @db.Decimal(18, 2)
   diffReason        String?
+  /// Tiền mặt lái xe thực giao nộp cho kế toán lúc đối soát (NULL = chưa ghi, coi như nộp đúng). Chỉ để ghi nhận/in; không sinh phiếu thu/chi.
+  driverHandedAmount Decimal?  @db.Decimal(18, 2)
   // thủ quỹ xác nhận
   confirmedAt       DateTime?
   confirmedBy       Int?

@@ -58,7 +58,7 @@ export const tripExpenseSchema = z.object({
 });
 export const removeTripExpenseSchema = z.object({ expenseId: id("Chọn khoản chi phí.") });
 
-export const settleTripSchema = z.object({ reason: z.string().trim().max(300, "Lý do tối đa 300 ký tự.").default("") });
+export const settleTripSchema = z.object({ reason: z.string().trim().max(300, "Lý do tối đa 300 ký tự.").default(""), handedAmount: money0.nullable().default(null) });
 /** Chỉ cần cho điểm giao chưa chọn tài khoản lúc nhập kết quả (dữ liệu cũ). */
 export const confirmTripSchema = z.object({ cashAccountId: id("Chọn quỹ tiền mặt.").nullable().default(null), transferAccountId: id("Chọn tài khoản ngân hàng.").nullable().default(null) });
 export const cancelTripSchema = z.object({ reason: z.string().trim().min(1, "Nhập lý do hủy chuyến.").max(300, "Lý do tối đa 300 ký tự.") });

@@ -156,6 +156,7 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
       ? [{ label: "Tiền mặt thu từ khách", value: body.totals.cash }, { label: "Lái xe đã ứng chi", value: `-${body.totals.expense}` }, { label: "Tiền mặt lái xe nộp quỹ", value: net, big: true }]
       : [{ label: "Tổng tiền mặt thu từ lái xe", value: body.totals.cash, big: true }];
     result.words = wordsOf(net);
+    if (body.totals.handed) result.summary.push({ label: "Lái xe giao nộp", value: body.totals.handed }, { label: body.totals.short ? "Lái xe còn thiếu" : "Kế toán trả lại lái xe", value: body.totals.change! });
   } else if (type === "TRIP_SHEET") {
     result.notices.push("Lái xe đánh dấu kết quả giao; ghi tiền mặt, chuyển khoản, tiền bớt vào phiếu rồi mang về giao cho kế toán nhập dữ liệu. Tránh nhầm đơn này với đơn khác.");
   } else if (type === "DEBT_STATEMENT") {
@@ -195,8 +196,8 @@ export async function buildHtmlPrint(db: PrismaClient, actor: Actor, type: strin
   return result;
 }
 
-function product(line: Line, hidePieces = false) {
-  const total = (pieces: string | number) => hidePieces ? "" : `<div class="rt">(${e(pieces)} Tấm)</div>`;
+function product(line: Line) {
+  const total = (pieces: string | number) => `<div class="rt">(${e(pieces)} Tấm)</div>`;
   const dim = parseDimNote(line.note);
   const detail = line.cuts ? `<div class="cut"><ul>${line.cuts.split("\n").map((cut) => `<li>${e(cut)}</li>`).join("")}</ul>${total(line.pieces)}<div class="rt">× ${e(line.ratio)}</div></div>${line.note ? `<div class="note">${e(line.note)}</div>` : ""}` : dim ? `<div class="cut"><ul><li>${e(formatQty(String(dim.length)))} m × ${e(dim.pieces)} Tấm</li></ul>${total(dim.pieces)}<div class="rt">× ${e(formatQty(String(dim.ratio)))}</div></div>${dim.user ? `<div class="note">${e(dim.user)}</div>` : ""}` : line.note ? `<div class="note">${e(line.note)}</div>` : "";
   return `<div class="pn"><b>${e(line.name)}</b><span class="tag">${e(line.processing)}</span></div>${detail}`;
@@ -253,8 +254,8 @@ function tableHtml(spec: TableSpec, lines: Line[]): string {
 /** Khối thông tin dạng lưới (nhãn xám + giá trị đậm); bỏ ô trống. */
 const infoBlock = (items: [string, string | undefined, boolean?][]) => `<div class="cust">${items.filter(([, v]) => v).map(([label, v, full]) => `<div${full ? ' class="full"' : ""}><span>${e(label)}:</span> <b>${e(v)}</b></div>`).join("")}</div>`;
 
-/** `hideCompany`: bỏ khối đầu phiếu (logo, tên/địa chỉ/SĐT/STK công ty, QR) khi giao hàng đi cho người khác. `hidePieces`: bỏ dòng tổng số tấm (giữ dòng kích thước) để chụp gửi bên đặt hàng. `debt`: lựa chọn nợ cũ đang áp dụng, giữ khi chuyển chế độ. */
-export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: boolean, nonce: string, opts: { hidePieces?: boolean; hideCompany?: boolean; debt?: boolean; prior?: number[]; paper?: "A4" | "A5" } = {}): string {
+/** `hideCompany`: bỏ khối đầu phiếu (logo, tên/địa chỉ/SĐT/STK công ty, QR) khi giao hàng đi cho người khác. `noPrice`: hóa đơn bán hàng in thành phiếu giao nhận không giá (bỏ đơn giá, thành tiền, tổng, nợ cũ, QR) để lái xe mang đi giao hộ. `debt`: lựa chọn nợ cũ đang áp dụng, giữ khi chuyển chế độ. */
+export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: boolean, nonce: string, opts: { noPrice?: boolean; hideCompany?: boolean; debt?: boolean; prior?: number[]; paper?: "A4" | "A5" } = {}): string {
   const { body: b, company: c, type } = model;
   const a5 = opts.paper === "A5" && type === "SALE_INVOICE";
   /** Phiếu thu/chi in dạng bill nhỏ (khổ 80mm như máy in siêu thị): không đầu trang công ty. */
@@ -264,10 +265,11 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const title = e(model.title ? model.title.toLocaleUpperCase("vi") : type === "LOSS_ADJUST" ? (b.doc.kind === "Xuất hủy" ? "PHIẾU XUẤT HỦY" : "PHIẾU HAO HỤT") : (TITLES[type] ?? "PHIẾU"));
   const bank = [c.bank.accountNo, c.bank.accountHolder, c.bank.bankName, c.bank.branch].filter(Boolean).join(" - ");
   const saleInvoice = type === "SALE_INVOICE";
+  const noPrice = saleInvoice && !!opts.noPrice;
   const companyInfo = saleInvoice
     ? `<p><b>Chuyên KD và SX:</b></p>${INVOICE_BUSINESS.map((t) => `<p>- ${e(t)}</p>`).join("")}<p><b>Địa chỉ:</b> ${e(c.address || INVOICE_ADDRESS)}</p><p><b>SĐT:</b> ${e(model.phone || INVOICE_PHONES)}</p>${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`
     : `<p><b>Địa chỉ:</b> ${e(c.address)}</p><p><b>SĐT:</b> ${e(c.phone)}</p>${c.taxCode ? `<p><b>MST:</b> ${e(c.taxCode)}</p>` : ""}${bank ? `<p><b>STK:</b> ${e(bank)}</p>` : ""}`;
-  const header = slip || (saleInvoice && opts.hideCompany) ? "" : `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co">${type === "TRIP_SHEET" ? "" : `<h1>${e(c.name)}</h1>`}${!plain ? companyInfo : ""}</div>${type === "SALE_INVOICE" && model.qr ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
+  const header = slip || (saleInvoice && opts.hideCompany) ? "" : `<header class="head">${image(c.logo, "logo", "Logo")}<div class="co">${type === "TRIP_SHEET" ? "" : `<h1>${e(c.name)}</h1>`}${!plain ? companyInfo : ""}</div>${type === "SALE_INVOICE" && model.qr && !noPrice ? `<div class="qr"><div class="box">${image(model.qr, "", "QR thanh toán")}</div>Quét để thanh toán</div>` : ""}</header>`;
   const partnerLabel = purchase || type === "SUPPLIER_ORDER" || (type === "GOODS_RETURN" && b.doc.kind === "Trả nhà cung cấp") ? "Nhà cung cấp" : "Khách hàng";
   const partnerBlock = `<div class="cust"><div><span>${partnerLabel}:</span> <b>${e(b.partner?.name)}</b></div><div><span>Điện thoại:</span> <b>${e(b.partner?.phone)}</b></div><div class="full"><span>Địa chỉ:</span> ${e(b.partner?.address)}</div>${model.shipAddress ? `<div class="full"><span>Địa chỉ giao hàng:</span> ${e(model.shipAddress)}</div>` : ""}</div>`;
   const p = b.partner, d = b.doc;
@@ -280,17 +282,17 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
     : type === "PRODUCTION_ORDER" ? infoBlock([["Người lập", d.createdBy]])
     : type === "STOCKTAKE" ? infoBlock([["Người lập", d.createdBy], ["Trạng thái", d.statusLabel]])
     : partnerBlock;
-  const cols = invoice ? ["STT", "Tên sản phẩm", "Số lượng", "Đơn giá", "Thành tiền"] : delivery ? ["STT", "Hàng hóa", "Số lượng", "Lượng xuất"] : ["STT", "Tên sản phẩm", "Mã cuộn", "Khối lượng", "Ghi chú", "Tổng số lượng", "Đơn vị tính", "Đơn giá", "Tổng tiền"];
-  const widths = invoice ? (saleInvoice ? [5, 55, 12, 13, 15] : [7, 45, 16, 15, 17]) : delivery ? [7, 55, 20, 18] : [5, 29, 7, 6, 6, 10, 6, 14, 17];
-  const rows = model.lines.map((line, i) => `<tr><td class="c">${i + 1}</td><td>${product(line, opts.hidePieces)}</td>${invoice ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>` : delivery ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.issued)}</td>` : `<td>${parseDimNote(line.note) ? "" : e(line.rollInfo)}</td><td></td><td></td><td class="r">${e(line.qty)}</td><td class="c">${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>`}</tr>`).join("");
-  const sum = delivery ? "" : `<tr class="sum"><td colspan="${cols.length - 1}" class="c">${invoice ? "Tổng" : "Tổng tiền hàng"}</td><td class="r">${e(b.totals.total)}</td></tr>`;
+  const cols = noPrice ? ["STT", "Tên sản phẩm", "Số lượng"] : invoice ? ["STT", "Tên sản phẩm", "Số lượng", "Đơn giá", "Thành tiền"] : delivery ? ["STT", "Hàng hóa", "Số lượng", "Lượng xuất"] : ["STT", "Tên sản phẩm", "Mã cuộn", "Khối lượng", "Ghi chú", "Tổng số lượng", "Đơn vị tính", "Đơn giá", "Tổng tiền"];
+  const widths = noPrice ? [7, 73, 20] : invoice ? (saleInvoice ? [5, 55, 12, 13, 15] : [7, 45, 16, 15, 17]) : delivery ? [7, 55, 20, 18] : [5, 29, 7, 6, 6, 10, 6, 14, 17];
+  const rows = model.lines.map((line, i) => `<tr><td class="c">${i + 1}</td><td>${product(line)}</td>${noPrice ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td>` : invoice ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>` : delivery ? `<td class="r">${e(line.qty)} ${e(line.unit)}</td><td class="r">${e(line.issued)}</td>` : `<td>${parseDimNote(line.note) ? "" : e(line.rollInfo)}</td><td></td><td></td><td class="r">${e(line.qty)}</td><td class="c">${e(line.unit)}</td><td class="r">${e(line.price)}</td><td class="r">${e(line.amount)}</td>`}</tr>`).join("");
+  const sum = delivery || noPrice ? "" : `<tr class="sum"><td colspan="${cols.length - 1}" class="c">${invoice ? "Tổng" : "Tổng tiền hàng"}</td><td class="r">${e(b.totals.total)}</td></tr>`;
   const table = voucher ? "" : TABLES[type] ? tableHtml(TABLES[type], model.lines) : `<table><colgroup>${widths.map((width) => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${cols.map((col) => `<th scope="col">${col}</th>`).join("")}</tr></thead><tbody>${rows}${sum}</tbody></table>`;
   const signs = SIGNS[type] ?? [];
   /** `prior`: undefined = giữ lựa chọn đơn nợ cũ đang có; null = thoát chế độ chọn đơn. */
-  const href = (o: { mode?: string; hidePieces?: boolean; hideCompany?: boolean; debt?: boolean; auto?: boolean; paper?: "A4" | "A5"; prior?: number[] | null }) => {
+  const href = (o: { mode?: string; noPrice?: boolean; hideCompany?: boolean; debt?: boolean; auto?: boolean; paper?: "A4" | "A5"; prior?: number[] | null }) => {
     const q = new URLSearchParams({ mode: o.mode ?? (mono ? "mono" : "color") });
     if ((o.paper ?? (a5 ? "A5" : "A4")) === "A5") q.set("paper", "A5");
-    if (o.hidePieces ?? opts.hidePieces) q.set("hidePieces", "1");
+    if (o.noPrice ?? opts.noPrice) q.set("noPrice", "1");
     if (o.hideCompany ?? opts.hideCompany) q.set("hideCompany", "1");
     const prior = o.prior === undefined ? opts.prior : o.prior ?? undefined;
     const debt = o.debt ?? opts.debt;
@@ -302,14 +304,14 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   const showDebt = model.summary.some((s) => s.label === "Nợ cũ");
   const pickMode = opts.prior !== undefined && model.priorOptions !== undefined;
   const nav = (p: number[]) => e(href({ prior: p }));
-  const picker = saleInvoice && pickMode
+  const picker = saleInvoice && pickMode && !noPrice
     ? `<nav class="picker" aria-label="Chọn đơn nợ cũ"><b>Chọn các đơn cũ cần cộng vào phiếu này:</b>${model.priorOptions!.length ? model.priorOptions!.map((o) => `<a href="${nav(o.selected ? opts.prior!.filter((x) => x !== o.id) : [...opts.prior!, o.id])}" role="checkbox" aria-checked="${o.selected}">${o.selected ? "☑" : "☐"} ${e(o.label)} · còn nợ ${e(o.amount)}</a>`).join("") : "<span>Khách không có đơn cũ nào còn nợ.</span>"}</nav>`
     : "";
   // Hóa đơn bán hàng: xem trước rộng, nút in dính đáy màn hình; các phiếu khác giữ thanh công cụ cũ.
   const toolbar = saleInvoice
-    ? `<nav class="toolbar bar" aria-label="Công cụ in"><a href="${e(href({ hidePieces: !opts.hidePieces }))}" role="checkbox" aria-checked="${!!opts.hidePieces}">${opts.hidePieces ? "☑" : "☐"} Ẩn tổng số tấm</a><a href="${e(href({ hideCompany: !opts.hideCompany }))}" role="checkbox" aria-checked="${!!opts.hideCompany}">${opts.hideCompany ? "☑" : "☐"} Ẩn thông tin công ty</a><a href="${e(href({ debt: !showDebt, prior: null }))}" role="checkbox" aria-checked="${showDebt}">${showDebt ? "☑" : "☐"} Hiện nợ cũ</a><a href="${e(href(pickMode ? { debt: false, prior: null } : { prior: [] }))}" role="checkbox" aria-checked="${pickMode}">${pickMode ? "☑" : "☐"} Chọn đơn nợ cũ</a><a href="${e(href({ mode: mono ? "color" : "mono" }))}">${mono ? "Bản màu" : "Bản đen trắng"}</a><a href="${e(href({ paper: a5 ? "A4" : "A5" }))}" role="checkbox" aria-checked="${a5}">${a5 ? "☑" : "☐"} Khổ A5</a><a href="${e(href({ debt: false, prior: null, auto: true }))}">In đơn hàng không có công nợ cũ</a><a class="pri" href="${e(href(pickMode ? { auto: true } : { debt: true, auto: true }))}">In đơn hàng</a></nav>`
+    ? `<nav class="toolbar bar" aria-label="Công cụ in"><a href="${e(href({ noPrice: !opts.noPrice }))}" role="checkbox" aria-checked="${noPrice}">${noPrice ? "☑" : "☐"} Phiếu giao nhận không có giá bán</a><a href="${e(href({ hideCompany: !opts.hideCompany }))}" role="checkbox" aria-checked="${!!opts.hideCompany}">${opts.hideCompany ? "☑" : "☐"} Ẩn thông tin công ty</a>${noPrice ? "" : `<a href="${e(href({ debt: !showDebt, prior: null }))}" role="checkbox" aria-checked="${showDebt}">${showDebt ? "☑" : "☐"} Hiện nợ cũ</a><a href="${e(href(pickMode ? { debt: false, prior: null } : { prior: [] }))}" role="checkbox" aria-checked="${pickMode}">${pickMode ? "☑" : "☐"} Chọn đơn nợ cũ</a>`}<a href="${e(href({ mode: mono ? "color" : "mono" }))}">${mono ? "Bản màu" : "Bản đen trắng"}</a><a href="${e(href({ paper: a5 ? "A4" : "A5" }))}" role="checkbox" aria-checked="${a5}">${a5 ? "☑" : "☐"} Khổ A5</a>${noPrice ? "" : `<a href="${e(href({ debt: false, prior: null, auto: true }))}">In đơn hàng không có công nợ cũ</a>`}<a class="pri" href="${e(href(noPrice || pickMode ? { auto: true } : { debt: true, auto: true }))}">${noPrice ? "In phiếu giao nhận" : "In đơn hàng"}</a></nav>`
     : `<nav class="toolbar" aria-label="Công cụ in"><button id="print-now" type="button" class="pri">In / Lưu PDF</button><a href="?mode=${mono ? "color" : "mono"}">${mono ? "Bản màu" : "Bản đen trắng"}</a><span>${slip ? "Khổ 80mm (máy in bill) · Tỷ lệ 100% · Tắt đầu/chân trang" : "A4 · Tỷ lệ 100% · Tắt đầu trang/chân trang trình duyệt"}</span></nav>`;
-  const tot = `<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>`;
+  const tot = noPrice ? "" : `<div class="tot">${model.summary.map((s) => `<div${s.big ? ' class="big"' : ""}><span>${e(s.label)}:</span><b>${e(s.value)}</b></div>`).join("")}</div>`;
   const noteHtml = b.doc.note ? `<p class="note">Ghi chú: ${e(b.doc.note)}</p>` : "";
   const totals = b.doc.note && !slip ? `<div class="totrow">${noteHtml}${tot}</div>` : tot;
   const numLabel = type === "DEBT_STATEMENT" ? "Mã đối tác" : type === "TRIP_CASH" ? "Chuyến" : "Số";
@@ -334,5 +336,5 @@ export function renderHtmlPrint(model: HtmlPrintDocument, mono: boolean, auto: b
   p.note{font-style:normal;font-weight:700}tr.sum td{border-top:1px solid var(--ink)}
   .picker{display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:210mm;margin:0 auto 12px;padding:10px 12px;background:var(--soft);color:var(--ink);border-radius:6px;font-size:13px}.picker a{padding:6px 10px;border:1px solid var(--line);border-radius:6px;color:inherit;text-decoration:none}
   @media print{.picker,.toolbar{display:none!important}html,body{width:auto;margin:0;padding:0}.page{width:auto;min-height:0;padding:0;box-shadow:none}.head{break-inside:avoid}tr{break-inside:avoid}th{print-color-adjust:exact}}
-  </style></head><body>${toolbar}${picker}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>${dateLabel}:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}${totals}${model.words ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note && slip ? noteHtml : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
+  </style></head><body>${toolbar}${picker}<main class="page">${header}<div class="titlebar"><h2>${title}</h2><div class="meta"><div><span>${numLabel}:</span> <b>${e(b.docCode)}</b></div><div><span>${dateLabel}:</span> <b>${e(b.doc.date)}</b></div>${orderMeta}</div></div>${info}${table}${totals}${model.words && !noPrice ? `<p class="words">${e(model.words)}</p>` : ""}${b.doc.note && slip ? noteHtml : ""}<div class="sign">${signs.map((s, i) => `<div><b>${s}</b><small>(Ký, ghi rõ họ tên)</small>${i === signs.length - 1 && !plain ? `<em>${e(model.signer)}</em>` : ""}</div>`).join("")}</div>${saleInvoice && !noPrice ? `<div class="terms"><b>Lưu ý:</b><br>${(model.footer.trim() ? model.footer.split("\n").map((t) => t.trim()).filter(Boolean) : INVOICE_NOTES).map((t) => `- ${e(t.replace(/^-\s*/, ""))}`).join("<br>")}</div>` : model.footer ? `<div class="terms">${e(model.footer).replace(/\n/g, "<br>")}</div>` : ""}${model.notices.length ? `<div class="terms">${model.notices.map(e).join("<br>")}</div>` : ""}</main><script nonce="${e(nonce)}">${script}</script></body></html>`;
 }
