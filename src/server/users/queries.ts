@@ -9,6 +9,7 @@ export interface UserRow {
   fullName: string;
   email: string | null;
   isLocked: boolean;
+  canAdvance: boolean;
   mustChangePassword: boolean;
   createdAt: Date;
   roles: { id: number; name: string }[];
@@ -17,7 +18,7 @@ export interface UserRow {
 const SORTABLE = ["fullName", "username", "createdAt"] as const;
 
 const USER_SELECT = {
-  id: true, username: true, fullName: true, email: true, isLocked: true, mustChangePassword: true, createdAt: true,
+  id: true, username: true, fullName: true, email: true, isLocked: true, canAdvance: true, mustChangePassword: true, createdAt: true,
   roles: { select: { role: { select: { id: true, name: true } } } },
 } as const; // KHÔNG chọn passwordHash
 

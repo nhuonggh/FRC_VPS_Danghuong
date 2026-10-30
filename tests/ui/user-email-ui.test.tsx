@@ -30,7 +30,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const detailBase: React.ComponentProps<typeof UserDetail> = {
-  user: { id: 5, username: "lan.tran", fullName: "Trần Thị Lan", email: null, isLocked: false, mustChangePassword: false, createdAt: "2026-09-01T03:00:00.000Z", roles: [{ id: 2, name: "Kế toán" }] },
+  user: { id: 5, username: "lan.tran", fullName: "Trần Thị Lan", email: null, isLocked: false, canAdvance: false, mustChangePassword: false, createdAt: "2026-09-01T03:00:00.000Z", roles: [{ id: 2, name: "Kế toán" }] },
   roles: [{ id: 2, name: "Kế toán" }],
   history: [{ id: 1, action: "user.set_email", at: "2026-09-02T04:00:00.000Z", by: "Admin" }],
   canManage: true,
@@ -128,7 +128,7 @@ describe("NewUserForm — email", () => {
 
 describe("UsersTable — cột Email", () => {
   const row = (over: Partial<UserRow> & { id: number }): UserRow => ({
-    username: `u${over.id}`, fullName: `Người ${over.id}`, email: null, isLocked: false, mustChangePassword: false,
+    username: `u${over.id}`, fullName: `Người ${over.id}`, email: null, isLocked: false, canAdvance: false, mustChangePassword: false,
     createdAt: new Date("2026-09-01T03:00:00Z"), roles: [], ...over,
   });
 

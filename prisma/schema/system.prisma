@@ -11,6 +11,8 @@ model User {
   // Hạn của MẬT KHẨU TẠM (khi mustChangePassword): quá hạn → verifyCredentials từ chối như sai mật khẩu. NULL = không có hạn.
   tempPasswordExpiresAt DateTime? @db.Timestamptz(3)
   isLocked              Boolean   @default(false)
+  // Được chọn làm "người ứng tiền" ở phiếu chi / chi phí. Danh sách này thay cho danh mục lái xe + phụ xe (trước đây bị trùng tên).
+  canAdvance            Boolean   @default(false)
   mustChangePassword    Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt

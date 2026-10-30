@@ -10,7 +10,7 @@ import { syncPaymentStatus } from "@/server/deposits/status";
 import { cancelSaleOrderTx } from "@/server/sales/lifecycle";
 import { saleOrderSchema } from "@/server/sales/schemas";
 import { createSaleOrderIdempotent } from "@/server/sales/service";
-import { confirmTripSchema, tripResultSchema, tripSchema } from "@/server/trips/schemas";
+import { confirmTripSchema, settleTripSchema, tripResultSchema, tripSchema } from "@/server/trips/schemas";
 import { addTripExpense, removeTripExpense, cancelTrip, clearTripResult, confirmTripCash, createTrip, createTripIdempotent, departTrip, handleStop, recordTripResult, settleTrip } from "@/server/trips/service";
 import { prisma, resetDb } from "../helpers/db";
 import { makeCashAccount, makePartner } from "../helpers/factories";
@@ -184,6 +184,19 @@ describe("đối soát (41) và thủ quỹ xác nhận (D-35)", () => {
     expect(receipts.map((r) => [String(r.amount), r.orderId === a.id ? "đơn" : r.orderId === null ? "không đơn" : "?"])).toEqual([["200000", "đơn"], ["50000", "không đơn"]]);
     await tx((x) => syncPaymentStatus(x, a.id));
     expect((await st(a.id)).paymentStatus).toBe("PAID"); // không thành OVERPAID
+  });
+  it("đối soát ghi tiền lái xe giao nộp (không đổi phiếu thu); không ghi thì để trống; số âm bị chặn ở schema", async () => {
+    const a = await order(); const t = await trip([a.id]);
+    await result(t.id, a.id, { cashAmount: 200_000, cashAccountId: cash.id });
+    await tx((x) => settleTrip(x, kt, t.id, "", NOW, 235_000)); // đưa 235k cho khoản phải nộp 200k ⇒ kế toán trả lại 35k
+    expect(String((await prisma.trip.findUniqueOrThrow({ where: { id: t.id } })).driverHandedAmount)).toBe("235000");
+    await tx((x) => confirmTripCash(x, tq, t.id, { cashAccountId: null, transferAccountId: null }, NOW));
+    expect((await prisma.receipt.findMany({ where: { tripId: t.id } })).map((r) => String(r.amount))).toEqual(["200000"]);
+    const b = await order(); const t2 = await trip([b.id]);
+    await result(t2.id, b.id, { cashAmount: 200_000, cashAccountId: cash.id });
+    await tx((x) => settleTrip(x, kt, t2.id, "", NOW));
+    expect((await prisma.trip.findUniqueOrThrow({ where: { id: t2.id } })).driverHandedAmount).toBeNull();
+    expect(settleTripSchema.safeParse({ handedAmount: -1 }).success).toBe(false);
   });
   it("chi phí lái xe ứng từ tiền thu: ghi nhận trước, thủ quỹ xác nhận ⇒ tự lập phiếu chi phí (người ứng = lái xe) trừ quỹ; sau đó khóa", async () => {
     const a = await order(); const t = await trip([a.id]);

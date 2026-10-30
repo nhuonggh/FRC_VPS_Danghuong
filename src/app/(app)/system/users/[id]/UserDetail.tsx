@@ -1,7 +1,7 @@
 "use client";
 
 import { igInput, InlineField } from "@/components/ui";
-import { KeyRound, Lock, Unlock } from "lucide-react";
+import { Banknote, KeyRound, Lock, Unlock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -17,7 +17,7 @@ import { toast } from "@/lib/toast";
 import { emailSectionSchema, profileSectionSchema, rolesSectionSchema } from "@/server/users/schemas";
 
 interface Props {
-  user: { id: number; username: string; fullName: string; email: string | null; isLocked: boolean; mustChangePassword: boolean; createdAt: string; roles: { id: number; name: string }[] };
+  user: { id: number; username: string; fullName: string; email: string | null; isLocked: boolean; canAdvance: boolean; mustChangePassword: boolean; createdAt: string; roles: { id: number; name: string }[] };
   roles: { id: number; name: string }[];
   history: { id: number; action: string; at: string; by: string }[];
   /** user.manage — không có thì mọi phần là chữ tĩnh, không bút chì, không nút Khóa/Cấp lại mật khẩu. */
@@ -27,7 +27,7 @@ interface Props {
 
 const ACTION_LABEL: Record<string, string> = {
   "user.create": "Tạo tài khoản", "user.update_profile": "Sửa họ tên", "user.set_email": "Đổi email đăng nhập Google", "user.set_roles": "Đổi nhóm quyền",
-  "user.lock": "Khóa tài khoản", "user.unlock": "Mở khóa tài khoản", "user.reset_password": "Cấp lại mật khẩu", "user.change_password": "Đổi mật khẩu",
+  "user.set_can_advance": "Đổi quyền ứng tiền chi phí", "user.lock": "Khóa tài khoản", "user.unlock": "Mở khóa tài khoản", "user.reset_password": "Cấp lại mật khẩu", "user.change_password": "Đổi mật khẩu",
 };
 
 function ProfileSection({ ctx, p }: { ctx: TabRenderCtx; p: Props }) {
@@ -138,6 +138,14 @@ export function UserDetail(p: Props) {
     } catch (e) { toastApiError(e); }
   });
 
+  const toggleAdvance = () => guarded(async () => {
+    try {
+      await apiFetch(`/api/users/${p.user.id}/can-advance`, { method: "POST", json: { canAdvance: !p.user.canAdvance } });
+      toast.success(p.user.canAdvance ? "Đã bỏ khỏi danh sách người ứng tiền." : "Đã thêm vào danh sách người ứng tiền.");
+      router.refresh();
+    } catch (e) { toastApiError(e); }
+  });
+
   const reset = () => guarded(async () => {
     if (!(await confirm({ title: `Cấp lại mật khẩu cho ${p.user.username}?`, description: "Mật khẩu cũ mất hiệu lực ngay.", confirmLabel: "Cấp lại", danger: true }))) return;
     try {
@@ -153,6 +161,9 @@ export function UserDetail(p: Props) {
         backHref="/system/users" backLabel="Quay lại người dùng"
         headerActions={
           <>
+            {p.canManage && (
+              <button type="button" onClick={() => void toggleAdvance()} className={actionBtn}><Banknote size={16} aria-hidden /> {p.user.canAdvance ? "Bỏ khỏi người ứng tiền" : "Cho phép ứng tiền"}</button>
+            )}
             {p.canManage && !p.isSelf && (
               <>
                 <button type="button" onClick={() => void toggleLock()} className={actionBtn}>
@@ -169,6 +180,7 @@ export function UserDetail(p: Props) {
         summary={{
           title: p.user.fullName, code: p.user.username,
           badges: [p.user.isLocked ? { label: "Đã khóa", tone: "danger" } : { label: "Hoạt động", tone: "success" },
+                   ...(p.user.canAdvance ? [{ label: "Người ứng tiền", tone: "info" as const }] : []),
                    ...(p.user.mustChangePassword ? [{ label: "Chờ đổi mật khẩu", tone: "warning" as const }] : [])],
           facts: [{ label: "Nhóm quyền", value: p.user.roles.length }, { label: "Tạo lúc", value: formatDateTime(p.user.createdAt) }],
         }}

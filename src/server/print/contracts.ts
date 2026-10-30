@@ -137,7 +137,7 @@ export async function buildContract(db: Db, actor: Actor, docType: string, docId
           })),
           ...t.expenses.map((x) => ({ no: "", kind: "expense", order: `Chi: ${x.expenseTypeName}`, customer: x.note ?? "", amount: `-${money(x.amount)}`, over: "", receipts: x.paymentCode ?? "" })),
         ],
-        totals: { cash: money(gross), expense: Number(expense) > 0 ? money(expense) : "", net: money(D(gross).minus(expense).toString()) },
+        totals: { cash: money(gross), expense: Number(expense) > 0 ? money(expense) : "", net: money(D(gross).minus(expense).toString()), ...(t.settled?.handedAmount != null && !D(t.settled.handedAmount).eq(D(gross).minus(expense)) ? { handed: money(t.settled.handedAmount), change: money(D(t.settled.handedAmount).minus(D(gross).minus(expense)).abs().toString()), short: D(t.settled.handedAmount).lt(D(gross).minus(expense)) ? "1" : "" } : {}) },
       };
     }
     case "GOODS_RETURN": {
