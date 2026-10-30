@@ -21,6 +21,23 @@ const opening = (what: string): GuideArticle => article(
   "Đây là số có từ trước khi dùng ứng dụng. Không nhập lại các khoản đã được ghi bằng đơn hàng hoặc phiếu thu chi trong kỳ.",
 );
 
+const openingStock = (what: string, other: string): GuideArticle => article(
+  `Khi bắt đầu sử dụng ứng dụng và cần nhập ${what} có từ trước. Có hai cách: nhập từ tệp mẫu của ứng dụng, hoặc nhập thẳng từ tệp “Định mức tồn” xuất ra từ phần mềm cũ.`,
+  [
+    "Chọn đúng kỳ đang bắt đầu sử dụng.",
+    "Cách 1 — tệp mẫu: bấm Tải tệp mẫu, điền Mã, Số lượng, Giá vốn rồi bấm Nhập từ Excel.",
+    "Cách 2 — từ phần mềm cũ: bấm Nhập từ phần mềm cũ và chọn tệp .xls vừa xuất ra từ phần mềm cũ (không cần sửa tệp).",
+    "Ứng dụng tự khớp sản phẩm theo tên và lấy giá vốn từ Giá nhập mặc định của sản phẩm. Chờ bảng xem trước hiện ra.",
+    "Đọc cột Ghi chú. Dòng báo lỗi là chưa nhập được: không có tên trong danh mục, hoặc tên trùng nhiều sản phẩm — thêm sản phẩm hoặc sửa tên rồi chọn lại tệp. Có thể bấm Tải dòng bị loại để lấy danh sách.",
+    "Dòng cảnh báo “chưa có giá nhập” vẫn được nhập nhưng giá vốn bằng 0. Nên cập nhật Giá nhập của sản phẩm trước khi nhập, nếu không lãi bán hàng sẽ bị tính cao hơn thực tế.",
+    `Tích “Cập nhật luôn Định mức tồn” nếu muốn lấy cả định mức tồn từ tệp. Tùy chọn này ghi đè định mức đang có của sản phẩm; cột Ghi chú cho biết giá trị cũ và mới. Không tích thì định mức giữ nguyên.`,
+    "Kiểm tra số dòng và số lượng ở bảng xem trước rồi bấm Nhập.",
+  ],
+  `${what.charAt(0).toUpperCase() + what.slice(1)} được ghi nhận cho kỳ đã chọn, mỗi sản phẩm một lô đầu kỳ.`,
+  `Tệp từ phần mềm cũ gồm cả hàng hóa lẫn nguyên liệu: màn này chỉ nhận đúng loại của nó, các dòng thuộc loại khác bị bỏ qua và được nhập ở màn ${other}. Số lượng trong tệp phải tính theo đơn vị gốc của sản phẩm. Kỳ đã có chứng từ thì chỉ giám đốc nhập được (tích “Cho phép khi kỳ đã có chứng từ”). Chỉ nhập một lần khi bắt đầu dùng ứng dụng.`,
+  "Sản phẩm cần có sẵn trong danh mục. Nên điền Giá nhập mặc định cho sản phẩm trước.",
+);
+
 /** Viết theo công việc thực tế; khoá khớp APP_NAV. Không đưa chức năng planned vào hướng dẫn. */
 export const GUIDE_ARTICLES: Readonly<Record<string, GuideArticle>> = {
   "order-new": article("Khi khách mua hàng và cần lập đơn.", [
@@ -100,10 +117,10 @@ export const GUIDE_ARTICLES: Readonly<Record<string, GuideArticle>> = {
   "rp-issue-by-order": report("hàng xuất kho theo đơn"),
   "rp-production": report("tình hình sản xuất"),
   "rp-debt-check": report("đối chiếu công nợ"),
-  "open-stock": opening("tồn kho đầu kỳ"),
+  "open-stock": openingStock("tồn kho đầu kỳ", "Tồn NVL đầu kỳ"),
   "open-debt": opening("công nợ đầu kỳ của khách và nhà cung cấp"),
   "open-cash": opening("số dư quỹ đầu kỳ"),
-  "open-material": opening("tồn nguyên liệu đầu kỳ"),
+  "open-material": openingStock("tồn nguyên liệu đầu kỳ", "Tồn kho đầu kỳ"),
   "open-discount": opening("chiết khấu tích lũy còn phải trả đầu kỳ"),
   "period-history": article("Khi cần xem số liệu của kỳ đã kết sổ.", ["Chọn kỳ cần tra cứu.", "Mở phần số liệu cần kiểm tra.", "Chọn bộ lọc hoặc mở chi tiết để đối chiếu khi màn hình cho phép."], "Bạn xem lại được số liệu kỳ cũ.", "Kỳ đã kết sổ chỉ để xem. Muốn xử lý sai sót, trao đổi với người phụ trách; không nhập lại chứng từ cũ vào kỳ mới tùy ý."),
   "period-close": article("Khi người phụ trách đã kiểm tra xong và chuẩn bị kết thúc kỳ.", ["Đọc danh sách cần kiểm tra, mở và xử lý hết các mục đang chặn kết sổ.", "Xem các cảnh báo còn lại và số đầu kỳ mới được xem trước.", "Nhờ người phụ trách xác nhận đã có bản sao lưu trong 24 giờ qua; điền thông tin được yêu cầu.", "Bấm nút kết sổ, gõ đúng tên kỳ và chỉ xác nhận khi đã kiểm tra đầy đủ."], "Kỳ cũ được khóa để tra cứu và ứng dụng chuyển sang kỳ mới.", "Kết sổ không hoàn tác được. Không bấm để thử; nếu chưa chắc, dừng và hỏi người phụ trách."),
