@@ -184,8 +184,7 @@ export async function createPurchase(
     await ctx.tx.purchaseLine.update({ where: { id: row.id }, data: { seq } });
   }
   await rewritePartnerLedger(ctx.tx, ctx, actor, purchase, total);
-  const paid = (input.payments ?? []).reduce((s, p) => s.plus(p.amount), D(0));
-  if (paid.gt(total)) throw new DomainError("Số tiền trả vượt tiền hàng của phiếu nhập.", 400);
+  // Trả vượt tiền hàng của phiếu được phép: phần dư trừ vào nợ cũ với NCC (giống phiếu chi trả NCC lẻ).
   for (const p of input.payments ?? []) {
     await createPayment(ctx.tx, actor, { kind: "TRA_NCC", partnerId: input.partnerId, cashAccountId: p.cashAccountId, amount: p.amount, date: input.date, note: [`Trả tiền phiếu nhập ${code}`, p.note].filter(Boolean).join(" — ") }, now);
   }

@@ -203,11 +203,11 @@ describe("HTML in: các phiếu còn lại", () => {
     const html = renderHtmlPrint(base("RECEIPT", { doc: { date: "20/10/2026", type: "Thu công nợ", account: "Quỹ TM", createdBy: "Phượng", order: "DH9" }, totals: { amount: "1.500.000" } }, { summary: [{ label: "Số tiền", value: "1.500.000", big: true }], words: moneyInWords("1500000") }), false, false, "n");
     expect(html).toContain("PHIẾU THU"); expect(html).toContain("Người nộp tiền"); expect(html).toContain("Một triệu năm trăm nghìn đồng"); expect(html).not.toContain("<table"); expect(html).toContain("Vào quỹ / ngân hàng"); expect(html).toContain("Người lập"); expect(html).toContain("Phượng"); expect(html).toContain("DH9");
     const pay = renderHtmlPrint(base("PAYMENT", { doc: { date: "x" } }), false, false, "n");
-    expect(pay).toContain("Người nhận tiền"); expect(pay).toContain("size:80mm auto"); expect(pay).not.toContain("<header");
+    expect(pay).toContain("Người nhận tiền"); expect(pay).toContain("size:80mm 200mm"); expect(pay).not.toContain("<header");
   });
   it("phiếu thu tiền lái xe: bill 80mm, chỉ tiền mặt theo đơn, có thời gian + người thao tác, không chỗ ký", () => {
     const html = renderHtmlPrint(base("TRIP_CASH", { partner: null, doc: { date: "25/10/2026 15:10", driver: "Lái A", vehicle: "51C-1", operator: "Thủ quỹ" }, totals: { cash: "250.000" } }, { lines: [{ no: "1", order: "DH1", customer: "Khách <B>", amount: "150.000", receipts: "PT000001", over: "gồm thu vượt (nợ cũ/dư)" }], summary: [{ label: "Tổng tiền mặt thu từ lái xe", value: "250.000", big: true }], words: moneyInWords("250000") }), false, false, "n");
-    expect(html).toContain("PHIẾU THU TIỀN LÁI XE"); expect(html).toContain("size:80mm auto"); expect(html).not.toContain("<header");
+    expect(html).toContain("PHIẾU THU TIỀN LÁI XE"); expect(html).toContain("size:80mm 200mm"); expect(html).not.toContain("<header");
     for (const t of ["Lái A", "51C-1", "Thủ quỹ", "Thời gian thu", "DH1", "PT: PT000001", "gồm thu vượt", "Tổng tiền mặt thu từ lái xe", "Hai trăm năm mươi nghìn đồng"]) expect(html).toContain(t);
     expect(html).toContain("Khách &lt;B&gt;"); expect(html).not.toContain("Chuyển khoản"); expect(html).not.toContain("Ký, ghi rõ họ tên");
   });
