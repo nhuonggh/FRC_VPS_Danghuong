@@ -166,6 +166,23 @@ describe("69/70 — bán hàng theo khách và nhóm", () => {
   });
 });
 
+describe("76 — bán hàng theo sản phẩm", () => {
+  it("dòng cha cộng dồn; ngay dưới là từng đơn (mới trước); chặn khi thiếu report.view", async () => {
+    const o1 = await order(a.id, { date: "2026-09-10" });
+    const o2 = await order(b.id, { qty: 3, dn: 0, da: 0, date: "2026-09-12" });
+    const r = await run("by-product");
+    expect(r.rows).toEqual([
+      expect.objectContaining({ group: 1, code: w.p.code, qty: "7", amount: "340000", order: "2 đơn" }),
+      expect.objectContaining({ order: o2.code, customer: "Khách B", qty: "3", amount: "150000" }),
+      expect.objectContaining({ order: o1.code, customer: "Khách A", qty: "4", amount: "190000" }),
+    ]);
+    expect(r.totals?.amount).toBe("340000");
+    expect((await run("by-product", { q: "khong-co-ma-nay" })).rows).toEqual([]);
+    expect((await exportReportXlsx(prisma, actor, "by-product", P())).byteLength).toBeGreaterThan(1000);
+    await expect(run("by-product", {}, { userId: 1, perms: new Set() })).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 describe("71 — xuất kho theo đơn", () => {
   it("mỗi dòng hàng một dòng; giá vốn chỉ hiện với cost.view", async () => {
     const o = await order(a.id);

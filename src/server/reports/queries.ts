@@ -6,7 +6,7 @@ import type { ListParams } from "@/lib/query-params";
 import { resolveTimeRange, timeRangeWhere, type TimeRange } from "@/lib/time-presets";
 import { DomainError } from "@/server/http/errors";
 import { actualConsumption, consumptionCompare, productionReport } from "./consumption";
-import { REPORTS, type ReportKey, type ReportResult } from "./types";
+import { REPORTS, type Cell, type ReportKey, type ReportResult } from "./types";
 import { grossOf } from "@/server/sales/queries";
 
 type Db = Prisma.TransactionClient | PrismaClient;
@@ -166,6 +166,43 @@ async function salesBy(db: Db, actor: Actor, range: TimeRange, by: "customer" | 
   };
 }
 
+/** 76 — Bán hàng theo sản phẩm: sản phẩm A→Z (dòng cha `group:1`), ngay dưới là từng dòng hàng của các đơn trong kỳ. Không trừ hàng trả, không có giá vốn. */
+async function salesByProduct(db: Db, actor: Actor, params: ListParams, range: TimeRange): Promise<ReportResult> {
+  const q = (params.q ?? "").trim();
+  const orders = await db.saleOrder.findMany({
+    where: { isCancelled: false, isDraft: false, orderDate: timeRangeWhere(range), partner: partnerScopeWhere(actor), ...(q ? { lines: { some: { product: { OR: [{ code: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } } } } : {}) },
+    orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 500,
+    select: { id: true, code: true, orderDate: true, roundAmounts: true, partner: { select: { name: true } }, lines: { orderBy: { id: "asc" }, select: { qty: true, unit: true, qtyBase: true, salePrice: true, discountNow: true, product: { select: { id: true, code: true, name: true, baseUnit: true } } } } },
+  });
+  const ql = q.toLowerCase();
+  type Child = Record<string, Cell>;
+  const m = new Map<number, { code: string; name: string; unit: string; qty: Prisma.Decimal; amount: Prisma.Decimal; orderIds: Set<number>; children: Child[] }>();
+  for (const o of orders) for (const l of o.lines) {
+    const p = l.product;
+    if (ql && !p.code.toLowerCase().includes(ql) && !p.name.toLowerCase().includes(ql)) continue;
+    let v = m.get(p.id);
+    if (!v) { v = { code: p.code, name: p.name, unit: p.baseUnit, qty: D(0), amount: D(0), orderIds: new Set(), children: [] }; m.set(p.id, v); }
+    const amount = r2(lineNet(l, o.roundAmounts));
+    v.qty = v.qty.plus(l.qtyBase); v.amount = v.amount.plus(amount); v.orderIds.add(o.id);
+    v.children.push({ code: p.code, name: p.name, order: o.code, orderId: o.id, date: ymd(o.orderDate), customer: o.partner.name, qty: l.qty.toString(), unit: l.unit, price: l.salePrice.toString(), amount: amount.toString() });
+  }
+  const list = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "vi") || a.code.localeCompare(b.code));
+  const rows: Child[] = [];
+  for (const v of list) {
+    rows.push({ group: 1, code: v.code, name: v.name, order: `${v.orderIds.size} đơn`, qty: v.qty.toString(), unit: v.unit, amount: v.amount.toString() });
+    rows.push(...v.children);
+  }
+  const total = list.reduce((s, v) => s.plus(v.amount), D(0));
+  const orderCount = new Set(list.flatMap((v) => [...v.orderIds])).size;
+  return {
+    key: "by-product", title: "Bán hàng theo sản phẩm", total: list.length,
+    summary: [{ label: "Sản phẩm", value: list.length }, { label: "Số đơn", value: orderCount }, { label: "Doanh thu", value: total.toString(), money: true }],
+    columns: [{ key: "code", label: "Mã", kind: "text" }, { key: "name", label: "Sản phẩm", kind: "text" }, { key: "order", label: "Đơn", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "customer", label: "Khách", kind: "text" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "price", label: "Đơn giá", kind: "money" }, { key: "amount", label: "Thành tiền", kind: "money" }],
+    rows, totals: { name: "Tổng", amount: total.toString() },
+    notes: ["Chỉ tính hàng đã bán (đơn chưa hủy, không phải nháp); không trừ hàng trả. Số lượng dòng sản phẩm tính theo đơn vị gốc.", ...(orders.length === 500 ? ["Chỉ hiện 500 đơn mới nhất trong khoảng thời gian — thu hẹp bộ lọc để xem đủ."] : [])],
+  };
+}
+
 /** 71 — Xuất kho theo đơn: từng dòng hàng (và NVL của dòng gia công); giá vốn chỉ hiện với người có cost.view. */
 async function issueByOrder(db: Db, actor: Actor, params: ListParams, range: TimeRange): Promise<ReportResult> {
   const showDetails = canViewOrderAnalysis(actor.perms);
@@ -242,6 +279,7 @@ export async function runReport(db: Db, actor: Actor, key: string, params: ListP
     : k === "profit-by-processing" ? await profitByDimension(db, actor, params, range, "processing")
     : k === "by-customer" ? await salesBy(db, actor, range, "customer", params)
     : k === "by-group" ? await salesBy(db, actor, range, "group", params)
+    : k === "by-product" ? await salesByProduct(db, actor, params, range)
     : k === "issue-by-order" ? await issueByOrder(db, actor, params, range)
     : k === "production" ? await productionReport(db, range, actor.perms.has("cost.view"))
     : k === "actual-consumption" ? await actualConsumption(db, range)
