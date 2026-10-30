@@ -6,8 +6,7 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { z } from "zod";
 import { KeyRound, ShieldCheck } from "lucide-react";
-import { FormCard, FormGrid, igInput, InlineField } from "@/components/ui";
-import { NewPage } from "@/components/ui/NewPage";
+import { igInput, InlineField, NewPage, tabsWithErrors, type FormTab } from "@/components/ui";
 import { TempPasswordDialog } from "@/components/ui/TempPasswordDialog";
 import { ApiError, apiFetch } from "@/lib/api-fetch";
 import { useIdempotencyKey } from "@/lib/use-idempotency-key";
@@ -41,26 +40,29 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
     setCreated({ id: r.id, username: v.username.toLowerCase(), password: r.tempPassword });
   });
 
-  return (
-    <>
-      <NewPage bare backHref="/system/users" backLabel="Quay lại người dùng" title="Tạo mới người dùng" submitLabel="Tạo người dùng"
-        isDirty={() => isDirty && !created} onSubmit={async () => { await submit(); }}>
-        <FormCard icon={KeyRound} title="Thông tin đăng nhập">
-          <FormGrid cols={2}>
-            <InlineField id="username" label="Tên đăng nhập" error={errors.username?.message} labelClass="sm:min-w-40">
-              <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} className={igInput} />
-            </InlineField>
-            <InlineField id="fullName" label="Họ tên" error={errors.fullName?.message} labelClass="sm:min-w-40">
-              <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} className={igInput} />
-            </InlineField>
-            <InlineField id="email" label="Email đăng nhập Google (không bắt buộc)" error={errors.email?.message} hint="Có email → người này đăng nhập được bằng tài khoản Google đúng email đó." className="md:col-span-2" labelClass="sm:min-w-40">
-              <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email} className={igInput} />
-            </InlineField>
-          </FormGrid>
-        </FormCard>
-        <FormCard icon={ShieldCheck} title="Nhóm quyền">
+  const tabs: FormTab[] = [
+    {
+      key: "dang-nhap", label: "Thông tin đăng nhập", icon: KeyRound, fields: ["username", "fullName", "email"],
+      render: () => (
+        <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+          <InlineField id="username" label="Tên đăng nhập" required error={errors.username?.message}>
+            <input id="username" autoComplete="off" {...register("username")} aria-invalid={!!errors.username} className={igInput} />
+          </InlineField>
+          <InlineField id="fullName" label="Họ tên" required error={errors.fullName?.message}>
+            <input id="fullName" {...register("fullName")} aria-invalid={!!errors.fullName} className={igInput} />
+          </InlineField>
+          <InlineField id="email" label="Email Google" error={errors.email?.message} hint="Không bắt buộc. Có email → người này đăng nhập được bằng tài khoản Google đúng email đó." className="md:col-span-2">
+            <input id="email" type="email" inputMode="email" autoComplete="off" {...register("email")} aria-invalid={!!errors.email} className={igInput} />
+          </InlineField>
+        </div>
+      ),
+    },
+    {
+      key: "nhom-quyen", label: "Nhóm quyền", icon: ShieldCheck, fields: ["roleIds"],
+      render: () => (
+        <>
           <Controller control={control} name="roleIds" render={({ field }) => (
-            <fieldset className="space-y-2" aria-describedby={errors.roleIds ? "roleIds-error" : undefined}>
+            <fieldset className="grid gap-2 md:grid-cols-2" aria-describedby={errors.roleIds ? "roleIds-error" : undefined}>
               <legend className="sr-only">Nhóm quyền</legend>
               {roles.map((r) => (
                 <label key={r.id} className="flex min-h-10 items-start gap-3 rounded-sm border border-border p-3 text-sm">
@@ -69,12 +71,19 @@ export function NewUserForm({ roles }: { roles: { id: number; name: string; desc
                   <span><span className="font-medium">{r.name}</span>{r.description && <span className="block text-xs text-fg-muted">{r.description}</span>}</span>
                 </label>
               ))}
-              {errors.roleIds && <p id="roleIds-error" className="text-xs text-danger">{errors.roleIds.message}</p>}
+              {errors.roleIds && <p id="roleIds-error" className="text-xs text-danger md:col-span-2">{errors.roleIds.message}</p>}
             </fieldset>
           )} />
-          <p className="mt-3 text-xs text-fg-muted">Hệ thống tự sinh mật khẩu tạm; người dùng phải đổi ở lần đăng nhập đầu.</p>
-        </FormCard>
-      </NewPage>
+          <p className="text-xs text-fg-muted">Hệ thống tự sinh mật khẩu tạm; người dùng phải đổi ở lần đăng nhập đầu.</p>
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <NewPage wide backHref="/system/users" backLabel="Quay lại người dùng" title="Tạo mới người dùng" submitLabel="Tạo người dùng"
+        isDirty={() => isDirty && !created} onSubmit={async () => { await submit(); }} tabs={tabs} errorTabs={tabsWithErrors(errors, tabs)} />
       <TempPasswordDialog open={!!created} username={created?.username ?? ""} password={created?.password ?? null}
         onClose={() => { const id = created!.id; setCreated(null); router.replace(`/system/users/${id}`); }} />
     </>
