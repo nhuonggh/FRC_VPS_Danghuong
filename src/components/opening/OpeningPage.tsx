@@ -1,5 +1,5 @@
 "use client";
-import { FlaskConical, Trash2, Upload } from "lucide-react";
+import { FileInput, FlaskConical, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,6 +22,7 @@ const DEMO_NOTE = "Số demo — sẽ reset khi chạy chính thức";
 
 export function OpeningPage({ kind, data, canForce, onlyDemo = false }: { kind: OpeningKind; data: OpeningListDTO; canForce: boolean; onlyDemo?: boolean }) {
   const router = useRouter(); const [open, setOpen] = useState(false); const [force, setForce] = useState(false);
+  const [legacyOpen, setLegacyOpen] = useState(false); const [updateMin, setUpdateMin] = useState(false);
   const [busy, setBusy] = useState<"load" | "reset" | null>(null); const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const base = `/period/opening-${kind === "material" ? "materials" : kind}`;
   async function demo(action: "load" | "reset") {
@@ -42,6 +43,7 @@ export function OpeningPage({ kind, data, canForce, onlyDemo = false }: { kind: 
         <div className="flex flex-wrap items-center gap-2">
           <a href={`/api/opening/${kind}/template`} className="flex h-11 items-center rounded-sm border border-border px-3 text-sm hover:bg-hover md:h-10">Tải tệp mẫu</a>
           <button type="button" onClick={() => setOpen(true)} className="flex h-11 items-center gap-2 rounded-sm bg-accent px-4 text-sm font-medium text-fg-on-accent md:h-10"><Upload size={16} aria-hidden />Nhập từ Excel</button>
+          {stockLike && <button type="button" onClick={() => setLegacyOpen(true)} className="flex h-11 items-center gap-2 rounded-sm border border-border px-3 text-sm hover:bg-hover md:h-10"><FileInput size={16} aria-hidden />Nhập từ phần mềm cũ</button>}
         </div>
       </div>
       <p className="text-sm text-fg-secondary">{HINT[kind]} Kỳ: <strong>{data.periodName}</strong>. Nhập xong chỉ chỉnh được bằng cách nhập lại với “Ghi đè”.</p>
@@ -70,6 +72,7 @@ export function OpeningPage({ kind, data, canForce, onlyDemo = false }: { kind: 
         )}
       </div>
       <ImportDialog open={open} onClose={() => setOpen(false)} onDone={() => router.refresh()} title={`Nhập ${OPENING_TITLE[kind].toLowerCase()} từ Excel`} endpoint={`/api/opening/${kind}/import${force ? "?force=1" : ""}`} templateHref={`/api/opening/${kind}/template`} />
+      {stockLike && <ImportDialog open={legacyOpen} onClose={() => setLegacyOpen(false)} onDone={() => router.refresh()} title={`Nhập ${OPENING_TITLE[kind].toLowerCase()} từ phần mềm cũ`} endpoint={`/api/opening/${kind}/import?legacy=1${updateMin ? "&minStock=1" : ""}${force ? "&force=1" : ""}`} templateHref={`/api/opening/${kind}/template?legacy=1`} accept=".xls,.xlsx" hint="Chọn tệp “Định mức tồn” xuất từ phần mềm cũ (.xls). Khớp sản phẩm theo tên; giá vốn lấy từ Giá nhập mặc định của sản phẩm — sản phẩm chưa có giá nhập vẫn được nhập với giá vốn 0 (có cảnh báo). Tệp gồm cả hàng hóa lẫn NVL: mỗi màn chỉ nhận sản phẩm đúng loại của nó." options={<div className="flex flex-col gap-1 text-sm"><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={updateMin} onChange={(e) => setUpdateMin(e.target.checked)} />Cập nhật luôn Định mức tồn của sản phẩm theo tệp</label>{updateMin && <p role="status" className="rounded-sm border border-warning bg-warning-soft p-2 text-xs">Sẽ GHI ĐÈ Định mức tồn hiện có của sản phẩm bằng giá trị trong tệp (dòng không có định mức thì giữ nguyên). Xem cột Ghi chú để biết giá trị cũ → mới.</p>}</div>} />}
     </div>
   );
 }

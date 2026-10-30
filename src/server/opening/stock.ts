@@ -8,8 +8,8 @@ import { postReceipt, removeDocument, type EngineCtx } from "@/server/inventory"
 import { assertOpeningAllowed } from "./guard";
 
 export type OpeningStockKind = "stock" | "material";
-export interface OpeningStockRow { code: string; productId: number; qty: string; unitCost: string }
-interface Ctx { periodId: number; openedAt: Date; products: Map<string, { id: number; kind: ProductKind; isActive: boolean }>; existing: Map<number, number> }
+export interface OpeningStockRow { code: string; productId: number; qty: string; unitCost: string; /** Chỉ bộ nhập từ phần mềm cũ: đặt lại Định mức tồn của sản phẩm (null/thiếu = không đổi). */ minStock?: string | null }
+export interface OpeningStockCtx { periodId: number; openedAt: Date; products: Map<string, { id: number; kind: ProductKind; isActive: boolean }>; existing: Map<number, number> }
 
 const text = (v: unknown) => (v == null ? "" : String(v).trim());
 const COLUMNS: readonly ImportColumn[] = [
@@ -19,7 +19,7 @@ const COLUMNS: readonly ImportColumn[] = [
 ];
 
 /** K1 (hàng hóa/thành phẩm/phụ kiện) và K4 (NVL): mỗi mã một lô OPENING qua engine, giá vốn nhập tay (D-39). */
-export function openingStockSpec(kind: OpeningStockKind, opts: { actor: Actor; force: boolean }): ImportSpec<OpeningStockRow, Ctx> {
+export function openingStockSpec(kind: OpeningStockKind, opts: { actor: Actor; force: boolean }): ImportSpec<OpeningStockRow, OpeningStockCtx> {
   const isMaterial = kind === "material";
   return {
     entity: isMaterial ? "OpeningMaterial" : "OpeningStock", label: isMaterial ? "tồn NVL đầu kỳ" : "tồn kho đầu kỳ", columns: COLUMNS,
@@ -51,7 +51,12 @@ export function openingStockSpec(kind: OpeningStockKind, opts: { actor: Actor; f
   };
 }
 
-async function writeLine(tx: Prisma.TransactionClient, actor: Actor, ctx: Ctx, r: OpeningStockRow, engine: EngineCtx, existingId: number | null) {
+export async function writeLine(tx: Prisma.TransactionClient, actor: Actor, ctx: OpeningStockCtx, r: OpeningStockRow, engine: EngineCtx, existingId: number | null) {
+  if (r.minStock != null) {
+    const prev = await tx.product.findUniqueOrThrow({ where: { id: r.productId }, select: { minStock: true } }); const next = new Prisma.Decimal(r.minStock);
+    if (!prev.minStock.eq(next)) { await tx.product.update({ where: { id: r.productId }, data: { minStock: next } }); await writeAudit(tx, { userId: actor.userId, action: "opening.stock.min-stock", entity: "Product", entityId: r.productId, before: { minStock: prev.minStock }, after: { minStock: next } }); }
+  }
+  if (new Prisma.Decimal(r.qty).isZero()) return; // dòng chỉ cập nhật Định mức tồn, không tạo lô
   const o = toIct(ctx.openedAt); const at = ictStartOfDay(o.y, o.m, o.d);
   const data = { qty: new Prisma.Decimal(r.qty), unitCost: new Prisma.Decimal(r.unitCost) };
   let before: unknown = null; let id = existingId;
