@@ -7,7 +7,7 @@ import { TempPasswordDialog } from "@/components/ui/TempPasswordDialog";
 import { apiFetch } from "@/lib/api-fetch";
 import { toastApiError } from "@/lib/api-error-toast";
 import { confirm } from "@/lib/confirm-store";
-import { formatDate, NULL_TEXT } from "@/lib/format";
+import { NULL_TEXT } from "@/lib/format";
 import { buildListHref, type ListParams } from "@/lib/query-params";
 import { toast } from "@/lib/toast";
 import type { UserRow } from "@/server/users/queries";
@@ -25,7 +25,7 @@ export function UsersTable({
     { key: "email", label: "Email", render: (u) => u.email ? <span className="break-all text-xs">{u.email}</span> : NULL_TEXT },
     { key: "roles", label: "Nhóm quyền", render: (u) => <div className="flex flex-wrap gap-1">{u.roles.map((r) => <Badge key={r.id} tone="info">{r.name}</Badge>)}</div> },
     { key: "status", label: "Trạng thái", render: (u) => (u.isLocked ? <Badge tone="danger">Đã khóa</Badge> : <Badge tone="success">Hoạt động</Badge>) },
-    { key: "createdAt", label: "Tạo lúc", sortable: true, render: (u) => formatDate(u.createdAt) },
+    { key: "canAdvance", label: "Người ứng tiền", render: (u) => (u.canAdvance ? <Badge tone="info">Được ứng tiền</Badge> : NULL_TEXT) },
   ];
 
   async function guarded(fn: () => Promise<void>) {
@@ -51,6 +51,16 @@ export function UsersTable({
     }
   });
 
+  const toggleAdvance = (u: UserRow) => guarded(async () => {
+    try {
+      await apiFetch(`/api/users/${u.id}/can-advance`, { method: "POST", json: { canAdvance: !u.canAdvance } });
+      toast.success(u.canAdvance ? `Đã bỏ ${u.fullName} khỏi danh sách người ứng tiền.` : `Đã thêm ${u.fullName} vào danh sách người ứng tiền.`);
+      router.refresh();
+    } catch (e) {
+      toastApiError(e);
+    }
+  });
+
   const reset = (u: UserRow) => guarded(async () => {
     if (!(await confirm({ title: `Cấp lại mật khẩu cho ${u.username}?`, description: "Mật khẩu cũ mất hiệu lực ngay.", confirmLabel: "Cấp lại", danger: true }))) return;
     try {
@@ -65,12 +75,12 @@ export function UsersTable({
   const actions = (u: UserRow): RowAction[] => [
     { key: "view", label: "Xem", icon: "eye", href: `/system/users/${u.id}` },
     ...(canManage ? [
-      { key: "edit", label: "Sửa", icon: "pencil" as const, href: `/system/users/${u.id}?edit=profile` },
-      ...(u.id === selfId ? [] : [{ key: "lock", label: u.isLocked ? "Mở khóa" : "Khóa", icon: "lock" as const, danger: !u.isLocked, onClick: () => void toggleLock(u) }]),
+      { key: "edit", label: "Sửa", icon: "pencil" as const, href: `/system/users/${u.id}?edit=profile` },      ...(u.id === selfId ? [] : [{ key: "lock", label: u.isLocked ? "Mở khóa" : "Khóa", icon: "lock" as const, danger: !u.isLocked, onClick: () => void toggleLock(u) }]),
       // Chính mình: không tự cấp lại mật khẩu → trỏ sang trang đổi mật khẩu
       u.id === selfId
         ? { key: "change-password", label: "Đổi mật khẩu của tôi", icon: "lock" as const, href: "/change-password" }
         : { key: "reset", label: "Cấp lại mật khẩu", icon: "pencil" as const, onClick: () => void reset(u) },
+      { key: "advance", label: u.canAdvance ? "Bỏ khỏi người ứng tiền" : "Cho phép ứng tiền", icon: "power" as const, onClick: () => void toggleAdvance(u) },
     ] : []),
   ];
 

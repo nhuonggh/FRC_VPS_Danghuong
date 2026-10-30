@@ -130,12 +130,16 @@ describe("UsersTable", () => {
   it("tài khoản của chính mình: KHÔNG có 'Cấp lại mật khẩu', có lối tới /change-password; người khác vẫn có", async () => {
     setup({ selfId: 1 });
     const mine = rowOf("Nguyễn Văn Nam");
-    expect(within(mine).getByRole("link", { name: "Đổi mật khẩu của tôi" })).toHaveAttribute("href", "/change-password");
     expect(within(mine).queryByRole("button", { name: "Cấp lại mật khẩu" })).toBeNull();
-    expect(within(mine).queryByRole("button", { name: "Thêm thao tác" })).toBeNull(); // 3 thao tác đều hiện sẵn, không có menu ⋯
+    expect(within(mine).getByRole("link", { name: "Đổi mật khẩu của tôi" })).toHaveAttribute("href", "/change-password");
+    await userEvent.click(within(mine).getByRole("button", { name: "Thêm thao tác" })); // ứng tiền nằm trong menu ⋯
+    expect(await screen.findByRole("menuitem", { name: "Cho phép ứng tiền" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Cấp lại mật khẩu" })).toBeNull();
+    await userEvent.keyboard("{Escape}");
     const other = rowOf("Người 3");
     await userEvent.click(within(other).getByRole("button", { name: "Thêm thao tác" }));
     expect(await screen.findByRole("menuitem", { name: "Cấp lại mật khẩu" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Đổi mật khẩu của tôi" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Cho phép ứng tiền" })).toBeInTheDocument();
+    expect(screen.queryByText("Đổi mật khẩu của tôi")).toBeNull();
   });
 });

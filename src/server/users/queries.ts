@@ -38,6 +38,13 @@ export async function listUsers(db: PrismaClient, params: ListParams) {
       (roleFilter.length === 0 || u.roles.some((r) => roleFilter.includes(r.id))),
   );
   const stats = { all: scoped.length, active: scoped.filter((u) => !u.isLocked).length, locked: scoped.filter((u) => u.isLocked).length };
+  // Số người theo từng nhóm quyền cho thanh tab (đếm sau tìm kiếm, không áp bộ lọc nhóm quyền/trạng thái đang chọn)
+  const roleCounts: Record<number, number> = {};
+  for (const u of users) {
+    if (needle && !normalizeSearch(`${u.username} ${u.fullName} ${u.email ?? ""}`).includes(needle)) continue;
+    for (const r of u.roles) roleCounts[r.id] = (roleCounts[r.id] ?? 0) + 1;
+  }
+  const allCount = users.filter((u) => !needle || normalizeSearch(`${u.username} ${u.fullName} ${u.email ?? ""}`).includes(needle)).length;
 
   const status = params.filters.status ?? [];
   const filtered = scoped.filter((u) => status.length === 0 || status.includes(u.isLocked ? "locked" : "active"));
@@ -52,7 +59,7 @@ export async function listUsers(db: PrismaClient, params: ListParams) {
   });
 
   const start = (params.page - 1) * params.pageSize;
-  return { rows: filtered.slice(start, start + params.pageSize), total: filtered.length, stats };
+  return { rows: filtered.slice(start, start + params.pageSize), total: filtered.length, stats, roleCounts, allCount };
 }
 
 export async function getUser(db: PrismaClient, id: number) {
