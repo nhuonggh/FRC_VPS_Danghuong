@@ -96,6 +96,7 @@ export const GUIDE_ARTICLES: Readonly<Record<string, GuideArticle>> = {
   "rp-profit-by-processing": report("lãi theo kiểu gia công"),
   "rp-by-customer": report("bán hàng theo từng khách"),
   "rp-by-group": report("bán hàng theo nhóm khách"),
+  "rp-by-product": report("bán hàng theo sản phẩm, kèm các đơn đã bán"),
   "rp-issue-by-order": report("hàng xuất kho theo đơn"),
   "rp-production": report("tình hình sản xuất"),
   "rp-debt-check": report("đối chiếu công nợ"),

@@ -215,6 +215,7 @@ export const APP_NAV: readonly NavModule[] = [
           { key: "rp-profit-by-processing", label: "Lãi theo kiểu gia công", desc: "Bấm kiểu xem từng sản phẩm", icon: "bar-chart-3", view: "report", path: "/reports/profit-by-processing", codes: ["75"], perm: "order.analysis.view" },
           { key: "rp-by-customer", label: "Bán hàng theo khách", desc: "", icon: "users", view: "report", path: "/reports/by-customer", codes: ["69"], perm: "report.view" },
           { key: "rp-by-group", label: "Bán hàng theo nhóm khách", desc: "", icon: "users", view: "report", path: "/reports/by-group", codes: ["70"], perm: "report.view" },
+          { key: "rp-by-product", label: "Bán hàng theo sản phẩm", desc: "Sản phẩm A→Z, kèm các đơn đã bán", icon: "package", view: "report", path: "/reports/by-product", codes: ["76"], perm: "report.view" },
           { key: "rp-issue-by-order", label: "Xuất kho theo đơn", desc: "", icon: "package", view: "report", path: "/reports/issue-by-order", codes: ["71"], perm: "report.view" },
           { key: "rp-production", label: "Báo cáo sản xuất", desc: "", icon: "factory", view: "report", path: "/reports/production", codes: ["72"], perm: "report.view" },
           { key: "rp-debt-check", label: "Đối chiếu công nợ", desc: "", icon: "scale", view: "report", path: "/reports/debt-reconciliation", codes: ["73"], perm: "report.view" },

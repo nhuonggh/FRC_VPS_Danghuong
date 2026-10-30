@@ -20,6 +20,7 @@ export const REPORTS = [
   { key: "profit-by-processing", code: "75", title: "Lãi theo kiểu gia công", perm: "order.analysis.view" },
   { key: "by-customer", code: "69", title: "Bán hàng theo khách", perm: "report.view" },
   { key: "by-group", code: "70", title: "Bán hàng theo nhóm khách", perm: "report.view" },
+  { key: "by-product", code: "76", title: "Bán hàng theo sản phẩm", perm: "report.view" },
   { key: "issue-by-order", code: "71", title: "Xuất kho theo đơn", perm: "report.view" },
   { key: "debt-reconciliation", code: "73", title: "Đối chiếu công nợ", perm: "report.view" },
   { key: "production", code: "72", title: "Báo cáo sản xuất", perm: "report.view" },
