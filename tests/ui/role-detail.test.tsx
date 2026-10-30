@@ -67,7 +67,7 @@ describe("RoleDetail — tóm tắt & xem", () => {
     expect(screen.getByText("Xem giá vốn")).toBeInTheDocument();
     expect(screen.queryByText("Tạo đơn hàng")).toBeNull();
     expect(screen.getByText("Nhạy cảm")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: /Bán hàng/ })).toHaveTextContent("(1/2)");
+    expect(screen.getByRole("group", { name: /Bán hàng/ })).toHaveTextContent("1/2");
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });
