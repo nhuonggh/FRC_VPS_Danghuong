@@ -13,6 +13,14 @@ describe("product import", () => {
     expect(spec.parseRow({ ...row, factor: "" }, { groups: new Map(), types: new Map() }).ok).toBe(false);
     expect(spec.parseRow({ ...row, unit: "" }, { groups: new Map(), types: new Map() }).ok).toBe(false);
   });
+  it("cột Giá nhập: đọc số Việt Nam, trống = không đổi, âm hoặc không có quyền = lỗi", () => {
+    const ctx = { groups: new Map(), types: new Map() }; const spec = productImportSpec();
+    const ok = spec.parseRow({ ...row, purchasePrice: "18.500,5" }, ctx); expect(ok.ok && ok.data.purchasePrice).toBe("18500.5");
+    const blank = spec.parseRow({ ...row, purchasePrice: "" }, ctx); expect(blank.ok && blank.data.purchasePrice).toBeNull();
+    expect(spec.parseRow({ ...row, purchasePrice: "-1" }, ctx).ok).toBe(false);
+    expect(productImportSpec({ canPrice: false }).parseRow({ ...row, purchasePrice: "100" }, ctx).ok).toBe(false);
+    expect(productImportSpec({ canPrice: false }).parseRow({ ...row, purchasePrice: "" }, ctx).ok).toBe(true);
+  });
   it("đọc dữ liệu D2 theo số Việt Nam", () => { const result = productImportSpec().parseRow(row, { groups: new Map(), types: new Map() }); expect(result.ok).toBe(true); if (result.ok) expect(result.data.minStock).toBe("1000"); });
   it("bỏ dòng ngừng bán", () => { const spec = productImportSpec(); const result = spec.parseRow({ ...row, stopped: "Có" }, { groups: new Map(), types: new Map() }); expect(result.ok && spec.skipReason?.(result.data)).toContain("Ngừng bán"); });
   it("cột Kiểu gia công: nhiều kiểu cách nhau dấu ;, không phân biệt dấu; kiểu lạ báo lỗi", () => {

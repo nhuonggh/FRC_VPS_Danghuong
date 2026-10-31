@@ -31,7 +31,7 @@ function sheets_() {
       { h: 'Kiểu gia công', s: 'Tôn xốp,11 sóng', w: 200 },
       { h: 'Mã', s: 'SP001', r: 1, w: 110 }, { h: 'Tên', s: 'Tôn lạnh', r: 1, w: 260 },
       { h: 'Loại', s: 'Hàng hóa', w: 150, list: ['Hàng hóa', 'Nguyên vật liệu', 'Thành phẩm', 'Phụ kiện'] },
-      { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Tỷ trọng', s: '2,4', w: 120 },
+      { h: 'Đơn vị gốc', s: 'md', r: 1, w: 100 }, { h: 'Định mức tồn', s: '0', w: 110 }, { h: 'Giá nhập', s: '18.500', w: 110 }, { h: 'Đơn vị quy đổi', s: 'kg', w: 120 }, { h: 'Tỷ trọng', s: '2,4', w: 120 },
       { h: 'Tôn cuộn', s: 'Không', w: 90, list: yn }, { h: 'Ngừng bán', s: 'Không', w: 100, list: yn }, { h: 'Ghi chú', s: '', w: 240 },
       { h: 'Được bán', s: '', w: 100, list: yn }, { h: 'Được mua', s: '', w: 100, list: yn }, { h: 'Dùng làm nguyên liệu', s: '', w: 160, list: yn }, { h: 'Được sản xuất', s: '', w: 130, list: yn }] },
     { name: 'Định mức (BOM)', help: 'Nhập tay ở Sản xuất → Định mức (chưa có nhập Excel). Mỗi dòng = 1 nguyên vật liệu của 1 thành phẩm theo kiểu gia công, kèm ngày bắt đầu hiệu lực.', cols: [

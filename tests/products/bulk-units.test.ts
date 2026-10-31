@@ -35,6 +35,15 @@ describe("sửa nhanh tỷ trọng sản phẩm", () => {
     await expect(tx((db) => setProductUnitsBulk(db, actor, [{ id: a.id, unit: "kg", factor: "" }]))).rejects.toThrow("đủ cả");
   });
 
+  it("nhập Excel cột Giá nhập: tạo mới ghi giá; ghi đè đổi giá; ô trống giữ nguyên giá cũ", async () => {
+    const head = ["Mã", "Tên", "Đơn vị gốc", "Giá nhập"];
+    await commitImport(prisma, actor, productImportSpec(), await toXlsx(head, [["G1", "Hàng G1", "md", "18.500"], ["G2", "Hàng G2", "md", ""]]), { overwrite: false, idempotencyKey: "gp1" });
+    const price = async (code: string) => (await prisma.product.findUniqueOrThrow({ where: { code } })).purchasePrice?.toString() ?? null;
+    expect(await price("G1")).toBe("18500"); expect(await price("G2")).toBeNull();
+    await commitImport(prisma, actor, productImportSpec(), await toXlsx(head, [["G1", "Hàng G1", "md", ""], ["G2", "Hàng G2", "md", "7.250,5"]]), { overwrite: true, idempotencyKey: "gp2" });
+    expect(await price("G1")).toBe("18500"); expect(await price("G2")).toBe("7250.5");
+  });
+
   it("nhập Excel nhiều dòng cùng mã tạo nhiều đơn vị quy đổi; xuất ra đủ cột Tỷ trọng, mỗi đơn vị một dòng", async () => {
     const head = ["Mã", "Tên", "Đơn vị gốc", "Đơn vị quy đổi", "Tỷ trọng"];
     const res = await commitImport(prisma, actor, productImportSpec(), await toXlsx(head, [["X1", "Tôn X", "md", "kg", "2,4"], ["X1", "Tôn X", "md", "m2", "1,2"], ["X2", "Tôn Y", "md", "", ""]]), { overwrite: false, idempotencyKey: "k1" });
