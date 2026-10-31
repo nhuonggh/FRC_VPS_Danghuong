@@ -181,6 +181,16 @@ describe("76 — bán hàng theo sản phẩm", () => {
     expect((await exportReportXlsx(prisma, actor, "by-product", P())).byteLength).toBeGreaterThan(1000);
     await expect(run("by-product", {}, { userId: 1, perms: new Set() })).rejects.toMatchObject({ status: 403 });
   });
+  it("dòng kiểu gia công tính giá theo m² hiện m² và đ/m² như hóa đơn; thành tiền không đổi", async () => {
+    const o = await order(a.id, { qty: 10, price: 97_200, dn: 0, da: 0, date: "2026-09-10" });
+    const type = await prisma.processingType.create({ data: { name: "Sóng 11", priceBasis: "AREA", ratio: "1.08" } });
+    await prisma.saleOrderLine.updateMany({ where: { orderId: o.id }, data: { processingTypeId: type.id } });
+    const r = await run("by-product");
+    expect(r.rows).toEqual([
+      expect.objectContaining({ group: 1, qty: "10.8", unit: "m²", amount: "972000" }),
+      expect.objectContaining({ order: o.code, qty: "10.8", unit: "m²", price: "90000", amount: "972000" }),
+    ]);
+  });
 });
 
 describe("71 — xuất kho theo đơn", () => {

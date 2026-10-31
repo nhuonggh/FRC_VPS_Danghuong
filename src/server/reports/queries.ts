@@ -8,6 +8,8 @@ import { DomainError } from "@/server/http/errors";
 import { actualConsumption, consumptionCompare, productionReport } from "./consumption";
 import { REPORTS, type Cell, type ReportKey, type ReportResult } from "./types";
 import { grossOf } from "@/server/sales/queries";
+import { areaRatiosOf } from "@/server/processing/area-ratio";
+import { pricePerM2 } from "@/lib/length-expr";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -172,19 +174,27 @@ async function salesByProduct(db: Db, actor: Actor, params: ListParams, range: T
   const orders = await db.saleOrder.findMany({
     where: { isCancelled: false, isDraft: false, orderDate: timeRangeWhere(range), partner: partnerScopeWhere(actor), ...(q ? { lines: { some: { product: { OR: [{ code: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } } } } : {}) },
     orderBy: [{ orderDate: "desc" }, { id: "desc" }], take: 500,
-    select: { id: true, code: true, orderDate: true, roundAmounts: true, partner: { select: { name: true } }, lines: { orderBy: { id: "asc" }, select: { qty: true, unit: true, qtyBase: true, salePrice: true, discountNow: true, product: { select: { id: true, code: true, name: true, baseUnit: true } } } } },
+    select: { id: true, code: true, orderDate: true, roundAmounts: true, partner: { select: { name: true } }, lines: { orderBy: { id: "asc" }, select: { qty: true, unit: true, qtyBase: true, salePrice: true, discountNow: true, note: true, productId: true, processingTypeId: true, processingType: { select: { priceBasis: true, ratio: true } }, product: { select: { id: true, code: true, name: true, baseUnit: true } } } } },
   });
   const ql = q.toLowerCase();
   type Child = Record<string, Cell>;
   const m = new Map<number, { code: string; name: string; units: Map<string, Prisma.Decimal>; amount: Prisma.Decimal; orderIds: Set<number>; children: Child[] }>();
-  for (const o of orders) for (const l of o.lines) {
-    const p = l.product;
-    if (ql && !p.code.toLowerCase().includes(ql) && !p.name.toLowerCase().includes(ql)) continue;
-    let v = m.get(p.id);
-    if (!v) { v = { code: p.code, name: p.name, units: new Map(), amount: D(0), orderIds: new Set(), children: [] }; m.set(p.id, v); }
-    const amount = r2(lineNet(l, o.roundAmounts));
-    v.units.set(l.unit, (v.units.get(l.unit) ?? D(0)).plus(l.qty)); v.amount = v.amount.plus(amount); v.orderIds.add(o.id);
-    v.children.push({ code: p.code, name: p.name, order: o.code, orderId: o.id, date: ymd(o.orderDate), customer: o.partner.name, qty: l.qty.toString(), unit: l.unit, price: l.salePrice.toString(), amount: amount.toString() });
+  for (const o of orders) {
+    const ratios = await areaRatiosOf(db, o.lines.map((l) => ({ productId: l.productId, unit: l.unit, baseUnit: l.product.baseUnit, note: l.note, processingTypeId: l.processingTypeId, type: l.processingType })));
+    for (const [i, l] of o.lines.entries()) {
+      const p = l.product;
+      if (ql && !p.code.toLowerCase().includes(ql) && !p.name.toLowerCase().includes(ql)) continue;
+      // Dòng tính giá theo m² (kiểu gia công AREA): hiện m² và đ/m² như hóa đơn; giá lưu là giá/md nên thành tiền không đổi.
+      const ratio = ratios[i];
+      const qty = ratio ? D(Math.round(l.qty.toNumber() * ratio * 1000) / 1000) : l.qty;
+      const unit = ratio ? "m²" : l.unit;
+      const price = ratio ? D(pricePerM2(l.salePrice.toNumber(), ratio)) : l.salePrice;
+      let v = m.get(p.id);
+      if (!v) { v = { code: p.code, name: p.name, units: new Map(), amount: D(0), orderIds: new Set(), children: [] }; m.set(p.id, v); }
+      const amount = r2(lineNet(l, o.roundAmounts));
+      v.units.set(unit, (v.units.get(unit) ?? D(0)).plus(qty)); v.amount = v.amount.plus(amount); v.orderIds.add(o.id);
+      v.children.push({ code: p.code, name: p.name, order: o.code, orderId: o.id, date: ymd(o.orderDate), customer: o.partner.name, qty: qty.toString(), unit, price: price.toString(), amount: amount.toString() });
+    }
   }
   const list = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "vi") || a.code.localeCompare(b.code));
   const rows: Child[] = [];
@@ -201,7 +211,7 @@ async function salesByProduct(db: Db, actor: Actor, params: ListParams, range: T
     summary: [{ label: "Sản phẩm", value: list.length }, { label: "Số đơn", value: orderCount }, { label: "Doanh thu", value: total.toString(), money: true }],
     columns: [{ key: "code", label: "Mã", kind: "text" }, { key: "name", label: "Sản phẩm", kind: "text" }, { key: "order", label: "Đơn", kind: "text" }, { key: "date", label: "Ngày", kind: "date" }, { key: "customer", label: "Khách", kind: "text" }, { key: "qty", label: "Số lượng", kind: "qty" }, { key: "unit", label: "ĐVT", kind: "text" }, { key: "price", label: "Đơn giá", kind: "money" }, { key: "amount", label: "Thành tiền", kind: "money" }],
     rows, totals: { name: "Tổng", amount: total.toString() },
-    notes: ["Chỉ tính hàng đã bán (đơn chưa hủy, không phải nháp); không trừ hàng trả. Số lượng và đơn giá theo đơn vị ghi trên đơn bán; dòng sản phẩm chỉ cộng số lượng khi các đơn cùng đơn vị.", ...(orders.length === 500 ? ["Chỉ hiện 500 đơn mới nhất trong khoảng thời gian — thu hẹp bộ lọc để xem đủ."] : [])],
+    notes: ["Chỉ tính hàng đã bán (đơn chưa hủy, không phải nháp); không trừ hàng trả. Số lượng và đơn giá theo đơn vị ghi trên đơn bán (dòng tính giá theo m² hiện m² và đ/m² như hóa đơn); dòng sản phẩm chỉ cộng số lượng khi các đơn cùng đơn vị.", ...(orders.length === 500 ? ["Chỉ hiện 500 đơn mới nhất trong khoảng thời gian — thu hẹp bộ lọc để xem đủ."] : [])],
   };
 }
 
