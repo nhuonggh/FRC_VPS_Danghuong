@@ -127,7 +127,7 @@ describe("TripDetail — nhập kết quả (40)", () => {
     expect(await screen.findByText("Có chênh lệch — nhập lý do.")).toBeInTheDocument();
     await userEvent.type(dlg.getByLabelText(/Lý do chênh lệch/), "thiếu 50k");
     await userEvent.click(dlg.getByRole("button", { name: "Đối soát" }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/settle", expect.objectContaining({ json: { reason: "thiếu 50k" }, idempotencyKey: expect.any(String) })));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/trips/3/settle", expect.objectContaining({ json: { reason: "thiếu 50k", handedAmount: null }, idempotencyKey: expect.any(String) })));
     unmount();
     render(<TripDetail trip={trip({ status: "SETTLED", statusLabel: "Đã đối soát", stops: [done] })} perms={allPerms} accounts={accounts} />);
     expect(screen.queryByRole("button", { name: /Sửa kết quả|Xóa kết quả|Nhập kết quả/ })).not.toBeInTheDocument();
