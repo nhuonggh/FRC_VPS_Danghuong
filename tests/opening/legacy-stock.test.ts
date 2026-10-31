@@ -67,3 +67,16 @@ describe("Nhập tồn đầu kỳ từ tệp phần mềm cũ", () => {
     await expect(previewImport(prisma, spec(), Buffer.from("<table><tr><th>A</th><th>B</th></tr></table>"), { overwrite: false })).rejects.toThrow(/Thiếu cột/);
   });
 });
+
+describe("Nhập tồn từ phần mềm cũ: sản phẩm ngừng bán", () => {
+  it("trùng tên nhưng chỉ 1 bản đang hoạt động ⇒ khớp bản đó; chỉ còn bản ngừng bán ⇒ lỗi rõ ràng", async () => {
+    const live = await makeProduct({ code: "A1", name: "Tôn lạnh", purchasePrice: "10" }); const dead = await makeProduct({ code: "A2", name: "Tôn lạnh" });
+    await prisma.product.update({ where: { id: dead.id }, data: { isActive: false } });
+    const gone = await makeProduct({ code: "B1", name: "Chỉ ngừng bán" }); await prisma.product.update({ where: { id: gone.id }, data: { isActive: false } });
+    const pv = await previewImport(prisma, spec(), legacyFile([["Tôn lạnh", "4", ""], ["Chỉ ngừng bán", "3", ""]]), { overwrite: false });
+    expect(pv.rows.find((r) => r.summary.includes("Tôn lạnh"))!.status).toBe("create");
+    const bad = pv.rows.find((r) => r.summary.includes("Chỉ ngừng bán"))!; expect(bad.status).toBe("error"); expect(bad.message).toContain("ngừng bán");
+    await run(spec(), legacyFile([["Tôn lạnh", "4", ""]]));
+    expect((await getOnHand(prisma, w.periodId, live.id)).toString()).toBe("4");
+  });
+});

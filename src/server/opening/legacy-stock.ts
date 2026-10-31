@@ -5,7 +5,7 @@ import type { ImportColumn, ImportSpec } from "@/server/import/types";
 import { assertOpeningAllowed } from "./guard";
 import { type OpeningStockCtx, type OpeningStockKind, type OpeningStockRow, openingStockSpec, writeLine } from "./stock";
 
-interface LegacyProduct { id: number; code: string; name: string; kind: ProductKind; minStock: Prisma.Decimal; purchasePrice: Prisma.Decimal | null }
+interface LegacyProduct { id: number; code: string; name: string; kind: ProductKind; isActive: boolean; minStock: Prisma.Decimal; purchasePrice: Prisma.Decimal | null }
 interface LegacyCtx extends OpeningStockCtx { byName: Map<string, LegacyProduct[]> }
 interface LegacyRow extends OpeningStockRow { name: string; skip: string | null }
 
@@ -51,7 +51,8 @@ export function openingLegacyStockSpec(kind: OpeningStockKind, opts: { actor: Ac
       if (min === "bad" || (min !== null && min.isNeg())) errors.push("Định mức tồn không hợp lệ.");
       if (errors.length) return { ok: false, errors };
       const q = (qty as Prisma.Decimal).toDecimalPlaces(3); const m = min === null ? null : (min as Prisma.Decimal).toDecimalPlaces(3);
-      const wantsMin = opts.updateMinStock && m !== null; const found = ctx.byName.get(normalizeSearch(name)) ?? [];
+      const wantsMin = opts.updateMinStock && m !== null; const all = ctx.byName.get(normalizeSearch(name)) ?? []; const found = all.filter((p) => p.isActive); // sản phẩm đã ngừng bán không tham gia khớp tên
+      if (found.length === 0 && all.length > 0 && !q.isZero()) return { ok: false, errors: [`Sản phẩm tên "${name}" (${all.map((p) => p.code).join(", ")}) đã ngừng bán — bật lại hoặc nhập theo mã bằng tệp mẫu.`] };
       if (found.length === 0) {
         if (q.isZero() && !wantsMin) return { ok: true, data: { name, code: "", productId: 0, qty: "0", unitCost: "0", skip: "Tồn bằng 0 và không có trong danh mục." } };
         return { ok: false, errors: [`Chưa có sản phẩm tên "${name}" trong danh mục — thêm sản phẩm hoặc sửa tên cho khớp.`] };

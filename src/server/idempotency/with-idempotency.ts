@@ -39,6 +39,8 @@ export async function withIdempotency<T>(
   prisma: PrismaClient,
   opts: IdempotencyOptions,
   work: (tx: Prisma.TransactionClient) => Promise<T>,
+  /** Mặc định 30 giây; nhập hàng loạt truyền dài hơn. */
+  timeoutMs = 30_000,
 ): Promise<T> {
   return prisma.$transaction(
     async (tx) => {
@@ -46,6 +48,6 @@ export async function withIdempotency<T>(
       if (claim.replay) return claim.result;
       return saveIdempotencyResult(tx, opts, await work(tx));
     },
-    { maxWait: 10_000, timeout: 30_000 },
+    { maxWait: 10_000, timeout: timeoutMs },
   );
 }
