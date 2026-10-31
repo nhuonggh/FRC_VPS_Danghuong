@@ -272,11 +272,17 @@ export function ResultDialog({ stop, tripId, accounts, onClose, onDone, idemKey 
 function SettleDialog({ open, onClose, trip, idemKey, onDone }: { open: boolean; onClose: () => void; trip: TripDetailDTO; idemKey: string; onDone: () => void }) {
   const [reason, setReason] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const diff = Number(trip.totals.diff);
+  // Tiền mặt lái xe thực đưa kế toán (rỗng = đưa đúng số phải nộp). Phải nộp = tiền mặt thu − chi phí lái xe đã ứng.
+  const [handed, setHanded] = useState("");
+  const dueCash = Number(trip.totals.cash) - Number(trip.totals.expense);
+  const handedNum = handed === "" ? dueCash : Number(handed);
+  const change = handedNum - dueCash;
   async function submit() {
     if (busy) return;
+    if (!Number.isFinite(handedNum) || handedNum < 0) { setError("Số tiền lái xe giao nộp không hợp lệ."); return; }
     if (diff !== 0 && !reason.trim()) { setError("Có chênh lệch — nhập lý do."); return; }
     setBusy(true); setError(null);
-    try { await apiFetch(`/api/trips/${trip.id}/settle`, { method: "POST", json: { reason }, idempotencyKey: idemKey }); onDone(); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Không đối soát được."); } finally { setBusy(false); }
+    try { await apiFetch(`/api/trips/${trip.id}/settle`, { method: "POST", json: { reason, handedAmount: handed === "" ? null : handedNum }, idempotencyKey: idemKey }); onDone(); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Không đối soát được."); } finally { setBusy(false); }
   }
   return (
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
@@ -289,6 +295,10 @@ function SettleDialog({ open, onClose, trip, idemKey, onDone }: { open: boolean;
             <div className="flex justify-between border-t border-border pt-1 font-semibold sm:col-span-2"><dt>Chênh lệch</dt><dd className={`tabular ${diff === 0 ? "text-success" : "text-danger"}`}>{formatCurrency(trip.totals.diff)}</dd></div>
           </dl>
           {diff !== 0 && <InlineField id="st-reason" label="Lý do chênh lệch" required multiline><textarea id="st-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className={igArea} /></InlineField>}
+          {dueCash > 0 && <div className="space-y-1">
+            <InlineField id="st-handed" label="Lái xe giao nộp (tiền mặt thực nhận)"><NumberInput id="st-handed" value={handed} onValueChange={setHanded} placeholder={formatCurrency(String(dueCash))} onFocus={(e) => e.currentTarget.select()} className={`${igInput} tabular text-right`} /></InlineField>
+            <p className="text-sm">{change === 0 ? <span className="text-fg-secondary">Lái xe nộp đúng {formatCurrency(String(dueCash))}.</span> : change > 0 ? <span>Kế toán trả lại lái xe: <strong className="tabular">{formatCurrency(String(change))}</strong></span> : <span className="text-danger">Lái xe còn thiếu: <strong className="tabular">{formatCurrency(String(-change))}</strong></span>}</p>
+          </div>}
           <p className="text-xs text-fg-muted">Đối soát xong chuyến chuyển cho thủ quỹ xác nhận nhận tiền; kết quả các điểm giao bị khoá.</p>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className={btnGhost}>Đóng</button><button type="button" onClick={submit} disabled={busy} className={btnPrimary}>Đối soát</button></div>
